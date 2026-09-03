@@ -150,6 +150,17 @@ func TestSchema_AMembershipIsDeletedAndAUserIsNot(t *testing.T) {
 	}
 }
 
+func TestSchema_AHandleIsUniqueAcrossTheInstall(t *testing.T) {
+	pool := migratedPool(t)
+	seedGardenAndUser(t, pool)
+
+	_, err := pool.Exec(t.Context(),
+		"INSERT INTO app_user (display_name, timezone, handle) VALUES ('Emma', 'Europe/London', 'emma')")
+	if err == nil {
+		t.Error("a second user with the handle emma was accepted")
+	}
+}
+
 func TestSchema_TheDigestHourDefaultsToEight(t *testing.T) {
 	ctx := t.Context()
 	pool := migratedPool(t)
@@ -232,7 +243,7 @@ func seedGardenAndUser(t *testing.T, pool *pgxpool.Pool) (gardenID, userID uuid.
 		t.Fatalf("inserting the garden: %v", err)
 	}
 	_, err := pool.Exec(ctx,
-		"INSERT INTO app_user (id, display_name, timezone) VALUES ($1, 'Ali', 'Europe/London')", testUserID)
+		"INSERT INTO app_user (id, display_name, timezone, handle) VALUES ($1, 'Emma', 'Europe/London', 'emma')", testUserID)
 	if err != nil {
 		t.Fatalf("inserting the user: %v", err)
 	}

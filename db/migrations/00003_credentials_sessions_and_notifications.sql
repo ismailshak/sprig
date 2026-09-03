@@ -46,18 +46,39 @@ CREATE TABLE invite (
     garden_id             uuid NOT NULL REFERENCES garden (id) ON DELETE CASCADE,
     token_hash            text COLLATE "C" NOT NULL UNIQUE,
     role                  text COLLATE "C" NOT NULL REFERENCES role (name),
+    -- Null is a join invite, and redeeming it creates the user, the membership
+    -- and the credential. Set is a re-enrolment invite, and redeeming it only
+    -- attaches a credential to the user named here.
+    user_id               uuid REFERENCES app_user (id) ON DELETE CASCADE,
     created_by            uuid NOT NULL REFERENCES app_user (id) ON DELETE RESTRICT,
     created_at            timestamptz NOT NULL DEFAULT now(),
     expires_at            timestamptz NOT NULL,
     -- Single use.
     redeemed_at           timestamptz,
-    -- Copied onto the membership at redemption, so the owner sets the sitter's
-    -- last day while they are still thinking about the trip.
+    -- Redeeming the invite copies this onto the membership, so the owner sets
+    -- the sitter's last day when issuing it rather than after the sitter joins.
     membership_expires_at timestamptz
 );
 
 -- People counts the invites still waiting.
 CREATE INDEX invite_garden_id_idx ON invite (garden_id);
+
+CREATE INDEX invite_user_id_idx ON invite (user_id);
+
+-- How an owner gets back in, since nobody above them can re-invite them.
+-- Redeeming a code attaches a passkey and does not sign anybody in.
+CREATE TABLE recovery_code (
+    id           uuid PRIMARY KEY DEFAULT uuidv7(),
+    user_id      uuid NOT NULL REFERENCES app_user (id) ON DELETE CASCADE,
+    -- Redemption looks a code up without being told whose it is.
+    code_hash    text COLLATE "C" NOT NULL UNIQUE,
+    -- Every code in a batch carries the same instant. Generating a batch
+    -- deletes the old one in the handler, so nothing here enforces that.
+    generated_at timestamptz NOT NULL DEFAULT now(),
+    used_at      timestamptz
+);
+
+CREATE INDEX recovery_code_user_id_idx ON recovery_code (user_id);
 
 CREATE TABLE api_token (
     id           uuid PRIMARY KEY DEFAULT uuidv7(),
@@ -137,6 +158,7 @@ DROP TABLE notification_preference;
 DROP TABLE notification_kind;
 DROP TABLE push_subscription;
 DROP TABLE api_token;
+DROP TABLE recovery_code;
 DROP TABLE invite;
 DROP TABLE passkey_credential;
 DROP TABLE session;
