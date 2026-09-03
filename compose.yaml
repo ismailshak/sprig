@@ -1,0 +1,37 @@
+name: sprig
+
+services:
+  db:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: sprig
+      POSTGRES_PASSWORD: sprig
+      POSTGRES_DB: sprig
+    ports:
+      - "5432:5432"
+    volumes:
+      - db-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sprig -d sprig"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+      start_period: 10s
+
+  # Behind a profile because the development loop only starts Postgres.
+  # This service is mainly for the e2e suite.
+  app:
+    profiles: [app]
+    build:
+      context: .
+    environment:
+      SPRIG_DATABASE_URL: postgres://sprig:sprig@db:5432/sprig?sslmode=disable
+      SPRIG_LOG_FORMAT: text
+    ports:
+      - "8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  db-data:
