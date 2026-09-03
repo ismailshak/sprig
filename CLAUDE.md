@@ -29,7 +29,7 @@ These are decisions already taken. Changing one is a conversation, not a refacto
 4. **A garden-scoped store function takes a garden ID.** There is no `GetPlant(id)`, only `GetPlant(gardenID, id)`, so a query that could return another garden's row is not a query anybody can call.
 5. **Authentication is deny-by-default at the mux.** Public routes are an explicit allowlist in one place. A new handler is protected until somebody decides otherwise.
 6. **A scope miss and a capability miss are both 404**, never 403. Another garden's plant is indistinguishable from a plant that does not exist.
-7. **Capabilities are read from `grade_capability` at request time**, never from a `switch` on the grade in Go. A template asks the same function the handler asks.
+7. **Capabilities are read from `role_capability` at request time**, never from a `switch` on the role in Go. A template asks the same function the handler asks.
 8. **Every flow survives a form post and a page navigation.** htmx has four uses — the care-row swap, the undo window, the in-place schedule editor, the lazy photo grid — and a fifth is checked against this rule first. `hx-boost` is off.
 9. **A route renders either a whole page or one named fragment that page also uses**, picked by `HX-Request`. A swap target is always an element the server can name by id.
 10. **A handler resolves, authorises, then renders**, in that order.
