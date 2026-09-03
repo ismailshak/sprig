@@ -7,6 +7,7 @@ A plant habit tracker: watering, feeding, repotting, per-plant reference notes, 
 Everything goes through mise, which pins the toolchain and holds the commands:
 
 ```
+mise run build    # the binary at ./sprig, version and revision stamped in
 mise run dev      # Postgres in a container, the server on the host
 mise run seed     # the prototype's garden into the dev database
 mise run test
@@ -45,6 +46,7 @@ These are decisions already taken. Changing one is a conversation, not a refacto
 | `internal/auth/`    | Passkeys, sessions, API tokens, the authorisation checks          |
 | `internal/photo/`   | Photo writes, reads and quota                                     |
 | `internal/push/`    | Subscriptions, VAPID sends, the digest job                        |
+| `internal/build/`   | The running binary's version, revision and toolchain              |
 | `db/migrations/`    | goose migrations, embedded and run at startup under an advisory lock |
 | `db/queries/`       | The `.sql` sqlc generates from                                    |
 | `web/templates/`    | `html/template`, embedded                                         |

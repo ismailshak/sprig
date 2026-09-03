@@ -9,6 +9,10 @@ pnpm = "11.25.0"
 # not contain this binary.
 "go:github.com/pressly/goose/v3/cmd/goose" = "v3.28.0"
 
+[tasks.build]
+description = "Build the server binary at ./sprig"
+run = "go build -o sprig ./cmd/sprig"
+
 # Only the database runs in a container.
 [tasks.dev]
 description = "Start Postgres and run the server on the host"
