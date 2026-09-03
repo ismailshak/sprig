@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -13,7 +14,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/ismailshak/sprig/db"
 	sprighttp "github.com/ismailshak/sprig/internal/http"
+	"github.com/ismailshak/sprig/internal/store"
 )
 
 func main() {
@@ -30,8 +33,8 @@ func main() {
 // process has been asked to stop.
 const shutdownGrace = 10 * time.Second
 
-// run wires config, logging and the server together, and blocks until ctx
-// is cancelled or the server fails.
+// run wires config, logging, the database and the server together, and blocks
+// until ctx is cancelled or the server fails.
 func run(ctx context.Context, getenv func(string) string, stdout io.Writer) error {
 	cfg, err := loadConfig(getenv)
 	if err != nil {
@@ -40,14 +43,32 @@ func run(ctx context.Context, getenv func(string) string, stdout io.Writer) erro
 
 	logger := newLogger(cfg, stdout)
 
+	pool, err := store.Open(ctx, cfg.databaseURL)
+	if err != nil {
+		return err
+	}
+	defer pool.Close()
+
+	// Before the listener, so nothing is served against a schema that is behind
+	// the binary.
+	if err := store.Migrate(ctx, pool, db.Migrations, logger); err != nil {
+		return err
+	}
+
 	var listenConfig net.ListenConfig
 	listener, err := listenConfig.Listen(ctx, "tcp", cfg.addr)
 	if err != nil {
 		return fmt.Errorf("listen: %w", err)
 	}
 
+	return serve(ctx, logger, listener, sprighttp.New(logger))
+}
+
+// serve runs the server on listener until ctx is cancelled, then gives
+// in-flight requests shutdownGrace to finish.
+func serve(ctx context.Context, logger *slog.Logger, listener net.Listener, handler http.Handler) error {
 	server := &http.Server{
-		Handler:           sprighttp.New(logger),
+		Handler:           handler,
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
