@@ -1,0 +1,29 @@
+name: Cache
+on:
+  push:
+    branches: [main]
+
+# CI only runs on pull requests, and a cache written on a pull request branch is
+# readable from that branch alone. This warms one on main for every branch to read.
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false # A cancelled job would upload a partial cache
+
+permissions:
+  contents: read
+
+jobs:
+  warm:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v7
+      - name: Set up Go
+        id: setup
+        uses: ./.github/actions/setup-go
+      - name: Compile the binary and the test dependencies
+        if: steps.setup.outputs.cache-hit != 'true'
+        run: |
+          mise run build
+          go test -run '^$' ./...
