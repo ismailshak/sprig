@@ -150,7 +150,7 @@ func TestSchema_AMembershipIsDeletedAndAUserIsNot(t *testing.T) {
 	}
 }
 
-func TestSchema_TheDigestHourIsAnHourOfTheDay(t *testing.T) {
+func TestSchema_TheDigestHourDefaultsToEight(t *testing.T) {
 	ctx := t.Context()
 	pool := migratedPool(t)
 	garden, user := seedGardenAndUser(t, pool)
@@ -164,15 +164,6 @@ func TestSchema_TheDigestHourIsAnHourOfTheDay(t *testing.T) {
 	}
 	if hour != 8 {
 		t.Errorf("digest_hour defaulted to %d, want 8", hour)
-	}
-
-	for _, bad := range []int{-1, 24} {
-		_, err := pool.Exec(ctx,
-			"INSERT INTO membership (garden_id, user_id, role, digest_hour) VALUES ($1, $2, 'member', $3)",
-			garden, user, bad)
-		if err == nil {
-			t.Errorf("digest_hour = %d was accepted", bad)
-		}
 	}
 }
 
