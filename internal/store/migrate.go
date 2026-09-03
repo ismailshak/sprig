@@ -33,6 +33,8 @@ func Migrate(ctx context.Context, pool *pgxpool.Pool, migrations fs.FS, logger *
 	db := stdlib.OpenDBFromPool(pool)
 	defer db.Close() //nolint:errcheck // the pool outlives it and owns the connections
 
+	// Without WithAllowMissing, goose refuses a migration numbered behind an
+	// applied one.
 	provider, err := goose.NewProvider(goose.DialectPostgres, db, migrations, goose.WithSessionLocker(locker))
 	if err != nil {
 		if errors.Is(err, goose.ErrNoMigrations) {

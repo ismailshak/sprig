@@ -237,3 +237,33 @@ func dropTestDatabase(t *testing.T, base, name string) {
 		t.Errorf("dropping %s: %v", name, err)
 	}
 }
+
+func TestMigrate_MigrationNumberedBehindAnAppliedOneIsRefused(t *testing.T) {
+	ctx := t.Context()
+	pool := openPool(t, createTestDatabase(t))
+
+	logger, _ := recordingLogger()
+	if err := Migrate(ctx, pool, numberedMigrations("00001_first", "00003_third"), logger); err != nil {
+		t.Fatalf("applying the first set: %v", err)
+	}
+
+	// 00002 lands from another branch after 00003 has already run.
+	err := Migrate(ctx, pool, numberedMigrations("00001_first", "00002_second", "00003_third"), logger)
+	if err == nil {
+		t.Fatal("expected an error for a migration numbered behind an applied one, got nil")
+	}
+	if got := schemaVersion(t, pool); got != 3 {
+		t.Errorf("schema version = %d, want the version the refusal left in place", got)
+	}
+}
+
+// numberedMigrations builds a migration set where each one creates a table named
+// after its own file.
+func numberedMigrations(names ...string) fs.FS {
+	fsys := fstest.MapFS{}
+	for _, name := range names {
+		body := fmt.Sprintf("-- +goose Up\nCREATE TABLE %q (id integer PRIMARY KEY);\n", name)
+		fsys[name+".sql"] = &fstest.MapFile{Data: []byte(body)}
+	}
+	return fsys
+}
