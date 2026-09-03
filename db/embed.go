@@ -6,9 +6,7 @@ import (
 	"io/fs"
 )
 
-// Without all:, embed skips the .gitkeep that is currently the only file here.
-//
-//go:embed all:migrations
+//go:embed migrations
 var embedded embed.FS
 
 // Migrations is db/migrations rooted at the directory itself, because goose
