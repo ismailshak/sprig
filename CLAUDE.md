@@ -14,6 +14,7 @@ mise run test
 mise run e2e
 mise run lint
 mise run migrate
+mise run migrate:new <name>
 ```
 
 A command that is worth typing twice becomes a task in `mise.toml` rather than living in a shell history.
