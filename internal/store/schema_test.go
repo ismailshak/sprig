@@ -198,7 +198,9 @@ func TestSchema_AnIdentifierDefaultsToATimeOrderedUUID(t *testing.T) {
 	if version != 7 {
 		t.Errorf("the default minted a v%d uuid, want v7", version)
 	}
-	if d := now.Sub(minted); d < 0 || d > time.Minute {
+	// Either side of now(), because now() is the transaction's start time and
+	// the identifier is minted a few hundred microseconds after it.
+	if d := minted.Sub(now).Abs(); d > time.Minute {
 		t.Errorf("the identifier's timestamp is %v from now, want the instant it was inserted", d)
 	}
 }
