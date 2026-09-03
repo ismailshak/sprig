@@ -1,0 +1,35 @@
+name: CI
+on: [pull_request]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v7
+      - name: Set up Go
+        uses: ./.github/actions/setup-go
+      - name: Lint project
+        run: mise run lint
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v7
+      - name: Set up Go
+        uses: ./.github/actions/setup-go
+      - name: Start Postgres
+        run: docker compose up -d --wait db
+      - name: Run tests
+        run: mise run test
+      - name: Show the database logs
+        if: failure()
+        run: docker compose logs db
