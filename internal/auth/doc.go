@@ -1,2 +1,2 @@
-// Package auth is passkey registration and assertion, sessions, API tokens, and the authorisation checks handlers and templates both ask.
+// Package auth handles passkeys, sessions, API tokens, and the authorisation checks handlers and templates both use.
 package auth
