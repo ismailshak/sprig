@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+#MISE description="Start Postgres and run the server on the host"
+set -euo pipefail
+
+export SPRIG_LOG_FORMAT=text
+
+# Makes Ctrl+C stop the db container.
+trap 'exit 0' INT
+trap 'docker compose stop db' EXIT
+
+docker compose up -d --wait db
+go run ./cmd/sprig
