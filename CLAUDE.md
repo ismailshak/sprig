@@ -35,6 +35,7 @@ These are decisions already taken. Changing one is a conversation, not a refacto
 10. **A handler resolves, authorises, then renders**, in that order.
 11. **Errors are logged once where they are handled**, never both logged and returned. No secret, token or database password appears in a log line.
 12. **The due-date computation lives in Go**, in `internal/schedule`, because four callers need the same answer.
+13. **A rule that could be revised on its own is a product decision and lives in a handler; a rule whose revision would move code with it is data integrity and lives in the schema.** Uniqueness, foreign keys, `NOT NULL` and the nullness groups that make the three schedule shapes total are the second kind. A range behind a select and an emptiness rule on a typed field are the first, and the eight checks on `care_schedule` are the only `CHECK` constraints in the schema.
 
 ## Layout
 

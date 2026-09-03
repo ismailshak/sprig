@@ -107,7 +107,7 @@ CREATE TABLE membership (
     -- Null is a permanent member.
     expires_at  timestamptz,
     -- Read in the timezone on the user row.
-    digest_hour smallint NOT NULL DEFAULT 8 CHECK (digest_hour BETWEEN 0 AND 23),
+    digest_hour smallint NOT NULL DEFAULT 8,
     UNIQUE (garden_id, user_id)
 );
 
