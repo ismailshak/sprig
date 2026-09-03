@@ -1,0 +1,2005 @@
+/* Structure and layout. No colour values live here — anything a palette could
+   change is a token, so this file is the same file whatever the palette is.
+
+   Two layouts, one markup. Phone is the primary target and gets a bottom tab bar;
+   at 900px the tabs become a rail on the left, and at 1180px the activity feed
+   moves out of the main column into its own. Nothing is hidden at either size:
+   the desktop view has to be reviewable as its own design rather than as a wide
+   phone. */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+
+/* ------------------------------------------------------------------ app shell */
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
+}
+
+/* One scroll container at both sizes, which is what lets the topbar be sticky
+   inside it rather than pinned outside it. Mobile stacks main above the tabs;
+   desktop puts the rail beside it with order. */
+.app__main {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+}
+
+.app__body {
+  padding: 0 20px 24px;
+}
+
+/* --------------------------------------------------------------------- header */
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--bg);
+  padding: 22px 20px 14px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.topbar__date {
+  font-size: var(--label-size);
+  font-weight: var(--label-weight);
+  letter-spacing: var(--label-tracking);
+  text-transform: var(--label-transform);
+  color: var(--ink-3);
+  margin-bottom: 4px;
+}
+
+.topbar__title {
+  font-family: var(--font-display);
+  font-weight: var(--display-weight);
+  letter-spacing: var(--display-tracking);
+  font-size: 30px;
+  line-height: 1.1;
+  margin: 0;
+}
+
+/* -------------------------------------------------------------------- summary */
+
+.summary {
+  margin: 4px 0 22px;
+  padding: 14px 16px;
+  border-radius: var(--radius);
+  background: var(--accent-soft);
+  color: var(--ink);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 15px;
+}
+
+.summary__count {
+  font-family: var(--font-display);
+  font-weight: var(--display-weight);
+  font-size: 26px;
+  line-height: 1;
+  letter-spacing: var(--display-tracking);
+  color: var(--accent);
+}
+
+/* ------------------------------------------------------------------- sections */
+
+.section { margin-bottom: 26px; }
+
+.section__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.section__title {
+  margin: 0;
+  font-size: var(--label-size);
+  font-weight: var(--label-weight);
+  letter-spacing: var(--label-tracking);
+  text-transform: var(--label-transform);
+  color: var(--ink-2);
+}
+
+.section__title--alert { color: var(--alert); }
+
+.section__count {
+  font-size: var(--label-size);
+  color: var(--ink-3);
+  letter-spacing: var(--label-tracking);
+}
+
+/* ----------------------------------------------------------------------- list */
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  background: var(--card-bg);
+  border: var(--card-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 12px 14px;
+  min-height: var(--tap);
+}
+
+.list--flush { padding: 0; }
+.list .row + .row,
+.list li + li .row { border-top: var(--row-divider); }
+
+/* The row opens the sheet, so it has to advertise that it can be pressed. Hover
+   is gated on a pointer that can actually hover: on a touchscreen the state
+   sticks after the tap and leaves the last row you touched looking selected.
+   A row inside its undo window is no longer openable and drops both. */
+.row:not(.row--done) { cursor: pointer; }
+
+@media (hover: hover) {
+  .row:not(.row--done):hover { background: var(--surface-2); }
+  /* The button lifts on its own so the two targets stay distinguishable while
+     the row underneath is also lit. */
+  .care:hover { transform: scale(1.04); }
+}
+
+.row__avatar {
+  width: 46px;
+  height: 46px;
+  border-radius: 999px;
+  overflow: hidden;
+  flex: none;
+  background: var(--surface-2);
+  border: var(--avatar-ring);
+}
+
+.row__avatar svg { display: block; width: 100%; height: 100%; }
+
+.row__text { flex: 1; min-width: 0; }
+
+.row__name {
+  font-family: var(--font-display);
+  font-weight: var(--display-weight);
+  letter-spacing: var(--display-tracking);
+  font-size: 17px;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.row__name--sp, .hero__name--sp { font-style: italic; }
+
+.row__meta {
+  font-size: 13px;
+  color: var(--ink-2);
+  margin-top: 2px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Each part shrinks and ellipsises on its own; a flex container cannot do it for
+   its children, which is how a long location used to get sliced mid-letter. */
+.row__part { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.row__meta .dot { color: var(--ink-3); flex: none; }
+.row__meta .late { color: var(--alert); font-weight: 600; }
+
+/* ---------------------------------------------------------------- care action */
+
+.care {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 14px;
+  height: 36px;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 14px;
+  font-weight: 600;
+  transition: transform .12s var(--ease), opacity .12s var(--ease);
+}
+
+.care:active { transform: scale(.96); }
+/* Some of these are anchors — Add, Edit plant, and the empty garden's one action
+   — because they go somewhere, and a page navigation is what they have to be. */
+a.care, a.empty__action { text-decoration: none; color: inherit; }
+a.empty__action { display: inline-flex; align-items: center; }
+.care svg { width: 16px; height: 16px; }
+
+/* Undo, not Done. The chip is a button and it reverses what just happened, so it
+   says what it does; the confirmation of what was recorded is on the meta line
+   beside it, where it cannot be mistaken for something to press. */
+.care--undo {
+  background: transparent;
+  color: var(--ink-2);
+  border: 1px solid var(--line-strong);
+}
+
+.care--outline {
+  background: none;
+  color: var(--ink);
+  border: 1px solid var(--line-strong);
+}
+
+.care--quiet {
+  background: var(--surface-2);
+  color: var(--ink-2);
+}
+
+/* ------------------------------------------------------------------- activity */
+
+.activity {
+  margin-top: 4px;
+  padding-top: 16px;
+  border-top: var(--row-divider);
+  font-size: 13px;
+  color: var(--ink-2);
+  display: grid;
+  gap: 7px;
+}
+
+.activity b { color: var(--ink); font-weight: 600; }
+
+/* ------------------------------------------------------------------------ nav */
+
+.nav {
+  display: flex;
+  border-top: var(--row-divider);
+  background: var(--surface);
+  padding: 8px 4px 22px;
+  flex: none;
+}
+
+.nav__item {
+  flex: 1;
+  display: grid;
+  gap: 3px;
+  justify-items: center;
+  padding: 4px 0;
+  color: var(--ink-3);
+  font-size: 10px;
+  letter-spacing: .02em;
+}
+
+.nav__item { text-decoration: none; }
+.nav__item svg { width: 22px; height: 22px; }
+.nav__item[aria-current="page"] { color: var(--accent); }
+
+.summary__count {
+  font-variant-numeric: lining-nums tabular-nums;
+  font-feature-settings: "lnum" 1, "tnum" 1;
+}
+
+.row--done .row__name { color: var(--ink-2); }
+.row--done .row__avatar { opacity: .55; }
+.summary--clear .summary__count { display: inline-flex; }
+.summary--clear .summary__count svg { width: 22px; height: 22px; }
+.summary--clear .summary__count { color: var(--good); }
+
+/* --------------------------------------------------------------- empty states */
+
+/* An empty Today is a normal day for a garden of long intervals, not an error,
+   so it gets a designed screen rather than the absence of one. */
+.empty {
+  display: grid;
+  justify-items: center;
+  text-align: center;
+  gap: 5px;
+  padding: 30px 16px 34px;
+}
+
+.empty__mark {
+  display: grid;
+  place-items: center;
+  width: 54px;
+  height: 54px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  margin-bottom: 11px;
+}
+
+.empty__mark svg { width: 26px; height: 26px; }
+
+.empty__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: var(--display-weight);
+  letter-spacing: var(--display-tracking);
+  font-size: 21px;
+  line-height: 1.2;
+}
+
+.empty__line {
+  margin: 0;
+  max-width: 34ch;
+  font-size: 14px;
+  color: var(--ink-2);
+}
+
+.empty__action {
+  margin-top: 15px;
+  height: 40px;
+  padding: 0 18px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--line-strong);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* ------------------------------------------------------------ the grace window */
+
+/* Collapsing the row rather than fading it keeps the list from jumping: the rows
+   below rise into the gap instead of appearing in a new place. */
+.row--leaving {
+  overflow: hidden;
+  min-height: 0;
+  max-height: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  opacity: 0;
+  border-top-width: 0 !important;
+  transition: max-height .32s var(--ease), opacity .22s var(--ease),
+              padding .32s var(--ease), min-height .32s var(--ease);
+}
+
+.row:not(.row--leaving) { max-height: 200px; }
+.row__said { color: var(--good); }
+
+/* The window is drawn as a bar along the bottom edge of the row, retreating
+   leftward as it closes, and the row leaves when it reaches zero. It sits on the
+   row rather than inside the Undo button because a rule narrow enough not to
+   dominate the button has to cut across the label to be seen at all.
+
+   --grace is the length of the window and --grace-delay is negative and equal to
+   the time already elapsed, both set inline on the row. The offset is what makes
+   the bar survive a re-render: every render replaces the element, and without it
+   the bar restarts from full each time while the timer underneath keeps its
+   original deadline. That is the bug the first version of this had, which is why
+   it never visibly moved. */
+.row--done::after,
+.grace::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  background: var(--accent);
+  transform-origin: left;
+  animation: grace-drain var(--grace, 6000ms) linear var(--grace-delay, 0ms) forwards;
+}
+
+@keyframes grace-drain { to { transform: scaleX(0) } }
+
+/* ---------------------------------------------------------------------- sheet */
+
+.sheet { position: fixed; inset: 0; z-index: 20; display: flex; flex-direction: column; justify-content: flex-end; }
+.sheet__scrim { position: absolute; inset: 0; background: rgba(8, 12, 11, .5); animation: fade .18s var(--ease); }
+
+.sheet__panel {
+  position: relative;
+  background: var(--surface);
+  border-top-left-radius: 18px;
+  border-top-right-radius: 18px;
+  padding: 8px 20px calc(20px + env(safe-area-inset-bottom));
+  max-height: 92%;
+  overflow-y: auto;
+  animation: rise .26s var(--ease);
+}
+
+@keyframes fade { from { opacity: 0 } }
+@keyframes rise { from { transform: translateY(14px); opacity: 0 } }
+
+.sheet__grip {
+  width: 36px; height: 4px; border-radius: 999px;
+  background: var(--line); margin: 0 auto 12px;
+}
+
+/* The plant heading is also the way to the plant. One target with one meaning,
+   rather than a row that opens two different places depending on where it is hit. */
+.sheet__plant {
+  display: flex; align-items: center; gap: 13px; width: 100%;
+  padding: 8px 8px 14px; margin: 0 -8px; text-align: left;
+  border-bottom: var(--row-divider);
+}
+
+.sheet__chevron { color: var(--ink-3); flex: none; display: grid; }
+.sheet__chevron svg { width: 18px; height: 18px; }
+
+.field { margin-top: 18px; }
+
+.field__label {
+  font-size: var(--label-size); font-weight: var(--label-weight);
+  letter-spacing: var(--label-tracking); text-transform: var(--label-transform);
+  color: var(--ink-2); margin-bottom: 9px;
+  display: block;
+}
+
+.field__hint {
+  text-transform: none; letter-spacing: 0; font-weight: 400; color: var(--ink-3);
+}
+
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.chip {
+  padding: 9px 14px; min-height: 40px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--line);
+  background: var(--bg); color: var(--ink-2);
+  font-size: 14px;
+}
+
+.chip[aria-pressed="true"] {
+  background: var(--accent); border-color: var(--accent);
+  color: var(--accent-ink); font-weight: 600;
+}
+
+.input {
+  width: 100%; margin-top: 8px; padding: 11px 12px;
+  font: inherit; font-size: 15px;
+  color: var(--ink); background: var(--bg);
+  border: 1px solid var(--line); border-radius: var(--radius);
+}
+
+.input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* A clock or a date is a fixed-width thing. Stretching the field to the panel
+   leaves a bar of empty box beside the value and reads as a text input. */
+.input--narrow { width: auto; min-width: 150px; }
+
+.sheet__go {
+  width: 100%; margin-top: 24px; min-height: var(--tap);
+  border-radius: var(--radius-pill);
+  background: var(--accent); color: var(--accent-ink);
+  font-size: 16px; font-weight: 600;
+}
+
+.sheet__cancel {
+  width: 100%; margin-top: 6px; min-height: var(--tap);
+  color: var(--ink-2); font-size: 15px;
+}
+
+/* ================================================================== desktop */
+
+/* The tab bar becomes a rail. Same markup, same items, same order — a tab that
+   only exists on one of the two sizes is a second information architecture to
+   keep in agreement, and there is no version of this app that needs one. */
+@media (min-width: 900px) {
+  .app { flex-direction: row; }
+
+  .nav {
+    order: -1;
+    flex: none;
+    flex-direction: column;
+    gap: 2px;
+    width: 232px;
+    padding: 22px 12px;
+    background: none;
+    border-top: 0;
+    border-right: var(--row-divider);
+  }
+
+  .nav__item {
+    flex: none;
+    grid-auto-flow: column;
+    grid-template-columns: auto 1fr;
+    justify-items: start;
+    align-items: center;
+    gap: 12px;
+    font-size: 14px;
+    padding: 10px 12px;
+    border-radius: var(--radius);
+  }
+
+  .nav__item[aria-current="page"] {
+    background: var(--accent-soft);
+    font-weight: 600;
+  }
+
+  /* Wide measure is the failure mode here, not wasted space: a care row stretched
+     to 1400px puts the plant name and its button at opposite ends of the screen. */
+  .topbar,
+  .app__body {
+    max-width: 1180px;
+    margin-inline: auto;
+    padding-left: 36px;
+    padding-right: 36px;
+  }
+
+  .topbar { padding-top: 34px; padding-bottom: 18px; }
+  .topbar__title { font-size: 34px; }
+
+  .list {
+    background: var(--surface);
+    border: 1px solid var(--line);
+  }
+}
+
+/* Above this the main column has room to spare, so the activity feed stops being
+   a footnote under the lists and becomes a column of its own. */
+@media (min-width: 1180px) {
+  .app__body--feed {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 320px;
+    gap: 0 44px;
+    align-items: start;
+  }
+
+  .app__body--feed > .empty,
+  .app__body--feed > .summary,
+  .app__body--feed > .section { grid-column: 1; }
+
+  .activity {
+    grid-column: 2;
+    grid-row: 1;
+    position: sticky;
+    top: 96px;
+    margin-top: 4px;
+    padding-top: 0;
+    border-top: 0;
+  }
+
+  .activity::before {
+    content: "Recent activity";
+    display: block;
+    font-size: var(--label-size);
+    font-weight: var(--label-weight);
+    letter-spacing: var(--label-tracking);
+    text-transform: var(--label-transform);
+    color: var(--ink-2);
+    margin-bottom: 4px;
+  }
+}
+
+/* At desktop the sheet is a dialog. Sliding a panel up from the bottom edge of a
+   1400px window puts the controls a long way from the row that was clicked. */
+@media (min-width: 900px) {
+  .sheet { justify-content: center; align-items: center; }
+  .sheet__grip { display: none; }
+  .sheet__panel {
+    width: 420px;
+    max-height: 84%;
+    border-radius: 14px;
+    padding: 8px 22px 22px;
+    box-shadow: 0 24px 60px rgba(0, 0, 0, .4);
+  }
+}
+
+/* Nothing here carries meaning that the motion is the only carrier of, so all of
+   it can simply stop. */
+@media (prefers-reduced-motion: reduce) {
+  .sheet__panel, .sheet__scrim { animation: none; }
+  .row--leaving { transition-duration: 1ms; }
+  .care { transition: none; }
+  /* The drain bar stays. It is the only animation here that is the sole carrier
+     of something the person needs — how much of the window is left — and a
+     six-second linear wipe is not the kind of motion the setting is about. */
+}
+
+/* ----------------------------------------------------------------- the roster */
+
+/* The Plants topbar has no eyebrow line, so its title sits alone and the bar's
+   spare half carries the page's creation action. */
+.topbar__action { align-self: center; }
+
+/* A plant's standing, which on this page only ever means overdue. It is text
+   rather than a chip because it is a statement and not a control — the row it
+   sits on is the control, and a pill here would read as a second button. */
+.standing {
+  flex: none;
+  font-size: 12.5px;
+  font-weight: 600;
+  text-align: right;
+  max-width: 40%;
+  color: var(--alert);
+}
+
+.row--link { color: inherit; text-decoration: none; }
+
+.foot-link {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: var(--tap);
+  padding: 0 2px;
+  font-size: 14px;
+  color: var(--ink-2);
+}
+
+.foot-link svg { width: 15px; height: 15px; color: var(--ink-3); }
+/* Some of these navigate — the archive, the older page of the log, a plant's
+   whole history — so they are anchors and have to stop looking like ones. */
+a.foot-link { text-decoration: none; color: var(--ink-2); }
+
+/* Rooms come thicker than Today's three sections do, so they carry less air
+   between them; at six headings on a phone the page is navigated by heading and
+   the gap only costs scroll. */
+.app__body--grid .section { margin-bottom: 18px; }
+
+/* One column on the phone. Wide, the rooms sit side by side rather than the rows
+   growing: a row is tuned to phone measure and a 1100px-wide plant name with its
+   species at the far edge is the failure this app's desktop layout exists to
+   avoid. Each room is a whole card, so a group never splits across columns. */
+@media (min-width: 900px) {
+  .app__body--grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 0 28px;
+    align-items: start;
+  }
+}
+
+
+/* ------------------------------------------------------------- a single plant */
+
+/* Not a tab root, so the bar carries the way back instead of a title. */
+.topbar--back { padding-top: 14px; padding-bottom: 8px; }
+
+.backlink {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: -6px;
+  min-height: var(--tap);
+  padding-right: 8px;
+  color: var(--ink-2);
+  text-decoration: none;
+  font-size: 15px;
+}
+
+.backlink svg { width: 20px; height: 20px; }
+
+/* The picture is the point of the top of this page: telling one green thing from
+   another is what a 46px circle in a list cannot do. It is wider than it is tall
+   so the name still lands above the fold on a phone. */
+.hero { margin-bottom: 22px; }
+
+/* Pressable, because it goes to the photo's own page. The mark in the corner is
+   the only thing saying so, and it sits on a scrim rather than on the picture so
+   it is legible over a pale leaf and a dark pot alike. */
+.hero__pic {
+  position: relative;
+  display: block;
+  width: 100%;
+  padding: 0;
+  aspect-ratio: 5 / 3;
+  border-radius: var(--radius);
+  overflow: hidden;
+  border: var(--card-border);
+  background: var(--surface-2);
+  display: grid;
+  place-items: center;
+}
+
+.hero__pic > svg { width: 62%; max-width: 260px; height: auto; }
+
+.hero__zoom {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  background: rgba(8, 12, 11, .42);
+  color: #fff;
+}
+
+.hero__zoom svg { width: 15px; height: 15px; }
+
+.hero__name {
+  margin: 14px 0 0;
+  font-family: var(--font-display);
+  font-weight: var(--display-weight);
+  letter-spacing: var(--display-tracking);
+  font-size: 28px;
+  line-height: 1.15;
+}
+
+.hero__meta { margin: 3px 0 0; font-size: 14px; color: var(--ink-2); }
+
+/* The room is a different kind of fact from a name, so it is a line of its own
+   rather than a third item in a dot-separated run. */
+.hero__where { margin: 2px 0 0; font-size: 13px; color: var(--ink-3); }
+
+/* ---------------------------------------------------------------- schedule row */
+
+/* The same card and the same divider as a list of plants, because it is the same
+   kind of object: a line you can press to change one thing about it. */
+.sched {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  min-height: var(--tap);
+  cursor: pointer;
+}
+
+.list .sched + .sched { border-top: var(--row-divider); }
+
+@media (hover: hover) {
+  .sched:hover { background: var(--surface-2); }
+}
+
+.sched__icon {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex: none;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.sched__icon svg { width: 17px; height: 17px; }
+
+.sched__text { flex: 1; min-width: 0; }
+
+.sched__type {
+  display: block;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.sched__every { font-size: 13px; color: var(--ink-2); }
+
+.sched__when {
+  flex: none;
+  font-size: 13px;
+  color: var(--ink-2);
+  text-align: right;
+}
+
+.sched__when--late { color: var(--alert); font-weight: 600; }
+
+/* A dormant schedule is not a problem and not a countdown. It reads at the
+   weight of an aside, because that is what it is until the window opens. */
+.sched__when--off { color: var(--ink-3); }
+
+/* A care type this plant is not on. It is in the list rather than behind a
+   button, because the reason to open this section is to change what the plant is
+   scheduled for and the absent types are half that question. */
+.sched--add .sched__icon { background: var(--surface-2); color: var(--ink-3); }
+.sched--add .sched__type { color: var(--ink-2); font-weight: 500; }
+.sched--add .sched__when { color: var(--ink-3); }
+
+/* The editing row trades the status column for two buttons, so it carries less
+   air between its parts than a row that is only being read. */
+.sched--editing { gap: 8px; }
+
+/* Editing happens where the number is read. Changing an interval is a seasonal
+   adjustment of one field, and sending it to a form page to do it is the reason
+   the interval never gets changed. */
+.sched__field {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--ink-2);
+  margin-top: 6px;
+}
+
+/* The three selects of a date are one control, so they wrap together onto the
+   line under their label rather than breaking between the month and the year. */
+.sched__field > .input { flex: none; }
+
+/* The sentence under the shape select. It is the only running text in the
+   editor, so it takes --ink-2 rather than the --ink-3 a label modifier can
+   afford: 3.37 is enough for "optional" beside a heading and not enough for a
+   line somebody has to read to make the choice. */
+.sched__hint {
+  margin-top: 5px;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--ink-2);
+}
+
+.input--tiny { width: 62px; margin-top: 0; padding: 6px 8px; font-size: 15px; }
+.input--unit { width: auto; max-width: 100%; margin-top: 0; padding: 6px 6px; font-size: 14px; }
+
+/* The editing row grows past one line, so its buttons stack to the right of the
+   fields rather than sitting on the row's centre line. */
+.sched--editing { align-items: flex-start; flex-wrap: wrap; }
+.sched--editing .sched__text { flex: 1 1 200px; }
+
+.sched__buttons { display: flex; align-items: center; gap: 4px; margin-top: 8px; margin-left: auto; }
+
+/* The question takes the whole width and the answers sit under it on the right,
+   where the buttons it replaced were. Asking on one line and answering on the
+   next is what keeps "Remove this schedule?" from being read as a label on the
+   button beside it. The rule above it separates the question from the fields it
+   is asking about. */
+.sched__confirm {
+  flex: 1 1 100%;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 4px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: var(--row-divider);
+}
+
+.sched__ask { flex: 1 1 100%; margin-bottom: 6px; font-size: 14px; font-weight: 600; }
+
+.sched__season {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+
+.sched__season input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--accent); }
+
+/* The two months on their own line. "Only from March to May" does not fit a
+   phone row, and letting it wrap leaves "to" stranded at the end of a line. */
+.sched__months {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+
+.care--small { height: 32px; padding: 0 12px; font-size: 13px; }
+
+/* An editor that can only be committed is one a mis-tap traps you in. Cancel is
+   text rather than a second pill so the row still has one obvious button. */
+.sched__cancel { flex: none; padding: 0 8px; font-size: 13px; color: var(--ink-2); }
+.care--small svg { width: 14px; height: 14px; }
+
+/* ------------------------------------------------------------- the wide action */
+
+/* Log care is the second of the page's two errands and it is not attached to any
+   one line above it, so it is a full-width button under the schedule rather than
+   a chip inside it. */
+.wide-action {
+  width: 100%;
+  min-height: var(--tap);
+  margin: 4px 0 26px;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+/* ------------------------------------------------------------------- reference */
+
+.panel {
+  background: var(--card-bg);
+  border: var(--card-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 14px;
+}
+
+/* Label and value on one line each, the label in the quiet register the app uses
+   for every other label. A grid rather than two columns of text, so a long value
+   wraps under itself instead of under its own label. */
+.facts {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  gap: 9px 12px;
+  margin: 0;
+  font-size: 14px;
+}
+
+.facts dt {
+  font-size: var(--label-size);
+  font-weight: var(--label-weight);
+  letter-spacing: var(--label-tracking);
+  text-transform: var(--label-transform);
+  color: var(--ink-2);
+  padding-top: 3px;
+}
+
+.facts dd { margin: 0; line-height: 1.5; }
+
+.facts + .panel__note {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: var(--row-divider);
+}
+
+.panel__note { margin: 0; font-size: 14px; line-height: 1.55; }
+
+.panel__fact {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 12px 0 0;
+  padding-top: 12px;
+  border-top: var(--row-divider);
+  font-size: 14px;
+}
+
+.panel__note:only-child { margin: 0; }
+.panel__fact:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
+.panel__fact span { color: var(--ink-2); }
+
+/* ---------------------------------------------------------------------- photos */
+
+.section__link { font-size: 13px; color: var(--ink-2); padding: 0; }
+
+/* A strip, not a grid. The question is whether it has grown, and the answer is
+   two pictures a long way apart in time; the grid is a page of its own. It runs
+   to the screen edge so a half-cut tile says there is more to the right. */
+.strip {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  margin: 0 -20px;
+  padding: 0 20px 2px;
+}
+
+.strip::-webkit-scrollbar { display: none; }
+
+.shot {
+  flex: none;
+  margin: 0;
+  width: 96px;
+  font-size: 11px;
+  color: var(--ink-3);
+  text-align: center;
+}
+
+.shot__pic, .shot--add {
+  display: grid;
+  place-items: center;
+  width: 96px;
+  height: 96px;
+  border-radius: var(--radius);
+  overflow: hidden;
+  border: var(--card-border);
+  background: var(--surface-2);
+  margin-bottom: 5px;
+}
+
+.shot__pic svg { width: 100%; height: 100%; }
+
+.shot--add {
+  gap: 4px;
+  border: 1px dashed var(--line-strong);
+  background: none;
+  color: var(--ink-2);
+  font-size: 12px;
+  align-content: center;
+}
+
+.shot--add svg { width: 20px; height: 20px; }
+
+/* --------------------------------------------------------------------- history */
+
+.loglist { list-style: none; margin: 0; padding: 0; }
+
+.logline {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 0;
+  font-size: 14px;
+  color: var(--ink-2);
+  border-bottom: var(--row-divider);
+}
+
+.logline b { color: var(--ink); font-weight: 600; }
+.logline--none { color: var(--ink-3); }
+.logline--fresh { justify-content: space-between; }
+.logline__said { color: var(--good); font-weight: 600; }
+
+/* ------------------------------------------------------------------ page foot */
+
+.plant__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 6px;
+}
+
+/* Archive is not delete and is not a warning. Rose in this app means overdue,
+   and spending it on an ordinary tidy-up would make the two mean the same. */
+.plant__archive {
+  min-height: var(--tap);
+  padding: 0 6px;
+  font-size: 14px;
+  color: var(--ink-2);
+}
+
+/* Named areas rather than source order, so the phone keeps the reading order it
+   needs and the desktop can put the picture and the reference in a column of
+   their own without a second copy of the markup. */
+.app__body--plant {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: "hero" "sched" "log" "ref" "photos" "history" "foot";
+}
+
+.hero { grid-area: hero; }
+.section--schedule { grid-area: sched; }
+.wide-action { grid-area: log; }
+.section--reference { grid-area: ref; }
+.section--photos { grid-area: photos; }
+.section--history { grid-area: history; }
+.plant__foot { grid-area: foot; }
+
+/* Wide, the page splits along the line its two halves already fall on: what the
+   plant is on the left, what you do to it on the right. The picture stops
+   growing there, because past about 340px it is a poster rather than an
+   identification. */
+@media (min-width: 900px) {
+  /* Narrower than the 1180px the list pages take. A schedule line is a label and
+     a date, and at 700px wide it puts "Water, every 10 days" at one edge of the
+     screen and "2 days late" at the other — the same failure the desktop layout
+     exists to avoid on a care row. The topbar matches so the back link stays
+     over the picture. */
+  .topbar--back,
+  .app__body--plant { max-width: 980px; }
+
+  .app__body--plant {
+    grid-template-columns: 340px minmax(0, 1fr);
+    grid-template-areas:
+      "hero    sched"
+      "hero    log"
+      "ref     photos"
+      "ref     history"
+      "ref     foot";
+    column-gap: 44px;
+    align-items: start;
+  }
+
+  .strip { margin: 0; padding: 0 0 2px; }
+}
+
+/* ------------------------------------------------------------- the plant form */
+
+/* Cancel rather than a back arrow, and text rather than a button: what it says
+   is that the typing will be thrown away, which is a different message from
+   "the previous page", and it should not look like the thing you press when
+   you are finished. */
+.topbar__cancel {
+  align-self: center;
+  padding: 0 4px;
+  min-height: var(--tap);
+  display: inline-flex;
+  align-items: center;
+  font-size: 15px;
+  color: var(--ink-2);
+  text-decoration: none;
+}
+
+/* A form is one column and a narrow one. The 1180px the lists take would put a
+   text input at the full width of the window, which is the same failure as a
+   care row stretched across a desktop and reads as a search box rather than as
+   a field with an answer of a few words in it. */
+@media (min-width: 900px) {
+  .topbar--form,
+  .app__body--form { max-width: 680px; }
+}
+
+.app__body--form { padding-bottom: 40px; }
+
+/* A form is a column of fields and its rhythm is the gap between them. The
+   sheet's label sits further from its control because it has chips under it as
+   often as an input; here everything is an input and the pair reads as one
+   thing. */
+.app__body--form .field { margin-top: 20px; }
+.app__body--form .field__label { margin-bottom: 2px; }
+.app__body--form .section { margin-top: 30px; }
+
+/* The three names are one question — "what is this called" — so they sit
+   together with one message under them rather than three required fields. */
+.form__names { margin-bottom: 4px; }
+
+.field__error {
+  margin: 10px 0 0;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--alert);
+}
+
+.field__pair { display: flex; gap: 8px; margin-top: 8px; }
+.field__pair > .input { margin-top: 0; }
+
+.input--tall { resize: vertical; line-height: 1.5; }
+
+/* The picture is the first field because it is the first thing a person has:
+   the plant is in front of them and the phone is already in their hand. It is
+   also the one field allowed to be absent — where the browser cannot resize
+   before upload it is not offered at all. */
+.photo-field { margin-bottom: 4px; }
+
+/* Empty, it is the size of a field, because that is what it is until it holds
+   something. Filled, it takes the 5:3 the plant page gives it, so what is framed
+   here is what will be seen there. A dashed 5:3 box for the empty state was the
+   first version and it spent a quarter of the first screen on a hole. */
+.photo-field__empty {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: var(--tap);
+  padding: 13px 14px;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink-2);
+  font-size: 15px;
+}
+
+.photo-field__empty svg { width: 21px; height: 21px; color: var(--ink-3); }
+
+.photo-field__pic {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  width: 100%;
+  aspect-ratio: 5 / 3;
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.photo-field__pic > svg { width: 62%; max-width: 260px; height: auto; }
+
+.photo-field__actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+/* Behind a disclosure, because a form that opens with eight empty boxes reads
+   as work. It is a details element rather than a scripted panel so that it
+   opens on a page the server rendered and stays open through a failed post. */
+.disclosure {
+  margin: 26px 0 18px;
+  border-top: var(--row-divider);
+  padding-top: 16px;
+}
+
+.disclosure__head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-height: var(--tap);
+  padding: 4px 0;
+  cursor: pointer;
+  list-style: none;
+}
+
+.disclosure__head::-webkit-details-marker { display: none; }
+
+/* The mark is a chevron that turns, drawn in CSS rather than pulled from the
+   icon set: it is a piece of the control rather than a thing with a meaning of
+   its own, and it has to rotate. */
+.disclosure__head::after {
+  content: "";
+  width: 8px; height: 8px;
+  margin-left: auto;
+  border-right: 2px solid var(--ink-3);
+  border-bottom: 2px solid var(--ink-3);
+  transform: rotate(45deg);
+  transition: transform .18s var(--ease);
+}
+
+.disclosure[open] .disclosure__head::after { transform: rotate(225deg); }
+
+.disclosure__hint { font-size: 13px; color: var(--ink-3); }
+.disclosure__body { padding-bottom: 8px; }
+
+/* --------------------------------------------------------- the room combobox */
+
+/* Rooms are the grouping the roster is built on, so a typo does not make a
+   spelling mistake, it makes a room. The list is what you pick from and typing
+   is what filters it; naming a new room is the last row and says so. */
+.combo { position: relative; }
+.combo > .input { padding-right: 36px; }
+
+.combo__mark {
+  position: absolute;
+  right: 15px;
+  top: 50%;
+  width: 8px; height: 8px;
+  margin-top: -2px;
+  border-right: 2px solid var(--ink-3);
+  border-bottom: 2px solid var(--ink-3);
+  transform: translateY(-50%) rotate(45deg);
+  pointer-events: none;
+}
+
+.combo__list {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 5;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  max-height: 244px;
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.combo__option {
+  display: flex;
+  align-items: center;
+  min-height: var(--tap);
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.combo__option[aria-selected="true"] { background: var(--accent-soft); }
+
+/* The new room is quieter than the ones that exist and is separated from them,
+   because it is the answer that changes the garden rather than reads it. */
+.combo__option--new {
+  margin-top: 4px;
+  padding-top: 12px;
+  border-top: var(--row-divider);
+  border-radius: 0 0 8px 8px;
+  color: var(--ink-2);
+}
+
+@media (hover: hover) {
+  .combo__option:hover { background: var(--surface-2); }
+}
+
+/* Archive sits under the button that saves, not beside it. They are not two
+   options of the same weight, and a destructive-ish action next to the primary
+   one is a mis-tap waiting to happen. */
+.form__foot { display: flex; justify-content: center; margin-top: 4px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .disclosure__head::after { transition: none; }
+}
+
+/* ---------------------------------------------------------------- the activity log */
+
+/* A log is read top to bottom and nothing lives at its right-hand edge, so the
+   column is set to a reading measure rather than to the 1180px the two lists
+   take. A row here is a sentence and a clock, and given the width of a window it
+   puts "Big Fella" at one edge and nothing at the other. */
+@media (min-width: 900px) {
+  .topbar--log,
+  .app__body--log,
+  .topbar--more,
+  .app__body--more { max-width: 760px; }
+}
+
+/* Filtered to one plant the row loses its picture, so its two lines sit at the
+   left edge on their own. The row keeps its tap floor, which is what stops it
+   collapsing to the height of two lines of small text. */
+.row--event { cursor: pointer; }
+
+/* The parts of an event whose length nobody controls, wrapping rather than
+   ellipsising, on a line under the meta rather than in a slot inside it. Same
+   ink as the meta above: the quotation marks and the line break are what say the
+   note is quoted speech, and making it darker would put somebody's aside above
+   the plant's own name in the order the row is read. */
+.row__extra {
+  display: block;
+  margin-top: 3px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--ink-2);
+}
+
+/* A row lead in the body face rather than in Fraunces: the care that was done on
+   a log filtered to one plant, and the name of a settings page on More. The
+   display face is for plant names, screen titles and empty states, and neither
+   "Watered" nor "Notifications" is any of those. */
+.row__act,
+.row__label {
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+/* A deleted row says so in the quiet register rather than in the green a logged
+   one takes. Nothing was accomplished; something was removed. */
+.row__said--gone { color: var(--ink-2); font-weight: 500; }
+
+/* One control most of the time and two on a page that is not the first, so they
+   sit at opposite ends rather than stacking. */
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+/* The bar on the filtered view carries the way back to the plant above the
+   title, which is two rows where every other bar is one. Both are links or
+   headings rather than controls, so the bar stays the same height as a row of
+   chrome and not a block of it. */
+.topbar--stack {
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: 0;
+  padding-top: 14px;
+}
+
+.topbar--stack .backlink { margin-left: -4px; }
+
+/* Save and Delete side by side, because correcting an event and removing it are
+   the same errand arriving at the same sheet. Delete is outlined and not rose:
+   rose in this app means overdue, and it is undoable for six seconds afterwards
+   exactly like a logged row on Today, so it does not need the weight of a
+   warning or a confirmation step in front of it. */
+.sheet__foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sheet__foot .sheet__go { flex: 1; margin-top: 0; }
+
+.sheet__delete {
+  flex: none;
+  min-height: var(--tap);
+  padding: 0 18px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--line-strong);
+  color: var(--ink-2);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+/* Who wrote it down and when, as against who did it and when. It is a statement
+   and not a field, so it takes the quietest ink and sits above the buttons
+   rather than among the labelled controls. */
+.sheet__record {
+  margin: 24px 0 10px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--ink-3);
+}
+
+/* ------------------------------------------------- the activity log as a rail */
+
+/* Activity is a strand, not a stack of day-headed cards: one continuous line
+   down the left with a node per event, day markers and silences drawn on it.
+
+   The trade it makes is horizontal. The strand and its node take the 47px the
+   portrait had, so the portrait shrinks from 46px to 34px to become the node —
+   which is the whole cost, and the gain is that a silence can be drawn rather
+   than left as the distance between two headings. */
+.rail {
+  list-style: none;
+  margin: 0 -10px 16px;
+  padding: 0;
+}
+
+.rail > li { position: relative; }
+
+/* The line is drawn per item rather than once behind the list, because a gap has
+   to be able to dash its own stretch of it and a deleted row has to be able to
+   take its stretch with it as it collapses. */
+.rail > li::before {
+  content: "";
+  position: absolute;
+  left: 26px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--line);
+}
+
+/* The strand starts at the first mark and stops at the last, rather than running
+   out of the top of the page and into the pager. Below it the log continues on
+   another URL, and a line pointing at the "Older activity" link would promise a
+   continuity the cursor cannot keep. */
+.rail > li:first-child::before { top: 14px; }
+.rail > li:last-child::before { bottom: auto; height: 30px; }
+
+.rail .row {
+  padding: 12px 10px;
+  gap: 13px;
+  border-radius: var(--radius);
+}
+
+/* Small enough to be a node, large enough to still identify the plant. This is
+   the twelve pixels of face the rail costs. Positioned so it paints over the
+   line rather than under it: the line is an absolute pseudo-element, and a
+   static sibling sits in a lower layer however opaque it is. */
+.rail .row__avatar { width: 34px; height: 34px; position: relative; }
+
+/* Filtered to one plant the node is the care, which is the thing that varies
+   there. It is the same treatment a schedule row's icon gets on a plant's page,
+   at the same size, so the two readings of the same care type match. */
+.row__node {
+  position: relative;
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.row__node svg { width: 18px; height: 18px; }
+
+/* A skip is not an accomplishment, so its node drops out of the accent and into
+   the quiet register — the same distinction the deleted row's "Deleted" makes
+   against a logged row's green. */
+.row__node--skip { background: var(--surface-2); color: var(--ink-3); }
+
+/* The day heading off its card and onto the line, with a hollow ring where a
+   filled node would be. Text aligns with the rows' text so the left edge of the
+   column is one edge and not two. */
+.rail__day {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  padding: 16px 10px 8px 57px;
+}
+
+.rail__day .dot { color: var(--ink-3); }
+
+.rail > li.rail__day:first-child { padding-top: 4px; }
+
+.rail__day::after {
+  content: "";
+  position: absolute;
+  left: 22px;
+  bottom: 9px;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--bg);
+  border: 2px solid var(--line);
+}
+
+/* The silence, drawn. The line dashes for exactly the stretch nothing happened
+   in, which is the one thing the list cannot say: under day headings a fortnight
+   of nothing and a single quiet day are both just the next heading. */
+.rail__gap {
+  padding: 12px 10px 12px 57px;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+/* A real dash rather than `border-left: dashed`, which at 2px wide draws dashes
+   two pixels long and reads as a slightly paler solid line. */
+.rail__gap::before {
+  background: repeating-linear-gradient(var(--line) 0 5px, transparent 5px 11px);
+}
+
+/* The undo window is the same bar along the row's bottom edge it is everywhere
+   else, inset to the text column. Drawing it across the full row would cut the
+   strand at the one moment the strand matters — the row is still there and can
+   still be brought back — and starting it at the text's left edge puts it on
+   empty pixels, which is the whole reason the bar lives on the row and not in
+   the Undo button. */
+.rail .row--done::after { left: 57px; right: 10px; }
+
+/* The hover band is inset from the strand rather than covering it, which is why
+   the list carries a negative margin and the rows carry the padding back. */
+@media (hover: hover) {
+  .rail .row:not(.row--done):hover { background: var(--surface-2); }
+}
+
+/* On the phone the strand runs on the page itself; at desktop it runs inside a
+   panel, which is the same move every other list makes here. Without it the log
+   is a 280px ribbon of text adrift in a 1400px window and the 760px cap stops
+   meaning anything, because nothing is drawing its width. */
+@media (min-width: 900px) {
+  .rail {
+    margin-inline: 0;
+    padding: 6px 10px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+  }
+}
+
+/* ------------------------------------------------------------------- more foot */
+
+/* Install, Sign out and the build, in that order and each quieter than the last.
+   They are stacked at the left rather than spread across the column, because the
+   right-hand end of a row on this page carries nothing and putting Sign out
+   there would be the only thing in the app that lives at that edge. */
+.more__foot {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  margin-top: 4px;
+}
+
+/* Quiet for the reason Archive is: rose means overdue here, and spending it on
+   the thing every session ends with would make the two mean the same. */
+.more__signout {
+  min-height: var(--tap);
+  padding: 0 2px;
+  font-size: 14px;
+  color: var(--ink-2);
+}
+
+.more__build {
+  margin: 6px 0 0 2px;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+/* -------------------------------------------------------------- more's rows */
+
+/* A row here is a name and a chevron, so it is one line and it is the height of
+   the tap floor and no more. The stacked two-line row this started as was
+   Plants' row grammar, where a 46px portrait sets the height and the name and
+   its meta stack beside it — with no portrait it kept the height and lost the
+   thing that filled it, and every row read as a plant row carrying nothing. */
+.row--setting {
+  gap: 12px;
+  min-height: var(--tap);
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.row--setting .row__label { flex: none; }
+
+/* Only ever an exception: notifications off, an invite nobody has taken up. It
+   sits before the chevron rather than at the very edge, so the chevron stays the
+   thing every row ends with. */
+.row__note {
+  flex: 1;
+  min-width: 0;
+  text-align: right;
+  font-size: 14px;
+  color: var(--ink-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.row__go {
+  flex: none;
+  margin-left: auto;
+  display: flex;
+  color: var(--ink-3);
+}
+
+/* A note takes the free space, so the chevron stops claiming it. */
+.row__note + .row__go { margin-left: 0; }
+
+.row__go svg { width: 17px; height: 17px; }
+
+/* ------------------------------------------------------- more's own pages */
+
+/* Eight pages share one shell, so they share one column. It is More's 760px and
+   not the form's 680: stepping into a row from the index should not make the
+   page you arrived at a different width from the one you left. */
+@media (min-width: 900px) {
+  .topbar--sub,
+  .app__body--sub { max-width: 760px; }
+}
+
+.app__body--sub { padding-bottom: 40px; }
+
+/* The plant form's rhythm, for the same reason: a label and its input are one
+   thing, and the gap between fields is what separates them. */
+.app__body--sub .field { margin-top: 20px; }
+.app__body--sub .field__label { margin-bottom: 2px; }
+.app__body--sub .section { margin-top: 28px; }
+.app__body--sub .section .care--outline { margin-top: 12px; }
+
+/* The wide action follows a field, a list or a paragraph rather than sitting
+   under a heading of its own, so it carries the gap that separates it from the
+   thing above it. Four pixels — the plant page's, where a schedule list is
+   already a bounded block — left Save looking welded to the input. */
+.app__body--sub .wide-action { margin-top: 20px; }
+
+/* Invite someone goes to a page, so it is an anchor wearing the button. */
+a.wide-action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+
+/* A sentence under the title, on the pages whose subject is a thing somebody may
+   never have met: a passkey, a bearer token, a link that works once. It is the
+   quiet register rather than the body one, because it is the page explaining
+   itself and not the page's content. */
+.lead {
+  margin: 0 0 14px;
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--ink-2);
+}
+
+/* The smaller sibling of the lead: a footnote under the thing it is about. Every
+   one of these exists because the rule it states is invisible — that a link is
+   shown once, that the last passkey cannot go, that an hour is read in a
+   timezone set on another page. */
+.note {
+  margin: 10px 2px 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink-3);
+}
+
+.note a { color: var(--ink-2); }
+
+/* A two-line row whose only control is at its right-hand end, which is every
+   list on these pages: a device, a browser, a token, a person, an invite. It
+   goes back to the row's own padding after More's index squeezed it to one line,
+   and it is not itself pressable — Remove is the control and the row is not a
+   second, larger copy of it. */
+.row--stack {
+  padding: 12px 14px;
+  min-height: var(--tap);
+  cursor: default;
+}
+
+@media (hover: hover) {
+  .row--stack:hover { background: none; }
+}
+
+/* The display face is the garden's: plant names, screen titles, the line on an
+   empty state. A browser called "iPhone · Safari" set in Fraunces reads as a
+   plant, so a name that is not a plant's is in the body face at the weight that
+   still makes it the row's first thing. */
+.row--stack .row__name,
+.check .row__name {
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 15px;
+  letter-spacing: 0;
+}
+
+/* These say a whole sentence rather than three words and a dot, so they wrap.
+   What a grade can do is the reason the select beside it is meaningful, and an
+   ellipsis two words in ("Everything, including in…") is the row keeping the
+   answer to itself. */
+.check .row__meta,
+.row--check .row__meta,
+.row--stack .row__meta { white-space: normal; }
+
+.row__you {
+  margin-left: 7px;
+  font-size: var(--label-size);
+  font-weight: var(--label-weight);
+  letter-spacing: var(--label-tracking);
+  text-transform: var(--label-transform);
+  color: var(--ink-3);
+}
+
+/* Remove, Revoke, Turn it off. Text at the right-hand end rather than a rose
+   button: each of them is undone by making another one of the thing, and rose in
+   this app means overdue. It is the size of the row's own text so that the one
+   control on the row is easy to hit. */
+.row__drop {
+  flex: none;
+  min-height: var(--tap);
+  padding: 0 2px 0 10px;
+  font-size: 14px;
+  color: var(--ink-2);
+}
+
+/* A checkbox and the sentence saying what it will send. The label fills the row
+   so the whole line is the target, which is what the row would have been if the
+   row itself were the control. */
+.row--check { padding: 0; cursor: default; }
+
+@media (hover: hover) {
+  .row--check:hover { background: none; }
+}
+
+.check {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 14px;
+  min-height: var(--tap);
+  cursor: pointer;
+}
+
+.check input[type="checkbox"] {
+  flex: none;
+  margin-top: 2px;
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+}
+
+/* A care type being renamed, which is the plant page's schedule row grammar
+   applied to a one-field row: the row becomes the editor in place, because there
+   is a real care type on the server to post a single row against. */
+.row--editing {
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 14px;
+  cursor: default;
+}
+
+.row--editing > .input { flex: 1 1 100%; margin-top: 0; }
+
+.row__edits { flex: 1 1 100%; }
+.row__edits .row__drop { padding-left: 0; }
+
+/* Why this row offers Turn it off rather than Delete, said in the row at the
+   moment the choice is in front of somebody. Finding it out from a refused post
+   afterwards is the version of this page worth avoiding. */
+.row__why {
+  margin: 2px 0 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--ink-3);
+}
+
+/* The destructive one at the left and the two ordinary ones at the right, which
+   is the arrangement that keeps Turn it off from being the thing a thumb reaches
+   for on its way to Save. */
+.row__buttons {
+  flex: 1 1 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.row__buttons .row__drop { padding-left: 0; }
+
+/* Remove, asking. The row becomes the question, which is the schedule editor's
+   confirm moved onto a list row: the question takes the whole width and the two
+   answers sit under it at the right, because asking on one line and answering on
+   the next is what keeps "Remove Ali?" from reading as a label on the button
+   beside it. Nothing here is destructive at the left, so there is no pair to
+   push apart and the buttons end the row together. */
+.row--asking .row__ask {
+  flex: 1 1 100%;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.row--asking .row__buttons { justify-content: flex-end; margin-top: 8px; }
+.row__buttons > span { display: flex; align-items: center; gap: 4px; }
+
+/* A care type that has been turned off keeps its place in the list, because the
+   history that kept it alive still refers to it and somebody looking for the
+   misting they recorded should find where it went. */
+/* A care type that is off and a token that has run out. Both keep their place
+   in the list because both are the row somebody came looking for, and both are
+   quiet because neither is doing anything. Stack rows name themselves in
+   .row__name rather than .row__label, so the rule covers the two. */
+.row--off .row__label,
+.row--off .row__name,
+.row--off .row__life,
+.row--off .row__meta { color: var(--ink-3); }
+
+/* A token's date, on a line of its own under the meta rather than as a third
+   part of it. It is the row's status where the meta is the row's identity, and
+   the two do not compete for the same width. */
+.row__life {
+  display: block;
+  margin-top: 2px;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+
+/* An invite link and a bearer token: shown once, in a box, with the sentence
+   saying so directly under the value rather than above it. The value is what the
+   eye lands on, so the warning has to be the next thing it reads. */
+.secret {
+  margin: 4px 0 8px;
+  padding: 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.secret__label {
+  margin: 0;
+  font-size: var(--label-size);
+  font-weight: var(--label-weight);
+  letter-spacing: var(--label-tracking);
+  text-transform: var(--label-transform);
+  color: var(--ink-2);
+}
+
+.secret__value {
+  display: block;
+  margin: 9px 0 12px;
+  padding: 10px 12px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink);
+  word-break: break-all;
+}
+
+.row__part code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+/* Numbered because the order is the whole content: a Share sheet that has not
+   been opened has nothing in it to scroll to. */
+.steps {
+  margin: 16px 0 0;
+  padding-left: 20px;
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--ink);
+}
+
+.steps li { margin-bottom: 12px; padding-left: 4px; }
+.steps li::marker { color: var(--ink-3); }
+
+/* ------------------------------------------------------------- the handle */
+
+/* Drawn only on a row where two members share a display name, so it is never a
+   second identifier under a name that did not need one. Mono because it is a
+   string that gets read character by character and typed somewhere else, which
+   is the same reason a token's prefix is mono. No sigil in front of it: an @
+   would make it read as the username the whole page is at pains to say it is
+   not. */
+.row__handle {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--ink-3);
+}
+
+/* Three controls at a row's right-hand end, which People is the only page to
+   need: a grade to choose, a device to give back, and the way out. They stay on
+   one line together and the row's text takes what is left, because a member's
+   name and the sentence under it wrap and these do not. */
+.row__controls {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 2px;
+}
+
+/* Three of them do not fit beside the text on a phone: 250 pixels of select and
+   two buttons left the capability sentence a five-word-tall column. So the row
+   wraps and the controls take a line of their own under the name, still at the
+   right-hand end. The 200px basis is what decides it rather than a breakpoint —
+   below about 450 the two cannot share a line and above it they can, which is
+   the same answer a media query would give without having to pick the number
+   twice. */
+.row--people { flex-wrap: wrap; gap: 8px 12px; }
+.row--people .row__text { flex: 1 1 200px; }
+.row--people .row__controls { flex: 0 1 auto; margin-left: auto; }
+
+/* Four controls do not fit across a phone either — the date alone is 137 of the
+   323 a row has — so they take two lines, and this is what decides where the
+   break falls. The two fields go together and the two quiet actions go together,
+   which is the only split of the four that groups like with like; letting them
+   wrap where they happened to run out put Re-enrol beside the select and left
+   Remove on a line of its own. */
+.row__acts { flex: none; display: flex; align-items: center; gap: 2px; }
+
+/* The grade word does not shrink. It is six characters from a list of three, and
+   flex takes width off every part of a meta line equally — which on this row
+   spent it on the one part that had none to give and produced "Sitt… · Access
+   ended 21 Aug". The date beside it is the part with room to ellipsise, and it
+   is the part that never has to. */
+.row__part--word { flex: none; }
+
+/* ---------------------------------------------------------- recovery codes */
+
+/* Ten values in the box one value normally sits in. Two columns rather than a
+   column of ten: a list that tall pushes the sentence explaining it off a phone
+   screen, and the sentence is the part that has to be read before anybody leaves
+   the page. No markers — the codes are interchangeable and a number down the
+   side would suggest an order that using them does not have. */
+.secret__codes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+  gap: 6px 12px;
+  margin: 9px 0 12px;
+  padding: 10px 12px;
+  list-style: none;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink);
+}
+
+/* ------------------------------------------------- the pages outside the tabs */
+
+/* No tab bar, so nothing holds the bottom of the window and the column is
+   centred in it instead. It is narrower than every other page in the app: there
+   is one field on it, and a single input stretched across a desktop window reads
+   as a layout that failed rather than a page that is simple. */
+.app--bare .app__main { display: flex; }
+
+.app__body--bare {
+  width: 100%;
+  max-width: 380px;
+  margin: auto;
+  padding: 32px 20px 40px;
+}
+
+.bare__title {
+  margin: 0 0 10px;
+  font-family: var(--font-display);
+  font-weight: var(--display-weight);
+  letter-spacing: var(--display-tracking);
+  font-size: 26px;
+  line-height: 1.15;
+}
+
+/* The answer to an attempt, in the body register rather than the note one: it is
+   the page's content and not a footnote on it. */
+.bare__line {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--ink-2);
+}
+
+.app__body--bare .wide-action { margin-top: 22px; }

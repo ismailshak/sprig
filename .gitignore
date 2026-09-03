@@ -1,0 +1,12 @@
+# Compiled binary, if anybody builds one outside the image
+/sprig
+
+# SPRIG_PHOTO_DIR's default. What the deployment mounts here is its business
+/photos/
+
+# The e2e subproject
+/e2e/node_modules/
+/e2e/test-results/
+/e2e/playwright-report/
+
+.env

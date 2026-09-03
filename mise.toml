@@ -1,0 +1,40 @@
+[tools]
+go = "1.27.1"
+golangci-lint = "2.13.2"
+sqlc = "1.31.1"
+node = "26.8.1"
+pnpm = "11.25.0"
+
+# The app runs goose as a library over an embed.FS at startup, so the image does
+# not contain this binary.
+"go:github.com/pressly/goose/v3/cmd/goose" = "v3.28.0"
+
+# Only the database runs in a container.
+[tasks.dev]
+description = "Start Postgres and run the server on the host"
+run = [
+  "docker compose up -d db",
+  "go run ./cmd/sprig",
+]
+
+[tasks.seed]
+description = "Load the prototype's garden into the dev database"
+run = "go run ./cmd/seed"
+
+[tasks.test]
+description = "Run the Go tests. The query layer's tests need a Postgres running"
+run = "go test ./..."
+
+[tasks.e2e]
+description = "Run the Playwright suite against the built image and a throwaway database"
+dir = "e2e"
+run = "pnpm test"
+
+[tasks.lint]
+description = "Run golangci-lint over the whole module"
+run = "golangci-lint run"
+
+# The app applies its own migrations at startup.
+[tasks.migrate]
+description = "Apply outstanding migrations to SPRIG_DATABASE_URL"
+run = "goose -dir db/migrations postgres \"$SPRIG_DATABASE_URL\" up"

@@ -1,0 +1,70 @@
+/* Palette values. Nothing here is a real token: the palette declares a --light-*
+   and a --dark-* value for every colour, and tokens.css picks which set is live.
+   Keeping values and mapping apart means a colour is changed in one place and the
+   light/dark plumbing is never touched to do it.
+
+   Verdigris and rose. The accent is the patina on a copper watering can, so it
+   sits beside the foliage rather than against it. That puts the accent and the
+   done green in the same family, so the done green is pushed to olive and the
+   accent is held slightly duller than its brightest form — a filled mint chip and
+   an outlined olive one have to be tellable apart at a glance in dark. Rose
+   carries overdue, which is a different hue from both.
+
+   Every value here has been checked against its own mode's background: 4.5 for
+   body text, 3.0 for large text and non-text marks. The lowest in the set is
+   --ink-3 at 3.37 in light. */
+
+:root {
+  --light-bg: #f8f5ee;
+  --light-surface: #fdfbf4;
+  --light-surface-2: #ece7da;
+  --light-accent-soft: #e4eeea;
+  --light-ink: #1f2b28;
+  --light-ink-2: #576460;
+  --light-ink-3: #7d8884;
+  --light-line: #e2dccd;
+  --light-line-strong: #1f2b28;
+  --light-accent: #2a6a5f;
+  --light-accent-ink: #f4fbf8;
+  --light-alert: #a33a5c;
+  --light-good: #52722b;
+  /* A list is a bordered panel in both modes. Light used to leave these three
+     transparent, so a list was a run of hairlines on the page and the eye had
+     nothing telling it where one section stopped and the next began — dark had
+     the box and light did not. The card sits a shade lighter than the page for
+     the same reason dark's sits a shade lighter than its own: 1.05 either way.
+     Every ink value gains against it, so --ink-3 reads 3.54 inside a card where
+     it reads 3.37 on the page, and the page is still the floor. */
+  --light-card-bg: #fdfbf4;
+  --light-card-border-color: #e2dccd;
+  --light-shadow-color: rgba(31, 43, 40, .05);
+  --light-tint-monstera: #e5efe6;
+  --light-tint-snake: #eaece2;
+  --light-tint-fiddle: #eeefe1;
+  --light-tint-pothos: #e7f0e8;
+  --light-tint-cactus: #f0eade;
+  --light-tint-fern: #e5eeeb;
+
+  --dark-bg: #181c1a;
+  --dark-surface: #202523;
+  --dark-surface-2: #28302c;
+  --dark-accent-soft: #172b27;
+  --dark-ink: #eceee8;
+  --dark-ink-2: #aab3ad;
+  --dark-ink-3: #818a85;
+  --dark-line: #2f3733;
+  --dark-line-strong: #4a5450;
+  --dark-accent: #5cb8a3;
+  --dark-accent-ink: #0b1a17;
+  --dark-alert: #f08aa2;
+  --dark-good: #9dbd63;
+  --dark-card-bg: #1c211f;
+  --dark-card-border-color: #262c29;
+  --dark-shadow-color: rgba(0, 0, 0, .45);
+  --dark-tint-monstera: #2b3d31;
+  --dark-tint-snake: #32392d;
+  --dark-tint-fiddle: #383b2c;
+  --dark-tint-pothos: #2d3f33;
+  --dark-tint-cactus: #3a3629;
+  --dark-tint-fern: #2c3d38;
+}

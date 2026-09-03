@@ -1,0 +1,47 @@
+version: "2"
+
+linters:
+  default: none
+  enable:
+    # Correctness
+    - errcheck # an unchecked error is the failure mode this app has most of
+    - govet
+    - staticcheck
+    - ineffassign
+    - unused
+    - errorlint # %w, errors.Is and errors.As rather than == and type asserts
+    - nilerr # returning nil after checking err != nil
+    - bodyclose # every response body the push and chores clients open
+    - noctx # an HTTP request without a context cannot be cancelled
+    - copyloopvar
+    - unconvert
+
+    # This app holds passkeys, sessions and other people's photographs
+    - gosec
+
+    # Style, where it is mechanical enough not to be an argument
+    - revive
+    - misspell
+    - nolintlint # a nolint without an explanation is a linter turned off quietly
+
+  settings:
+    revive:
+      rules:
+        - name: exported # every exported identifier carries a doc comment
+        - name: error-strings
+        - name: context-as-argument
+        - name: indent-error-flow
+        - name: unused-parameter
+
+    nolintlint:
+      require-explanation: true
+      require-specific: true
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/ismailshak/sprig
