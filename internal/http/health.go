@@ -11,7 +11,6 @@ type healthzResponse struct {
 	Status    string `json:"status"`
 	Version   string `json:"version"`
 	Revision  string `json:"revision"`
-	Dirty     bool   `json:"dirty"`
 	GoVersion string `json:"go_version"`
 }
 
@@ -26,7 +25,6 @@ func handleHealthz(w http.ResponseWriter, _ *http.Request) {
 		Status:    "ok",
 		Version:   info.Version,
 		Revision:  info.Revision,
-		Dirty:     info.Dirty,
 		GoVersion: info.GoVersion,
 	})
 }
