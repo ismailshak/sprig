@@ -38,3 +38,8 @@ run = "golangci-lint run"
 [tasks.migrate]
 description = "Apply outstanding migrations to SPRIG_DATABASE_URL"
 run = "goose -dir db/migrations postgres \"$SPRIG_DATABASE_URL\" up"
+
+[tasks."migrate:new"]
+description = "Create the next numbered migration in db/migrations"
+usage = 'arg "<name>" help="What the migration does, in snake_case"'
+run = 'goose -dir db/migrations -s create "${usage_name?}" sql'
