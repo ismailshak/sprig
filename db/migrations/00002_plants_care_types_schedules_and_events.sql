@@ -66,9 +66,11 @@ CREATE TABLE care_schedule (
     anchor_precision   text COLLATE "C",
     season_start_month smallint,
     season_end_month   smallint,
-    -- Stands in for the missing event, so a plant added today with a ten-day
-    -- cadence is due in ten days rather than overdue on arrival.
-    created_at         timestamptz NOT NULL DEFAULT now(),
+    -- When the schedule was last set, which an edit rewrites. It stands in for
+    -- the missing event, so a plant added today with a ten-day cadence is due in
+    -- ten days rather than overdue on arrival. Care performed after it spends a
+    -- one-off, so a new date on a spent one-off brings it back.
+    set_at             timestamptz NOT NULL DEFAULT now(),
 
     -- Both foreign keys carry garden_id, so a schedule cannot join a plant in
     -- one garden to a care type in another.
