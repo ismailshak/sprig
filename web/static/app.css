@@ -1806,7 +1806,7 @@ a.wide-action {
 /* Remove, asking. The row becomes the question, which is the schedule editor's
    confirm moved onto a list row: the question takes the whole width and the two
    answers sit under it at the right, because asking on one line and answering on
-   the next is what keeps "Remove Ali?" from reading as a label on the button
+   the next is what keeps "Remove Ellie?" from reading as a label on the button
    beside it. Nothing here is destructive at the left, so there is no pair to
    push apart and the buttons end the row together. */
 .row--asking .row__ask {
