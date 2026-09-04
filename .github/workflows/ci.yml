@@ -29,6 +29,33 @@ jobs:
       - name: Run tests
         run: mise run test
 
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v7
+      - name: Set up the toolchain
+        uses: ./.github/actions/setup-go
+      - name: Cache the browser
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/ms-playwright
+          # The lockfile pins the Playwright version, which pins the browser build
+          key: ${{ runner.os }}-playwright-${{ hashFiles('e2e/pnpm-lock.yaml') }}
+      - name: Install the browser and its system libraries
+        run: |
+          pnpm --dir e2e install --frozen-lockfile
+          pnpm --dir e2e exec playwright install --with-deps chromium
+      - name: Run the suite
+        run: mise run e2e
+      - name: Keep the traces of failed tests
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-traces
+          path: e2e/test-results
+          if-no-files-found: ignore
+
   image:
     runs-on: ubuntu-latest
     steps:

@@ -21,11 +21,6 @@ run = "go build -o sprig ./cmd/sprig"
 description = "Load the prototype's garden into the dev database"
 run = "go run ./cmd/seed"
 
-[tasks.e2e]
-description = "Run the Playwright suite against the built image and a throwaway database"
-dir = "e2e"
-run = "pnpm test"
-
 [tasks.lint]
 description = "Run golangci-lint over the whole module, and check the generated queries are current"
 run = ["sqlc diff", "golangci-lint run"]

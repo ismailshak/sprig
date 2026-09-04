@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+#MISE description="Run the Playwright suite against the built image and a throwaway Postgres"
+#USAGE arg "[args]..." var=#true help="Passed to playwright test, such as a file or --project"
+#USAGE flag "--ui" help="Open Playwright's UI mode on the stack instead of running headless"
+set -euo pipefail
+
+cd "${MISE_PROJECT_ROOT:?}"
+
+# An empty host port has Docker pick a free one for each
+export DB_PORTS=127.0.0.1::5432
+export APP_PORTS=127.0.0.1::8080
+
+# A project per run keeps it clear of the dev stack, and the suite refuses to start without the prefix
+export COMPOSE_PROJECT_NAME="sprig-e2e-$$"
+export COMPOSE_PROFILES=app
+
+cleanup() {
+  status=$?
+  if [ "$status" -ne 0 ]; then
+    # Print the logs before down removes the containers
+    docker compose logs app db || true
+  fi
+  docker compose down --volumes --remove-orphans
+  exit "$status"
+}
+
+trap cleanup EXIT
+
+docker compose up -d --build --wait db app
+db_port=$(docker compose port db 5432)
+app_port=$(docker compose port app 8080)
+
+export SPRIG_DATABASE_URL="postgres://sprig:sprig@127.0.0.1:${db_port##*:}/sprig?sslmode=disable"
+# localhost rather than 127.0.0.1, so the suite hits the same origin development uses
+export SPRIG_BASE_URL="http://localhost:${app_port##*:}"
+
+# usage hands the arguments over as one shell-escaped string
+eval "args=(${usage_args-})"
+
+cd e2e
+
+pnpm install --frozen-lockfile
+
+# Installs the pinned browser, and on Linux its system libraries, when they are missing
+pnpm run browsers
+
+if [ "${usage_ui:-false}" = "true" ]; then
+  pnpm run test:ui
+else
+  pnpm test "${args[@]}"
+fi
