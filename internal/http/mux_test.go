@@ -13,7 +13,7 @@ import (
 
 func TestNew_HealthzOK(t *testing.T) {
 	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
-	handler := New(logger)
+	handler := New(logger, testSessions(), rejectEveryToken)
 
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/healthz", nil))
@@ -43,7 +43,7 @@ func TestNew_HealthzOK(t *testing.T) {
 func TestNew_RequestLineCarriesTheHeaderID(t *testing.T) {
 	var buf bytes.Buffer
 	logger := slog.New(NewContextHandler(slog.NewJSONHandler(&buf, nil)))
-	handler := New(logger)
+	handler := New(logger, testSessions(), rejectEveryToken)
 
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/healthz", nil))
@@ -70,25 +70,31 @@ func TestNew_RequestLineCarriesTheHeaderID(t *testing.T) {
 	}
 }
 
-func TestNew_UnknownRouteNotFound(t *testing.T) {
+// A stranger cannot tell a path that exists from one that does not.
+func TestNew_UnknownRouteIsSignInForAStrangerAndNotFoundForAMember(t *testing.T) {
 	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
-	handler := New(logger)
+	handler := New(logger, testSessions(), acceptEveryToken(sitterPrincipal()))
 
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/nope", nil))
+	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != signInPath {
+		t.Errorf("without a cookie: status = %d to %q, want %d to %q", rec.Code, rec.Header().Get("Location"), http.StatusSeeOther, signInPath)
+	}
 
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, signedIn(httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/nope", nil)))
 	if rec.Code != http.StatusNotFound {
-		t.Errorf("status = %d, want %d", rec.Code, http.StatusNotFound)
+		t.Errorf("with a session: status = %d, want %d", rec.Code, http.StatusNotFound)
 	}
 }
 
 // GET is left alone because nothing state-changing answers to one.
 func TestNew_RefusesAnUnsafeMethodFromAnotherOrigin(t *testing.T) {
 	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
-	handler := New(logger)
+	handler := New(logger, testSessions(), rejectEveryToken)
 
-	// No route answers at /plants yet, so 404 is what an accepted request
-	// gets and 403 is the refusal.
+	// The requests carry no cookie, so an accepted one reaches the session
+	// check and is sent to sign in, and a refused one is a 403 before that.
 	cases := []struct {
 		name   string
 		method string
@@ -99,11 +105,11 @@ func TestNew_RefusesAnUnsafeMethodFromAnotherOrigin(t *testing.T) {
 	}{
 		{"a form post from elsewhere", http.MethodPost, "sprig.test", "https://evil.example", "", http.StatusForbidden},
 		{"a browser that says cross-site", http.MethodPost, "sprig.test", "", "cross-site", http.StatusForbidden},
-		{"a form post from this origin", http.MethodPost, "sprig.test", "http://sprig.test", "", http.StatusNotFound},
-		{"a browser that says same-origin", http.MethodPost, "sprig.test", "", "same-origin", http.StatusNotFound},
-		{"a post over plain http on a laptop", http.MethodPost, "localhost:8080", "http://localhost:8080", "same-origin", http.StatusNotFound},
-		{"a client that is not a browser", http.MethodDelete, "sprig.test", "", "", http.StatusNotFound},
-		{"a read from elsewhere", http.MethodGet, "sprig.test", "https://evil.example", "cross-site", http.StatusNotFound},
+		{"a form post from this origin", http.MethodPost, "sprig.test", "http://sprig.test", "", http.StatusSeeOther},
+		{"a browser that says same-origin", http.MethodPost, "sprig.test", "", "same-origin", http.StatusSeeOther},
+		{"a post over plain http on a laptop", http.MethodPost, "localhost:8080", "http://localhost:8080", "same-origin", http.StatusSeeOther},
+		{"a client that is not a browser", http.MethodDelete, "sprig.test", "", "", http.StatusSeeOther},
+		{"a read from elsewhere", http.MethodGet, "sprig.test", "https://evil.example", "cross-site", http.StatusSeeOther},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
