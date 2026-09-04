@@ -2,10 +2,7 @@ package store
 
 import (
 	"context"
-	"crypto/rand"
 	"errors"
-	"fmt"
-	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -18,6 +15,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/ismailshak/sprig/internal/pgtest"
 )
 
 var (
@@ -40,7 +39,6 @@ var (
 var (
 	sharedOnce sync.Once
 	sharedPool *pgxpool.Pool
-	sharedName string
 	sharedErr  error
 )
 
@@ -51,11 +49,10 @@ var (
 func sharedTx(t *testing.T) pgx.Tx {
 	t.Helper()
 
-	base := testServerURL(t)
-	template := templateDatabase(t)
-	sharedOnce.Do(func() { sharedErr = prepareSharedDatabase(base, template) })
+	databaseURL := pgtest.Shared(t, migrateSchema)
+	sharedOnce.Do(func() { sharedPool, sharedErr = Open(context.Background(), databaseURL) })
 	if sharedErr != nil {
-		t.Fatalf("preparing the shared database: %v", sharedErr)
+		t.Fatalf("opening the shared database: %v", sharedErr)
 	}
 
 	tx, err := sharedPool.Begin(t.Context())
@@ -65,34 +62,6 @@ func sharedTx(t *testing.T) pgx.Tx {
 	// The test's own context is cancelled by the time a cleanup runs.
 	t.Cleanup(func() { _ = tx.Rollback(context.WithoutCancel(t.Context())) })
 	return tx
-}
-
-func prepareSharedDatabase(base *url.URL, template string) error {
-	ctx := context.Background()
-	name := "sprig_test_shared_" + strings.ToLower(rand.Text()[:12])
-
-	server, err := pgx.Connect(ctx, base.String())
-	if err != nil {
-		return fmt.Errorf("connect to %s: %w", base.Redacted(), err)
-	}
-	defer func() { _ = server.Close(ctx) }()
-
-	create := fmt.Sprintf("CREATE DATABASE %s TEMPLATE %s",
-		pgx.Identifier{name}.Sanitize(), pgx.Identifier{template}.Sanitize())
-	if _, err := server.Exec(ctx, create); err != nil {
-		return fmt.Errorf("create %s: %w", name, err)
-	}
-	// Recorded before the pool is opened, so a failure below still leaves the
-	// database for TestMain to drop.
-	sharedName = name
-
-	dbURL := *base
-	dbURL.Path = "/" + name
-	sharedPool, err = Open(ctx, dbURL.String())
-	if err != nil {
-		return fmt.Errorf("open %s: %w", name, err)
-	}
-	return nil
 }
 
 // closeSharedPool releases the connections before TestMain drops the

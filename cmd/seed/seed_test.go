@@ -2,14 +2,10 @@ package main
 
 import (
 	"context"
-	"crypto/rand"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
-	"net/url"
 	"os"
-	"strings"
 	"testing"
 	"time"
 	"uuid"
@@ -18,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/ismailshak/sprig/db"
+	"github.com/ismailshak/sprig/internal/pgtest"
 	"github.com/ismailshak/sprig/internal/store"
 )
 
@@ -27,93 +24,45 @@ var seededTables = []string{
 	"care_type", "plant", "care_schedule", "care_event",
 }
 
-// testPool is a migrated database of this package's own, since the seed writes
-// through a pool rather than through a transaction a test could roll back.
-// Without SPRIG_DATABASE_URL there is nowhere to make one and every test below
-// skips.
-var testPool *pgxpool.Pool
-
+// TestMain drops the template database every test in this package is copied
+// from.
 func TestMain(m *testing.M) {
-	base := os.Getenv("SPRIG_DATABASE_URL")
-	if base == "" {
-		os.Exit(m.Run())
-	}
-	if err := checkIsLocal(base); err != nil {
+	code := m.Run()
+	if err := pgtest.Cleanup(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		code = 1
 	}
-
-	name, drop, err := createTestDatabase(base)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
-
-	code := 1
-	func() {
-		defer drop()
-
-		pool, err := store.Open(context.Background(), name)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			return
-		}
-		defer pool.Close()
-
-		quiet := slog.New(slog.NewTextHandler(io.Discard, nil))
-		if err := store.Migrate(context.Background(), pool, db.Migrations, quiet); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			return
-		}
-
-		testPool = pool
-		code = m.Run()
-	}()
 	os.Exit(code)
 }
 
-func createTestDatabase(base string) (string, func(), error) {
-	ctx := context.Background()
-	parsed, err := url.Parse(base)
+// migrateSchema builds the template every test database in this package is
+// copied from.
+func migrateSchema(ctx context.Context, databaseURL string) error {
+	pool, err := store.Open(ctx, databaseURL)
 	if err != nil {
-		return "", nil, fmt.Errorf("SPRIG_DATABASE_URL is not a URL: %w", err)
+		return err
 	}
-	name := "sprig_seed_test_" + strings.ToLower(rand.Text()[:12])
+	// CREATE DATABASE refuses a template another session is connected to.
+	defer pool.Close()
 
-	server, err := pgx.Connect(ctx, base)
-	if err != nil {
-		return "", nil, fmt.Errorf("connect to %s: %w", parsed.Redacted(), err)
-	}
-	defer func() { _ = server.Close(ctx) }()
-
-	if _, err := server.Exec(ctx, "CREATE DATABASE "+pgx.Identifier{name}.Sanitize()); err != nil {
-		return "", nil, fmt.Errorf("create %s: %w", name, err)
-	}
-
-	drop := func() {
-		conn, err := pgx.Connect(ctx, base)
-		if err != nil {
-			return
-		}
-		defer func() { _ = conn.Close(ctx) }()
-		_, _ = conn.Exec(ctx, "DROP DATABASE "+pgx.Identifier{name}.Sanitize()+" WITH (FORCE)")
-	}
-
-	dbURL := *parsed
-	dbURL.Path = "/" + name
-	return dbURL.String(), drop, nil
+	return store.Migrate(ctx, pool, db.Migrations, slog.New(slog.DiscardHandler))
 }
 
+// seeded is a database of the test's own holding the prototype's garden. The
+// seed commits, so these tests cannot share one database and roll back.
 func seeded(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 
-	if testPool == nil {
-		t.Skip("SPRIG_DATABASE_URL is unset; start Postgres with docker compose up -d db")
+	pool, err := store.Open(t.Context(), pgtest.Fresh(t, migrateSchema))
+	if err != nil {
+		t.Fatalf("opening the test database: %v", err)
 	}
-	if _, err := seed(t.Context(), testPool, testReference(t)); err != nil {
+	t.Cleanup(pool.Close)
+
+	if _, err := seed(t.Context(), pool, testReference(t)); err != nil {
 		t.Fatalf("seeding: %v", err)
 	}
-	return testPool
+	return pool
 }
 
 // The e2e suite seeds from empty every run and asserts against what it finds,

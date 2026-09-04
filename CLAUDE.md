@@ -50,6 +50,7 @@ These are decisions already taken. Changing one is a conversation, not a refacto
 | `internal/photo/`   | Photo writes, reads and quota                                     |
 | `internal/push/`    | Subscriptions, VAPID sends, the digest job                        |
 | `internal/build/`   | The running binary's version, revision and toolchain              |
+| `internal/pgtest/`  | The Postgres databases the tests are run against                  |
 | `db/migrations/`    | goose migrations, embedded and run at startup under an advisory lock |
 | `db/queries/`       | The `.sql` sqlc generates from                                    |
 | `web/templates/`    | `html/template`, embedded                                         |

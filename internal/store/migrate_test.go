@@ -3,11 +3,9 @@ package store
 import (
 	"bytes"
 	"context"
-	"crypto/rand"
 	"fmt"
 	"io/fs"
 	"log/slog"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,15 +13,40 @@ import (
 	"testing"
 	"testing/fstest"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/ismailshak/sprig/db"
+	"github.com/ismailshak/sprig/internal/pgtest"
 )
+
+// migrateSchema builds the template every test database in this package is
+// copied from.
+func migrateSchema(ctx context.Context, databaseURL string) error {
+	pool, err := Open(ctx, databaseURL)
+	if err != nil {
+		return err
+	}
+	// CREATE DATABASE refuses a template another session is connected to.
+	defer pool.Close()
+
+	return Migrate(ctx, pool, db.Migrations, slog.New(slog.DiscardHandler))
+}
+
+// TestMain closes the shared pool before Cleanup drops the database it was
+// open on.
+func TestMain(m *testing.M) {
+	code := m.Run()
+	closeSharedPool()
+	if err := pgtest.Cleanup(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		code = 1
+	}
+	os.Exit(code)
+}
 
 func TestMigrate_FreshDatabaseAppliesEveryMigrationOnce(t *testing.T) {
 	ctx := t.Context()
-	pool := openPool(t, createTestDatabase(t))
+	pool := openPool(t, pgtest.Empty(t))
 
 	logger, applied := recordingLogger()
 	if err := Migrate(ctx, pool, os.DirFS("testdata/migrations"), logger); err != nil {
@@ -50,7 +73,7 @@ func TestMigrate_FreshDatabaseAppliesEveryMigrationOnce(t *testing.T) {
 
 func TestMigrate_ConcurrentStartsDoNotRunTheSameMigrationTwice(t *testing.T) {
 	ctx := t.Context()
-	databaseURL := createTestDatabase(t)
+	databaseURL := pgtest.Empty(t)
 	pools := make([]*pgxpool.Pool, 4)
 	for i := range pools {
 		pools[i] = openPool(t, databaseURL)
@@ -105,7 +128,7 @@ func TestMigrate_ConcurrentStartsDoNotRunTheSameMigrationTwice(t *testing.T) {
 
 func TestMigrate_FailedMigrationLeavesTheRestUnapplied(t *testing.T) {
 	ctx := t.Context()
-	pool := openPool(t, createTestDatabase(t))
+	pool := openPool(t, pgtest.Empty(t))
 
 	logger, applied := recordingLogger()
 	err := Migrate(ctx, pool, os.DirFS("testdata/broken"), logger)
@@ -129,7 +152,7 @@ func TestMigrate_FailedMigrationLeavesTheRestUnapplied(t *testing.T) {
 }
 
 func TestMigrate_EmptySetIsNotAFailure(t *testing.T) {
-	pool := openPool(t, createTestDatabase(t))
+	pool := openPool(t, pgtest.Empty(t))
 
 	logger, applied := recordingLogger()
 	if err := Migrate(t.Context(), pool, os.DirFS(t.TempDir()), logger); err != nil {
@@ -183,173 +206,9 @@ func openPool(t *testing.T, databaseURL string) *pgxpool.Pool {
 	return pool
 }
 
-// testServerURL is the server every test database is created on. Without
-// SPRIG_DATABASE_URL there is none, so the test is skipped rather than
-// failed.
-func testServerURL(t *testing.T) *url.URL {
-	t.Helper()
-
-	base := os.Getenv("SPRIG_DATABASE_URL")
-	if base == "" {
-		t.Skip("SPRIG_DATABASE_URL is unset; start Postgres with docker compose up -d db")
-	}
-	parsed, err := url.Parse(base)
-	if err != nil {
-		t.Fatalf("SPRIG_DATABASE_URL is not a URL: %v", err)
-	}
-	// These tests create and drop databases, so they may only ever talk to one
-	// on this machine or in the compose stack.
-	switch parsed.Hostname() {
-	case "localhost", "127.0.0.1", "::1", "db":
-	default:
-		t.Fatalf("refusing to run against %q: tests only talk to loopback or the compose database", parsed.Hostname())
-	}
-	return parsed
-}
-
-// createTestDatabase creates a database without the migrations, because the
-// migration tests apply those themselves.
-func createTestDatabase(t *testing.T) string {
-	t.Helper()
-	return createDatabase(t, "")
-}
-
-func createDatabase(t *testing.T, template string) string {
-	t.Helper()
-
-	base := testServerURL(t)
-	name := "sprig_test_" + strings.ToLower(rand.Text()[:12])
-
-	create := "CREATE DATABASE " + pgx.Identifier{name}.Sanitize()
-	if template != "" {
-		create += " TEMPLATE " + pgx.Identifier{template}.Sanitize()
-	}
-
-	server, err := pgx.Connect(t.Context(), base.String())
-	if err != nil {
-		t.Fatalf("connecting to %s: %v", base.Redacted(), err)
-	}
-	defer func() { _ = server.Close(t.Context()) }()
-
-	if _, err := server.Exec(t.Context(), create); err != nil {
-		t.Fatalf("creating %s: %v", name, err)
-	}
-	t.Cleanup(func() { dropTestDatabase(t, base.String(), name) })
-
-	dbURL := *base
-	dbURL.Path = "/" + name
-	return dbURL.String()
-}
-
-var (
-	templateOnce sync.Once
-	templateName string
-	templateErr  error
-)
-
-// templateDatabase holds the migrations, applied once, for createDatabase to
-// copy. A copy costs one CREATE DATABASE, and a fresh database costs that plus
-// the goose run.
-func templateDatabase(t *testing.T) string {
-	t.Helper()
-
-	base := testServerURL(t)
-	templateOnce.Do(func() { templateErr = prepareTemplateDatabase(base) })
-	if templateErr != nil {
-		t.Fatalf("preparing the template database: %v", templateErr)
-	}
-	return templateName
-}
-
-func prepareTemplateDatabase(base *url.URL) error {
-	ctx := context.Background()
-	name := "sprig_test_tmpl_" + strings.ToLower(rand.Text()[:12])
-
-	server, err := pgx.Connect(ctx, base.String())
-	if err != nil {
-		return fmt.Errorf("connect to %s: %w", base.Redacted(), err)
-	}
-	defer func() { _ = server.Close(ctx) }()
-
-	if _, err := server.Exec(ctx, "CREATE DATABASE "+pgx.Identifier{name}.Sanitize()); err != nil {
-		return fmt.Errorf("create %s: %w", name, err)
-	}
-	// Recorded before the migrations run, so a failure below still leaves the
-	// database for TestMain to drop.
-	templateName = name
-
-	dbURL := *base
-	dbURL.Path = "/" + name
-	pool, err := Open(ctx, dbURL.String())
-	if err != nil {
-		return fmt.Errorf("open %s: %w", name, err)
-	}
-	// Closed here rather than at the end of the run, because CREATE DATABASE
-	// refuses a template another session is connected to.
-	defer pool.Close()
-
-	if err := Migrate(ctx, pool, db.Migrations, slog.New(slog.DiscardHandler)); err != nil {
-		return fmt.Errorf("migrate %s: %w", name, err)
-	}
-	return nil
-}
-
-// TestMain drops what outlives a single test, which is the template database
-// and the one queries_test.go shares.
-func TestMain(m *testing.M) {
-	code := m.Run()
-	if err := dropRunDatabases(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		code = 1
-	}
-	os.Exit(code)
-}
-
-func dropRunDatabases() error {
-	closeSharedPool()
-
-	base := os.Getenv("SPRIG_DATABASE_URL")
-	ctx := context.Background()
-	for _, name := range []string{sharedName, templateName} {
-		if name == "" {
-			continue
-		}
-		server, err := pgx.Connect(ctx, base)
-		if err != nil {
-			return fmt.Errorf("connecting to drop %s: %w", name, err)
-		}
-		drop := fmt.Sprintf("DROP DATABASE %s WITH (FORCE)", pgx.Identifier{name}.Sanitize())
-		_, err = server.Exec(ctx, drop)
-		_ = server.Close(ctx)
-		if err != nil {
-			return fmt.Errorf("dropping %s: %w", name, err)
-		}
-	}
-	return nil
-}
-
-func dropTestDatabase(t *testing.T, base, name string) {
-	t.Helper()
-
-	// The test's own context is cancelled by the time a cleanup runs.
-	ctx := context.WithoutCancel(t.Context())
-	server, err := pgx.Connect(ctx, base)
-	if err != nil {
-		t.Errorf("connecting to drop %s: %v", name, err)
-		return
-	}
-	defer func() { _ = server.Close(ctx) }()
-
-	// FORCE, because a pool that failed mid-test may still hold a connection.
-	drop := fmt.Sprintf("DROP DATABASE %s WITH (FORCE)", pgx.Identifier{name}.Sanitize())
-	if _, err := server.Exec(ctx, drop); err != nil {
-		t.Errorf("dropping %s: %v", name, err)
-	}
-}
-
 func TestMigrate_MigrationNumberedBehindAnAppliedOneIsRefused(t *testing.T) {
 	ctx := t.Context()
-	pool := openPool(t, createTestDatabase(t))
+	pool := openPool(t, pgtest.Empty(t))
 
 	logger, _ := recordingLogger()
 	if err := Migrate(ctx, pool, numberedMigrations("00001_first", "00003_third"), logger); err != nil {
