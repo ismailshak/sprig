@@ -9,6 +9,21 @@ import (
 
 var set = time.Date(2026, time.September, 3, 9, 0, 0, 0, time.UTC)
 
+// One zone east of Greenwich, one west, and one that changes its clocks.
+var (
+	auckland   = mustLoad("Pacific/Auckland")
+	losAngeles = mustLoad("America/Los_Angeles")
+	london     = mustLoad("Europe/London")
+)
+
+func mustLoad(name string) *time.Location {
+	loc, err := time.LoadLocation(name)
+	if err != nil {
+		panic(err)
+	}
+	return loc
+}
+
 func TestNext(t *testing.T) {
 	cases := []struct {
 		name  string
@@ -230,6 +245,51 @@ func TestNext(t *testing.T) {
 			last:  event(time.Date(2025, time.March, 20, 8, 0, 0, 0, time.UTC)),
 			want:  time.Date(2026, time.March, 1, 0, 0, 0, 0, time.UTC),
 			month: true,
+		},
+		{
+			name:  "care given on the anchor's morning east of Greenwich is that occurrence",
+			sched: anchored(set, 1, UnitYear, time.August, 1),
+			// 09:00 in Auckland on 1 August, which is 21:00 UTC on 31 July.
+			last: event(time.Date(2026, time.July, 31, 21, 0, 0, 0, time.UTC)),
+			now:  time.Date(2026, time.August, 1, 10, 0, 0, 0, auckland),
+			want: time.Date(2027, time.August, 1, 0, 0, 0, 0, auckland),
+		},
+		{
+			name:  "care given the evening before the anchor west of Greenwich is not that occurrence",
+			sched: anchored(set, 1, UnitYear, time.August, 1),
+			// 20:00 in Los Angeles on 31 July, which is 03:00 UTC on 1 August.
+			last: event(time.Date(2026, time.August, 1, 3, 0, 0, 0, time.UTC)),
+			now:  time.Date(2026, time.August, 1, 10, 0, 0, 0, losAngeles),
+			want: time.Date(2026, time.August, 1, 0, 0, 0, 0, losAngeles),
+		},
+		{
+			name:  "an anchor read west of Greenwich is still its own date",
+			sched: oneOff(set, time.Date(2028, time.March, 1, 0, 0, 0, 0, time.UTC)),
+			now:   time.Date(2026, time.September, 3, 10, 0, 0, 0, losAngeles),
+			want:  time.Date(2028, time.March, 1, 0, 0, 0, 0, losAngeles),
+		},
+		{
+			name:  "a day added the night the clocks go forward is a calendar day",
+			sched: cadence(set, 1, UnitDay),
+			// 23:30 GMT on 28 March 2026, and the clocks go forward at 01:00.
+			last: event(time.Date(2026, time.March, 28, 23, 30, 0, 0, time.UTC)),
+			now:  time.Date(2026, time.March, 29, 8, 0, 0, 0, london),
+			want: time.Date(2026, time.March, 29, 23, 30, 0, 0, london),
+		},
+		{
+			name:  "a day added the night the clocks go back is a calendar day",
+			sched: cadence(set, 1, UnitDay),
+			// 00:30 BST on 25 October 2026, which is 23:30 UTC the day before.
+			last: event(time.Date(2026, time.October, 24, 23, 30, 0, 0, time.UTC)),
+			now:  time.Date(2026, time.October, 25, 8, 0, 0, 0, london),
+			want: time.Date(2026, time.October, 26, 0, 30, 0, 0, london),
+		},
+		{
+			name:  "an override added across a clock change is a calendar day",
+			sched: cadence(set, 10, UnitDay),
+			last:  override(skip(time.Date(2026, time.March, 28, 23, 30, 0, 0, time.UTC)), 1),
+			now:   time.Date(2026, time.March, 29, 8, 0, 0, 0, london),
+			want:  time.Date(2026, time.March, 29, 23, 30, 0, 0, london),
 		},
 		{
 			name:  "a seasonal cadence inside its window is the usual computation",
