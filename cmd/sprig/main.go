@@ -14,6 +14,10 @@ import (
 	"syscall"
 	"time"
 
+	// Every page reads a user's timezone from the zone database this embeds,
+	// so a base image without one still serves the right day.
+	_ "time/tzdata"
+
 	"github.com/ismailshak/sprig/db"
 	"github.com/ismailshak/sprig/internal/auth"
 	sprighttp "github.com/ismailshak/sprig/internal/http"

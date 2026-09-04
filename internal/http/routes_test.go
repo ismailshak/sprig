@@ -34,10 +34,11 @@ var routeAccess = map[string]access{
 	// The hashed URL is known only at startup, so this path is a plain one the
 	// pattern matches.
 	assetPattern: {public: true, path: assetPrefix + "app.css"},
+	"GET /{$}":   {},
 }
 
 func TestRoutes_EveryRouteHasOneEntryAndTheTwoAgree(t *testing.T) {
-	table := routes(testSessions(), nil, testTemplates(), testAssets())
+	table := routes(testLogger, testSessions(), nil, testTemplates(), testAssets())
 	patterns := map[string]bool{}
 	for _, r := range table {
 		patterns[r.pattern] = true
@@ -60,7 +61,8 @@ func TestRoutes_EveryRouteHasOneEntryAndTheTwoAgree(t *testing.T) {
 		if mutates(method) && a.capability == "" && !a.anyMember && !a.public {
 			t.Errorf("%s mutates and names no capability; give it one, or say anyMember if every member may call it", r.pattern)
 		}
-		if strings.Contains(path, "{") {
+		// {$} pins the pattern to the path itself and names nothing.
+		if strings.Contains(strings.TrimSuffix(path, "{$}"), "{") {
 			if a.path == "" {
 				t.Errorf("%s has a wildcard and routeAccess gives no path to request it by", r.pattern)
 			}
@@ -86,7 +88,7 @@ func TestRoutes_EachRouteRefusesWhatItsEntrySays(t *testing.T) {
 	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
 	every := everyCapability()
 
-	for _, r := range routes(testSessions(), nil, testTemplates(), testAssets()) {
+	for _, r := range routes(testLogger, testSessions(), nil, testTemplates(), testAssets()) {
 		a, ok := routeAccess[r.pattern]
 		if !ok {
 			// The agreement test names the missing entry.
@@ -163,7 +165,7 @@ func mutates(method string) bool {
 // removing one capability from a principal holding all the others.
 func everyCapability() auth.Capabilities {
 	set := auth.Capabilities{}
-	for _, r := range routes(testSessions(), nil, testTemplates(), testAssets()) {
+	for _, r := range routes(testLogger, testSessions(), nil, testTemplates(), testAssets()) {
 		if r.capability != "" {
 			set[r.capability] = true
 		}
