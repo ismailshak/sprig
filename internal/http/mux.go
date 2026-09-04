@@ -3,6 +3,7 @@ package http
 import (
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/ismailshak/sprig/internal/auth"
 	"github.com/ismailshak/sprig/internal/store"
@@ -21,10 +22,12 @@ type route struct {
 // enforcement test walks it, because http.ServeMux does not list its patterns
 // and a route registered directly on the mux would be one the test cannot see.
 // devRoutes is what a development build adds, and empty otherwise.
-func routes(sessions *auth.Sessions, queries *store.Queries, templates *Templates, assets *Assets) []route {
+func routes(logger *slog.Logger, sessions *auth.Sessions, queries *store.Queries, templates *Templates, assets *Assets) []route {
+	todayHandler := &today{logger: logger, queries: queries, templates: templates, now: time.Now}
 	base := []route{
 		{pattern: "GET /healthz", handler: http.HandlerFunc(handleHealthz)},
 		{pattern: assetPattern, handler: assets.handler()},
+		{pattern: "GET /{$}", handler: http.HandlerFunc(todayHandler.show)},
 	}
 	return append(base, devRoutes(sessions, queries, templates)...)
 }
@@ -43,7 +46,7 @@ var publicRoutes = map[string]bool{
 // that so a cross-site post is refused before it costs a session lookup.
 func New(logger *slog.Logger, sessions *auth.Sessions, resolver Resolver, queries *store.Queries, templates *Templates, assets *Assets) http.Handler {
 	mux := http.NewServeMux()
-	for _, r := range routes(sessions, queries, templates, assets) {
+	for _, r := range routes(logger, sessions, queries, templates, assets) {
 		h := r.handler
 		if r.capability != "" {
 			h = require(r.capability, h)

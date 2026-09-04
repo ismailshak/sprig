@@ -23,6 +23,8 @@ const (
 	testToken = "a-token-the-test-issued"
 )
 
+var testLogger = slog.New(slog.NewJSONHandler(io.Discard, nil))
+
 // testSessions is a Sessions over no database. The middleware asks it only
 // for the cookie's name and shape, which need no query.
 func testSessions() *auth.Sessions {

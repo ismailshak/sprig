@@ -131,11 +131,8 @@ func (t *Templates) render(w http.ResponseWriter, r *http.Request, v view, data 
 	_, _ = w.Write(buf.Bytes())
 }
 
-// fail answers with a 500 and is where err is logged, so a caller does not
-// log it again.
 func (t *Templates) fail(w http.ResponseWriter, r *http.Request, err error) {
-	t.logger.ErrorContext(r.Context(), "render", slog.Any("error", err))
-	http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+	serverError(t.logger, w, r, "render", err)
 }
 
 // htmx sets HX-Request on every request it sends, and a navigation carries no

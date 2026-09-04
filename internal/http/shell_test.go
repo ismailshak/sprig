@@ -13,8 +13,7 @@ import (
 )
 
 // renderShell parses the layout and the partials directly rather than going
-// through Templates, because Templates holds a set per page and the tree has
-// no page yet.
+// through Templates, so nothing but the shell is rendered.
 func renderShell(t *testing.T, assets *Assets, tab string) string {
 	t.Helper()
 	set, err := template.New(layoutTemplate).

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/ismailshak/sprig/internal/auth"
+	"github.com/ismailshak/sprig/internal/store"
 )
 
 const signInPath = "/signin"
@@ -72,14 +73,21 @@ func Authenticate(logger *slog.Logger, sessions *auth.Sessions, resolver Resolve
 // 404 rule covers an object a request named, and this request named none, so
 // the status is 403.
 func writeAccessEnded(w http.ResponseWriter, ended *auth.MembershipEndedError) {
-	location, err := time.LoadLocation(ended.User.Timezone)
-	if err != nil {
-		location = time.UTC
-	}
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(http.StatusForbidden)
 	// A failed write means the browser hung up, which nothing here can act on.
-	_, _ = fmt.Fprintf(w, "Your access to %s ended on %s.\n", ended.Garden.Name, ended.EndedAt.In(location).Format("2 January 2006"))
+	_, _ = fmt.Fprintf(w, "Your access to %s ended on %s.\n", ended.Garden.Name, ended.EndedAt.In(locationFor(ended.User)).Format("2 January 2006"))
+}
+
+// locationFor is the zone a user reads their dates in. The account form holds
+// the column to a name the zone database knows, so an unknown name is a row
+// written some other way and gets UTC rather than an error.
+func locationFor(user store.AppUser) *time.Location {
+	location, err := time.LoadLocation(user.Timezone)
+	if err != nil {
+		return time.UTC
+	}
+	return location
 }
 
 // PrincipalFrom returns the principal Authenticate attached to r. It panics
