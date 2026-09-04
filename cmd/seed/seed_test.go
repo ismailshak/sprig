@@ -155,11 +155,12 @@ func TestSeed_EveryCadenceFallsDueOnTheDayTheRosterSays(t *testing.T) {
 	}
 }
 
-// A spent one-off produces no date, so one in the fixture leaves a schedule
+// A completed one-off produces no date, so one in the fixture leaves a schedule
 // line missing from a plant page. The fixture is checked against Next rather
 // than against a copy of the rule in SQL.
-func TestSeed_NoOneOffIsSpent(t *testing.T) {
+func TestSeed_NoOneOffIsCompleted(t *testing.T) {
 	pool := seeded(t)
+	ref := testReference(t)
 	ctx := t.Context()
 	queries := store.New(pool)
 
@@ -184,8 +185,8 @@ func TestSeed_NoOneOffIsSpent(t *testing.T) {
 				continue
 			}
 			last := latest[key{row.CareSchedule.PlantID, row.CareSchedule.CareTypeID}]
-			if _, ok := engine.Next(row.CareSchedule, last); !ok {
-				t.Errorf("the %s one-off on plant %v is spent and produces no date", row.CareType.Slug, row.Plant.ID)
+			if _, ok := engine.Next(row.CareSchedule, last, ref); !ok {
+				t.Errorf("the %s one-off on plant %v is completed and produces no date", row.CareType.Slug, row.Plant.ID)
 			}
 		}
 	}

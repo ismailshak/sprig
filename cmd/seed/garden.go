@@ -98,7 +98,7 @@ type schedule struct {
 
 	// Days before the reference at which the schedule was set. Zero places it a
 	// day after the plant arrived. A one-off sets a value, because care
-	// performed after set_at spends it.
+	// performed after set_at completes it.
 	setDaysAgo int
 }
 
