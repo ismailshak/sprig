@@ -21,9 +21,10 @@ type route struct {
 // enforcement test walks it, because http.ServeMux does not list its patterns
 // and a route registered directly on the mux would be one the test cannot see.
 // devRoutes is what a development build adds, and empty otherwise.
-func routes(sessions *auth.Sessions, queries *store.Queries, templates *Templates) []route {
+func routes(sessions *auth.Sessions, queries *store.Queries, templates *Templates, assets *Assets) []route {
 	base := []route{
 		{pattern: "GET /healthz", handler: http.HandlerFunc(handleHealthz)},
+		{pattern: assetPattern, handler: assets.handler()},
 	}
 	return append(base, devRoutes(sessions, queries, templates)...)
 }
@@ -32,6 +33,7 @@ func routes(sessions *auth.Sessions, queries *store.Queries, templates *Template
 // covers the rest, so a route in routes is protected until it is listed here.
 var publicRoutes = map[string]bool{
 	"GET /healthz": true,
+	assetPattern:   true,
 }
 
 // New builds sprig's handler. Request id runs outermost so it is set before
@@ -39,9 +41,9 @@ var publicRoutes = map[string]bool{
 // produces one request line, the cross-origin check sits inside both so a
 // refused request is logged like any other, and authentication sits inside
 // that so a cross-site post is refused before it costs a session lookup.
-func New(logger *slog.Logger, sessions *auth.Sessions, resolver Resolver, queries *store.Queries, templates *Templates) http.Handler {
+func New(logger *slog.Logger, sessions *auth.Sessions, resolver Resolver, queries *store.Queries, templates *Templates, assets *Assets) http.Handler {
 	mux := http.NewServeMux()
-	for _, r := range routes(sessions, queries, templates) {
+	for _, r := range routes(sessions, queries, templates, assets) {
 		h := r.handler
 		if r.capability != "" {
 			h = require(r.capability, h)

@@ -80,7 +80,7 @@ func devStack(t *testing.T) (http.Handler, *auth.Resolver) {
 	sessions := auth.NewSessions(queries, testTTL, auth.CookieSettings{Name: "__Host-sprig_session", Secure: true})
 	resolver := auth.NewResolver(sessions, queries)
 	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
-	return New(logger, sessions, resolver, queries, testTemplates()), resolver
+	return New(logger, sessions, resolver, queries, testTemplates(), testAssets()), resolver
 }
 
 func postHandle(t *testing.T, handler http.Handler, handle string, cookie *http.Cookie) *httptest.ResponseRecorder {
@@ -209,7 +209,7 @@ func TestDevSignIn_RefusesWhatItCannotSignIn(t *testing.T) {
 
 func TestDevSignIn_SignInPathLeadsHere(t *testing.T) {
 	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
-	handler := New(logger, testSessions(), rejectEveryToken, nil, testTemplates())
+	handler := New(logger, testSessions(), rejectEveryToken, nil, testTemplates(), testAssets())
 
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, signInPath, nil))

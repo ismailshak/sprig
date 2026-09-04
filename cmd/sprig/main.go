@@ -18,6 +18,7 @@ import (
 	"github.com/ismailshak/sprig/internal/auth"
 	sprighttp "github.com/ismailshak/sprig/internal/http"
 	"github.com/ismailshak/sprig/internal/store"
+	"github.com/ismailshak/sprig/web"
 )
 
 func main() {
@@ -56,9 +57,14 @@ func run(ctx context.Context, getenv func(string) string, stdout io.Writer) erro
 		return err
 	}
 
+	assets, err := sprighttp.NewAssets(web.Static)
+	if err != nil {
+		return err
+	}
+
 	// Before the listener too, so a template that does not parse stops the
 	// process rather than answering the first request for its page with a 500.
-	templates, err := sprighttp.ParseTemplates(logger, cfg.templateDir)
+	templates, err := sprighttp.ParseTemplates(logger, cfg.templateDir, assets)
 	if err != nil {
 		return err
 	}
@@ -73,7 +79,7 @@ func run(ctx context.Context, getenv func(string) string, stdout io.Writer) erro
 	sessions := auth.NewSessions(queries, cfg.sessionTTL, cfg.cookie)
 	resolver := auth.NewResolver(sessions, queries)
 
-	return serve(ctx, logger, listener, sprighttp.New(logger, sessions, resolver, queries, templates))
+	return serve(ctx, logger, listener, sprighttp.New(logger, sessions, resolver, queries, templates, assets))
 }
 
 // serve runs the server on listener until ctx is cancelled, then gives

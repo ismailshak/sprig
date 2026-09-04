@@ -36,7 +36,7 @@ func ServerURL(t *testing.T) *url.URL {
 
 	base := os.Getenv("SPRIG_DATABASE_URL")
 	if base == "" {
-		t.Skip("SPRIG_DATABASE_URL is unset; start Postgres with docker compose up -d db")
+		t.Skip("SPRIG_DATABASE_URL is unset")
 	}
 	parsed, err := url.Parse(base)
 	if err != nil {
