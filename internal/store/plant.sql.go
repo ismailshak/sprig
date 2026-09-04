@@ -48,8 +48,7 @@ ORDER BY location NULLS LAST, coalesce(nickname, common_name, botanical_name), i
 `
 
 // The order is the roster's, which groups by room and puts a plant with no
-// room last. Two plants can agree on room and name, so id ends the ordering
-// and fixes their order.
+// room last. Two plants can agree on room and name, so id ends the ordering.
 func (q *Queries) ListPlants(ctx context.Context, gardenID uuid.UUID) ([]Plant, error) {
 	rows, err := q.db.Query(ctx, listPlants, gardenID)
 	if err != nil {

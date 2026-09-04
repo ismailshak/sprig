@@ -19,8 +19,6 @@ ORDER BY plant_id, care_type_id, performed_at DESC
 `
 
 // A skipped event is a plant's latest one too, so nothing here filters on done.
-// performed_at DESC puts the latest event of each plant and care type first,
-// and DISTINCT ON keeps that row.
 // An event whose plant or care type was archived stays in, because the caller
 // pairs these rows against ListCareSchedules, which already excludes both.
 func (q *Queries) ListLatestCareEvents(ctx context.Context, gardenID uuid.UUID) ([]CareEvent, error) {

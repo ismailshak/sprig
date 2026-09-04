@@ -207,16 +207,13 @@ func testServerURL(t *testing.T) *url.URL {
 	return parsed
 }
 
-// createTestDatabase creates an empty database and drops it when the test ends.
-// The migration tests apply the migrations themselves, so they start from one
-// of these rather than from the template migratedPool copies.
+// createTestDatabase creates a database without the migrations, because the
+// migration tests apply those themselves.
 func createTestDatabase(t *testing.T) string {
 	t.Helper()
 	return createDatabase(t, "")
 }
 
-// createDatabase creates a database and drops it when the test ends, copying
-// template when it is named.
 func createDatabase(t *testing.T, template string) string {
 	t.Helper()
 

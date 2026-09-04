@@ -44,11 +44,10 @@ var (
 	sharedErr  error
 )
 
-// sharedTx is a transaction on a database the tests in this file have in
-// common, rolled back when the test ends. None of them commits, so they read
-// one migrated database between them rather than creating one each. They run
-// in sequence, and two transactions inserting testGardenID at once would
-// serialise on the unique index.
+// sharedTx returns a transaction on a database the tests in this file have in
+// common, rolled back when the test ends. None of them commits, so one
+// migrated database serves them all. Two of them inserting testGardenID at
+// once would serialise on the unique index, so none of them runs in parallel.
 func sharedTx(t *testing.T) pgx.Tx {
 	t.Helper()
 
@@ -129,7 +128,8 @@ func seedTwoGardens(t *testing.T) (*Queries, pgx.Tx) {
 		($1, $2, 'Monty',  'Swiss cheese plant', 'Living room'),
 		($3, $2, 'Fern',   'Boston fern',        'Bathroom')`,
 		montyID, testGardenID, fernID)
-	// No location and no nickname, which is what the ORDER BY falls through.
+	// Aloe has no location and no nickname, so it lands on the last term of
+	// both the NULLS LAST and the coalesce.
 	exec("INSERT INTO plant (id, garden_id, common_name) VALUES ($1, $2, 'Aloe')", sprigID, testGardenID)
 	exec(`INSERT INTO plant (id, garden_id, nickname, location, archived_at)
 		VALUES ($1, $2, 'Departed', 'Bedroom', now())`, departedID, testGardenID)
@@ -149,7 +149,8 @@ func seedTwoGardens(t *testing.T) (*Queries, pgx.Tx) {
 		($1, $5, $3, 3,  'day'),
 		($1, $6, $3, 10, 'day')`,
 		testGardenID, montyID, waterTypeID, feedTypeID, fernID, departedID)
-	// On a live plant, but of the type that was archived.
+	// Fern is live and the mist type is archived, which is the pair
+	// ListCareSchedules has to drop.
 	exec(`INSERT INTO care_schedule (garden_id, plant_id, care_type_id, interval_count, interval_unit)
 		VALUES ($1, $2, $3, 2, 'day')`, testGardenID, fernID, mistTypeID)
 	exec(`INSERT INTO care_schedule (garden_id, plant_id, care_type_id, interval_count, interval_unit)
@@ -185,11 +186,9 @@ func TestGetPlant_ReadsThePlantAsked(t *testing.T) {
 	}
 }
 
-// The overrides in sqlc.yaml decide the generated types, and no single query
-// test is the place to prove they took. An identifier arrives as uuid.UUID
-// rather than pgtype.UUID, an instant as time.Time, and a nullable column as a
-// pointer, so a column holding nothing and one holding the empty string stay
-// apart.
+// The overrides in sqlc.yaml decide the generated types, and no other test
+// here asserts them. A nullable column arrives as a pointer, so a column
+// holding nothing and one holding the empty string stay apart.
 func TestQueries_TheColumnTypesAreTheOnesTheOverridesAskFor(t *testing.T) {
 	ctx := t.Context()
 	queries, _ := seedTwoGardens(t)
@@ -243,7 +242,8 @@ func TestListPlants_LeavesOutArchivedAndOrdersLikeTheRoster(t *testing.T) {
 	for i, p := range plants {
 		got[i] = p.ID
 	}
-	// Bathroom before Living room, and the plant with no room after both.
+	// Bathroom sorts before Living room, and the plant with no room comes
+	// after both.
 	want := []uuid.UUID{fernID, montyID, sprigID}
 	if !slices.Equal(got, want) {
 		t.Errorf("listed\n\t%v\nwant\n\t%v", got, want)
@@ -445,8 +445,6 @@ type namedQuery struct {
 	tables []string
 }
 
-// The check reads db/queries rather than the generated Go, so it applies to
-// what a person writes.
 var (
 	queryName  = regexp.MustCompile(`(?m)^-- name: (\w+) :\w+$`)
 	queryTable = regexp.MustCompile(`(?i)\b(?:from|join|into|update)\s+([a-z_][a-z0-9_]*)`)

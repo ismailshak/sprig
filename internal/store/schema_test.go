@@ -214,8 +214,7 @@ func TestSchema_AnIdentifierDefaultsToATimeOrderedUUID(t *testing.T) {
 	}
 }
 
-// migratedPool is an empty database with the app's own migrations applied,
-// copied from the template rather than migrated again.
+// migratedPool is an empty database with the app's own migrations applied.
 func migratedPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 	return openPool(t, createDatabase(t, templateDatabase(t)))
