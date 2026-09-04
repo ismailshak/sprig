@@ -11,6 +11,20 @@ import (
 	"uuid"
 )
 
+const countPlants = `-- name: CountPlants :one
+SELECT count(*) FROM plant
+WHERE garden_id = $1 AND archived_at IS NULL
+`
+
+// Today needs the number rather than the rows, so it can tell a garden with no
+// plants from one with nothing due.
+func (q *Queries) CountPlants(ctx context.Context, gardenID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countPlants, gardenID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const getPlant = `-- name: GetPlant :one
 SELECT id, garden_id, nickname, common_name, botanical_name, location, sun, water_needs, feed_needs, soil, climate, pot, notes, acquired_year, acquired_month, created_at, archived_at FROM plant
 WHERE garden_id = $1 AND id = $2

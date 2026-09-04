@@ -8,3 +8,9 @@ WHERE garden_id = @garden_id AND id = @plant_id;
 SELECT * FROM plant
 WHERE garden_id = @garden_id AND archived_at IS NULL
 ORDER BY location NULLS LAST, coalesce(nickname, common_name, botanical_name), id;
+
+-- Today needs the number rather than the rows, so it can tell a garden with no
+-- plants from one with nothing due.
+-- name: CountPlants :one
+SELECT count(*) FROM plant
+WHERE garden_id = @garden_id AND archived_at IS NULL;
