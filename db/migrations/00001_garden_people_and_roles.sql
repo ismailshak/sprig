@@ -4,7 +4,7 @@
 --
 -- An identifier is a uuid defaulting to uuidv7(). v7 puts a millisecond
 -- timestamp in the high bits, so a new row appends to the primary key index
--- instead of scattering across it, and Postgres mints it so there is no
+-- instead of scattering across it, and Postgres supplies it so there is no
 -- generator to write and no library to depend on.
 --
 -- A text column holding a program identifier rather than prose is COLLATE "C".
@@ -21,6 +21,8 @@ CREATE TABLE garden (
 CREATE TABLE app_user (
     id           uuid PRIMARY KEY DEFAULT uuidv7(),
     display_name text NOT NULL,
+    -- Slugified from the display name. Nothing authenticates with it.
+    handle       text COLLATE "C" NOT NULL UNIQUE,
     -- No default, because due-today is computed in it and a zone nobody
     -- chose is wrong by up to a day.
     timezone     text NOT NULL,

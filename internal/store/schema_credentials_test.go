@@ -1,8 +1,10 @@
 package store
 
 import (
+	"errors"
 	"slices"
 	"testing"
+	"time"
 	"uuid"
 
 	"github.com/jackc/pgx/v5"
@@ -146,8 +148,8 @@ func TestSchema_AnIssuedTokenIsStoredOnlyAsAHash(t *testing.T) {
 		SELECT table_name || '.' || column_name, coalesce(collation_name, '')
 		FROM information_schema.columns
 		WHERE table_schema = 'public'
-		  AND table_name IN ('session', 'invite', 'api_token')
-		  AND column_name IN ('token_hash', 'token', 'secret', 'plaintext')
+		  AND table_name IN ('session', 'invite', 'api_token', 'recovery_code')
+		  AND column_name IN ('token_hash', 'code_hash', 'token', 'secret', 'plaintext')
 		ORDER BY table_name`)
 	if err != nil {
 		t.Fatalf("reading the columns: %v", err)
@@ -169,10 +171,130 @@ func TestSchema_AnIssuedTokenIsStoredOnlyAsAHash(t *testing.T) {
 		t.Fatalf("reading the columns: %v", err)
 	}
 
-	want := []string{"api_token.token_hash", "invite.token_hash", "session.token_hash"}
+	want := []string{"api_token.token_hash", "invite.token_hash", "recovery_code.code_hash", "session.token_hash"}
 	if !slices.Equal(got, want) {
 		t.Errorf("the columns holding a token are\n\t%v\nwant\n\t%v", got, want)
 	}
+}
+
+// Without invite.user_id, re-enrolling a member creates a second app_user row,
+// and their care events stay on the first.
+func TestSchema_AReEnrolmentInviteNamesTheUserItAdmits(t *testing.T) {
+	ctx := t.Context()
+	pool := migratedPool(t)
+	garden, user := seedGardenAndUser(t, pool)
+
+	insert := `INSERT INTO invite (garden_id, token_hash, role, created_by, expires_at, user_id)
+	           VALUES ($1, $2, 'sitter', $3, now() + interval '1 hour', $4)`
+	if _, err := pool.Exec(ctx, insert, garden, "re-enrol", user, user); err != nil {
+		t.Fatalf("inserting the re-enrolment invite: %v", err)
+	}
+	if _, err := pool.Exec(ctx, insert, garden, "join", user, nil); err != nil {
+		t.Fatalf("inserting the join invite: %v", err)
+	}
+
+	const claim = `UPDATE invite
+	               SET redeemed_at = now()
+	               WHERE token_hash = $1 AND redeemed_at IS NULL AND expires_at > now()
+	               RETURNING user_id`
+
+	var named *uuid.UUID
+	if err := pool.QueryRow(ctx, claim, "re-enrol").Scan(&named); err != nil {
+		t.Fatalf("claiming the re-enrolment invite: %v", err)
+	}
+	if named == nil || *named != user {
+		t.Errorf("the re-enrolment invite named %v, want the user %v it was issued against", named, user)
+	}
+
+	if err := pool.QueryRow(ctx, claim, "join").Scan(&named); err != nil {
+		t.Fatalf("claiming the join invite: %v", err)
+	}
+	if named != nil {
+		t.Errorf("the join invite named %v, want nobody", named)
+	}
+
+	if err := pool.QueryRow(ctx, claim, "re-enrol").Scan(&named); !errors.Is(err, pgx.ErrNoRows) {
+		t.Errorf("claiming the invite a second time returned %v, want no row", err)
+	}
+}
+
+func TestSchema_RecoveryCodesAndInvitesGoWithTheUserTheyName(t *testing.T) {
+	ctx := t.Context()
+	pool := migratedPool(t)
+	garden, user := seedGardenAndUser(t, pool)
+
+	_, err := pool.Exec(ctx, "INSERT INTO recovery_code (user_id, code_hash) VALUES ($1, 'hash')", user)
+	if err != nil {
+		t.Fatalf("inserting the recovery code: %v", err)
+	}
+	owner := seedUser(t, pool, "Owner", "owner")
+	_, err = pool.Exec(ctx, `
+		INSERT INTO invite (garden_id, token_hash, role, created_by, expires_at, user_id)
+		VALUES ($1, 're-enrol', 'sitter', $2, now() + interval '1 hour', $3)`, garden, owner, user)
+	if err != nil {
+		t.Fatalf("inserting the re-enrolment invite: %v", err)
+	}
+
+	if _, err := pool.Exec(ctx, "DELETE FROM app_user WHERE id = $1", user); err != nil {
+		t.Fatalf("deleting the user: %v", err)
+	}
+	for _, table := range []string{"recovery_code", "invite"} {
+		var left int
+		if err := pool.QueryRow(ctx, "SELECT count(*) FROM "+table).Scan(&left); err != nil {
+			t.Fatalf("counting %s: %v", table, err)
+		}
+		if left != 0 {
+			t.Errorf("%d rows in %s outlived the user, want 0", left, table)
+		}
+	}
+}
+
+func TestSchema_ARecoveryCodeRecordsWhenItsBatchWasMadeAndWhenItWasUsed(t *testing.T) {
+	ctx := t.Context()
+	pool := migratedPool(t)
+	_, user := seedGardenAndUser(t, pool)
+
+	insert := "INSERT INTO recovery_code (user_id, code_hash) VALUES ($1, $2) RETURNING generated_at, used_at"
+	var generated time.Time
+	var used *time.Time
+	if err := pool.QueryRow(ctx, insert, user, "first").Scan(&generated, &used); err != nil {
+		t.Fatalf("inserting the first code: %v", err)
+	}
+	if used != nil {
+		t.Errorf("a new code reads as used at %v, want unused", used)
+	}
+	if d := time.Since(generated).Abs(); d > time.Minute {
+		t.Errorf("the batch instant is %v from now, want the moment it was written", d)
+	}
+}
+
+// Redemption looks a code up by hash alone, so a shared hash would let one
+// code open two accounts.
+func TestSchema_TwoRecoveryCodesCannotShareAHash(t *testing.T) {
+	ctx := t.Context()
+	pool := migratedPool(t)
+	_, user := seedGardenAndUser(t, pool)
+
+	const insert = "INSERT INTO recovery_code (user_id, code_hash) VALUES ($1, 'hash')"
+	if _, err := pool.Exec(ctx, insert, user); err != nil {
+		t.Fatalf("inserting the code: %v", err)
+	}
+	if _, err := pool.Exec(ctx, insert, user); err == nil {
+		t.Error("two codes hashing to the same value were accepted")
+	}
+}
+
+func seedUser(t *testing.T, pool *pgxpool.Pool, displayName, handle string) uuid.UUID {
+	t.Helper()
+
+	var id uuid.UUID
+	err := pool.QueryRow(t.Context(),
+		"INSERT INTO app_user (display_name, timezone, handle) VALUES ($1, 'Europe/London', $2) RETURNING id",
+		displayName, handle).Scan(&id)
+	if err != nil {
+		t.Fatalf("inserting the user %q: %v", displayName, err)
+	}
+	return id
 }
 
 func seedGarden(t *testing.T, pool *pgxpool.Pool, name string) uuid.UUID {
