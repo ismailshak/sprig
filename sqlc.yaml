@@ -1,0 +1,46 @@
+version: "2"
+sql:
+  - engine: postgresql
+    schema: db/migrations
+    queries: db/queries
+    gen:
+      go:
+        package: store
+        out: internal/store
+        sql_package: pgx/v5
+        # sqlc knows id on its own, so api_token would otherwise generate ApiToken.
+        initialisms: ["id", "api"]
+        # A nullable column is a pointer, so the zero value and the absent
+        # value are distinct.
+        emit_pointers_for_null_types: true
+        # Two parameters stay positional, so a signature reads
+        # GetPlant(gardenID, plantID).
+        query_parameter_limit: 2
+        overrides:
+          # Without these, every identifier is a pgtype.UUID and every
+          # instant a pgtype.Timestamptz. pgx encodes and scans uuid.UUID and
+          # time.Time natively, and the due-date engine computes in time.Time.
+          - db_type: uuid
+            go_type:
+              import: uuid
+              type: UUID
+          - db_type: uuid
+            nullable: true
+            go_type:
+              import: uuid
+              type: UUID
+              pointer: true
+          - db_type: timestamptz
+            go_type: time.Time
+          - db_type: timestamptz
+            nullable: true
+            go_type:
+              type: time.Time
+              pointer: true
+          - db_type: date
+            go_type: time.Time
+          - db_type: date
+            nullable: true
+            go_type:
+              type: time.Time
+              pointer: true

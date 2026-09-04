@@ -17,6 +17,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/ismailshak/sprig/db"
 )
 
 func TestMigrate_FreshDatabaseAppliesEveryMigrationOnce(t *testing.T) {
@@ -181,10 +183,10 @@ func openPool(t *testing.T, databaseURL string) *pgxpool.Pool {
 	return pool
 }
 
-// createTestDatabase creates an empty database on the server SPRIG_DATABASE_URL
-// names and drops it when the test ends. Without that variable there is no
-// server to create it on, so the test is skipped rather than failed.
-func createTestDatabase(t *testing.T) string {
+// testServerURL is the server every test database is created on. Without
+// SPRIG_DATABASE_URL there is none, so the test is skipped rather than
+// failed.
+func testServerURL(t *testing.T) *url.URL {
 	t.Helper()
 
 	base := os.Getenv("SPRIG_DATABASE_URL")
@@ -202,21 +204,128 @@ func createTestDatabase(t *testing.T) string {
 	default:
 		t.Fatalf("refusing to run against %q: tests only talk to loopback or the compose database", parsed.Hostname())
 	}
+	return parsed
+}
 
+// createTestDatabase creates a database without the migrations, because the
+// migration tests apply those themselves.
+func createTestDatabase(t *testing.T) string {
+	t.Helper()
+	return createDatabase(t, "")
+}
+
+func createDatabase(t *testing.T, template string) string {
+	t.Helper()
+
+	base := testServerURL(t)
 	name := "sprig_test_" + strings.ToLower(rand.Text()[:12])
-	server, err := pgx.Connect(t.Context(), base)
+
+	create := "CREATE DATABASE " + pgx.Identifier{name}.Sanitize()
+	if template != "" {
+		create += " TEMPLATE " + pgx.Identifier{template}.Sanitize()
+	}
+
+	server, err := pgx.Connect(t.Context(), base.String())
 	if err != nil {
-		t.Fatalf("connecting to %s: %v", parsed.Redacted(), err)
+		t.Fatalf("connecting to %s: %v", base.Redacted(), err)
 	}
 	defer func() { _ = server.Close(t.Context()) }()
 
-	if _, err := server.Exec(t.Context(), "CREATE DATABASE "+pgx.Identifier{name}.Sanitize()); err != nil {
+	if _, err := server.Exec(t.Context(), create); err != nil {
 		t.Fatalf("creating %s: %v", name, err)
 	}
-	t.Cleanup(func() { dropTestDatabase(t, base, name) })
+	t.Cleanup(func() { dropTestDatabase(t, base.String(), name) })
 
-	parsed.Path = "/" + name
-	return parsed.String()
+	dbURL := *base
+	dbURL.Path = "/" + name
+	return dbURL.String()
+}
+
+var (
+	templateOnce sync.Once
+	templateName string
+	templateErr  error
+)
+
+// templateDatabase holds the migrations, applied once, for createDatabase to
+// copy. A copy costs one CREATE DATABASE, and a fresh database costs that plus
+// the goose run.
+func templateDatabase(t *testing.T) string {
+	t.Helper()
+
+	base := testServerURL(t)
+	templateOnce.Do(func() { templateErr = prepareTemplateDatabase(base) })
+	if templateErr != nil {
+		t.Fatalf("preparing the template database: %v", templateErr)
+	}
+	return templateName
+}
+
+func prepareTemplateDatabase(base *url.URL) error {
+	ctx := context.Background()
+	name := "sprig_test_tmpl_" + strings.ToLower(rand.Text()[:12])
+
+	server, err := pgx.Connect(ctx, base.String())
+	if err != nil {
+		return fmt.Errorf("connect to %s: %w", base.Redacted(), err)
+	}
+	defer func() { _ = server.Close(ctx) }()
+
+	if _, err := server.Exec(ctx, "CREATE DATABASE "+pgx.Identifier{name}.Sanitize()); err != nil {
+		return fmt.Errorf("create %s: %w", name, err)
+	}
+	// Recorded before the migrations run, so a failure below still leaves the
+	// database for TestMain to drop.
+	templateName = name
+
+	dbURL := *base
+	dbURL.Path = "/" + name
+	pool, err := Open(ctx, dbURL.String())
+	if err != nil {
+		return fmt.Errorf("open %s: %w", name, err)
+	}
+	// Closed here rather than at the end of the run, because CREATE DATABASE
+	// refuses a template another session is connected to.
+	defer pool.Close()
+
+	if err := Migrate(ctx, pool, db.Migrations, slog.New(slog.DiscardHandler)); err != nil {
+		return fmt.Errorf("migrate %s: %w", name, err)
+	}
+	return nil
+}
+
+// TestMain drops what outlives a single test, which is the template database
+// and the one queries_test.go shares.
+func TestMain(m *testing.M) {
+	code := m.Run()
+	if err := dropRunDatabases(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		code = 1
+	}
+	os.Exit(code)
+}
+
+func dropRunDatabases() error {
+	closeSharedPool()
+
+	base := os.Getenv("SPRIG_DATABASE_URL")
+	ctx := context.Background()
+	for _, name := range []string{sharedName, templateName} {
+		if name == "" {
+			continue
+		}
+		server, err := pgx.Connect(ctx, base)
+		if err != nil {
+			return fmt.Errorf("connecting to drop %s: %w", name, err)
+		}
+		drop := fmt.Sprintf("DROP DATABASE %s WITH (FORCE)", pgx.Identifier{name}.Sanitize())
+		_, err = server.Exec(ctx, drop)
+		_ = server.Close(ctx)
+		if err != nil {
+			return fmt.Errorf("dropping %s: %w", name, err)
+		}
+	}
+	return nil
 }
 
 func dropTestDatabase(t *testing.T, base, name string) {

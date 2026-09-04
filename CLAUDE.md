@@ -63,7 +63,7 @@ Three tiers, each the cheapest thing that can see its own failures.
 - **Integration tests against a real Postgres** for the query layer. Nothing is mocked — a mock has an opinion about what Postgres does and is wrong exactly where a query is wrong.
 - **Playwright** for what only exists in a browser. Two passes: one ordinary, one with JavaScript disabled over sign-in, logging care, adding a plant and editing a schedule.
 
-No test ever points at a deployed database. The e2e harness refuses to start unless `SPRIG_DATABASE_URL` resolves to loopback or the compose service name.
+No test ever points at a deployed database. The e2e harness refuses to start unless `SPRIG_DATABASE_URL` resolves to loopback or the compose service name. Tests should only ever test business logic, mechanics of adding/removing/updating data and correctness of our code. It should never be testing libraries, databases, and other things that are outside the scope of our application.
 
 ## Commits
 

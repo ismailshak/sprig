@@ -4,8 +4,6 @@ import (
 	"testing"
 	"time"
 	"uuid"
-
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func TestSchema_ACareTypeSlugIsUniqueWithinItsGarden(t *testing.T) {
@@ -190,19 +188,44 @@ func TestSchema_ASkipCarriesItsOwnInterval(t *testing.T) {
 	plant := seedPlant(t, pool, garden, "Sprout")
 	careType := seedCareType(t, pool, garden, "water", "Water")
 
-	_, err := pool.Exec(ctx, `
+	var done bool
+	var override *int32
+	err := pool.QueryRow(ctx, `
 		INSERT INTO care_event (garden_id, plant_id, care_type_id, performed_by, performed_at, done, override_interval_days)
-		VALUES ($1, $2, $3, $4, now(), false, 2)`, garden, plant, careType, user)
+		VALUES ($1, $2, $3, $4, now(), false, 2)
+		RETURNING done, override_interval_days`, garden, plant, careType, user).Scan(&done, &override)
 	if err != nil {
 		t.Fatalf("inserting the skip: %v", err)
 	}
+	if done {
+		t.Error("the skip reads as done")
+	}
+	if override == nil {
+		t.Fatal("override interval is nil, and the skip was written with one")
+	}
+	if *override != 2 {
+		t.Errorf("override interval = %d, want the 2 days the skip asked for", *override)
+	}
+
+	// The column is only for a skip that named its own interval, so ordinary
+	// care leaves it empty.
+	err = pool.QueryRow(ctx, `
+		INSERT INTO care_event (garden_id, plant_id, care_type_id, performed_by, performed_at, done)
+		VALUES ($1, $2, $3, $4, now(), true)
+		RETURNING override_interval_days`, garden, plant, careType, user).Scan(&override)
+	if err != nil {
+		t.Fatalf("inserting the watering: %v", err)
+	}
+	if override != nil {
+		t.Errorf("a watering that named no interval stored %d", *override)
+	}
 }
 
-func seedPlant(t *testing.T, pool *pgxpool.Pool, gardenID uuid.UUID, nickname string) uuid.UUID {
+func seedPlant(t *testing.T, conn DBTX, gardenID uuid.UUID, nickname string) uuid.UUID {
 	t.Helper()
 
 	var id uuid.UUID
-	err := pool.QueryRow(t.Context(),
+	err := conn.QueryRow(t.Context(),
 		"INSERT INTO plant (garden_id, nickname) VALUES ($1, $2) RETURNING id", gardenID, nickname).Scan(&id)
 	if err != nil {
 		t.Fatalf("inserting the plant %q: %v", nickname, err)
@@ -210,11 +233,11 @@ func seedPlant(t *testing.T, pool *pgxpool.Pool, gardenID uuid.UUID, nickname st
 	return id
 }
 
-func seedCareType(t *testing.T, pool *pgxpool.Pool, gardenID uuid.UUID, slug, name string) uuid.UUID {
+func seedCareType(t *testing.T, conn DBTX, gardenID uuid.UUID, slug, name string) uuid.UUID {
 	t.Helper()
 
 	var id uuid.UUID
-	err := pool.QueryRow(t.Context(),
+	err := conn.QueryRow(t.Context(),
 		"INSERT INTO care_type (garden_id, name, slug) VALUES ($1, $2, $3) RETURNING id", gardenID, name, slug).Scan(&id)
 	if err != nil {
 		t.Fatalf("inserting the care type %q: %v", slug, err)
