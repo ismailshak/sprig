@@ -65,6 +65,8 @@ Three tiers, each the cheapest thing that can see its own failures.
 - **Integration tests against a real Postgres** for the query layer. Nothing is mocked — a mock has an opinion about what Postgres does and is wrong exactly where a query is wrong.
 - **Playwright** for what only exists in a browser. Two passes: one ordinary, one with JavaScript disabled over sign-in, logging care, adding a plant and editing a schedule.
 
+A Playwright test asserts behaviour, and appearance is not behaviour. It drives a browser to find out where a flow lands, what the page says when it arrives, and what the database holds afterwards. Screenshot comparison, pixel diffing and golden images are excluded — a screen's appearance is settled in the prototype and reviewed by eye. A test selects by a role, an accessible name, visible text, or an id the server names as part of a swap contract; never by a CSS class, because renaming one is a design decision and has to stay free. Nothing is mocked, stubbed or intercepted, and assertions are made against the deterministic seed. One test is one flow end to end rather than one page. A card that adds a screen adds the flows that screen makes possible.
+
 No test ever points at a deployed database. The e2e harness refuses to start unless `SPRIG_DATABASE_URL` resolves to loopback or the compose service name. Tests should only ever test business logic, mechanics of adding/removing/updating data and correctness of our code. It should never be testing libraries, databases, and other things that are outside the scope of our application.
 
 ## Commits
