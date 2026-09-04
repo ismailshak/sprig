@@ -143,6 +143,10 @@ func seed(ctx context.Context, pool *pgxpool.Pool, ref time.Time) (counts, error
 	}
 	written.events = events
 
+	if err := writeIdentity(ctx, tx, ref); err != nil {
+		return counts{}, err
+	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return counts{}, fmt.Errorf("commit: %w", err)
 	}
@@ -167,7 +171,9 @@ func clear(ctx context.Context, tx pgx.Tx, gardens []garden, people []*person) e
 		"DELETE FROM care_schedule WHERE garden_id = ANY($1)",
 		"DELETE FROM plant WHERE garden_id = ANY($1)",
 		"DELETE FROM care_type WHERE garden_id = ANY($1)",
-		// The cascade from garden takes the memberships, sessions and invites.
+		// The cascade from garden takes the memberships, sessions, preferences,
+		// invites and tokens, and the one from app_user takes the passkeys,
+		// recovery codes and subscriptions.
 		"DELETE FROM garden WHERE id = ANY($1)",
 	}
 	for _, sql := range byGarden {
@@ -204,7 +210,8 @@ func writeGarden(ctx context.Context, tx pgx.Tx, g *garden, ref time.Time, event
 		return 0, fmt.Errorf("writing the garden %s: %w", g.name, err)
 	}
 
-	for _, m := range g.members {
+	for i := range g.members {
+		m := &g.members[i]
 		var invitedBy *uuid.UUID
 		if m.invitedBy != nil {
 			invitedBy = &m.invitedBy.id
@@ -221,6 +228,16 @@ func writeGarden(ctx context.Context, tx pgx.Tx, g *garden, ref time.Time, event
 		); err != nil {
 			return 0, fmt.Errorf("writing %s's membership of %s: %w", m.person.handle, g.name, err)
 		}
+		if err := writePreferences(ctx, tx, g, m); err != nil {
+			return 0, err
+		}
+	}
+
+	if err := writeInvites(ctx, tx, g, ref); err != nil {
+		return 0, err
+	}
+	if err := writeTokens(ctx, tx, g, ref); err != nil {
+		return 0, err
 	}
 
 	// A garden's care types are shown in the order it created them, so they are
