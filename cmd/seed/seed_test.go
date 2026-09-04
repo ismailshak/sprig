@@ -22,6 +22,8 @@ import (
 var seededTables = []string{
 	"garden", "app_user", "membership",
 	"care_type", "plant", "care_schedule", "care_event",
+	"passkey_credential", "invite", "recovery_code", "api_token",
+	"push_subscription", "notification_preference",
 }
 
 func TestMain(m *testing.M) {
@@ -292,14 +294,15 @@ func TestSeed_OneAccountHoldsMembershipsInBothGardens(t *testing.T) {
 }
 
 // dumpRows reads every seeded table as JSON text, so two runs can be compared
-// column by column without naming the columns here.
+// column by column without naming the columns here. The rows are ordered by
+// that text rather than by id, because notification_preference has none.
 func dumpRows(t *testing.T, pool *pgxpool.Pool) map[string][]string {
 	t.Helper()
 
 	out := map[string][]string{}
 	for _, table := range seededTables {
 		name := pgx.Identifier{table}.Sanitize()
-		rows, err := pool.Query(t.Context(), "SELECT to_jsonb(t)::text FROM "+name+" t ORDER BY t.id")
+		rows, err := pool.Query(t.Context(), "SELECT to_jsonb(t)::text FROM "+name+" t ORDER BY 1")
 		if err != nil {
 			t.Fatalf("reading %s: %v", table, err)
 		}

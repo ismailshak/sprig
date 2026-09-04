@@ -21,6 +21,11 @@ const (
 	tablePlant
 	tableCareSchedule
 	tableCareEvent
+	tablePasskeyCredential
+	tableInvite
+	tableRecoveryCode
+	tableAPIToken
+	tablePushSubscription
 )
 
 func seedID(table, n int) uuid.UUID {
@@ -54,6 +59,12 @@ type membership struct {
 	// Days after the reference the arrangement runs out. Zero is the ordinary
 	// permanent membership.
 	expiresInDays int
+
+	// Off is the zero value, so nothing prompts for permission until a person
+	// turns a kind on. The handler that creates a membership holds the same
+	// default, and the seed does not read it from there.
+	digest   bool
+	activity bool
 }
 
 type careType struct {
@@ -157,6 +168,8 @@ type garden struct {
 	members   []membership
 	careTypes []careType
 	plants    []plant
+	invites   []invite
+	tokens    []apiToken
 }
 
 // home is the garden the prototype draws, carrying its plants, rooms, names,
@@ -172,7 +185,7 @@ func home() garden {
 		name:    "Home",
 		daysOld: 730,
 		members: []membership{
-			{id: seedID(tableMembership, 1), person: &ellie, role: "owner", daysOld: 730},
+			{id: seedID(tableMembership, 1), person: &ellie, role: "owner", daysOld: 730, digest: true},
 			{id: seedID(tableMembership, 2), person: &sam, role: "member", invitedBy: &ellie, daysOld: 700},
 		},
 		careTypes: []careType{
@@ -184,6 +197,14 @@ func home() garden {
 			{id: seedID(tableCareType, 4), name: "Mist", slug: "mist", archivedDaysAgo: 10},
 		},
 		plants: append(livingPlants(), archivedPlants()...),
+		invites: []invite{
+			{id: seedID(tableInvite, 1), token: sitterInviteToken, role: "sitter", createdBy: &ellie, daysOld: 2, expiresInDays: 5},
+		},
+		// Both tokens live the full ninety days auth.MaxTokenLifetime allows.
+		tokens: []apiToken{
+			{id: seedID(tableAPIToken, 1), name: "The kitchen display", token: kitchenDisplayToken, prefix: "sprg_7c1f", createdBy: &ellie, daysOld: 40, usedDaysAgo: 0, expiresInDays: 50},
+			{id: seedID(tableAPIToken, 2), name: "The spare display", token: spareDisplayToken, prefix: "sprg_2ea8", createdBy: &ellie, daysOld: 96, usedDaysAgo: 74, expiresInDays: -6},
+		},
 	}
 }
 
