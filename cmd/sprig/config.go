@@ -17,8 +17,11 @@ type config struct {
 	databaseURL string
 	cookie      auth.CookieSettings
 	sessionTTL  time.Duration
-	logLevel    slog.Level
-	logFormat   string
+	// trustedIPHeader is the header a proxy writes the client address to.
+	// Empty means RemoteAddr is the client address.
+	trustedIPHeader string
+	logLevel        slog.Level
+	logFormat       string
 }
 
 // defaultSessionTTL is 30 days of disuse before a session ends. A shorter
@@ -39,9 +42,10 @@ func loadConfig(getenv func(string) string) (config, error) {
 	}
 
 	cfg := config{
-		addr:        withDefault(getenv("SPRIG_ADDR"), ":8080"),
-		databaseURL: require("SPRIG_DATABASE_URL"),
-		logFormat:   withDefault(getenv("SPRIG_LOG_FORMAT"), "json"),
+		addr:            withDefault(getenv("SPRIG_ADDR"), ":8080"),
+		databaseURL:     require("SPRIG_DATABASE_URL"),
+		trustedIPHeader: strings.TrimSpace(getenv("SPRIG_TRUSTED_IP_HEADER")),
+		logFormat:       withDefault(getenv("SPRIG_LOG_FORMAT"), "json"),
 	}
 
 	if cfg.logFormat != "json" && cfg.logFormat != "text" {

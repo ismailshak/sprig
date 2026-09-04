@@ -61,6 +61,9 @@ func TestLoadConfig_Defaults(t *testing.T) {
 	if cfg.sessionTTL != 720*time.Hour {
 		t.Errorf("sessionTTL = %s, want 720h", cfg.sessionTTL)
 	}
+	if cfg.trustedIPHeader != "" {
+		t.Errorf("trustedIPHeader = %q, want none, so RemoteAddr is the client until a deployment says otherwise", cfg.trustedIPHeader)
+	}
 }
 
 func TestLoadConfig_APlainCookieOverHTTPTakesBothVariables(t *testing.T) {
@@ -114,10 +117,11 @@ func TestLoadConfig_RejectsACookieABrowserWouldDrop(t *testing.T) {
 
 func TestLoadConfig_OverridesAndTextFormat(t *testing.T) {
 	env := map[string]string{
-		"SPRIG_DATABASE_URL": "postgres://example/db",
-		"SPRIG_ADDR":         ":9090",
-		"SPRIG_LOG_FORMAT":   "text",
-		"SPRIG_LOG_LEVEL":    "debug",
+		"SPRIG_DATABASE_URL":      "postgres://example/db",
+		"SPRIG_ADDR":              ":9090",
+		"SPRIG_LOG_FORMAT":        "text",
+		"SPRIG_LOG_LEVEL":         "debug",
+		"SPRIG_TRUSTED_IP_HEADER": "CF-Connecting-IP",
 	}
 	getenv := func(k string) string { return env[k] }
 
@@ -133,6 +137,9 @@ func TestLoadConfig_OverridesAndTextFormat(t *testing.T) {
 	}
 	if cfg.logLevel != slog.LevelDebug {
 		t.Errorf("logLevel = %v, want %v", cfg.logLevel, slog.LevelDebug)
+	}
+	if cfg.trustedIPHeader != "CF-Connecting-IP" {
+		t.Errorf("trustedIPHeader = %q, want CF-Connecting-IP", cfg.trustedIPHeader)
 	}
 }
 
