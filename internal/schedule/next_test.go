@@ -14,8 +14,10 @@ func TestNext(t *testing.T) {
 		name  string
 		sched store.CareSchedule
 		last  *store.CareEvent
+		now   time.Time
 		// The zero time is a schedule with nothing left to produce.
-		want time.Time
+		want  time.Time
+		month bool
 	}{
 		{
 			name:  "a cadence with no event counts from when the schedule was set",
@@ -139,44 +141,217 @@ func TestNext(t *testing.T) {
 			want:  time.Date(2028, time.March, 1, 0, 0, 0, 0, time.UTC),
 		},
 		{
-			name:  "a one-off is not spent by care recorded before it was set",
+			name:  "a one-off is not completed by care recorded before it was set",
 			sched: oneOff(set, time.Date(2028, time.March, 1, 0, 0, 0, 0, time.UTC)),
 			last:  event(day(time.June, 1)),
 			want:  time.Date(2028, time.March, 1, 0, 0, 0, 0, time.UTC),
 		},
 		{
-			name:  "a repot backfilled from before the schedule was set does not spend it",
+			name:  "a repot backfilled from before the schedule was set does not complete it",
 			sched: oneOff(set, time.Date(2028, time.March, 1, 0, 0, 0, 0, time.UTC)),
 			last:  backdated(day(time.August, 1), day(time.September, 5)),
 			want:  time.Date(2028, time.March, 1, 0, 0, 0, 0, time.UTC),
 		},
 		{
-			name:  "a spent one-off produces nothing rather than a date in the past",
+			name:  "a completed one-off produces nothing rather than a date in the past",
 			sched: oneOff(time.Date(2026, time.January, 1, 9, 0, 0, 0, time.UTC), time.Date(2026, time.March, 1, 0, 0, 0, 0, time.UTC)),
 			last:  event(time.Date(2026, time.March, 2, 8, 0, 0, 0, time.UTC)),
 		},
 		{
-			name:  "a skip asks again rather than spending a one-off",
+			name:  "a skip asks again rather than completing a one-off",
 			sched: oneOff(time.Date(2026, time.January, 1, 9, 0, 0, 0, time.UTC), time.Date(2026, time.March, 1, 0, 0, 0, 0, time.UTC)),
 			last:  skip(time.Date(2026, time.March, 2, 8, 0, 0, 0, time.UTC)),
 			want:  time.Date(2026, time.March, 1, 0, 0, 0, 0, time.UTC),
+		},
+		{
+			name:  "an override beats a cadence",
+			sched: cadence(set, 10, UnitDay),
+			last:  override(skip(day(time.September, 1)), 2),
+			want:  time.Date(2026, time.September, 3, 8, 0, 0, 0, time.UTC),
+		},
+		{
+			name:  "an override beats an anchored series",
+			sched: anchored(set, 1, UnitYear, time.August, 1),
+			last:  override(skip(day(time.August, 3)), 2),
+			want:  time.Date(2026, time.August, 5, 8, 0, 0, 0, time.UTC),
+		},
+		{
+			name:  "an override beats a one-off",
+			sched: oneOff(set, time.Date(2028, time.March, 1, 0, 0, 0, 0, time.UTC)),
+			last:  override(skip(day(time.September, 5)), 7),
+			want:  time.Date(2026, time.September, 12, 8, 0, 0, 0, time.UTC),
+		},
+		{
+			name:  "an override on a month-precise one-off is a day",
+			sched: monthPrecise(oneOff(set, time.Date(2028, time.March, 1, 0, 0, 0, 0, time.UTC))),
+			last:  override(skip(day(time.September, 5)), 7),
+			want:  time.Date(2026, time.September, 12, 8, 0, 0, 0, time.UTC),
+		},
+		{
+			name:  "a backdated override counts from when the plant was looked at",
+			sched: cadence(set, 10, UnitDay),
+			last:  override(skipBackdated(day(time.August, 30), day(time.September, 3)), 2),
+			want:  time.Date(2026, time.September, 1, 8, 0, 0, 0, time.UTC),
+		},
+		{
+			name:  "an override on a done event still wins",
+			sched: cadence(set, 10, UnitDay),
+			last:  override(event(day(time.September, 1)), 3),
+			want:  time.Date(2026, time.September, 4, 8, 0, 0, 0, time.UTC),
+		},
+		{
+			name:  "an override on a one-off's done event asks again rather than completing it",
+			sched: oneOff(time.Date(2026, time.January, 1, 9, 0, 0, 0, time.UTC), time.Date(2026, time.March, 1, 0, 0, 0, 0, time.UTC)),
+			last:  override(event(time.Date(2026, time.March, 2, 8, 0, 0, 0, time.UTC)), 10),
+			want:  time.Date(2026, time.March, 12, 8, 0, 0, 0, time.UTC),
+		},
+		{
+			name:  "a month-precise one-off is its month",
+			sched: monthPrecise(oneOff(set, time.Date(2028, time.March, 1, 0, 0, 0, 0, time.UTC))),
+			want:  time.Date(2028, time.March, 1, 0, 0, 0, 0, time.UTC),
+			month: true,
+		},
+		{
+			name:  "a month-precise anchored series is its month",
+			sched: monthPrecise(anchored(set, 1, UnitYear, time.March, 1)),
+			want:  time.Date(2027, time.March, 1, 0, 0, 0, 0, time.UTC),
+			month: true,
+		},
+		{
+			name:  "care done late in a month-precise anchor's month is that occurrence",
+			sched: monthPrecise(anchored(set, 1, UnitYear, time.March, 1)),
+			last:  event(day(time.March, 28)),
+			want:  time.Date(2027, time.March, 1, 0, 0, 0, 0, time.UTC),
+			month: true,
+		},
+		{
+			name:  "a month-precise series not done since last year comes back as its month",
+			sched: monthPrecise(anchoredOn(time.Date(2025, time.January, 1, 9, 0, 0, 0, time.UTC), 1, UnitYear, time.Date(2025, time.March, 1, 0, 0, 0, 0, time.UTC))),
+			last:  event(time.Date(2025, time.March, 20, 8, 0, 0, 0, time.UTC)),
+			want:  time.Date(2026, time.March, 1, 0, 0, 0, 0, time.UTC),
+			month: true,
+		},
+		{
+			name:  "a seasonal cadence inside its window is the usual computation",
+			sched: seasonal(cadence(set, 3, UnitWeek), time.March, time.September),
+			last:  event(day(time.August, 20)),
+			now:   day(time.September, 3),
+			want:  time.Date(2026, time.September, 10, 8, 0, 0, 0, time.UTC),
+		},
+		{
+			name:  "a seasonal cadence overdue inside its window stays where it fell",
+			sched: seasonal(cadence(set, 3, UnitWeek), time.March, time.September),
+			last:  event(day(time.August, 20)),
+			now:   day(time.September, 20),
+			want:  time.Date(2026, time.September, 10, 8, 0, 0, 0, time.UTC),
+		},
+		{
+			name:  "the season shuts the day after its last month",
+			sched: seasonal(cadence(set, 3, UnitWeek), time.March, time.September),
+			last:  event(day(time.August, 20)),
+			now:   time.Date(2026, time.October, 1, 0, 0, 0, 0, time.UTC),
+		},
+		{
+			name:  "the season is open to the end of its last month",
+			sched: seasonal(cadence(set, 3, UnitWeek), time.March, time.September),
+			last:  event(day(time.August, 20)),
+			now:   time.Date(2026, time.September, 30, 23, 59, 0, 0, time.UTC),
+			want:  time.Date(2026, time.September, 10, 8, 0, 0, 0, time.UTC),
+		},
+		{
+			name:  "the season is open from the first instant of its first month",
+			sched: seasonal(cadence(set, 3, UnitWeek), time.March, time.September),
+			last:  event(day(time.August, 20)),
+			now:   time.Date(2027, time.March, 1, 0, 0, 0, 0, time.UTC),
+			want:  time.Date(2027, time.March, 1, 0, 0, 0, 0, time.UTC),
+		},
+		{
+			name:  "a feed missed in September is not due again until the window opens",
+			sched: seasonal(cadence(set, 3, UnitWeek), time.March, time.September),
+			last:  event(day(time.August, 20)),
+			now:   time.Date(2027, time.March, 5, 8, 0, 0, 0, time.UTC),
+			want:  time.Date(2027, time.March, 1, 0, 0, 0, 0, time.UTC),
+		},
+		{
+			name:  "a feed that would fall after the close waits for the next opening",
+			sched: seasonal(cadence(set, 3, UnitWeek), time.March, time.September),
+			last:  event(day(time.September, 25)),
+			now:   day(time.September, 26),
+			want:  time.Date(2027, time.March, 1, 0, 0, 0, 0, time.UTC),
+		},
+		{
+			name:  "a seasonal schedule set in winter is due when the window opens",
+			sched: seasonal(cadence(day(time.November, 15), 3, UnitWeek), time.March, time.September),
+			now:   time.Date(2027, time.March, 5, 8, 0, 0, 0, time.UTC),
+			want:  time.Date(2027, time.March, 1, 0, 0, 0, 0, time.UTC),
+		},
+		{
+			name:  "a skip that asks to be reminded past the close is not due until the window opens",
+			sched: seasonal(cadence(set, 3, UnitWeek), time.March, time.September),
+			last:  override(skip(day(time.September, 28)), 5),
+			now:   day(time.October, 3),
+		},
+		{
+			name:  "a wrapped season is open on the near side of the new year",
+			sched: seasonal(cadence(set, 3, UnitWeek), time.November, time.February),
+			last:  event(day(time.November, 20)),
+			now:   day(time.December, 5),
+			want:  time.Date(2026, time.December, 11, 8, 0, 0, 0, time.UTC),
+		},
+		{
+			name:  "a wrapped season is open on the far side of the new year",
+			sched: seasonal(cadence(set, 3, UnitWeek), time.November, time.February),
+			last:  event(day(time.December, 20)),
+			now:   time.Date(2027, time.January, 15, 8, 0, 0, 0, time.UTC),
+			want:  time.Date(2027, time.January, 10, 8, 0, 0, 0, time.UTC),
+		},
+		{
+			name:  "a wrapped season is shut in the middle of the year",
+			sched: seasonal(cadence(set, 3, UnitWeek), time.November, time.February),
+			last:  event(day(time.February, 10)),
+			now:   day(time.June, 15),
+		},
+		{
+			name:  "a wrapped season asked about in January opened the previous November",
+			sched: seasonal(cadence(set, 3, UnitWeek), time.November, time.February),
+			last:  event(day(time.February, 10)),
+			now:   time.Date(2027, time.January, 15, 8, 0, 0, 0, time.UTC),
+			want:  time.Date(2026, time.November, 1, 0, 0, 0, 0, time.UTC),
+		},
+		{
+			name:  "a wrapped season's feed that would fall in spring waits for November",
+			sched: seasonal(cadence(set, 3, UnitWeek), time.November, time.February),
+			last:  event(day(time.February, 20)),
+			now:   day(time.February, 21),
+			want:  time.Date(2026, time.November, 1, 0, 0, 0, 0, time.UTC),
 		},
 	}
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got, ok := Next(c.sched, c.last)
+			now := c.now
+			if now.IsZero() {
+				now = set
+			}
+			got, ok := Next(c.sched, c.last, now)
 			if c.want.IsZero() {
 				if ok {
-					t.Fatalf("Next() = %s, true, want no occurrence", got)
+					t.Fatalf("Next() = %s, true, want no occurrence", got.At)
 				}
 				return
 			}
 			if !ok {
 				t.Fatal("Next() reported no occurrence, want one")
 			}
-			if !got.Equal(c.want) {
-				t.Errorf("Next() = %s, want %s", got, c.want)
+			if !got.At.Equal(c.want) {
+				t.Errorf("Next().At = %s, want %s", got.At, c.want)
+			}
+			precision := PrecisionDay
+			if c.month {
+				precision = PrecisionMonth
+			}
+			if got.Precision != precision {
+				t.Errorf("Next().Precision = %q, want %q", got.Precision, precision)
 			}
 		})
 	}
@@ -200,6 +375,17 @@ func oneOff(setAt, anchor time.Time) store.CareSchedule {
 	return store.CareSchedule{AnchorDate: &anchor, AnchorPrecision: ptr("day"), SetAt: setAt}
 }
 
+// A month-precise anchor is stored as the first of its month.
+func monthPrecise(s store.CareSchedule) store.CareSchedule {
+	s.AnchorPrecision = ptr("month")
+	return s
+}
+
+func seasonal(s store.CareSchedule, start, end time.Month) store.CareSchedule {
+	s.SeasonStartMonth, s.SeasonEndMonth = ptr(int16(start)), ptr(int16(end)) //nolint:gosec // a month is 1 to 12
+	return s
+}
+
 func day(month time.Month, d int) time.Time {
 	return time.Date(2026, month, d, 8, 0, 0, 0, time.UTC)
 }
@@ -213,8 +399,17 @@ func backdated(performed, recorded time.Time) *store.CareEvent {
 }
 
 func skip(performed time.Time) *store.CareEvent {
-	e := event(performed)
+	return skipBackdated(performed, performed)
+}
+
+func skipBackdated(performed, recorded time.Time) *store.CareEvent {
+	e := backdated(performed, recorded)
 	e.Done = false
+	return e
+}
+
+func override(e *store.CareEvent, days int32) *store.CareEvent {
+	e.OverrideIntervalDays = &days
 	return e
 }
 
