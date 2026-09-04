@@ -41,7 +41,8 @@ These are decisions already taken. Changing one is a conversation, not a refacto
 
 | Path                | Holds                                                             |
 | ------------------- | ----------------------------------------------------------------- |
-| `cmd/sprig/`        | The one binary                                                    |
+| `cmd/sprig/`        | The one binary that ships                                         |
+| `cmd/seed/`         | The development seed, which the image does not contain            |
 | `internal/http/`    | Middleware, handlers, the template tree                           |
 | `internal/store/`   | The pgx pool and sqlc-generated queries                           |
 | `internal/schedule/`| The due-date engine                                               |
@@ -49,6 +50,7 @@ These are decisions already taken. Changing one is a conversation, not a refacto
 | `internal/photo/`   | Photo writes, reads and quota                                     |
 | `internal/push/`    | Subscriptions, VAPID sends, the digest job                        |
 | `internal/build/`   | The running binary's version, revision and toolchain              |
+| `internal/pgtest/`  | The Postgres databases the tests are run against                  |
 | `db/migrations/`    | goose migrations, embedded and run at startup under an advisory lock |
 | `db/queries/`       | The `.sql` sqlc generates from                                    |
 | `web/templates/`    | `html/template`, embedded                                         |

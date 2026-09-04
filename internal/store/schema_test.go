@@ -9,6 +9,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/ismailshak/sprig/internal/pgtest"
 )
 
 // wantCapabilities is written out rather than read from the migration, so
@@ -217,7 +219,7 @@ func TestSchema_AnIdentifierDefaultsToATimeOrderedUUID(t *testing.T) {
 // migratedPool is an empty database with the app's own migrations applied.
 func migratedPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
-	return openPool(t, createDatabase(t, templateDatabase(t)))
+	return openPool(t, pgtest.Fresh(t, migrateSchema))
 }
 
 // The ids are fixed and obviously synthetic, so a failure names the same row
