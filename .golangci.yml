@@ -1,5 +1,11 @@
 version: "2"
 
+run:
+  # The dev tag compiles the development sign-in in, so this is the build
+  # with more code in it. The file it replaces in a production build holds
+  # one function returning nil.
+  build-tags: [dev]
+
 linters:
   default: none
   enable:

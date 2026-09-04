@@ -9,4 +9,6 @@ trap 'exit 0' INT
 trap 'docker compose stop db' EXIT
 
 docker compose up -d --wait db
-go run ./cmd/sprig
+# The dev tag adds the sign-in that stands in for passkeys. The image is built
+# without it.
+go run -tags dev ./cmd/sprig

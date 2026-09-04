@@ -23,7 +23,10 @@ run = "go run ./cmd/seed"
 
 [tasks.test]
 description = "Run the Go tests. The query layer's tests need a Postgres running"
-run = "go test ./..."
+# The dev tag compiles the development sign-in in, and everything else is the
+# same in both builds. A test in cmd/sprig builds the untagged binary and
+# checks the sign-in is absent from it.
+run = "go test -tags dev ./..."
 
 [tasks.e2e]
 description = "Run the Playwright suite against the built image and a throwaway database"
