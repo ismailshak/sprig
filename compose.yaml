@@ -7,8 +7,9 @@ services:
       POSTGRES_USER: sprig
       POSTGRES_PASSWORD: sprig
       POSTGRES_DB: sprig
+    # Tests set this to 127.0.0.1::5432 so Docker picks a free host port
     ports:
-      - "5432:5432"
+      - "${DB_PORTS:-5432:5432}"
     volumes:
       - db-data:/var/lib/postgresql
     healthcheck:

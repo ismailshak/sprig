@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+#MISE description="Run the Go tests against a throwaway Postgres"
+#USAGE arg "[packages]..." var=#true help="Packages to test, ./... when omitted"
+#USAGE flag "--run <regexp>" help="Only tests whose names match the regexp"
+set -euo pipefail
+
+cd "${MISE_PROJECT_ROOT:?}"
+
+# Docker will pick a free port
+export DB_PORTS=127.0.0.1::5432
+
+# Set a unique project by using the PID so it doesn't clash with other runs
+compose=(docker compose -p "sprig-test-$$")
+
+cleanup() {
+  status=$?
+  if [ "$status" -ne 0 ]; then
+    # Print logs on failure since they would be unreachable otherwise
+    "${compose[@]}" logs db || true
+  fi
+  "${compose[@]}" down --volumes --remove-orphans
+  exit "$status"
+}
+
+trap cleanup EXIT
+
+"${compose[@]}" up -d --wait db
+port=$("${compose[@]}" port db 5432)
+export SPRIG_DATABASE_URL="postgres://sprig:sprig@127.0.0.1:${port##*:}/sprig?sslmode=disable"
+
+args=()
+if [ -n "${usage_run-}" ]; then
+  args+=(-run "$usage_run")
+fi
+# usage hands the packages over as one shell-escaped string
+eval "packages=(${usage_packages-})"
+args+=("${packages[@]:-./...}")
+
+# The dev tag compiles in the development sign-in, and a test in cmd/sprig
+# checks the untagged build lacks it
+go test -tags dev "${args[@]}"
