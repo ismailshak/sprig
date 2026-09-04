@@ -31,8 +31,8 @@ dir = "e2e"
 run = "pnpm test"
 
 [tasks.lint]
-description = "Run golangci-lint over the whole module"
-run = "golangci-lint run"
+description = "Run golangci-lint over the whole module, and check the generated queries are current"
+run = ["sqlc diff", "golangci-lint run"]
 
 # The app applies its own migrations at startup.
 [tasks.migrate]
