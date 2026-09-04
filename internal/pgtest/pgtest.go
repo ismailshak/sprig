@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // ApplySchema builds the schema in a database Fresh and Shared then copy. It
@@ -82,10 +83,47 @@ func Shared(t *testing.T, schema ApplySchema) string {
 	return databaseURL(base, sharedName)
 }
 
-// Cleanup drops the two databases that outlive a single test, the template and
-// the one Shared returns. TestMain calls it after m.Run returns, once the pools
-// on them are closed.
-func Cleanup() error {
+// SharedPool is a pool on Shared. Main closes it before dropping the database.
+func SharedPool(t *testing.T, schema ApplySchema) *pgxpool.Pool {
+	t.Helper()
+
+	databaseURL := Shared(t, schema)
+	poolOnce.Do(func() { sharedPool, poolErr = open(context.Background(), databaseURL) })
+	if poolErr != nil {
+		t.Fatalf("opening the shared database: %v", poolErr)
+	}
+	return sharedPool
+}
+
+// Tx is a transaction on SharedPool that is rolled back when the test ends, so
+// the tests in a binary share one database without seeing each other's rows.
+func Tx(t *testing.T, schema ApplySchema) pgx.Tx {
+	t.Helper()
+
+	tx, err := SharedPool(t, schema).Begin(t.Context())
+	if err != nil {
+		t.Fatalf("beginning the transaction: %v", err)
+	}
+	// The test's own context is cancelled by the time a cleanup runs.
+	t.Cleanup(func() { _ = tx.Rollback(context.WithoutCancel(t.Context())) })
+	return tx
+}
+
+// Main is a test binary's TestMain. It drops the template and the database
+// Shared returns, which no single test owns, after closing the pool on them.
+func Main(m *testing.M) {
+	code := m.Run()
+	if sharedPool != nil {
+		sharedPool.Close()
+	}
+	if err := cleanup(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		code = 1
+	}
+	os.Exit(code)
+}
+
+func cleanup() error {
 	base := os.Getenv("SPRIG_DATABASE_URL")
 	if base == "" {
 		return nil
@@ -115,7 +153,23 @@ var (
 	sharedOnce sync.Once
 	sharedName string
 	sharedErr  error
+
+	poolOnce   sync.Once
+	sharedPool *pgxpool.Pool
+	poolErr    error
 )
+
+func open(ctx context.Context, databaseURL string) (*pgxpool.Pool, error) {
+	pool, err := pgxpool.New(ctx, databaseURL)
+	if err != nil {
+		return nil, err
+	}
+	if err := pool.Ping(ctx); err != nil {
+		pool.Close()
+		return nil, err
+	}
+	return pool, nil
+}
 
 func templateDatabase(t *testing.T, schema ApplySchema) string {
 	t.Helper()

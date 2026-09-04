@@ -1,20 +1,17 @@
 package store
 
 import (
-	"context"
 	"errors"
 	"os"
 	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 	"uuid"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/ismailshak/sprig/internal/pgtest"
 )
@@ -36,40 +33,12 @@ var (
 	earlierWatering = time.Date(2026, 3, 5, 9, 0, 0, 0, time.UTC)
 )
 
-var (
-	sharedOnce sync.Once
-	sharedPool *pgxpool.Pool
-	sharedErr  error
-)
-
-// sharedTx returns a transaction on a database the tests in this file have in
-// common, rolled back when the test ends. None of them commits, so one
-// migrated database serves them all. Two of them inserting testGardenID at
-// once would serialise on the unique index, so none of them runs in parallel.
+// sharedTx is pgtest.Tx over the app's migrations. Two tests inserting
+// testGardenID at once would serialise on the unique index, so none of them
+// runs in parallel.
 func sharedTx(t *testing.T) pgx.Tx {
 	t.Helper()
-
-	databaseURL := pgtest.Shared(t, migrateSchema)
-	sharedOnce.Do(func() { sharedPool, sharedErr = Open(context.Background(), databaseURL) })
-	if sharedErr != nil {
-		t.Fatalf("opening the shared database: %v", sharedErr)
-	}
-
-	tx, err := sharedPool.Begin(t.Context())
-	if err != nil {
-		t.Fatalf("beginning the transaction: %v", err)
-	}
-	// The test's own context is cancelled by the time a cleanup runs.
-	t.Cleanup(func() { _ = tx.Rollback(context.WithoutCancel(t.Context())) })
-	return tx
-}
-
-// closeSharedPool releases the connections before TestMain drops the
-// database.
-func closeSharedPool() {
-	if sharedPool != nil {
-		sharedPool.Close()
-	}
+	return pgtest.Tx(t, migrateSchema)
 }
 
 // seedTwoGardens fills a transaction with Rosewood and one other garden. With
