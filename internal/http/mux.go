@@ -7,9 +7,26 @@ import (
 	"github.com/ismailshak/sprig/internal/auth"
 )
 
+// route is one pattern the server answers. An empty capability admits every
+// member, and New wraps a route carrying one in require, so a handler never
+// checks its own.
+type route struct {
+	pattern    string
+	capability auth.Capability
+	handler    http.Handler
+}
+
+// routes is every route the server has. New registers from this slice and the
+// enforcement test walks it, because http.ServeMux does not list its patterns
+// and a route registered directly on the mux would be one the test cannot see.
+func routes() []route {
+	return []route{
+		{pattern: "GET /healthz", handler: http.HandlerFunc(handleHealthz)},
+	}
+}
+
 // publicRoutes is every route that answers without a session. Authenticate
-// covers the rest, so a handler registered in New is protected until it is
-// listed here.
+// covers the rest, so a route in routes is protected until it is listed here.
 var publicRoutes = map[string]bool{
 	"GET /healthz": true,
 }
@@ -21,7 +38,13 @@ var publicRoutes = map[string]bool{
 // that so a cross-site post is refused before it costs a session lookup.
 func New(logger *slog.Logger, sessions *auth.Sessions, resolver Resolver) http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /healthz", handleHealthz)
+	for _, r := range routes() {
+		h := r.handler
+		if r.capability != "" {
+			h = require(r.capability, h)
+		}
+		mux.Handle(r.pattern, h)
+	}
 
 	isPublic := func(r *http.Request) bool {
 		_, pattern := mux.Handler(r)
