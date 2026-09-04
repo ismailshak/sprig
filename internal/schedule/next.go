@@ -22,6 +22,7 @@ const (
 
 // Occurrence is when a schedule falls due.
 type Occurrence struct {
+	// At is in now's location.
 	At time.Time
 	// PrecisionMonth means the whole of At's month is the occurrence and At is
 	// the first of it.
@@ -48,12 +49,17 @@ type Occurrence struct {
 // and while it is open an occurrence before the opening moves to the opening.
 // The season applies to the override as well.
 //
-// now decides the season and nothing else. The season is read against now's
-// calendar, so a caller passes now in the reader's location. An anchored series
-// last done a year ago comes back as the occurrence that was missed, and the
-// caller decides what counts as overdue.
+// now's location is the calendar the answer is read in. It decides how long a
+// day or a month is when one is added, which day an event fell on, and which
+// day an anchor names. A caller passes now in the reader's location, because
+// the answer has to agree with the reader's day.
+//
+// now's instant decides the season and nothing else. An anchored series last
+// done a year ago comes back as the occurrence that was missed, and the caller
+// decides what counts as overdue.
 func Next(s store.CareSchedule, last *store.CareEvent, now time.Time) (Occurrence, bool) {
-	o, ok := shape(s, last)
+	loc := now.Location()
+	o, ok := shape(s, last, loc)
 	if !ok || s.SeasonStartMonth == nil {
 		return o, ok
 	}
@@ -66,7 +72,6 @@ func Next(s store.CareSchedule, last *store.CareEvent, now time.Time) (Occurrenc
 	// An occurrence left behind in a closed window would otherwise read as
 	// months overdue. One past the close waits for the next opening, because
 	// nobody is asked on a date the season is shut.
-	loc := now.Location()
 	if opening := lastOpening(now, start); o.At.Before(opening) {
 		o.At = opening
 	} else if !inSeason(o.At.In(loc).Month(), start, end) {
@@ -75,12 +80,14 @@ func Next(s store.CareSchedule, last *store.CareEvent, now time.Time) (Occurrenc
 	return o, true
 }
 
-// shape is the occurrence before Next applies the season.
-func shape(s store.CareSchedule, last *store.CareEvent) (Occurrence, bool) {
+// shape is the occurrence before Next applies the season. It adds intervals to
+// wall clocks in loc, so a day added across a clock change is a calendar day
+// rather than twenty-four hours.
+func shape(s store.CareSchedule, last *store.CareEvent, loc *time.Location) (Occurrence, bool) {
 	if last != nil && last.OverrideIntervalDays != nil {
 		// PerformedAt rather than RecordedAt, so a backdated skip counts from
 		// when the plant was looked at rather than when somebody logged it.
-		at := last.PerformedAt.AddDate(0, 0, int(*last.OverrideIntervalDays))
+		at := last.PerformedAt.In(loc).AddDate(0, 0, int(*last.OverrideIntervalDays))
 		return Occurrence{At: at, Precision: PrecisionDay}, true
 	}
 
@@ -90,6 +97,7 @@ func shape(s store.CareSchedule, last *store.CareEvent) (Occurrence, bool) {
 	if last != nil {
 		since = last.PerformedAt
 	}
+	since = since.In(loc)
 
 	switch {
 	case s.AnchorDate == nil:
@@ -104,19 +112,39 @@ func shape(s store.CareSchedule, last *store.CareEvent) (Occurrence, bool) {
 		if last != nil && last.Done && last.PerformedAt.After(s.SetAt) {
 			return Occurrence{}, false
 		}
-		return Occurrence{At: *s.AnchorDate, Precision: *s.AnchorPrecision}, true
+		return Occurrence{At: anchorDay(*s.AnchorDate, loc), Precision: *s.AnchorPrecision}, true
 
 	default:
+		// The comparison is between days rather than instants, so care given
+		// on the anchor's own day is that occurrence in every location. An
+		// instant east of Greenwich can precede the anchor's midnight UTC
+		// while falling on the anchor's day, and compared as an instant it
+		// would leave the series due on the day it was just done.
+		//
 		// Each step counts from the anchor rather than from the step before
 		// it, so a monthly series anchored on the 31st returns to the 31st
 		// after February.
+		anchor, sinceDay := anchorDay(*s.AnchorDate, loc), dayOf(since, loc)
 		for k := 0; ; k++ {
-			at := advance(*s.AnchorDate, *s.IntervalCount, *s.IntervalUnit, k)
-			if at.After(since) {
+			at := advance(anchor, *s.IntervalCount, *s.IntervalUnit, k)
+			if at.After(sinceDay) {
 				return Occurrence{At: at, Precision: *s.AnchorPrecision}, true
 			}
 		}
 	}
+}
+
+func dayOf(t time.Time, loc *time.Location) time.Time {
+	y, m, d := t.In(loc).Date()
+	return time.Date(y, m, d, 0, 0, 0, 0, loc)
+}
+
+// anchorDay is midnight in loc of the date an anchor names. pgx scans a date
+// column as midnight UTC, so reading it through In(loc) would give the evening
+// before anywhere west of Greenwich.
+func anchorDay(anchor time.Time, loc *time.Location) time.Time {
+	y, m, d := anchor.Date()
+	return time.Date(y, m, d, 0, 0, 0, 0, loc)
 }
 
 // inSeason reports whether m lies in the window from start to end, inclusive
