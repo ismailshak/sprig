@@ -35,7 +35,8 @@ func init() {
 	publicRoutes["GET "+signInPath] = true
 }
 
-func devRoutes(sessions *auth.Sessions, queries *store.Queries) []route {
+// The development sign-in renders its own page, so it ignores the tree.
+func devRoutes(sessions *auth.Sessions, queries *store.Queries, _ *Templates) []route {
 	d := &devSignIn{sessions: sessions, queries: queries, resolver: auth.NewResolver(sessions, queries)}
 	return []route{
 		{pattern: "GET " + devSignInPath, handler: http.HandlerFunc(d.show)},
@@ -111,8 +112,7 @@ func (d *devSignIn) start(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
-// The template tree does not exist yet, and this page is deleted before it
-// would earn a place in it.
+// This page is deleted before it would earn a place in the template tree.
 var devSignInPage = template.Must(template.New("dev-signin").Parse(`<!doctype html>
 <html lang="en">
 <meta charset="utf-8">

@@ -3,6 +3,9 @@
 set -euo pipefail
 
 export SPRIG_LOG_FORMAT=text
+# Reading the templates from disk rather than from the copy embedded in the
+# binary means an edit shows up on the next request instead of the next restart.
+export SPRIG_TEMPLATE_DIR="${MISE_PROJECT_ROOT:?}/web/templates"
 
 # Makes Ctrl+C stop the db container.
 trap 'exit 0' INT

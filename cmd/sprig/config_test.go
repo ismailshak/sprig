@@ -64,6 +64,9 @@ func TestLoadConfig_Defaults(t *testing.T) {
 	if cfg.trustedIPHeader != "" {
 		t.Errorf("trustedIPHeader = %q, want none, so RemoteAddr is the client until a deployment says otherwise", cfg.trustedIPHeader)
 	}
+	if cfg.templateDir != "" {
+		t.Errorf("templateDir = %q, want none, so the templates are the ones compiled in", cfg.templateDir)
+	}
 }
 
 func TestLoadConfig_APlainCookieOverHTTPTakesBothVariables(t *testing.T) {

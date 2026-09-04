@@ -56,6 +56,13 @@ func run(ctx context.Context, getenv func(string) string, stdout io.Writer) erro
 		return err
 	}
 
+	// Before the listener too, so a template that does not parse stops the
+	// process rather than answering the first request for its page with a 500.
+	templates, err := sprighttp.ParseTemplates(logger, cfg.templateDir)
+	if err != nil {
+		return err
+	}
+
 	var listenConfig net.ListenConfig
 	listener, err := listenConfig.Listen(ctx, "tcp", cfg.addr)
 	if err != nil {
@@ -66,7 +73,7 @@ func run(ctx context.Context, getenv func(string) string, stdout io.Writer) erro
 	sessions := auth.NewSessions(queries, cfg.sessionTTL, cfg.cookie)
 	resolver := auth.NewResolver(sessions, queries)
 
-	return serve(ctx, logger, listener, sprighttp.New(logger, sessions, resolver, queries))
+	return serve(ctx, logger, listener, sprighttp.New(logger, sessions, resolver, queries, templates))
 }
 
 // serve runs the server on listener until ctx is cancelled, then gives

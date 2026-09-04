@@ -34,7 +34,7 @@ var routeAccess = map[string]access{
 }
 
 func TestRoutes_EveryRouteHasOneEntryAndTheTwoAgree(t *testing.T) {
-	table := routes(testSessions(), nil)
+	table := routes(testSessions(), nil, testTemplates())
 	patterns := map[string]bool{}
 	for _, r := range table {
 		patterns[r.pattern] = true
@@ -83,7 +83,7 @@ func TestRoutes_EachRouteRefusesWhatItsEntrySays(t *testing.T) {
 	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
 	every := everyCapability()
 
-	for _, r := range routes(testSessions(), nil) {
+	for _, r := range routes(testSessions(), nil, testTemplates()) {
 		a, ok := routeAccess[r.pattern]
 		if !ok {
 			// The agreement test names the missing entry.
@@ -102,7 +102,7 @@ func TestRoutes_EachRouteRefusesWhatItsEntrySays(t *testing.T) {
 			handler := New(logger, testSessions(), ResolverFunc(func(context.Context, time.Time, string) (auth.Principal, error) {
 				resolved++
 				return auth.Principal{}, auth.ErrNoSession
-			}), nil)
+			}), nil, testTemplates())
 			rec := httptest.NewRecorder()
 			handler.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), method, path, nil))
 			sentToSignIn := rec.Code == http.StatusSeeOther && rec.Header().Get("Location") == signInPath
@@ -118,13 +118,13 @@ func TestRoutes_EachRouteRefusesWhatItsEntrySays(t *testing.T) {
 			if a.capability != "" {
 				lacking := memberWith(without(every, a.capability))
 				rec = httptest.NewRecorder()
-				New(logger, testSessions(), acceptEveryToken(lacking), nil).ServeHTTP(rec, signedIn(httptest.NewRequestWithContext(t.Context(), method, path, nil)))
+				New(logger, testSessions(), acceptEveryToken(lacking), nil, testTemplates()).ServeHTTP(rec, signedIn(httptest.NewRequestWithContext(t.Context(), method, path, nil)))
 				if rec.Code != http.StatusNotFound {
 					t.Errorf("a member without %s got %d, want %d", a.capability, rec.Code, http.StatusNotFound)
 				}
 
 				rec = httptest.NewRecorder()
-				New(logger, testSessions(), acceptEveryToken(memberWith(every)), nil).ServeHTTP(rec, signedIn(httptest.NewRequestWithContext(t.Context(), method, path, nil)))
+				New(logger, testSessions(), acceptEveryToken(memberWith(every)), nil, testTemplates()).ServeHTTP(rec, signedIn(httptest.NewRequestWithContext(t.Context(), method, path, nil)))
 				if rec.Code == http.StatusNotFound {
 					t.Errorf("a member with %s got %d, so the route is hidden from the people it is for", a.capability, rec.Code)
 				}
@@ -132,7 +132,7 @@ func TestRoutes_EachRouteRefusesWhatItsEntrySays(t *testing.T) {
 
 			if a.foreign != "" {
 				rec = httptest.NewRecorder()
-				New(logger, testSessions(), acceptEveryToken(memberWith(every)), nil).ServeHTTP(rec, signedIn(httptest.NewRequestWithContext(t.Context(), method, a.foreign, nil)))
+				New(logger, testSessions(), acceptEveryToken(memberWith(every)), nil, testTemplates()).ServeHTTP(rec, signedIn(httptest.NewRequestWithContext(t.Context(), method, a.foreign, nil)))
 				if rec.Code != http.StatusNotFound {
 					t.Errorf("an owner asking for Fairview's object at %s got %d, want %d", a.foreign, rec.Code, http.StatusNotFound)
 				}
@@ -160,7 +160,7 @@ func mutates(method string) bool {
 // removing one capability from a principal holding all the others.
 func everyCapability() auth.Capabilities {
 	set := auth.Capabilities{}
-	for _, r := range routes(testSessions(), nil) {
+	for _, r := range routes(testSessions(), nil, testTemplates()) {
 		if r.capability != "" {
 			set[r.capability] = true
 		}
