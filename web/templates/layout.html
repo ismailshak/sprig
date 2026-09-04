@@ -5,8 +5,23 @@
 <meta name="color-scheme" content="light dark">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>{{block "title" .}}sprig{{end}}</title>
+{{/* palettes holds the colour values, tokens maps one half of them onto the
+     token names, and app.css reads the tokens, so the links are in that order. */}}
+<link rel="stylesheet" href="{{asset "palettes.css"}}">
+<link rel="stylesheet" href="{{asset "tokens.css"}}">
+<link rel="stylesheet" href="{{asset "app.css"}}">
+<script src="{{asset "vendor/htmx-2.0.10.min.js"}}" defer></script>
 </head>
 <body>
+<div class="app">
+<div class="app__main">
+{{/* A page writes its own topbar and app__body. The width those two are capped
+     to above 900px varies by page, and the modifier that sets it goes on them. */}}
 {{block "main" .}}{{end}}
+</div>
+{{/* The layout declares a block rather than calling the partial, because sign
+     in, invite and setup leave it undefined and get no tab bar. */}}
+{{block "nav" .}}{{end}}
+</div>
 </body>
 </html>

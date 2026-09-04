@@ -1,0 +1,19 @@
+{{/* The dot is the label of the page being rendered. That tab is a button
+     with nowhere to go, and the other three are links that need no script. */}}
+{{define "tabs"}}
+<nav class="nav">
+{{if eq . "Today"}}<button class="nav__item" aria-current="page">{{template "icon-today"}}Today</button>
+{{else}}<a class="nav__item" href="/">{{template "icon-today"}}Today</a>{{end}}
+{{if eq . "Plants"}}<button class="nav__item" aria-current="page">{{template "icon-plants"}}Plants</button>
+{{else}}<a class="nav__item" href="/plants">{{template "icon-plants"}}Plants</a>{{end}}
+{{if eq . "Activity"}}<button class="nav__item" aria-current="page">{{template "icon-activity"}}Activity</button>
+{{else}}<a class="nav__item" href="/activity">{{template "icon-activity"}}Activity</a>{{end}}
+{{if eq . "More"}}<button class="nav__item" aria-current="page">{{template "icon-more"}}More</button>
+{{else}}<a class="nav__item" href="/more">{{template "icon-more"}}More</a>{{end}}
+</nav>
+{{end}}
+
+{{define "icon-today"}}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1Z"/></svg>{{end}}
+{{define "icon-plants"}}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21v-8"/><path d="M12 13c-5 0-7-3-7-7 5 0 7 3 7 7Z"/><path d="M12 13c5 0 7-3 7-7-5 0-7 3-7 7Z"/></svg>{{end}}
+{{define "icon-activity"}}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l3 7 4-14 3 7h4"/></svg>{{end}}
+{{define "icon-more"}}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="5.5" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="12" cy="18.5" r="1.4"/></svg>{{end}}
