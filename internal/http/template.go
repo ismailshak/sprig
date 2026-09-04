@@ -26,6 +26,7 @@ const layoutTemplate = "layout.html"
 type Templates struct {
 	logger *slog.Logger
 	dir    string
+	funcs  template.FuncMap
 	pages  map[string]*template.Template
 }
 
@@ -33,9 +34,12 @@ type Templates struct {
 // that does not parse. An empty dir parses the tree compiled into the binary
 // once. A dir names a directory to read instead, re-read on every render, so
 // an edit during development needs no restart.
-func ParseTemplates(logger *slog.Logger, dir string) (*Templates, error) {
-	t := &Templates{logger: logger, dir: dir}
-	pages, err := parsePages(t.fs())
+//
+// A template reaches assets through the asset function, which turns a file's
+// name into the hashed URL.
+func ParseTemplates(logger *slog.Logger, dir string, assets *Assets) (*Templates, error) {
+	t := &Templates{logger: logger, dir: dir, funcs: template.FuncMap{"asset": assets.Path}}
+	pages, err := parsePages(t.fs(), t.funcs)
 	if err != nil {
 		return nil, err
 	}
@@ -52,12 +56,12 @@ func (t *Templates) fs() fs.FS {
 
 // parsePages parses the layout and the partials before cloning that set per
 // page, so a layout that does not parse is an error in a tree with no pages.
-func parsePages(fsys fs.FS) (map[string]*template.Template, error) {
+func parsePages(fsys fs.FS, funcs template.FuncMap) (map[string]*template.Template, error) {
 	partials, err := fs.Glob(fsys, "partials/*.html")
 	if err != nil {
 		return nil, err
 	}
-	base, err := template.New(layoutTemplate).ParseFS(fsys, append([]string{layoutTemplate}, partials...)...)
+	base, err := template.New(layoutTemplate).Funcs(funcs).ParseFS(fsys, append([]string{layoutTemplate}, partials...)...)
 	if err != nil {
 		return nil, fmt.Errorf("parsing the layout and partials: %w", err)
 	}
@@ -93,7 +97,7 @@ type view struct {
 func (t *Templates) render(w http.ResponseWriter, r *http.Request, v view, data any) {
 	pages := t.pages
 	if t.dir != "" {
-		reloaded, err := parsePages(t.fs())
+		reloaded, err := parsePages(t.fs(), t.funcs)
 		if err != nil {
 			t.fail(w, r, err)
 			return

@@ -11,16 +11,28 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/ismailshak/sprig/web"
 )
 
 // The tree is compiled into the binary, so a parse failure here is a broken
 // build rather than a failing test.
 func testTemplates() *Templates {
-	templates, err := ParseTemplates(slog.New(slog.NewJSONHandler(io.Discard, nil)), "")
+	templates, err := ParseTemplates(slog.New(slog.NewJSONHandler(io.Discard, nil)), "", testAssets())
 	if err != nil {
 		panic(err)
 	}
 	return templates
+}
+
+// The tree is the one the binary ships rather than a fixture, so a template
+// naming a file that is not there fails here as well as in a browser.
+func testAssets() *Assets {
+	assets, err := NewAssets(web.Static)
+	if err != nil {
+		panic(err)
+	}
+	return assets
 }
 
 // The fixture's rows come from a partial rather than from markup written
@@ -66,7 +78,7 @@ func fixtureTemplates(t *testing.T) (*Templates, *bytes.Buffer) {
 
 	var logged bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&logged, nil))
-	templates, err := ParseTemplates(logger, writeTree(t, fixtureLayout, fixturePage, fixtureRow))
+	templates, err := ParseTemplates(logger, writeTree(t, fixtureLayout, fixturePage, fixtureRow), testAssets())
 	if err != nil {
 		t.Fatalf("parsing the fixture tree: %v", err)
 	}
@@ -169,7 +181,7 @@ func TestRender_AnUnknownPageIs500AndNotAPanic(t *testing.T) {
 
 func TestParseTemplates_ADirectoryOnDiskIsRereadPerRender(t *testing.T) {
 	dir := writeTree(t, fixtureLayout, `{{define "main"}}first{{end}}`, fixtureRow)
-	templates, err := ParseTemplates(slog.New(slog.NewJSONHandler(io.Discard, nil)), dir)
+	templates, err := ParseTemplates(slog.New(slog.NewJSONHandler(io.Discard, nil)), dir, testAssets())
 	if err != nil {
 		t.Fatalf("parsing the tree: %v", err)
 	}
@@ -191,7 +203,7 @@ func TestParseTemplates_ADirectoryOnDiskIsRereadPerRender(t *testing.T) {
 func TestParseTemplates_ATreeThatDoesNotParseIsAStartupError(t *testing.T) {
 	dir := writeTree(t, fixtureLayout, `{{define "main"}}{{range .Rows}}{{end}}`, fixtureRow)
 
-	if _, err := ParseTemplates(slog.New(slog.NewJSONHandler(io.Discard, nil)), dir); err == nil {
+	if _, err := ParseTemplates(slog.New(slog.NewJSONHandler(io.Discard, nil)), dir, testAssets()); err == nil {
 		t.Fatal("a page with an unclosed range parsed without an error")
 	}
 }
