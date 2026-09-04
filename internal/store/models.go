@@ -59,7 +59,7 @@ type CareSchedule struct {
 	AnchorPrecision  *string
 	SeasonStartMonth *int16
 	SeasonEndMonth   *int16
-	CreatedAt        time.Time
+	SetAt            time.Time
 }
 
 type CareType struct {

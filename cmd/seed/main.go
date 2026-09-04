@@ -296,19 +296,22 @@ func writePlant(ctx context.Context, tx pgx.Tx, g *garden, p *plant, careTypeID 
 			anchorPrecision = &precision
 		}
 
+		// A day after the plant arrived puts set_at before every event the
+		// seed writes.
+		setAt := created.AddDate(0, 0, 1)
+		if s.setDaysAgo != 0 {
+			setAt = ref.AddDate(0, 0, -s.setDaysAgo)
+		}
+
 		if _, err := tx.Exec(ctx,
 			`INSERT INTO care_schedule (
 				id, garden_id, plant_id, care_type_id,
 				interval_count, interval_unit, anchor_date, anchor_precision,
-				season_start_month, season_end_month, created_at)
+				season_start_month, season_end_month, set_at)
 			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
 			s.id, g.id, p.id, careTypeID[s.slug],
 			count, unit, anchorDate, anchorPrecision,
-			number(s.seasonStart), number(s.seasonEnd),
-			// The creation timestamp stands in for the missing event on a
-			// schedule that has none, so it sits before every event the seed
-			// writes.
-			created.AddDate(0, 0, 1),
+			number(s.seasonStart), number(s.seasonEnd), setAt,
 		); err != nil {
 			return fmt.Errorf("writing the %s schedule for %s: %w", s.slug, p.displayName(), err)
 		}

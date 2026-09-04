@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"slices"
 	"time"
+
+	engine "github.com/ismailshak/sprig/internal/schedule"
 )
 
 // historyDays bounds the log by a date rather than by a count of events, so
@@ -32,13 +34,13 @@ type logEntry struct {
 // what a count and a unit mean to the due-date engine.
 func advance(t time.Time, count int, unit string, n int) time.Time {
 	switch unit {
-	case unitDay:
+	case engine.UnitDay:
 		return t.AddDate(0, 0, count*n)
-	case unitWeek:
+	case engine.UnitWeek:
 		return t.AddDate(0, 0, 7*count*n)
-	case unitMonth:
+	case engine.UnitMonth:
 		return t.AddDate(0, count*n, 0)
-	case unitYear:
+	case engine.UnitYear:
 		return t.AddDate(count*n, 0, 0)
 	default:
 		panic("unknown interval unit " + unit)

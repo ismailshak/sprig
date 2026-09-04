@@ -4,6 +4,8 @@ import (
 	"testing"
 	"time"
 	"uuid"
+
+	engine "github.com/ismailshak/sprig/internal/schedule"
 )
 
 // A Wednesday in September, which is the day the prototype draws and a month
@@ -31,19 +33,19 @@ func TestOccurrences_TheNewestEventIsOneIntervalBeforeTheScheduleFallsDue(t *tes
 	}{
 		{
 			name:   "days",
-			s:      schedule{slug: "water", count: 10, unit: unitDay, dueIn: -2},
+			s:      schedule{slug: "water", count: 10, unit: engine.UnitDay, dueIn: -2},
 			newest: time.Date(2026, time.August, 21, 0, 0, 0, 0, ref.Location()),
 		},
 		{
 			name:   "weeks",
-			s:      schedule{slug: "water", count: 3, unit: unitWeek, dueIn: 0},
+			s:      schedule{slug: "water", count: 3, unit: engine.UnitWeek, dueIn: 0},
 			newest: time.Date(2026, time.August, 12, 0, 0, 0, 0, ref.Location()),
 		},
 		{
 			// A month is the calendar's rather than thirty days, so the answer
 			// is the fourth of August.
 			name:   "months",
-			s:      schedule{slug: "water", count: 1, unit: unitMonth, dueIn: 2},
+			s:      schedule{slug: "water", count: 1, unit: engine.UnitMonth, dueIn: 2},
 			newest: time.Date(2026, time.August, 4, 0, 0, 0, 0, ref.Location()),
 		},
 	} {
@@ -61,7 +63,7 @@ func TestOccurrences_TheNewestEventIsOneIntervalBeforeTheScheduleFallsDue(t *tes
 
 func TestOccurrences_TheHistoryStopsAtTheHorizonAndAtToday(t *testing.T) {
 	ref := testReference(t)
-	s := schedule{slug: "water", count: 4, unit: unitDay, dueIn: 0}
+	s := schedule{slug: "water", count: 4, unit: engine.UnitDay, dueIn: 0}
 
 	// The horizon is exclusive and the newest event is four days back, so the
 	// oldest is 196 days ago and there are 49 of them rather than 50.
@@ -79,7 +81,7 @@ func TestOccurrences_TheHistoryStopsAtTheHorizonAndAtToday(t *testing.T) {
 
 func TestOccurrences_AClosedSeasonLeavesAHoleInTheLog(t *testing.T) {
 	ref := testReference(t)
-	s := schedule{slug: "feed", count: 3, unit: unitWeek, dueIn: 14, seasonStart: 3, seasonEnd: 9}
+	s := schedule{slug: "feed", count: 3, unit: engine.UnitWeek, dueIn: 14, seasonStart: 3, seasonEnd: 9}
 
 	for _, o := range occurrences(&s, ref) {
 		if m := o.at.Month(); m < time.March || m > time.September {
@@ -102,7 +104,7 @@ func TestOccurrences_AOneOffProducesNoHistory(t *testing.T) {
 // rather than from the last event.
 func TestSchedule_AnAnchoredSeriesFallsDueOnItsNextOccurrence(t *testing.T) {
 	ref := testReference(t)
-	s := schedule{slug: "feed", count: 1, unit: unitYear, anchorMonth: time.May, anchorDay: 1}
+	s := schedule{slug: "feed", count: 1, unit: engine.UnitYear, anchorMonth: time.May, anchorDay: 1}
 
 	if got, want := s.anchor(ref), time.Date(2026, time.May, 1, 0, 0, 0, 0, ref.Location()); !got.Equal(want) {
 		t.Errorf("the series starts on %s, want %s", got.Format(time.DateOnly), want.Format(time.DateOnly))
@@ -235,11 +237,11 @@ func TestAdvance_MonthsAndYearsMoveByTheCalendar(t *testing.T) {
 		n     int
 		want  time.Time
 	}{
-		{"a month back", 1, unitMonth, -1, time.Date(2026, time.February, 22, 0, 0, 0, 0, loc)},
-		{"four months on", 1, unitMonth, 4, time.Date(2026, time.July, 22, 0, 0, 0, 0, loc)},
-		{"a year on", 1, unitYear, 1, time.Date(2027, time.March, 22, 0, 0, 0, 0, loc)},
-		{"three weeks back", 3, unitWeek, -1, time.Date(2026, time.March, 1, 0, 0, 0, 0, loc)},
-		{"ten days back", 10, unitDay, -1, time.Date(2026, time.March, 12, 0, 0, 0, 0, loc)},
+		{"a month back", 1, engine.UnitMonth, -1, time.Date(2026, time.February, 22, 0, 0, 0, 0, loc)},
+		{"four months on", 1, engine.UnitMonth, 4, time.Date(2026, time.July, 22, 0, 0, 0, 0, loc)},
+		{"a year on", 1, engine.UnitYear, 1, time.Date(2027, time.March, 22, 0, 0, 0, 0, loc)},
+		{"three weeks back", 3, engine.UnitWeek, -1, time.Date(2026, time.March, 1, 0, 0, 0, 0, loc)},
+		{"ten days back", 10, engine.UnitDay, -1, time.Date(2026, time.March, 12, 0, 0, 0, 0, loc)},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := advance(from, tc.count, tc.unit, tc.n); !got.Equal(tc.want) {
