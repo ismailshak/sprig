@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/ismailshak/sprig/db"
+	"github.com/ismailshak/sprig/internal/auth"
 	sprighttp "github.com/ismailshak/sprig/internal/http"
 	"github.com/ismailshak/sprig/internal/store"
 )
@@ -61,7 +62,11 @@ func run(ctx context.Context, getenv func(string) string, stdout io.Writer) erro
 		return fmt.Errorf("listen: %w", err)
 	}
 
-	return serve(ctx, logger, listener, sprighttp.New(logger))
+	queries := store.New(pool)
+	sessions := auth.NewSessions(queries, cfg.sessionTTL, cfg.cookie)
+	resolver := auth.NewResolver(sessions, queries)
+
+	return serve(ctx, logger, listener, sprighttp.New(logger, sessions, resolver))
 }
 
 // serve runs the server on listener until ctx is cancelled, then gives

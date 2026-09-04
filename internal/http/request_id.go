@@ -12,7 +12,10 @@ const RequestIDHeader = "X-Request-Id"
 
 type contextKey int
 
-const requestIDKey contextKey = iota
+const (
+	requestIDKey contextKey = iota
+	principalKey
+)
 
 // RequestID generates an id for every request, attaches it to the request's
 // context and echoes it on the response, so a client and a log line can be
