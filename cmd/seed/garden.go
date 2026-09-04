@@ -4,14 +4,8 @@ import (
 	"fmt"
 	"time"
 	"uuid"
-)
 
-// The four interval units the schema allows.
-const (
-	unitDay   = "day"
-	unitWeek  = "week"
-	unitMonth = "month"
-	unitYear  = "year"
+	engine "github.com/ismailshak/sprig/internal/schedule"
 )
 
 // The tables the seed writes identifiers into. A seeded identifier is written
@@ -101,6 +95,11 @@ type schedule struct {
 	anchorMonth time.Month
 	anchorDay   int
 	anchorYear  int
+
+	// Days before the reference at which the schedule was set. Zero places it a
+	// day after the plant arrived. A one-off sets a value, because care
+	// performed after set_at spends it.
+	setDaysAgo int
 }
 
 // An event no cadence produced, because the care it records repeats on no
@@ -210,12 +209,14 @@ func livingPlants() []plant {
 			pot:           "30cm terracotta, drainage hole, no saucer of standing water.",
 			notes:         "Wipe the leaves when they dust over. The aerial roots can go back into the pot or be left alone, but do not cut them off.",
 			schedules: []schedule{
-				{id: seedID(tableCareSchedule, 1), slug: "water", count: 10, unit: unitDay, dueIn: -2},
-				{id: seedID(tableCareSchedule, 2), slug: "feed", count: 3, unit: unitWeek, dueIn: 14, seasonStart: 3, seasonEnd: 9},
+				{id: seedID(tableCareSchedule, 1), slug: "water", count: 10, unit: engine.UnitDay, dueIn: -2},
+				{id: seedID(tableCareSchedule, 2), slug: "feed", count: 3, unit: engine.UnitWeek, dueIn: 14, seasonStart: 3, seasonEnd: 9},
 				// Nobody knows how often this plant wants repotting. The last
 				// one was recent and the next is a job for the spring after
-				// next, which is why an interval is not required.
-				{id: seedID(tableCareSchedule, 3), slug: "repot", anchorMonth: time.March, anchorYear: 2},
+				// next, which is why an interval is not required. The schedule
+				// was set the day after that repot, so the repot leaves it
+				// standing.
+				{id: seedID(tableCareSchedule, 3), slug: "repot", anchorMonth: time.March, anchorYear: 2, setDaysAgo: 2},
 			},
 			// The repot that was done rather than the one pencilled in. A care
 			// type whose only schedule is a one-off still has history behind it,
@@ -229,8 +230,8 @@ func livingPlants() []plant {
 			botanicalName: "Ficus lyrata",
 			location:      "Living room",
 			schedules: []schedule{
-				{id: seedID(tableCareSchedule, 4), slug: "water", count: 1, unit: unitWeek, dueIn: 5},
-				{id: seedID(tableCareSchedule, 5), slug: "feed", count: 4, unit: unitWeek, dueIn: 0, seasonStart: 3, seasonEnd: 9},
+				{id: seedID(tableCareSchedule, 4), slug: "water", count: 1, unit: engine.UnitWeek, dueIn: 5},
+				{id: seedID(tableCareSchedule, 5), slug: "feed", count: 4, unit: engine.UnitWeek, dueIn: 0, seasonStart: 3, seasonEnd: 9},
 			},
 		},
 		{
@@ -240,7 +241,7 @@ func livingPlants() []plant {
 			botanicalName: "Dracaena trifasciata",
 			location:      "Bedroom",
 			schedules: []schedule{
-				{id: seedID(tableCareSchedule, 6), slug: "water", count: 3, unit: unitWeek, dueIn: 0},
+				{id: seedID(tableCareSchedule, 6), slug: "water", count: 3, unit: engine.UnitWeek, dueIn: 0},
 			},
 		},
 		{
@@ -250,7 +251,7 @@ func livingPlants() []plant {
 			botanicalName: "Dracaena trifasciata",
 			location:      "Bedroom",
 			schedules: []schedule{
-				{id: seedID(tableCareSchedule, 7), slug: "water", count: 24, unit: unitDay, dueIn: 16},
+				{id: seedID(tableCareSchedule, 7), slug: "water", count: 24, unit: engine.UnitDay, dueIn: 16},
 			},
 		},
 		{
@@ -266,8 +267,8 @@ func livingPlants() []plant {
 			climate:       "Likes the steam, which is why he lives in the bathroom.",
 			notes:         "Trim the brown fronds at the base rather than cutting across them.",
 			schedules: []schedule{
-				{id: seedID(tableCareSchedule, 8), slug: "water", count: 4, unit: unitDay, dueIn: 0},
-				{id: seedID(tableCareSchedule, 9), slug: "feed", count: 3, unit: unitWeek, dueIn: 11, seasonStart: 3, seasonEnd: 9},
+				{id: seedID(tableCareSchedule, 8), slug: "water", count: 4, unit: engine.UnitDay, dueIn: 0},
+				{id: seedID(tableCareSchedule, 9), slug: "feed", count: 3, unit: engine.UnitWeek, dueIn: 11, seasonStart: 3, seasonEnd: 9},
 			},
 			// The misting somebody tried for a month and gave up on. The type
 			// was archived afterwards, so these are events with no schedule
@@ -281,7 +282,7 @@ func livingPlants() []plant {
 			botanicalName: "Adiantum raddianum",
 			location:      "Bathroom",
 			schedules: []schedule{
-				{id: seedID(tableCareSchedule, 10), slug: "water", count: 9, unit: unitDay, dueIn: 8},
+				{id: seedID(tableCareSchedule, 10), slug: "water", count: 9, unit: engine.UnitDay, dueIn: 8},
 			},
 		},
 		{
@@ -291,8 +292,8 @@ func livingPlants() []plant {
 			botanicalName: "Epipremnum aureum",
 			location:      "Kitchen",
 			schedules: []schedule{
-				{id: seedID(tableCareSchedule, 11), slug: "water", count: 9, unit: unitDay, dueIn: 1},
-				{id: seedID(tableCareSchedule, 12), slug: "feed", count: 1, unit: unitMonth, dueIn: 19, seasonStart: 3, seasonEnd: 9},
+				{id: seedID(tableCareSchedule, 11), slug: "water", count: 9, unit: engine.UnitDay, dueIn: 1},
+				{id: seedID(tableCareSchedule, 12), slug: "feed", count: 1, unit: engine.UnitMonth, dueIn: 19, seasonStart: 3, seasonEnd: 9},
 			},
 		},
 		{
@@ -302,7 +303,7 @@ func livingPlants() []plant {
 			botanicalName: "Epipremnum aureum",
 			location:      "Kitchen",
 			schedules: []schedule{
-				{id: seedID(tableCareSchedule, 13), slug: "water", count: 12, unit: unitDay, dueIn: 8},
+				{id: seedID(tableCareSchedule, 13), slug: "water", count: 12, unit: engine.UnitDay, dueIn: 8},
 			},
 		},
 		{
@@ -312,8 +313,8 @@ func livingPlants() []plant {
 			botanicalName: "Monstera adansonii",
 			location:      "Kitchen",
 			schedules: []schedule{
-				{id: seedID(tableCareSchedule, 14), slug: "water", count: 2, unit: unitWeek, dueIn: 9},
-				{id: seedID(tableCareSchedule, 15), slug: "feed", count: 1, unit: unitMonth, dueIn: 21, seasonStart: 3, seasonEnd: 9},
+				{id: seedID(tableCareSchedule, 14), slug: "water", count: 2, unit: engine.UnitWeek, dueIn: 9},
+				{id: seedID(tableCareSchedule, 15), slug: "feed", count: 1, unit: engine.UnitMonth, dueIn: 21, seasonStart: 3, seasonEnd: 9},
 			},
 		},
 		{
@@ -329,11 +330,11 @@ func livingPlants() []plant {
 			soil:          "Cactus compost with grit.",
 			pot:           "Terracotta. Plastic holds too much water.",
 			schedules: []schedule{
-				{id: seedID(tableCareSchedule, 16), slug: "water", count: 1, unit: unitMonth, dueIn: 2},
+				{id: seedID(tableCareSchedule, 16), slug: "water", count: 1, unit: engine.UnitMonth, dueIn: 2},
 				// Anchored to the calendar rather than to the last feeding. A
 				// cactus is fed once, in May, and feeding it late in June should
 				// not drag next year to June.
-				{id: seedID(tableCareSchedule, 17), slug: "feed", count: 1, unit: unitYear, anchorMonth: time.May, anchorDay: 1},
+				{id: seedID(tableCareSchedule, 17), slug: "feed", count: 1, unit: engine.UnitYear, anchorMonth: time.May, anchorDay: 1},
 			},
 		},
 		{
@@ -343,7 +344,7 @@ func livingPlants() []plant {
 			botanicalName: "Opuntia microdasys",
 			location:      "Windowsill",
 			schedules: []schedule{
-				{id: seedID(tableCareSchedule, 18), slug: "water", count: 5, unit: unitWeek, dueIn: 19},
+				{id: seedID(tableCareSchedule, 18), slug: "water", count: 5, unit: engine.UnitWeek, dueIn: 19},
 			},
 		},
 		{
@@ -352,7 +353,7 @@ func livingPlants() []plant {
 			id:       seedID(tablePlant, 12),
 			nickname: "Sprout",
 			schedules: []schedule{
-				{id: seedID(tableCareSchedule, 19), slug: "water", count: 11, unit: unitDay, dueIn: 10},
+				{id: seedID(tableCareSchedule, 19), slug: "water", count: 11, unit: engine.UnitDay, dueIn: 10},
 			},
 		},
 	}
@@ -418,7 +419,7 @@ func upstairs() garden {
 				botanicalName: "Ficus elastica",
 				location:      "Hallway",
 				schedules: []schedule{
-					{id: seedID(tableCareSchedule, 20), slug: "water", count: 2, unit: unitWeek, dueIn: 3},
+					{id: seedID(tableCareSchedule, 20), slug: "water", count: 2, unit: engine.UnitWeek, dueIn: 3},
 				},
 			},
 			{
@@ -427,7 +428,7 @@ func upstairs() garden {
 				botanicalName: "Aloe barbadensis",
 				location:      "Kitchen",
 				schedules: []schedule{
-					{id: seedID(tableCareSchedule, 21), slug: "water", count: 3, unit: unitWeek, dueIn: -1},
+					{id: seedID(tableCareSchedule, 21), slug: "water", count: 3, unit: engine.UnitWeek, dueIn: -1},
 				},
 			},
 			{
@@ -437,7 +438,7 @@ func upstairs() garden {
 				botanicalName: "Chlorophytum comosum",
 				location:      "Study",
 				schedules: []schedule{
-					{id: seedID(tableCareSchedule, 22), slug: "water", count: 1, unit: unitWeek, dueIn: 4},
+					{id: seedID(tableCareSchedule, 22), slug: "water", count: 1, unit: engine.UnitWeek, dueIn: 4},
 				},
 			},
 		},

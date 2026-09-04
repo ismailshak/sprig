@@ -15,6 +15,7 @@ import (
 
 	"github.com/ismailshak/sprig/db"
 	"github.com/ismailshak/sprig/internal/pgtest"
+	engine "github.com/ismailshak/sprig/internal/schedule"
 	"github.com/ismailshak/sprig/internal/store"
 )
 
@@ -151,6 +152,42 @@ func TestSeed_EveryCadenceFallsDueOnTheDayTheRosterSays(t *testing.T) {
 	}
 	if seen != len(want) {
 		t.Errorf("%d of %d cadences have an event behind them", seen, len(want))
+	}
+}
+
+// A spent one-off produces no date, so one in the fixture leaves a schedule
+// line missing from a plant page. The fixture is checked against Next rather
+// than against a copy of the rule in SQL.
+func TestSeed_NoOneOffIsSpent(t *testing.T) {
+	pool := seeded(t)
+	ctx := t.Context()
+	queries := store.New(pool)
+
+	for _, g := range []garden{home(), upstairs()} {
+		schedules, err := queries.ListCareSchedules(ctx, g.id)
+		if err != nil {
+			t.Fatalf("listing %s's schedules: %v", g.name, err)
+		}
+		events, err := queries.ListLatestCareEvents(ctx, g.id)
+		if err != nil {
+			t.Fatalf("listing %s's latest events: %v", g.name, err)
+		}
+
+		type key struct{ plant, careType uuid.UUID }
+		latest := map[key]*store.CareEvent{}
+		for i := range events {
+			latest[key{events[i].PlantID, events[i].CareTypeID}] = &events[i]
+		}
+
+		for _, row := range schedules {
+			if row.CareSchedule.IntervalCount != nil {
+				continue
+			}
+			last := latest[key{row.CareSchedule.PlantID, row.CareSchedule.CareTypeID}]
+			if _, ok := engine.Next(row.CareSchedule, last); !ok {
+				t.Errorf("the %s one-off on plant %v is spent and produces no date", row.CareType.Slug, row.Plant.ID)
+			}
+		}
 	}
 }
 
