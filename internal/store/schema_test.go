@@ -9,8 +9,6 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-
-	"github.com/ismailshak/sprig/db"
 )
 
 // wantCapabilities is written out rather than read from the migration, so
@@ -216,16 +214,11 @@ func TestSchema_AnIdentifierDefaultsToATimeOrderedUUID(t *testing.T) {
 	}
 }
 
-// migratedPool is an empty database with the app's own migrations applied.
+// migratedPool is an empty database with the app's own migrations applied,
+// copied from the template rather than migrated again.
 func migratedPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
-
-	pool := openPool(t, createTestDatabase(t))
-	logger, _ := recordingLogger()
-	if err := Migrate(t.Context(), pool, db.Migrations, logger); err != nil {
-		t.Fatalf("applying the migrations: %v", err)
-	}
-	return pool
+	return openPool(t, createDatabase(t, templateDatabase(t)))
 }
 
 // The ids are fixed and obviously synthetic, so a failure names the same row
@@ -235,14 +228,14 @@ var (
 	testUserID   = uuid.MustParse("00000000-0000-7000-8000-000000000002")
 )
 
-func seedGardenAndUser(t *testing.T, pool *pgxpool.Pool) (gardenID, userID uuid.UUID) {
+func seedGardenAndUser(t *testing.T, conn DBTX) (gardenID, userID uuid.UUID) {
 	t.Helper()
 
 	ctx := t.Context()
-	if _, err := pool.Exec(ctx, "INSERT INTO garden (id, name) VALUES ($1, 'Rosewood')", testGardenID); err != nil {
+	if _, err := conn.Exec(ctx, "INSERT INTO garden (id, name) VALUES ($1, 'Rosewood')", testGardenID); err != nil {
 		t.Fatalf("inserting the garden: %v", err)
 	}
-	_, err := pool.Exec(ctx,
+	_, err := conn.Exec(ctx,
 		"INSERT INTO app_user (id, display_name, timezone, handle) VALUES ($1, 'Emma', 'Europe/London', 'emma')", testUserID)
 	if err != nil {
 		t.Fatalf("inserting the user: %v", err)
