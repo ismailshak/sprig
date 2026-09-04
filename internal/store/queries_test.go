@@ -1,20 +1,17 @@
 package store
 
 import (
-	"context"
 	"errors"
 	"os"
 	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 	"uuid"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/ismailshak/sprig/internal/pgtest"
 )
@@ -36,40 +33,12 @@ var (
 	earlierWatering = time.Date(2026, 3, 5, 9, 0, 0, 0, time.UTC)
 )
 
-var (
-	sharedOnce sync.Once
-	sharedPool *pgxpool.Pool
-	sharedErr  error
-)
-
-// sharedTx returns a transaction on a database the tests in this file have in
-// common, rolled back when the test ends. None of them commits, so one
-// migrated database serves them all. Two of them inserting testGardenID at
-// once would serialise on the unique index, so none of them runs in parallel.
+// sharedTx is pgtest.Tx over the app's migrations. Two tests inserting
+// testGardenID at once would serialise on the unique index, so none of them
+// runs in parallel.
 func sharedTx(t *testing.T) pgx.Tx {
 	t.Helper()
-
-	databaseURL := pgtest.Shared(t, migrateSchema)
-	sharedOnce.Do(func() { sharedPool, sharedErr = Open(context.Background(), databaseURL) })
-	if sharedErr != nil {
-		t.Fatalf("opening the shared database: %v", sharedErr)
-	}
-
-	tx, err := sharedPool.Begin(t.Context())
-	if err != nil {
-		t.Fatalf("beginning the transaction: %v", err)
-	}
-	// The test's own context is cancelled by the time a cleanup runs.
-	t.Cleanup(func() { _ = tx.Rollback(context.WithoutCancel(t.Context())) })
-	return tx
-}
-
-// closeSharedPool releases the connections before TestMain drops the
-// database.
-func closeSharedPool() {
-	if sharedPool != nil {
-		sharedPool.Close()
-	}
+	return pgtest.Tx(t, migrateSchema)
 }
 
 // seedTwoGardens fills a transaction with Rosewood and one other garden. With
@@ -355,6 +324,12 @@ func TestListPlants_AnEmptyGardenIsNoRowsAndNoError(t *testing.T) {
 // parameter, so there is no unscoped read for a handler to call. A query that
 // reads more than one scoped table scopes each of them, because binding the
 // garden on the driving table alone leaves a join free to cross.
+//
+// The session table is exempt when a query reads nothing else, because the
+// session row is what tells a request which garden it is on and its lookup
+// cannot take the garden as an input. Such a query binds @token_hash instead.
+// A query joining session to another scoped table binds @garden_id like any
+// other.
 func TestQueries_EveryQueryOnAGardenScopedTableBindsTheGarden(t *testing.T) {
 	tx := sharedTx(t)
 
@@ -389,6 +364,12 @@ func TestQueries_EveryQueryOnAGardenScopedTableBindsTheGarden(t *testing.T) {
 			}
 		}
 		if len(touched) == 0 {
+			continue
+		}
+		if slices.Equal(touched, []string{"session"}) {
+			if !strings.Contains(query.sql, "@token_hash") {
+				t.Errorf("%s reads session and takes no @token_hash, so it can return another garden's rows", query.name)
+			}
 			continue
 		}
 		if !strings.Contains(query.sql, "@garden_id") {

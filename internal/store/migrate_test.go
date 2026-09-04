@@ -32,16 +32,8 @@ func migrateSchema(ctx context.Context, databaseURL string) error {
 	return Migrate(ctx, pool, db.Migrations, slog.New(slog.DiscardHandler))
 }
 
-// TestMain closes the shared pool before Cleanup drops the database it was
-// open on.
 func TestMain(m *testing.M) {
-	code := m.Run()
-	closeSharedPool()
-	if err := pgtest.Cleanup(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		code = 1
-	}
-	os.Exit(code)
+	pgtest.Main(m)
 }
 
 func TestMigrate_FreshDatabaseAppliesEveryMigrationOnce(t *testing.T) {

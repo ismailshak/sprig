@@ -3,9 +3,7 @@ package main
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
-	"os"
 	"slices"
 	"testing"
 	"time"
@@ -26,15 +24,8 @@ var seededTables = []string{
 	"care_type", "plant", "care_schedule", "care_event",
 }
 
-// TestMain drops the template database every test in this package is copied
-// from.
 func TestMain(m *testing.M) {
-	code := m.Run()
-	if err := pgtest.Cleanup(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		code = 1
-	}
-	os.Exit(code)
+	pgtest.Main(m)
 }
 
 // migrateSchema builds the template every test database in this package is

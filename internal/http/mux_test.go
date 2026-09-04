@@ -37,10 +37,9 @@ func TestNew_HealthzOK(t *testing.T) {
 	}
 }
 
-// The id reaches the request line only because New orders RequestID
-// outermost and the caller wrapped its handler with NewContextHandler.
-// Neither is visible from the other's package, so nothing else fails if one
-// of them is undone.
+// The id reaches the request line only because New orders RequestID outermost
+// and the caller wrapped its handler with NewContextHandler. Neither is visible
+// from the other's package, so nothing else fails if one of them is undone.
 func TestNew_RequestLineCarriesTheHeaderID(t *testing.T) {
 	var buf bytes.Buffer
 	logger := slog.New(NewContextHandler(slog.NewJSONHandler(&buf, nil)))
@@ -80,5 +79,48 @@ func TestNew_UnknownRouteNotFound(t *testing.T) {
 
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("status = %d, want %d", rec.Code, http.StatusNotFound)
+	}
+}
+
+// GET is left alone because nothing state-changing answers to one.
+func TestNew_RefusesAnUnsafeMethodFromAnotherOrigin(t *testing.T) {
+	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
+	handler := New(logger)
+
+	// No route answers at /plants yet, so 404 is what an accepted request
+	// gets and 403 is the refusal.
+	cases := []struct {
+		name   string
+		method string
+		host   string
+		origin string
+		site   string
+		want   int
+	}{
+		{"a form post from elsewhere", http.MethodPost, "sprig.test", "https://evil.example", "", http.StatusForbidden},
+		{"a browser that says cross-site", http.MethodPost, "sprig.test", "", "cross-site", http.StatusForbidden},
+		{"a form post from this origin", http.MethodPost, "sprig.test", "http://sprig.test", "", http.StatusNotFound},
+		{"a browser that says same-origin", http.MethodPost, "sprig.test", "", "same-origin", http.StatusNotFound},
+		{"a post over plain http on a laptop", http.MethodPost, "localhost:8080", "http://localhost:8080", "same-origin", http.StatusNotFound},
+		{"a client that is not a browser", http.MethodDelete, "sprig.test", "", "", http.StatusNotFound},
+		{"a read from elsewhere", http.MethodGet, "sprig.test", "https://evil.example", "cross-site", http.StatusNotFound},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			req := httptest.NewRequestWithContext(t.Context(), c.method, "/plants", nil)
+			req.Host = c.host
+			if c.origin != "" {
+				req.Header.Set("Origin", c.origin)
+			}
+			if c.site != "" {
+				req.Header.Set("Sec-Fetch-Site", c.site)
+			}
+
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+			if rec.Code != c.want {
+				t.Errorf("status = %d, want %d", rec.Code, c.want)
+			}
+		})
 	}
 }

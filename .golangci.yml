@@ -3,26 +3,21 @@ version: "2"
 linters:
   default: none
   enable:
-    # Correctness
-    - errcheck # an unchecked error is the failure mode this app has most of
+    - errcheck
     - govet
     - staticcheck
     - ineffassign
     - unused
     - errorlint # %w, errors.Is and errors.As rather than == and type asserts
     - nilerr # returning nil after checking err != nil
-    - bodyclose # every response body the push and chores clients open
-    - noctx # an HTTP request without a context cannot be cancelled
+    - bodyclose
+    - noctx # an HTTP request made without a context
     - copyloopvar
     - unconvert
-
-    # This app holds passkeys, sessions and other people's photographs
     - gosec
-
-    # Style, where it is mechanical enough not to be an argument
     - revive
     - misspell
-    - nolintlint # a nolint without an explanation is a linter turned off quietly
+    - nolintlint
 
   settings:
     revive:
@@ -36,6 +31,13 @@ linters:
     nolintlint:
       require-explanation: true
       require-specific: true
+
+    gosec:
+      excludes:
+        # G124 wants Secure written as a literal true on every http.Cookie, and
+        # the session cookie takes it from SPRIG_COOKIE_SECURE. A test in
+        # internal/auth asserts the attributes instead.
+        - G124
 
 formatters:
   enable:
