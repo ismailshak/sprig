@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"slices"
 	"testing"
 	"time"
 	"uuid"
@@ -326,4 +327,54 @@ func dumpRows(t *testing.T, pool *pgxpool.Pool) map[string][]string {
 		}
 	}
 	return out
+}
+
+// A schedule's dueIn is how many days after the reference it next falls due,
+// so the seeded rows have to put each plant in the section that offset names.
+func TestSeed_TodayPlacesEachPlantWhereTheRosterSays(t *testing.T) {
+	pool := seeded(t)
+	ref := testReference(t)
+	ctx := t.Context()
+	queries := store.New(pool)
+
+	g := home()
+	schedules, err := queries.ListCareSchedules(ctx, g.id)
+	if err != nil {
+		t.Fatalf("listing %s's schedules: %v", g.name, err)
+	}
+	events, err := queries.ListLatestCareEvents(ctx, g.id)
+	if err != nil {
+		t.Fatalf("listing %s's latest events: %v", g.name, err)
+	}
+
+	day := engine.Today(engine.Resolve(schedules, events, ref))
+
+	sections := []struct {
+		name string
+		rows []engine.Row
+		want []string
+	}{
+		{"Overdue", day.Overdue, []string{"Big Fella"}},
+		{"Due today", day.DueToday, []string{"Doris", "Gerald", "Nigel"}},
+		{"Coming up", day.ComingUp, []string{"Trail Mix", "Spike"}},
+	}
+	for _, s := range sections {
+		got := make([]string, 0, len(s.rows))
+		for _, r := range s.rows {
+			got = append(got, r.Plant.DisplayName())
+		}
+		if !slices.Equal(got, s.want) {
+			t.Errorf("%s = %v, want %v", s.name, got, s.want)
+		}
+	}
+
+	// Gerald's watering is five days off and his feed is due today.
+	for _, r := range day.DueToday {
+		if r.Plant.DisplayName() == "Gerald" && r.Care.CareType.Slug != "feed" {
+			t.Errorf("Gerald's row is about %s, want feed", r.Care.CareType.Slug)
+		}
+	}
+	if day.Next == nil || day.Next.Plant.DisplayName() != "Ferngully" || day.Next.Care.Days != 8 {
+		t.Errorf("Next = %+v, want Ferngully in 8 days", day.Next)
+	}
 }
