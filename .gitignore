@@ -1,5 +1,6 @@
-# Compiled binary, if anybody builds one outside the image
+# Compiled binaries, if anybody builds one outside the image
 /sprig
+/seed
 
 # SPRIG_PHOTO_DIR's default. What the deployment mounts here is its business
 /photos/

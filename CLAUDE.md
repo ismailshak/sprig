@@ -41,7 +41,8 @@ These are decisions already taken. Changing one is a conversation, not a refacto
 
 | Path                | Holds                                                             |
 | ------------------- | ----------------------------------------------------------------- |
-| `cmd/sprig/`        | The one binary                                                    |
+| `cmd/sprig/`        | The one binary that ships                                         |
+| `cmd/seed/`         | The development seed, which the image does not contain            |
 | `internal/http/`    | Middleware, handlers, the template tree                           |
 | `internal/store/`   | The pgx pool and sqlc-generated queries                           |
 | `internal/schedule/`| The due-date engine                                               |
