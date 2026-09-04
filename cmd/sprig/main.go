@@ -66,7 +66,7 @@ func run(ctx context.Context, getenv func(string) string, stdout io.Writer) erro
 	sessions := auth.NewSessions(queries, cfg.sessionTTL, cfg.cookie)
 	resolver := auth.NewResolver(sessions, queries)
 
-	return serve(ctx, logger, listener, sprighttp.New(logger, sessions, resolver))
+	return serve(ctx, logger, listener, sprighttp.New(logger, sessions, resolver, queries))
 }
 
 // serve runs the server on listener until ctx is cancelled, then gives

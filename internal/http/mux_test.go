@@ -13,7 +13,7 @@ import (
 
 func TestNew_HealthzOK(t *testing.T) {
 	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
-	handler := New(logger, testSessions(), rejectEveryToken)
+	handler := New(logger, testSessions(), rejectEveryToken, nil)
 
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/healthz", nil))
@@ -43,7 +43,7 @@ func TestNew_HealthzOK(t *testing.T) {
 func TestNew_RequestLineCarriesTheHeaderID(t *testing.T) {
 	var buf bytes.Buffer
 	logger := slog.New(NewContextHandler(slog.NewJSONHandler(&buf, nil)))
-	handler := New(logger, testSessions(), rejectEveryToken)
+	handler := New(logger, testSessions(), rejectEveryToken, nil)
 
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/healthz", nil))
@@ -73,7 +73,7 @@ func TestNew_RequestLineCarriesTheHeaderID(t *testing.T) {
 // A stranger cannot tell a path that exists from one that does not.
 func TestNew_UnknownRouteIsSignInForAStrangerAndNotFoundForAMember(t *testing.T) {
 	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
-	handler := New(logger, testSessions(), acceptEveryToken(sitterPrincipal()))
+	handler := New(logger, testSessions(), acceptEveryToken(sitterPrincipal()), nil)
 
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/nope", nil))
@@ -91,7 +91,7 @@ func TestNew_UnknownRouteIsSignInForAStrangerAndNotFoundForAMember(t *testing.T)
 // GET is left alone because nothing state-changing answers to one.
 func TestNew_RefusesAnUnsafeMethodFromAnotherOrigin(t *testing.T) {
 	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
-	handler := New(logger, testSessions(), rejectEveryToken)
+	handler := New(logger, testSessions(), rejectEveryToken, nil)
 
 	// The requests carry no cookie, so an accepted one reaches the session
 	// check and is sent to sign in, and a refused one is a 403 before that.

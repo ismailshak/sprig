@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/ismailshak/sprig/internal/auth"
+	"github.com/ismailshak/sprig/internal/store"
 )
 
 // route is one pattern the server answers. An empty capability admits every
@@ -19,10 +20,12 @@ type route struct {
 // routes is every route the server has. New registers from this slice and the
 // enforcement test walks it, because http.ServeMux does not list its patterns
 // and a route registered directly on the mux would be one the test cannot see.
-func routes() []route {
-	return []route{
+// devRoutes is what a development build adds, and empty otherwise.
+func routes(sessions *auth.Sessions, queries *store.Queries) []route {
+	base := []route{
 		{pattern: "GET /healthz", handler: http.HandlerFunc(handleHealthz)},
 	}
+	return append(base, devRoutes(sessions, queries)...)
 }
 
 // publicRoutes is every route that answers without a session. Authenticate
@@ -36,9 +39,9 @@ var publicRoutes = map[string]bool{
 // produces one request line, the cross-origin check sits inside both so a
 // refused request is logged like any other, and authentication sits inside
 // that so a cross-site post is refused before it costs a session lookup.
-func New(logger *slog.Logger, sessions *auth.Sessions, resolver Resolver) http.Handler {
+func New(logger *slog.Logger, sessions *auth.Sessions, resolver Resolver, queries *store.Queries) http.Handler {
 	mux := http.NewServeMux()
-	for _, r := range routes() {
+	for _, r := range routes(sessions, queries) {
 		h := r.handler
 		if r.capability != "" {
 			h = require(r.capability, h)
