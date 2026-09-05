@@ -103,6 +103,73 @@ func (q *Queries) DeleteCareEvent(ctx context.Context, arg DeleteCareEventParams
 	return i, err
 }
 
+const getCareEvent = `-- name: GetCareEvent :one
+SELECT care_event.id, care_event.garden_id, care_event.plant_id, care_event.care_type_id, care_event.performed_by, care_event.performed_at, care_event.recorded_at, care_event.done, care_event.note, care_event.override_interval_days, plant.id, plant.garden_id, plant.nickname, plant.common_name, plant.botanical_name, plant.location, plant.sun, plant.water_needs, plant.feed_needs, plant.soil, plant.climate, plant.pot, plant.notes, plant.acquired_year, plant.acquired_month, plant.created_at, plant.archived_at, care_type.id, care_type.garden_id, care_type.name, care_type.slug, care_type.created_at, care_type.archived_at, app_user.display_name AS performed_by_name
+FROM care_event
+JOIN plant ON plant.id = care_event.plant_id AND plant.garden_id = care_event.garden_id
+JOIN care_type ON care_type.id = care_event.care_type_id AND care_type.garden_id = care_event.garden_id
+JOIN app_user ON app_user.id = care_event.performed_by
+WHERE care_event.garden_id = $1 AND care_event.plant_id = $2 AND care_event.id = $3
+`
+
+type GetCareEventParams struct {
+	GardenID uuid.UUID
+	PlantID  uuid.UUID
+	ID       uuid.UUID
+}
+
+type GetCareEventRow struct {
+	CareEvent       CareEvent
+	Plant           Plant
+	CareType        CareType
+	PerformedByName string
+}
+
+// GetCareEvent reads one event with everything the correcting sheet shows: the
+// plant it belongs to, the care type it records, and the name of whoever
+// recorded it.
+func (q *Queries) GetCareEvent(ctx context.Context, arg GetCareEventParams) (GetCareEventRow, error) {
+	row := q.db.QueryRow(ctx, getCareEvent, arg.GardenID, arg.PlantID, arg.ID)
+	var i GetCareEventRow
+	err := row.Scan(
+		&i.CareEvent.ID,
+		&i.CareEvent.GardenID,
+		&i.CareEvent.PlantID,
+		&i.CareEvent.CareTypeID,
+		&i.CareEvent.PerformedBy,
+		&i.CareEvent.PerformedAt,
+		&i.CareEvent.RecordedAt,
+		&i.CareEvent.Done,
+		&i.CareEvent.Note,
+		&i.CareEvent.OverrideIntervalDays,
+		&i.Plant.ID,
+		&i.Plant.GardenID,
+		&i.Plant.Nickname,
+		&i.Plant.CommonName,
+		&i.Plant.BotanicalName,
+		&i.Plant.Location,
+		&i.Plant.Sun,
+		&i.Plant.WaterNeeds,
+		&i.Plant.FeedNeeds,
+		&i.Plant.Soil,
+		&i.Plant.Climate,
+		&i.Plant.Pot,
+		&i.Plant.Notes,
+		&i.Plant.AcquiredYear,
+		&i.Plant.AcquiredMonth,
+		&i.Plant.CreatedAt,
+		&i.Plant.ArchivedAt,
+		&i.CareType.ID,
+		&i.CareType.GardenID,
+		&i.CareType.Name,
+		&i.CareType.Slug,
+		&i.CareType.CreatedAt,
+		&i.CareType.ArchivedAt,
+		&i.PerformedByName,
+	)
+	return i, err
+}
+
 const listCareEventLog = `-- name: ListCareEventLog :many
 SELECT care_event.id, care_event.garden_id, care_event.plant_id, care_event.care_type_id, care_event.performed_by, care_event.performed_at, care_event.recorded_at, care_event.done, care_event.note, care_event.override_interval_days, plant.id, plant.garden_id, plant.nickname, plant.common_name, plant.botanical_name, plant.location, plant.sun, plant.water_needs, plant.feed_needs, plant.soil, plant.climate, plant.pot, plant.notes, plant.acquired_year, plant.acquired_month, plant.created_at, plant.archived_at, care_type.id, care_type.garden_id, care_type.name, care_type.slug, care_type.created_at, care_type.archived_at, app_user.display_name AS performed_by_name
 FROM care_event
@@ -379,4 +446,137 @@ func (q *Queries) ListRecentCareEvents(ctx context.Context, gardenID uuid.UUID, 
 		return nil, err
 	}
 	return items, nil
+}
+
+const restoreCareEvent = `-- name: RestoreCareEvent :one
+INSERT INTO care_event (id, garden_id, plant_id, care_type_id, performed_by, performed_at, recorded_at, done, note, override_interval_days)
+SELECT $1::uuid, $2::uuid, $3::uuid, $4::uuid, app_user.id,
+       $5::timestamptz, $6::timestamptz, $7::boolean,
+       $8::text, $9::integer
+FROM app_user
+WHERE app_user.id = $10::uuid
+  AND ($11::boolean OR app_user.id = $12::uuid)
+ON CONFLICT (id) DO NOTHING
+RETURNING id, garden_id, plant_id, care_type_id, performed_by, performed_at, recorded_at, done, note, override_interval_days
+`
+
+type RestoreCareEventParams struct {
+	ID                   uuid.UUID
+	GardenID             uuid.UUID
+	PlantID              uuid.UUID
+	CareTypeID           uuid.UUID
+	PerformedAt          time.Time
+	RecordedAt           time.Time
+	Done                 bool
+	Note                 *string
+	OverrideIntervalDays *int32
+	PerformedBy          uuid.UUID
+	MayDeleteAny         bool
+	RestoredBy           uuid.UUID
+}
+
+// RestoreCareEvent puts a deleted event back under the id it had, for the Undo
+// button on the row a delete leaves behind. The row is gone from the table, so
+// the values arrive with the request rather than from the database.
+//
+// The WHERE clause is what stops the performer being anybody the sender likes:
+// it has to be the person making the request unless they may delete anyone's
+// care. That is the same test DeleteCareEvent applies, so nobody can restore an
+// event they could not have deleted. The join is there so that an id naming no
+// user returns no rows rather than failing a foreign key.
+//
+// The performer is not required to still be a member of the garden. The event's
+// foreign key is to app_user rather than to membership, so that a departed
+// member's care still says who gave it, and a restore has to be able to say the
+// same.
+//
+// An id already in the table inserts nothing and returns no rows, so restoring
+// the same event twice is a 404 rather than a duplicate key error.
+func (q *Queries) RestoreCareEvent(ctx context.Context, arg RestoreCareEventParams) (CareEvent, error) {
+	row := q.db.QueryRow(ctx, restoreCareEvent,
+		arg.ID,
+		arg.GardenID,
+		arg.PlantID,
+		arg.CareTypeID,
+		arg.PerformedAt,
+		arg.RecordedAt,
+		arg.Done,
+		arg.Note,
+		arg.OverrideIntervalDays,
+		arg.PerformedBy,
+		arg.MayDeleteAny,
+		arg.RestoredBy,
+	)
+	var i CareEvent
+	err := row.Scan(
+		&i.ID,
+		&i.GardenID,
+		&i.PlantID,
+		&i.CareTypeID,
+		&i.PerformedBy,
+		&i.PerformedAt,
+		&i.RecordedAt,
+		&i.Done,
+		&i.Note,
+		&i.OverrideIntervalDays,
+	)
+	return i, err
+}
+
+const updateCareEvent = `-- name: UpdateCareEvent :one
+UPDATE care_event
+SET care_type_id = $1,
+    performed_at = $2,
+    done = $3,
+    note = $4,
+    override_interval_days = $5
+WHERE id = $6 AND garden_id = $7 AND plant_id = $8
+  AND ($9::boolean OR performed_by = $10)
+RETURNING id, garden_id, plant_id, care_type_id, performed_by, performed_at, recorded_at, done, note, override_interval_days
+`
+
+type UpdateCareEventParams struct {
+	CareTypeID           uuid.UUID
+	PerformedAt          time.Time
+	Done                 bool
+	Note                 *string
+	OverrideIntervalDays *int32
+	ID                   uuid.UUID
+	GardenID             uuid.UUID
+	PlantID              uuid.UUID
+	MayEditAny           bool
+	PerformedBy          uuid.UUID
+}
+
+// Matches on performed_by unless may_edit_any is set, so the ownership check is
+// in the query and cannot be forgotten by a caller. recorded_at and performed_by
+// are left alone: a correction changes what was done and when it was done, not
+// who wrote it down or when they wrote it.
+func (q *Queries) UpdateCareEvent(ctx context.Context, arg UpdateCareEventParams) (CareEvent, error) {
+	row := q.db.QueryRow(ctx, updateCareEvent,
+		arg.CareTypeID,
+		arg.PerformedAt,
+		arg.Done,
+		arg.Note,
+		arg.OverrideIntervalDays,
+		arg.ID,
+		arg.GardenID,
+		arg.PlantID,
+		arg.MayEditAny,
+		arg.PerformedBy,
+	)
+	var i CareEvent
+	err := row.Scan(
+		&i.ID,
+		&i.GardenID,
+		&i.PlantID,
+		&i.CareTypeID,
+		&i.PerformedBy,
+		&i.PerformedAt,
+		&i.RecordedAt,
+		&i.Done,
+		&i.Note,
+		&i.OverrideIntervalDays,
+	)
+	return i, err
 }
