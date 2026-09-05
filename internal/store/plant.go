@@ -21,3 +21,17 @@ func (p Plant) BotanicalOnly() bool {
 func isSet(name *string) bool {
 	return name != nil && *name != ""
 }
+
+// OtherName is whichever of the plant's names DisplayName did not use, the
+// common one ahead of the botanical one, and empty on a plant down to a single
+// name.
+func (p Plant) OtherName() (name string, botanical bool) {
+	display := p.DisplayName()
+	if isSet(p.CommonName) && *p.CommonName != display {
+		return *p.CommonName, false
+	}
+	if isSet(p.BotanicalName) && *p.BotanicalName != display {
+		return *p.BotanicalName, true
+	}
+	return "", false
+}

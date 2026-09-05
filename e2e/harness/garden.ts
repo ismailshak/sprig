@@ -14,6 +14,24 @@ export const plants = {
   nigel: { id: '00000000-0000-7000-8000-050000000005', name: 'Nigel' },
   trailMix: { id: '00000000-0000-7000-8000-050000000007', name: 'Trail Mix' },
   motherInLaw: { id: '00000000-0000-7000-8000-050000000004', name: 'Mother-in-Law' },
+  // goldenPothos carries the common name because the seed gives the plant no
+  // nickname.
+  goldenPothos: { id: '00000000-0000-7000-8000-050000000008', name: 'Golden pothos' },
+  littleFella: { id: '00000000-0000-7000-8000-050000000009', name: 'Little Fella' },
+  // The roster puts Sprout under No room because the seed gives it no
+  // location.
+  sprout: { id: '00000000-0000-7000-8000-050000000012', name: 'Sprout' },
+} as const;
+
+// No room is the heading the roster gives the plants with no location rather
+// than a room the seed writes.
+export const rooms = {
+  bathroom: 'Bathroom',
+  bedroom: 'Bedroom',
+  kitchen: 'Kitchen',
+  livingRoom: 'Living room',
+  windowsill: 'Windowsill',
+  noRoom: 'No room',
 } as const;
 
 export type Plant = (typeof plants)[keyof typeof plants];

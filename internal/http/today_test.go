@@ -144,7 +144,7 @@ func (f *todayFixture) water(t *testing.T, plantID uuid.UUID) {
 }
 
 var (
-	sectionElement = regexp.MustCompile(`(?s)<section[^>]*aria-labelledby="([a-z-]+)"[^>]*>.*?</section>`)
+	sectionElement = regexp.MustCompile(`(?s)<section[^>]*aria-labelledby="([a-z0-9-]+)"[^>]*>.*?</section>`)
 	rowElement     = regexp.MustCompile(`(?s)<li[^>]*id="(care-[^"]+)"[^>]*>.*?</li>`)
 	headElement    = regexp.MustCompile(`(?s)<div[^>]*id="day-head"[^>]*>.*?</div>`)
 	// The feed's close is the one </div> after a newline because a line opens
