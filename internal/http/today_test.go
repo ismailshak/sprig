@@ -147,9 +147,13 @@ var (
 	sectionElement = regexp.MustCompile(`(?s)<section[^>]*aria-labelledby="([a-z-]+)"[^>]*>.*?</section>`)
 	rowElement     = regexp.MustCompile(`(?s)<li[^>]*id="(care-[^"]+)"[^>]*>.*?</li>`)
 	headElement    = regexp.MustCompile(`(?s)<div[^>]*id="day-head"[^>]*>.*?</div>`)
-	sectionHead    = regexp.MustCompile(`^(?:Overdue|Due today|Coming up) (\d+)\b`)
-	tag            = regexp.MustCompile(`<[^>]+>`)
-	spaces         = regexp.MustCompile(`\s+`)
+	// The feed's close is the one </div> after a newline because a line opens
+	// and closes on one line.
+	feedElement     = regexp.MustCompile(`(?s)<div[^>]*id="activity"[^>]*>(.*?)\n</div>`)
+	feedLineElement = regexp.MustCompile(`(?s)<div>.*?</div>`)
+	sectionHead     = regexp.MustCompile(`^(?:Overdue|Due today|Coming up) (\d+)\b`)
+	tag             = regexp.MustCompile(`<[^>]+>`)
+	spaces          = regexp.MustCompile(`\s+`)
 )
 
 // text is what a reader sees in a piece of markup, with the tags gone and
@@ -416,5 +420,127 @@ func TestToday_TheDateAndTheGardenHeadThePage(t *testing.T) {
 	}
 	if !regexp.MustCompile(`<h1[^>]*>Rosewood</h1>`).MatchString(page) {
 		t.Error("the garden's name is not the page's heading")
+	}
+}
+
+// feed is each line of the feed as markup, in drawn order.
+func feed(t *testing.T, page string) []string {
+	t.Helper()
+	m := feedElement.FindStringSubmatch(page)
+	if m == nil {
+		t.Fatalf("the page carries no feed:\n%s", page)
+	}
+	return feedLineElement.FindAllString(m[1], -1)
+}
+
+// says is what each line of the feed reads as.
+func says(lines []string) []string {
+	out := make([]string, 0, len(lines))
+	for _, line := range lines {
+		out = append(out, text(line))
+	}
+	return out
+}
+
+func TestFeed_NamesWhatWasRecordedNewestFirst(t *testing.T) {
+	got := says(feed(t, rosewood(t).show(t)))
+	want := []string{
+		"You watered Nigel · Sunday",
+		"You watered Sprout · Friday",
+		"You watered Trail Mix · 26 Aug",
+		"You watered Big Fella · 22 Aug",
+		"You watered Spike · 16 Aug",
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("the feed reads\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+}
+
+func TestFeed_NamesThePersonWhoIsNotTheReader(t *testing.T) {
+	f := rosewood(t)
+	sam := uuid.MustParse("00000000-0000-7000-8000-000000000198")
+	f.exec(t, "INSERT INTO app_user (id, display_name, handle, timezone) VALUES ($1, 'Sam', 'sam', 'Europe/London')", sam)
+	f.exec(t, "INSERT INTO care_event (garden_id, plant_id, care_type_id, performed_by, performed_at, recorded_at, done) VALUES ($1, $2, $3, $4, $5, $5, true)",
+		rosewoodID, dorisID, feedID, sam, thursday.Add(-time.Hour))
+
+	if got := says(feed(t, f.show(t)))[0]; got != "Sam fed Doris · today, 8:00am" {
+		t.Errorf("the feed's newest line reads %q, want Sam named as the one who fed Doris", got)
+	}
+}
+
+func TestFeed_SaysASkipWasASkip(t *testing.T) {
+	f := rosewood(t)
+	f.exec(t, "INSERT INTO care_event (garden_id, plant_id, care_type_id, performed_by, performed_at, recorded_at, done, override_interval_days) VALUES ($1, $2, $3, $4, $5, $5, false, 2)",
+		rosewoodID, dorisID, waterID, readerID, thursday)
+
+	if got := says(feed(t, f.show(t)))[0]; got != "You skipped Doris · today, 9:00am" {
+		t.Errorf("the feed's newest line reads %q, want the skip said as a skip", got)
+	}
+}
+
+func TestFeed_OffersUndoOnlyOnTheReadersOwnCareInsideItsWindow(t *testing.T) {
+	sam := uuid.MustParse("00000000-0000-7000-8000-000000000198")
+	// Sam's watering of Doris is lines[0] and the reader's of Nigel is
+	// lines[1], both recorded a moment ago. Every seeded event behind them is
+	// days old.
+	setup := func(t *testing.T) *todayFixture {
+		f := rosewood(t)
+		f.exec(t, "INSERT INTO app_user (id, display_name, handle, timezone) VALUES ($1, 'Sam', 'sam', 'Europe/London')", sam)
+		f.exec(t, "INSERT INTO care_event (garden_id, plant_id, care_type_id, performed_by, performed_at, recorded_at, done) VALUES ($1, $2, $3, $4, $5, $5, true)",
+			rosewoodID, dorisID, waterID, sam, thursday)
+		f.exec(t, "UPDATE care_event SET recorded_at = $1 WHERE plant_id = $2 AND performed_by = $3", thursday.Add(-time.Second), nigelID, readerID)
+		return f
+	}
+
+	t.Run("a sitter who may delete nothing is offered no button", func(t *testing.T) {
+		f := setup(t)
+		for _, line := range feed(t, f.show(t)) {
+			if strings.Contains(line, "<form") {
+				t.Errorf("a reader with no delete capability was offered %q", text(line))
+			}
+		}
+	})
+
+	t.Run("a member is offered it on their own", func(t *testing.T) {
+		f := setup(t)
+		f.principal.Capabilities[auth.CareDeleteOwn] = true
+		line := feed(t, f.show(t))[1]
+		if !strings.Contains(line, undoFormPath(nigelID, f.events(t, nigelID)[0].ID)) {
+			t.Errorf("the reader's own watering carries no undo: %q", line)
+		}
+	})
+
+	t.Run("nobody is offered it on somebody else's", func(t *testing.T) {
+		f := setup(t)
+		f.principal.Capabilities[auth.CareDeleteOwn] = true
+		f.principal.Capabilities[auth.CareDeleteAny] = true
+		if strings.Contains(feed(t, f.show(t))[0], undoFormPath(dorisID, f.events(t, dorisID)[1].ID)) {
+			t.Errorf("an owner was offered Sam's watering back as an undo of their own")
+		}
+	})
+
+	t.Run("nobody is offered it on a care recorded before the window", func(t *testing.T) {
+		f := setup(t)
+		f.principal.Capabilities[auth.CareDeleteOwn] = true
+		f.exec(t, "UPDATE care_event SET recorded_at = $1 WHERE plant_id = $2 AND performed_by = $3",
+			thursday.Add(-undoWindow), nigelID, readerID)
+
+		for _, line := range feed(t, f.show(t)) {
+			if strings.Contains(line, "<form") {
+				t.Errorf("a care recorded a window ago was offered back: %q", text(line))
+			}
+		}
+	})
+}
+
+// A swap needs the element on the page before there is anything to put in it.
+// The assertion allows no whitespace inside the div because the stylesheet
+// hides the feed on :empty.
+func TestFeed_IsDrawnEmptyInAGardenWithNothingRecorded(t *testing.T) {
+	f := rosewood(t)
+	f.exec(t, "DELETE FROM care_event WHERE garden_id = $1", rosewoodID)
+
+	if page := f.show(t); !strings.Contains(page, `<div class="activity" id="activity"></div>`) {
+		t.Errorf("the page draws no empty feed for a swap to land on:\n%s", page)
 	}
 }

@@ -12,7 +12,7 @@ export class TodayScreen {
     return this.page.getByRole('region', { name: title });
   }
 
-  // The id format is the server's, and lives here so a change to it is one
+  // The id format is the server's and lives here so a change to it is one
   // edit.
   careRow(plant: Plant, care: string): Locator {
     return this.page.locator(`#care-${plant.id}-${care}`);
@@ -30,5 +30,20 @@ export class TodayScreen {
 
   undoButton(plant: Plant, care: string): Locator {
     return this.careRow(plant, care).getByRole('button', { name: 'Undo' });
+  }
+
+  // The server swaps the feed in under this id.
+  feed(): Locator {
+    return this.page.locator('#activity');
+  }
+
+  feedLines(): Locator {
+    return this.feed().locator('> div');
+  }
+
+  // The stylesheet shows the feed's Undo only with scripting off. With
+  // JavaScript on this matches nothing.
+  feedUndo(): Locator {
+    return this.feed().getByRole('button', { name: 'Undo' });
   }
 }

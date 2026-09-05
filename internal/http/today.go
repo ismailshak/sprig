@@ -32,15 +32,25 @@ func (h *today) show(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if strings.HasPrefix(r.Header.Get("HX-Target"), careRowPrefix) {
-		h.templates.render(w, r, view{page: "today", fragment: "care-settled"}, newCareSettled(principal.Garden, g))
+		h.templates.render(w, r, view{page: "today", fragment: "care-settled"}, newCareSettled(principal, g))
 		return
 	}
-	h.templates.render(w, r, view{page: "today"}, newTodayPage(principal.Garden, g))
+	h.templates.render(w, r, view{page: "today"}, newTodayPage(principal, g))
 }
 
 // graceWindow is how long a logged row keeps its place on Today with an Undo
-// beside it.
+// beside it. It is short because it runs as a timer in the page.
 const graceWindow = 4 * time.Second
+
+// undoWindow is how long after an event was recorded the feed offers it back.
+// It is longer than graceWindow because the feed's Undo sits on a page that
+// stays as it was drawn, reached by a redirect with no script running. The
+// stylesheet hides that button whenever a script is running.
+//
+// It decides what a render draws and nothing else. A button already on the
+// page goes on working however long it has been there because refusing a
+// press the page invited is worse than deleting an event a minute late.
+const undoWindow = 30 * time.Second
 
 // collapseMS is the duration of the stylesheet's transition on a leaving row.
 const collapseMS = 320
@@ -52,6 +62,7 @@ type gardenDay struct {
 	lines  []schedule.Line
 	day    schedule.Day
 	latest []store.CareEvent
+	recent []store.ListRecentCareEventsRow
 	plants int64
 	// now is in the reader's location.
 	now time.Time
@@ -68,6 +79,10 @@ func (h *today) load(ctx context.Context, principal auth.Principal) (gardenDay, 
 	if err != nil {
 		return g, fmt.Errorf("list the latest care: %w", err)
 	}
+	g.recent, err = h.queries.ListRecentCareEvents(ctx, principal.Garden.ID, feedLength)
+	if err != nil {
+		return g, fmt.Errorf("list the recent care: %w", err)
+	}
 	g.plants, err = h.queries.CountPlants(ctx, principal.Garden.ID)
 	if err != nil {
 		return g, fmt.Errorf("count the plants: %w", err)
@@ -78,7 +93,7 @@ func (h *today) load(ctx context.Context, principal auth.Principal) (gardenDay, 
 	return g, nil
 }
 
-// windows reports whether any care is still inside its undo window.
+// windows reports whether any care is still inside its grace window.
 func (g gardenDay) windows() bool {
 	for _, e := range g.latest {
 		if g.now.Sub(e.RecordedAt) < graceWindow {
@@ -107,7 +122,8 @@ type todayPage struct {
 	Sheet    *sheet
 	Head     todayHead
 	Sections []todaySection
-	// OOB marks the feed as an out-of-band swap, which is how an answer aimed
+	Feed     todayFeed
+	// OOB marks the body as an out-of-band swap, which is how an answer aimed
 	// at one row reaches the rest of the day.
 	OOB bool
 }
@@ -151,27 +167,30 @@ type link struct {
 }
 
 // careSwap is what a swap of one row answers with. The head comes back beside
-// the row because logging the last thing outstanding changes what it says.
+// the row because logging the last thing outstanding changes what it says. The
+// feed comes back because every log and undo adds or removes one of its lines.
 type careSwap struct {
 	Row  careRow
 	Head todayHead
+	Feed todayFeed
 }
 
-// careSettled is what a row whose undo window has closed answers with. The
+// careSettled is what a row whose grace window has closed answers with. The
 // head comes back alone while other rows are still inside their windows
-// because replacing the feed under them would take them with it.
+// because replacing the body under them would take them with it. The feed is
+// not in it because a closing window records and reverses nothing.
 type careSettled struct {
 	Head todayHead
-	Feed *todayPage
+	Body *todayPage
 }
 
-func newCareSettled(garden store.Garden, g gardenDay) careSettled {
+func newCareSettled(principal auth.Principal, g gardenDay) careSettled {
 	if g.windows() {
 		return careSettled{Head: swapHead(g)}
 	}
-	page := newTodayPage(garden, g)
+	page := newTodayPage(principal, g)
 	page.OOB = true
-	return careSettled{Feed: &page}
+	return careSettled{Body: &page}
 }
 
 // careRow is what the care-row fragment takes, so a page load and a swap draw
@@ -214,11 +233,12 @@ func careRowID(plant store.Plant, careType store.CareType) string {
 	return fmt.Sprintf("%s%s-%s", careRowPrefix, plant.ID, careType.Slug)
 }
 
-func newTodayPage(garden store.Garden, g gardenDay) todayPage {
+func newTodayPage(principal auth.Principal, g gardenDay) todayPage {
 	day, latest, plants, now := g.day, g.latest, g.plants, g.now
 	page := todayPage{
 		Date:   now.Format("Monday 2 January"),
-		Garden: garden.Name,
+		Garden: principal.Garden.Name,
+		Feed:   newTodayFeed(principal, g),
 	}
 	if rows := day.Overdue; len(rows) > 0 {
 		page.Sections = append(page.Sections, todaySection{ID: "overdue", Title: "Overdue", Alert: true, Rows: careRows(rows, now)})
@@ -243,7 +263,7 @@ func newTodayHead(day schedule.Day, latest []store.CareEvent, plants int64, now 
 }
 
 // swapHead is the head as an answer to a swap draws it. Clear is reachable
-// only here because a navigation draws no row inside an undo window.
+// only here because a navigation draws no row inside a grace window.
 func swapHead(g gardenDay) todayHead {
 	head := newTodayHead(g.day, g.latest, g.plants, g.now)
 	if head.Empty != nil && g.windows() {
@@ -323,4 +343,72 @@ func newCareRow(row schedule.Row, now time.Time) careRow {
 		r.When = whenWord(row.Care.Days, now)
 	}
 	return r
+}
+
+// feedLength is how many events the feed at the foot of Today carries. A
+// household of two or three logs about five cares in a day, and the whole log
+// is on Activity.
+const feedLength = 5
+
+// todayFeed is the feed as its own element because an answer aimed at one row
+// swaps it in beside the row.
+type todayFeed struct {
+	Lines []feedLine
+	OOB   bool
+}
+
+type feedLine struct {
+	Who   string
+	Did   string
+	Plant string
+	When  string
+	// Undo is where the line's form posts to delete the event. It is empty on
+	// a line the reader may not take back.
+	Undo string
+}
+
+func newTodayFeed(principal auth.Principal, g gardenDay) todayFeed {
+	feed := todayFeed{Lines: make([]feedLine, 0, len(g.recent))}
+	for _, e := range g.recent {
+		feed.Lines = append(feed.Lines, newFeedLine(principal, e, g.now))
+	}
+	return feed
+}
+
+func newFeedLine(principal auth.Principal, e store.ListRecentCareEventsRow, now time.Time) feedLine {
+	line := feedLine{
+		Who:   e.PerformedByName,
+		Did:   carePast(e.CareType),
+		Plant: e.Plant.DisplayName(),
+		When:  feedWhen(e.CareEvent.PerformedAt, now),
+	}
+	if e.CareEvent.PerformedBy == principal.User.ID {
+		line.Who = "You"
+	}
+	if !e.CareEvent.Done {
+		line.Did = "skipped"
+	}
+	if mayUndo(principal, e.CareEvent, now) {
+		line.Undo = undoFormPath(e.CareEvent.PlantID, e.CareEvent.ID)
+	}
+	return line
+}
+
+// mayUndo reports whether the feed draws a line's Undo. The line has to be
+// the reader's own and inside undoWindow because an undo is the way back from
+// a care just recorded. The delete behind the button is bounded by the
+// capability alone. A button drawn inside the window still works after it.
+func mayUndo(principal auth.Principal, e store.CareEvent, now time.Time) bool {
+	if e.PerformedBy != principal.User.ID || now.Sub(e.RecordedAt) >= undoWindow {
+		return false
+	}
+	return principal.Can(auth.CareDeleteOwn) || principal.Can(auth.CareDeleteAny)
+}
+
+// swapFeed is the feed as an answer to a swap draws it, out of band because
+// the swap that asked for it is aimed at a row.
+func swapFeed(principal auth.Principal, g gardenDay) todayFeed {
+	feed := newTodayFeed(principal, g)
+	feed.OOB = true
+	return feed
 }

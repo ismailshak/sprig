@@ -12,7 +12,7 @@ requireOwnStack(process.env);
 export default defineConfig({
   testDir: './tests',
   globalSetup: './harness/global-setup.ts',
-  // The tests share one database and reseed it, so they run one at a time.
+  // The tests run one at a time because they share one database and reseed it.
   workers: 1,
   fullyParallel: false,
   // Only CI retries because WebKit aborts a navigation with an internal error
@@ -23,19 +23,20 @@ export default defineConfig({
   use: {
     baseURL,
     trace: 'retain-on-failure',
-    // The sheet's entrance animation moves its buttons for 260ms, and
-    // Playwright's retry after an unstable check sleeps on a page timer that
-    // never fires with JavaScript off. The stylesheet stops the animation
-    // under prefers-reduced-motion. reducedMotion sits in contextOptions
-    // because the runner takes no test option of that name.
+    // reducedMotion turns off the sheet's entrance animation, which the
+    // stylesheet drops under prefers-reduced-motion. The animation otherwise
+    // moves the buttons for 260ms and Playwright retries the unstable check on
+    // a page timer that never fires with JavaScript off. It sits in
+    // contextOptions because the runner takes no test option of that name.
     contextOptions: { reducedMotion: 'reduce' },
   },
-  // A test runs in both projects unless it carries the @js tag, which marks
-  // behaviour that exists only with JavaScript on.
+  // @js marks behaviour that exists only with JavaScript on, and @nojs
+  // behaviour that exists only with it off.
   projects: [
     {
       name: 'phone',
       use: { ...devices['iPhone 16'] },
+      grepInvert: /@nojs/,
     },
     {
       name: 'phone-nojs',

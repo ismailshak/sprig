@@ -83,7 +83,7 @@ func Resolve(schedules []store.ListCareSchedulesRow, latest []store.CareEvent, n
 		case ok:
 			line.Due = dayOf(o.At, loc)
 			line.Precision = o.Precision
-			line.Days = daysBetween(today, line.Due)
+			line.Days = DaysBetween(today, line.Due)
 			line.State = state(today, line.Due, line.Precision)
 		case line.Schedule.SeasonStartMonth != nil:
 			line.State = Dormant
@@ -112,14 +112,19 @@ func state(today, due time.Time, precision string) State {
 	}
 }
 
-// daysBetween counts calendar days from one local midnight to another. It
-// re-expresses both in UTC before subtracting, because a day either side of
-// a clock change is twenty-three or twenty-five hours long in the reader's
-// location.
-func daysBetween(from, to time.Time) int {
-	f := time.Date(from.Year(), from.Month(), from.Day(), 0, 0, 0, 0, time.UTC)
-	t := time.Date(to.Year(), to.Month(), to.Day(), 0, 0, 0, 0, time.UTC)
+// DaysBetween counts calendar days from one instant to another, both read in
+// to's location. It re-expresses the two midnights in UTC before subtracting
+// because a day either side of a clock change is twenty-three or twenty-five
+// hours long in the reader's location.
+func DaysBetween(from, to time.Time) int {
+	f := midnightUTC(from.In(to.Location()))
+	t := midnightUTC(to)
 	return int(t.Sub(f) / (24 * time.Hour))
+}
+
+func midnightUTC(t time.Time) time.Time {
+	y, m, d := t.Date()
+	return time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
 }
 
 // Day is the garden as the reader's day finds it, in the three sections

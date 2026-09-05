@@ -50,6 +50,13 @@ func undoPath(plantID, eventID uuid.UUID, slug string) string {
 	return logPath(plantID) + "/" + eventID.String() + "?row=" + url.QueryEscape(slug)
 }
 
+// undoFormPath is undoPath's delete reached by POST because a form has no
+// DELETE method. It carries no row because a form post is answered with a
+// redirect to the whole day.
+func undoFormPath(plantID, eventID uuid.UUID) string {
+	return logPath(plantID) + "/" + eventID.String() + "/undo"
+}
+
 func sheetPath(plantID uuid.UUID, slug string) string {
 	return logPath(plantID) + "?row=" + url.QueryEscape(slug)
 }
@@ -330,7 +337,7 @@ func (h *today) sheet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	page := newTodayPage(principal.Garden, g)
+	page := newTodayPage(principal, g)
 	page.Sheet = newSheet(lines[0].Plant, lines, care, d, g.now)
 	// Answering the form alone leaves the dialog in place because replacing it
 	// replays the entrance animation and drops the panel's scroll.
@@ -390,7 +397,7 @@ func (h *today) log(w http.ResponseWriter, r *http.Request) {
 	performedAt, problem := d.performedAt(g.now)
 	if problem != "" {
 		s.WhenError = problem
-		page := newTodayPage(principal.Garden, g)
+		page := newTodayPage(principal, g)
 		page.Sheet = s
 		// The refusal goes back to the sheet rather than the row the form targeted.
 		w.Header().Set("HX-Retarget", "#sheet")
@@ -432,13 +439,18 @@ func (h *today) log(w http.ResponseWriter, r *http.Request) {
 		serverError(h.logger, w, r, "load the day", err)
 		return
 	}
-	swap := careSwap{Row: loggedRow(plant, lines, d, care.CareType, event, g.now), Head: swapHead(after)}
+	swap := careSwap{
+		Row:  loggedRow(plant, lines, d, care.CareType, event, g.now),
+		Head: swapHead(after),
+		Feed: swapFeed(principal, after),
+	}
 	h.templates.render(w, r, view{page: "today", fragment: "care-logged"}, swap)
 }
 
-// undo answers DELETE /plants/{plant}/log/{event} by deleting the event the
-// button was drawn beside. What comes back is the row as the day now has it,
-// which is the state it was in before the event.
+// undo answers DELETE /plants/{plant}/log/{event} and POST
+// /plants/{plant}/log/{event}/undo by deleting the event the button was drawn
+// beside. A swap gets back the row as the day now has it, and a form post a
+// redirect to the day.
 func (h *today) undo(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	plantID, err := uuid.Parse(r.PathValue("plant"))
@@ -490,7 +502,8 @@ func (h *today) undo(w http.ResponseWriter, r *http.Request) {
 		line = named
 	}
 	row := newCareRow(schedule.Row{Plant: line.Plant, Care: line, Lines: lines}, g.now)
-	h.templates.render(w, r, view{page: "today", fragment: "care-undone"}, careSwap{Row: row, Head: swapHead(g)})
+	swap := careSwap{Row: row, Head: swapHead(g), Feed: swapFeed(principal, g)}
+	h.templates.render(w, r, view{page: "today", fragment: "care-undone"}, swap)
 }
 
 func lineFor(lines []schedule.Line, slug string) (schedule.Line, bool) {

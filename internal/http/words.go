@@ -7,6 +7,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/ismailshak/sprig/internal/schedule"
 	"github.com/ismailshak/sprig/internal/store"
 )
 
@@ -79,4 +80,21 @@ func capitalise(s string) string {
 // stamp names an instant the way a row does, "Tue 1 Sep, 6:00pm".
 func stamp(t time.Time) string {
 	return t.Format("Mon 2 Jan, 3:04pm")
+}
+
+// feedWhen names when an event happened, as the feed on Today says it. Today
+// and yesterday carry the clock because those are the two a reader checks
+// against memory. The rest of the week names the day since a weekday is placed
+// faster than a date.
+func feedWhen(at, now time.Time) string {
+	at = at.In(now.Location())
+	switch days := schedule.DaysBetween(at, now); {
+	case days <= 0:
+		return "today, " + at.Format("3:04pm")
+	case days == 1:
+		return "yesterday, " + at.Format("3:04pm")
+	case days <= 6:
+		return at.Weekday().String()
+	}
+	return at.Format("2 Jan")
 }

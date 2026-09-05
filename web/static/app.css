@@ -278,6 +278,20 @@ a.empty__action { display: inline-flex; align-items: center; }
 
 .activity b { color: var(--ink); font-weight: 600; }
 
+/* An empty feed stays in the page so a swap has somewhere to land. Hiding it
+   keeps its border, and at 1180px its heading, off the page. */
+.activity:empty { display: none; }
+
+/* The feed's Undo shows only with scripting off because a running script
+   gives the row its own Undo and the two would sit side by side. */
+.activity__undo { display: none; }
+
+@media (scripting: none) {
+  .activity__undo { display: inline; }
+  .activity__undo::before { content: "\00B7"; margin: 0 5px; color: var(--ink-3); }
+  .activity__undo button { color: var(--accent); font-weight: 600; }
+}
+
 /* ------------------------------------------------------------------------ nav */
 
 .nav {
@@ -623,9 +637,12 @@ legend.field__label + * { clear: both; }
   .app__body--feed > .summary,
   .app__body--feed > .section { grid-column: 1; }
 
+  /* The feed spans the four rows the first column holds, the summary and the
+     three sections, because an item in row 1 alone sizes that row and a feed
+     taller than the summary pushes the sections down. */
   .activity {
     grid-column: 2;
-    grid-row: 1;
+    grid-row: 1 / span 4;
     position: sticky;
     top: 96px;
     margin-top: 4px;

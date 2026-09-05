@@ -75,7 +75,9 @@ type DeleteCareEventParams struct {
 }
 
 // DeleteCareEvent matches on performed_by unless may_delete_any is set,
-// because a check standing beside the query can be forgotten.
+// because a check standing beside the query can be forgotten. Nothing bounds
+// how old the event may be because the undo window decides what the feed
+// draws rather than what the delete accepts.
 func (q *Queries) DeleteCareEvent(ctx context.Context, arg DeleteCareEventParams) (CareEvent, error) {
 	row := q.db.QueryRow(ctx, deleteCareEvent,
 		arg.ID,
@@ -130,6 +132,81 @@ func (q *Queries) ListLatestCareEvents(ctx context.Context, gardenID uuid.UUID) 
 			&i.Done,
 			&i.Note,
 			&i.OverrideIntervalDays,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRecentCareEvents = `-- name: ListRecentCareEvents :many
+SELECT care_event.id, care_event.garden_id, care_event.plant_id, care_event.care_type_id, care_event.performed_by, care_event.performed_at, care_event.recorded_at, care_event.done, care_event.note, care_event.override_interval_days, plant.id, plant.garden_id, plant.nickname, plant.common_name, plant.botanical_name, plant.location, plant.sun, plant.water_needs, plant.feed_needs, plant.soil, plant.climate, plant.pot, plant.notes, plant.acquired_year, plant.acquired_month, plant.created_at, plant.archived_at, care_type.id, care_type.garden_id, care_type.name, care_type.slug, care_type.created_at, care_type.archived_at, app_user.display_name AS performed_by_name
+FROM care_event
+JOIN plant ON plant.id = care_event.plant_id AND plant.garden_id = care_event.garden_id
+JOIN care_type ON care_type.id = care_event.care_type_id AND care_type.garden_id = care_event.garden_id
+JOIN app_user ON app_user.id = care_event.performed_by
+WHERE care_event.garden_id = $1
+ORDER BY care_event.recorded_at DESC, care_event.id DESC
+LIMIT $2
+`
+
+type ListRecentCareEventsRow struct {
+	CareEvent       CareEvent
+	Plant           Plant
+	CareType        CareType
+	PerformedByName string
+}
+
+// The order is recorded_at rather than performed_at so a backdated care still
+// lands at the top of the feed.
+func (q *Queries) ListRecentCareEvents(ctx context.Context, gardenID uuid.UUID, count int32) ([]ListRecentCareEventsRow, error) {
+	rows, err := q.db.Query(ctx, listRecentCareEvents, gardenID, count)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRecentCareEventsRow
+	for rows.Next() {
+		var i ListRecentCareEventsRow
+		if err := rows.Scan(
+			&i.CareEvent.ID,
+			&i.CareEvent.GardenID,
+			&i.CareEvent.PlantID,
+			&i.CareEvent.CareTypeID,
+			&i.CareEvent.PerformedBy,
+			&i.CareEvent.PerformedAt,
+			&i.CareEvent.RecordedAt,
+			&i.CareEvent.Done,
+			&i.CareEvent.Note,
+			&i.CareEvent.OverrideIntervalDays,
+			&i.Plant.ID,
+			&i.Plant.GardenID,
+			&i.Plant.Nickname,
+			&i.Plant.CommonName,
+			&i.Plant.BotanicalName,
+			&i.Plant.Location,
+			&i.Plant.Sun,
+			&i.Plant.WaterNeeds,
+			&i.Plant.FeedNeeds,
+			&i.Plant.Soil,
+			&i.Plant.Climate,
+			&i.Plant.Pot,
+			&i.Plant.Notes,
+			&i.Plant.AcquiredYear,
+			&i.Plant.AcquiredMonth,
+			&i.Plant.CreatedAt,
+			&i.Plant.ArchivedAt,
+			&i.CareType.ID,
+			&i.CareType.GardenID,
+			&i.CareType.Name,
+			&i.CareType.Slug,
+			&i.CareType.CreatedAt,
+			&i.CareType.ArchivedAt,
+			&i.PerformedByName,
 		); err != nil {
 			return nil, err
 		}
