@@ -32,7 +32,7 @@ Decisions already taken. Changing one is a conversation, not a refactor.
 6. **A scope miss and a capability miss are both 404**, never 403. Another garden's plant is indistinguishable from one that does not exist.
 7. **Capabilities are read from `role_capability` at request time**, never from a `switch` on the role. Templates and handlers ask the same function.
 8. **Every flow survives a form post and a page navigation.** htmx has four uses: the care-row swap, the undo window, the in-place schedule editor, the lazy photo grid. A fifth is checked against this rule first. `hx-boost` is off.
-9. **A route renders a whole page or one named fragment that page also uses**, picked by `HX-Request`. A swap target is always an element the server can name by id.
+9. **A route renders a whole page or one named fragment that page also uses**, picked by `HX-Request`. Where a route answers more than one swap target, `HX-Target` picks which fragment. A swap target is always an element the server can name by id.
 10. **A handler resolves, authorises, then renders**, in that order.
 11. **Errors are logged once where they are handled**, never both logged and returned. No secret, token or database password appears in a log line.
 12. **Due-date computation lives in `internal/schedule`**, because four callers need the same answer.

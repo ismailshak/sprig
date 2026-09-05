@@ -1,16 +1,7 @@
-{{/* This template draws the sheet over Today and the empty slot when no
-     sheet is open. The two are one definition under one id so a swap in
-     either direction lands on the other.
-
+{{/* The sheet over Today and the empty slot when none is open are one
+     definition under one id so a swap in either direction lands on the other.
      Cancel and the scrim close the dialog through method="dialog", which
-     needs no script. Nothing traps focus or returns it.
-
-     The chips are radios, so the outcome and the day settle without a round
-     trip and the stylesheet shows the picker each one leaves undecided. A
-     What chip submits the form back as a query instead, because the usual
-     interval on the skip chip belongs to the care type selected and only the
-     server knows it. Without script that submission is a navigation, and
-     with it a swap of the sheet. */}}
+     needs no script. */}}
 {{define "sheet"}}{{with .Sheet}}{{$s := .}}<dialog open class="sheet" id="sheet" aria-label="{{.Label}}">
 <form method="dialog"><button class="sheet__scrim" aria-label="Close"></button></form>
 <div class="sheet__panel">
@@ -23,14 +14,25 @@
 </span>
 <span class="sheet__chevron">{{template "icon-chevron"}}</span>
 </a>
-<form class="sheet__form" method="post" action="{{.Path}}" hx-post="{{.Path}}" hx-target="#{{.Target}}" hx-swap="outerHTML">
+{{template "sheet-form" $}}
+<form method="dialog"><button class="sheet__cancel">Cancel</button></form>
+</div>
+</dialog>{{else}}<div id="sheet"></div>{{end}}{{end}}
+
+{{/* The stylesheet shows the fieldset the outcome chips name, sheet__done or
+     sheet__skipped. A What chip submits the form back as a query because the
+     usual interval on the skip chip belongs to the care type selected and only
+     the server knows it. The form is its own definition under its own id
+     because swapping the dialog would replay the entrance animation and reset
+     the panel's scroll. */}}
+{{define "sheet-form"}}{{with .Sheet}}{{$s := .}}<form class="sheet__form" id="sheet-form" method="post" action="{{.Path}}" hx-post="{{.Path}}" hx-target="#{{.Target}}" hx-swap="outerHTML">
 {{/* Enter in the note field presses the form's first submit button, which
      would otherwise be a What chip. */}}
 <button class="sheet__default" name="care" value="{{.Care}}" tabindex="-1" aria-hidden="true"></button>
 <input type="hidden" name="row" value="{{.Row}}">
 {{if gt (len .Cares) 1}}<fieldset class="field">
 <legend class="field__label">What</legend>
-<div class="chips">{{range .Cares}}<button class="chip" name="care" value="{{.Value}}" formmethod="get" formaction="{{$s.Path}}" aria-pressed="{{.On}}" hx-get="{{$s.Path}}" hx-include="closest form" hx-target="#sheet" hx-swap="outerHTML">{{.Label}}</button>{{end}}</div>
+<div class="chips">{{range .Cares}}<button class="chip" name="care" value="{{.Value}}" formmethod="get" formaction="{{$s.Path}}" aria-pressed="{{.On}}" hx-get="{{$s.Path}}" hx-include="closest form" hx-target="#sheet-form" hx-swap="outerHTML">{{.Label}}</button>{{end}}</div>
 </fieldset>{{end}}
 <fieldset class="field">
 <legend class="field__label">Outcome</legend>
@@ -58,7 +60,4 @@
      chips call for. */}}
 <button class="sheet__go sheet__done" name="care" value="{{.Care}}">Log {{.Noun}}</button>
 <button class="sheet__go sheet__skipped" name="care" value="{{.Care}}">Record a skip</button>
-</form>
-<form method="dialog"><button class="sheet__cancel">Cancel</button></form>
-</div>
-</dialog>{{else}}<div id="sheet"></div>{{end}}{{end}}
+</form>{{end}}{{end}}

@@ -13,6 +13,9 @@ import (
 	"github.com/ismailshak/sprig/internal/store"
 )
 
+// sheetFormID is the id a What chip names as the target of its swap.
+const sheetFormID = "sheet-form"
+
 const (
 	whenNow       = "now"
 	whenToday     = "today"
@@ -281,8 +284,8 @@ func snoozes(usual, selected int32) []chip {
 }
 
 // sheet answers GET /plants/{plant}/log with the sheet over Today, as the
-// page for a navigation and the dialog alone for a swap. Switching What
-// fetches it again with the draft in the query.
+// page for a navigation, the dialog for a swap that opens it, and the form
+// for a swap that switches What.
 func (h *today) sheet(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	plantID, err := uuid.Parse(r.PathValue("plant"))
@@ -319,7 +322,13 @@ func (h *today) sheet(w http.ResponseWriter, r *http.Request) {
 
 	page := newTodayPage(principal.Garden, g)
 	page.Sheet = newSheet(lines[0].Plant, lines, care, d, g.now)
-	h.templates.render(w, r, view{page: "today", fragment: "sheet"}, page)
+	// Answering the form alone leaves the dialog in place because replacing it
+	// replays the entrance animation and drops the panel's scroll.
+	fragment := "sheet"
+	if r.Header.Get("HX-Target") == sheetFormID {
+		fragment = "sheet-form"
+	}
+	h.templates.render(w, r, view{page: "today", fragment: fragment}, page)
 }
 
 // log answers POST /plants/{plant}/log by recording the event the draft

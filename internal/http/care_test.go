@@ -14,15 +14,33 @@ import (
 	"github.com/ismailshak/sprig/internal/store"
 )
 
-func (f *todayFixture) sheet(t *testing.T, path string, htmx bool) *httptest.ResponseRecorder {
+func (f *todayFixture) sheetRequest(t *testing.T, path string) *http.Request {
 	t.Helper()
 
 	ctx := context.WithValue(t.Context(), principalKey, f.principal)
 	req := httptest.NewRequestWithContext(ctx, http.MethodGet, path, nil)
 	req.SetPathValue("plant", strings.Split(strings.TrimPrefix(path, "/plants/"), "/")[0])
+	return req
+}
+
+func (f *todayFixture) sheet(t *testing.T, path string, htmx bool) *httptest.ResponseRecorder {
+	t.Helper()
+
+	req := f.sheetRequest(t, path)
 	if htmx {
 		req.Header.Set("HX-Request", "true")
 	}
+	rec := httptest.NewRecorder()
+	f.handler.sheet(rec, req)
+	return rec
+}
+
+func (f *todayFixture) sheetTargeting(t *testing.T, path, target string) *httptest.ResponseRecorder {
+	t.Helper()
+
+	req := f.sheetRequest(t, path)
+	req.Header.Set("HX-Request", "true")
+	req.Header.Set("HX-Target", target)
 	rec := httptest.NewRecorder()
 	f.handler.sheet(rec, req)
 	return rec
@@ -228,6 +246,18 @@ func TestSheet_ASwapGetsTheSheetAloneAndANavigationThePage(t *testing.T) {
 	page := f.sheet(t, sheetPath(dorisID, "water"), false).Body.String()
 	if !strings.HasPrefix(page, "<!doctype html>") || !strings.Contains(page, "<dialog") {
 		t.Errorf("a navigation did not get the page with the dialog in it:\n%.200s", page)
+	}
+}
+
+func TestSheet_ASwapThatNamesTheFormGetsTheFormAlone(t *testing.T) {
+	f := rosewood(t)
+
+	swap := f.sheetTargeting(t, sheetPath(nigelID, "water"), sheetFormID).Body.String()
+	if !strings.HasPrefix(swap, `<form class="sheet__form" id="`+sheetFormID+`"`) {
+		t.Errorf("a swap naming the form did not start with it:\n%.200s", swap)
+	}
+	if strings.Contains(swap, "<dialog") {
+		t.Errorf("a swap naming the form carried the dialog, which would replay its animation:\n%.200s", swap)
 	}
 }
 
