@@ -63,6 +63,27 @@ func (q *Queries) CreateCareSchedule(ctx context.Context, arg CreateCareSchedule
 	return i, err
 }
 
+const deleteCareSchedule = `-- name: DeleteCareSchedule :one
+DELETE FROM care_schedule
+WHERE garden_id = $1 AND plant_id = $2 AND care_type_id = $3
+RETURNING id
+`
+
+type DeleteCareScheduleParams struct {
+	GardenID   uuid.UUID
+	PlantID    uuid.UUID
+	CareTypeID uuid.UUID
+}
+
+// The events the schedule produced stay where they are, so the care type drops
+// back to being one the plant is not on rather than losing its history.
+func (q *Queries) DeleteCareSchedule(ctx context.Context, arg DeleteCareScheduleParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, deleteCareSchedule, arg.GardenID, arg.PlantID, arg.CareTypeID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const listCareSchedules = `-- name: ListCareSchedules :many
 SELECT care_schedule.id, care_schedule.garden_id, care_schedule.plant_id, care_schedule.care_type_id, care_schedule.interval_count, care_schedule.interval_unit, care_schedule.anchor_date, care_schedule.anchor_precision, care_schedule.season_start_month, care_schedule.season_end_month, care_schedule.set_at, plant.id, plant.garden_id, plant.nickname, plant.common_name, plant.botanical_name, plant.location, plant.sun, plant.water_needs, plant.feed_needs, plant.soil, plant.climate, plant.pot, plant.notes, plant.acquired_year, plant.acquired_month, plant.created_at, plant.archived_at, care_type.id, care_type.garden_id, care_type.name, care_type.slug, care_type.created_at, care_type.archived_at
 FROM care_schedule
@@ -136,4 +157,65 @@ func (q *Queries) ListCareSchedules(ctx context.Context, gardenID uuid.UUID) ([]
 		return nil, err
 	}
 	return items, nil
+}
+
+const upsertCareSchedule = `-- name: UpsertCareSchedule :one
+INSERT INTO care_schedule (garden_id, plant_id, care_type_id, interval_count, interval_unit,
+                           anchor_date, anchor_precision, season_start_month, season_end_month)
+VALUES ($1, $2, $3, $4, $5,
+        $6, $7, $8, $9)
+ON CONFLICT (plant_id, care_type_id) DO UPDATE
+SET interval_count     = excluded.interval_count,
+    interval_unit      = excluded.interval_unit,
+    anchor_date        = excluded.anchor_date,
+    anchor_precision   = excluded.anchor_precision,
+    season_start_month = excluded.season_start_month,
+    season_end_month   = excluded.season_end_month,
+    set_at             = now()
+RETURNING id, garden_id, plant_id, care_type_id, interval_count, interval_unit, anchor_date, anchor_precision, season_start_month, season_end_month, set_at
+`
+
+type UpsertCareScheduleParams struct {
+	GardenID         uuid.UUID
+	PlantID          uuid.UUID
+	CareTypeID       uuid.UUID
+	IntervalCount    *int32
+	IntervalUnit     *string
+	AnchorDate       *time.Time
+	AnchorPrecision  *string
+	SeasonStartMonth *int16
+	SeasonEndMonth   *int16
+}
+
+// A plant is scheduled for a care type at most once, so saving the editor
+// either writes the row or replaces it. set_at moves with the save, which is
+// what leaves a schedule newly set with no history due a full interval from
+// now and what brings a spent one-off back.
+func (q *Queries) UpsertCareSchedule(ctx context.Context, arg UpsertCareScheduleParams) (CareSchedule, error) {
+	row := q.db.QueryRow(ctx, upsertCareSchedule,
+		arg.GardenID,
+		arg.PlantID,
+		arg.CareTypeID,
+		arg.IntervalCount,
+		arg.IntervalUnit,
+		arg.AnchorDate,
+		arg.AnchorPrecision,
+		arg.SeasonStartMonth,
+		arg.SeasonEndMonth,
+	)
+	var i CareSchedule
+	err := row.Scan(
+		&i.ID,
+		&i.GardenID,
+		&i.PlantID,
+		&i.CareTypeID,
+		&i.IntervalCount,
+		&i.IntervalUnit,
+		&i.AnchorDate,
+		&i.AnchorPrecision,
+		&i.SeasonStartMonth,
+		&i.SeasonEndMonth,
+		&i.SetAt,
+	)
+	return i, err
 }
