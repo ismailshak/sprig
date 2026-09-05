@@ -24,10 +24,12 @@ type route struct {
 // devRoutes is what a development build adds, and empty otherwise.
 func routes(logger *slog.Logger, sessions *auth.Sessions, queries *store.Queries, templates *Templates, assets *Assets) []route {
 	todayHandler := &today{logger: logger, queries: queries, templates: templates, now: time.Now}
+	plantsHandler := &plants{logger: logger, queries: queries, templates: templates, now: time.Now}
 	base := []route{
 		{pattern: "GET /healthz", handler: http.HandlerFunc(handleHealthz)},
 		{pattern: assetPattern, handler: assets.handler()},
 		{pattern: "GET /{$}", handler: http.HandlerFunc(todayHandler.show)},
+		{pattern: "GET /plants", handler: http.HandlerFunc(plantsHandler.show)},
 		{pattern: "GET /plants/{plant}/log", capability: auth.CareLog, handler: http.HandlerFunc(todayHandler.sheet)},
 		{pattern: "POST /plants/{plant}/log", capability: auth.CareLog, handler: http.HandlerFunc(todayHandler.log)},
 		{pattern: "DELETE /plants/{plant}/log/{event}", capability: auth.CareDeleteOwn, handler: http.HandlerFunc(todayHandler.undo)},

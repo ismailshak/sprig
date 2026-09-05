@@ -38,6 +38,7 @@ var routeAccess = map[string]access{
 	// pattern matches.
 	assetPattern:               {public: true, path: assetPrefix + "app.css"},
 	"GET /{$}":                 {},
+	"GET /plants":              {},
 	"GET /plants/{plant}/log":  {capability: auth.CareLog, path: logPath(rosewoodPlantID), foreign: logPath(fairviewPlantID)},
 	"POST /plants/{plant}/log": {capability: auth.CareLog, path: logPath(rosewoodPlantID), foreign: logPath(fairviewPlantID)},
 	"DELETE /plants/{plant}/log/{event}": {

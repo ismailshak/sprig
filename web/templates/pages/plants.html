@@ -1,0 +1,50 @@
+{{define "title"}}sprig — plants{{end}}
+
+{{/* Add sits in the bar and is outlined rather than filled because the roster
+     is opened to look a plant up far more often than to add one. */}}
+{{define "main"}}
+<header class="topbar">
+<h1 class="topbar__title">Plants</h1>
+{{if .Add}}<a class="care care--outline topbar__action" href="/plants/new">{{template "icon-plus"}}Add</a>{{end}}
+</header>
+<div class="app__body">
+{{if .Rooms}}
+<div class="app__body--grid">
+{{range .Rooms}}{{template "room-section" .}}{{end}}
+</div>
+{{else}}
+<div class="empty">
+<span class="empty__mark">{{template "icon-plants"}}</span>
+<h2 class="empty__title">No plants yet</h2>
+<p class="empty__line">Add one and sprig will tell you when it needs water.</p>
+{{if .Add}}<a class="empty__action" href="/plants/new">Add a plant</a>{{end}}
+</div>
+{{end}}
+</div>
+{{end}}
+
+{{define "room-section"}}
+<section class="section" aria-labelledby="{{.ID}}">
+<div class="section__head">
+<h2 class="section__title" id="{{.ID}}">{{.Title}}</h2>
+<span class="section__count">{{len .Plants}}</span>
+</div>
+<ul class="list">
+{{range .Plants}}{{template "roster-row" .}}
+{{end}}</ul>
+</section>
+{{end}}
+
+{{/* row__avatar stays empty until photos exist. */}}
+{{define "roster-row"}}<li>
+<a class="row row--link" href="{{.Href}}">
+<span class="row__avatar"></span>
+<span class="row__text">
+<span class="row__name{{if .Botanical}} row__name--sp{{end}}">{{.Name}}</span>
+{{with .Sub}}<span class="row__meta"><span class="row__part">{{if $.SubBotanical}}<i>{{.}}</i>{{else}}{{.}}{{end}}</span></span>{{end}}
+</span>
+{{with .Standing}}<span class="standing">{{.}}</span>{{end}}
+</a>
+</li>{{end}}
+
+{{define "nav"}}{{template "tabs" "Plants"}}{{end}}
