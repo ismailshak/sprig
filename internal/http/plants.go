@@ -63,7 +63,7 @@ func (h *plants) roster(ctx context.Context, principal auth.Principal) (rosterPa
 		return rosterPage{}, fmt.Errorf("list the latest care: %w", err)
 	}
 
-	return newRosterPage(principal, list, schedule.Resolve(schedules, latest, now)), nil
+	return newRosterPage(principal, list, schedule.Resolve(schedules, latest, now), now), nil
 }
 
 type rosterPage struct {
@@ -94,7 +94,7 @@ type rosterRow struct {
 	Standing string
 }
 
-func newRosterPage(principal auth.Principal, list []store.Plant, lines []schedule.Line) rosterPage {
+func newRosterPage(principal auth.Principal, list []store.Plant, lines []schedule.Line, now time.Time) rosterPage {
 	page := rosterPage{Add: principal.Can(auth.PlantCreate)}
 
 	rooms := map[string][]rosterRow{}
@@ -103,7 +103,7 @@ func newRosterPage(principal auth.Principal, list []store.Plant, lines []schedul
 		if plant.Location != nil && *plant.Location != "" {
 			room = *plant.Location
 		}
-		rooms[room] = append(rooms[room], newRosterRow(plant, plantLines(lines, plant.ID)))
+		rooms[room] = append(rooms[room], newRosterRow(plant, plantLines(lines, plant.ID), now))
 	}
 
 	for _, room := range sortedRooms(rooms) {
@@ -141,7 +141,7 @@ func compareNames(a, b string) int {
 	return cmp.Or(cmp.Compare(strings.ToLower(a), strings.ToLower(b)), cmp.Compare(a, b))
 }
 
-func newRosterRow(plant store.Plant, lines []schedule.Line) rosterRow {
+func newRosterRow(plant store.Plant, lines []schedule.Line, now time.Time) rosterRow {
 	row := rosterRow{
 		Href:      plantPath(plant.ID),
 		Name:      plant.DisplayName(),
@@ -149,7 +149,7 @@ func newRosterRow(plant store.Plant, lines []schedule.Line) rosterRow {
 	}
 	row.Sub, row.SubBotanical = plant.OtherName()
 	if late := mostOverdue(lines); late != nil {
-		row.Standing = late.CareType.Name + " " + lateWord(-late.Days)
+		row.Standing = late.CareType.Name + " " + overdueWord(*late, now)
 	}
 	return row
 }

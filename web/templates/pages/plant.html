@@ -26,8 +26,7 @@
 <h2 class="section__title" id="schedule">Schedule</h2>
 </div>
 <ul class="list">
-{{range .}}{{template "schedule-row" .}}
-{{end}}</ul>
+{{template "schedule-rows" $}}</ul>
 </section>
 {{end}}
 
@@ -73,15 +72,59 @@
 </div>
 {{end}}
 
+{{/* The rows of the Schedule section, and the fragment a swap aimed at one of
+     them is answered with. */}}
+{{define "schedule-rows"}}{{range .Schedule}}{{template "schedule-row" .}}
+{{end}}{{end}}
+
 {{/* The rule on the left and the consequence on the right. An anchored line
-     carries no window, because the schema puts a season only on a cadence. */}}
-{{define "schedule-row"}}<li class="sched">
+     carries no window, because the schema puts a season only on a cadence. A
+     care type the plant is not on keeps the same row and says so on the right,
+     because that row is the only way it gets a schedule here.
+
+     Every state of the row carries the same id, and settle:0ms keeps htmx from
+     painting a frame at the outgoing row's classes. The whole row is the
+     control, so with no script it is a link to the editor's own page. */}}
+{{define "schedule-row"}}{{if .Edit}}{{template "schedule-editor" .Edit}}{{else}}<li class="sched{{if not .Scheduled}} sched--add{{end}}" id="{{.ID}}">
+{{if .Open}}<a href="{{.Open}}" hx-get="{{.Open}}" hx-target="#{{.ID}}" hx-swap="outerHTML settle:0ms">{{end}}
 <span class="sched__icon">{{template "care-icon" .Slug}}</span>
 <div class="sched__text">
 <span class="sched__type">{{.Care}}</span>
-<span class="sched__every">{{.Rule}}{{with .Season}} &middot; {{.}}{{end}}</span>
+{{with .Rule}}<span class="sched__every">{{.}}{{with $.Season}} &middot; {{.}}{{end}}</span>{{end}}
 </div>
 <span class="sched__when{{if .Late}} sched__when--late{{end}}{{if .Off}} sched__when--off{{end}}">{{.When}}</span>
+{{if .Open}}</a>{{end}}
+</li>{{end}}{{end}}
+
+{{/* The row as the small form it is edited in, because there is a plant here to
+     save one row against. One URL answers the editor and the save, a second the
+     question Remove asks and the removal itself.
+
+     Save is the only submit button while the editor is at rest, and Keep it is
+     the first while it is asking, so Enter in a field never presses Remove. The
+     other two answers are GETs and go by link.
+
+     Remove asks first, and the question replaces the foot rather than opening a
+     dialog, so the schedule being discussed stays visible above the answer.
+     Everything else in the app answers a mistake with undo, and undo needs the
+     undone thing still on screen: removing a schedule takes its own row away. */}}
+{{define "schedule-editor"}}<li class="sched sched--editing" id="{{.ID}}">
+<form method="post" action="{{.Path}}" hx-post="{{.Path}}" hx-target="#{{.ID}}" hx-swap="outerHTML settle:0ms">
+<span class="sched__icon">{{template "care-icon" .Slug}}</span>
+{{template "schedule-controls" .}}
+{{if .Asking}}<div class="sched__confirm">
+<span class="sched__ask">Remove this schedule?</span>
+<button class="sched__cancel" type="submit" formmethod="get" formaction="{{.Path}}"
+ hx-get="{{.Path}}" hx-include="#{{.ID}}" hx-target="#{{.ID}}" hx-swap="outerHTML settle:0ms">Keep it</button>
+<button class="care care--small" type="submit" formaction="{{.Remove}}"
+ hx-post="{{.Remove}}" hx-target="#{{.ID}}" hx-swap="outerHTML settle:0ms">Remove</button>
+</div>{{else}}<div class="sched__buttons">
+{{with .Remove}}<a class="sched__cancel" href="{{.}}"
+ hx-get="{{.}}" hx-include="#{{$.ID}}" hx-target="#{{$.ID}}" hx-swap="outerHTML settle:0ms">Remove</a>{{end}}
+<a class="sched__cancel" href="{{.Cancel}}" hx-get="{{.Cancel}}" hx-target="#{{.ID}}" hx-swap="outerHTML settle:0ms">Cancel</a>
+<button class="care care--small" type="submit">Save</button>
+</div>{{end}}
+</form>
 </li>{{end}}
 
 {{define "nav"}}{{template "tabs" "Plants"}}{{end}}

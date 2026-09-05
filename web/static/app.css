@@ -833,6 +833,20 @@ a.foot-link { text-decoration: none; color: var(--ink-2); }
   .sched:hover { background: var(--surface-2); }
 }
 
+/* The whole row is the control and the editor is one form, so with no script a
+   row at rest is a link and an open one is a form. display: contents drops the
+   wrapper's box, which leaves the row's parts as the flex line's own children. */
+.sched > a,
+.sched > form {
+  display: contents;
+  color: inherit;
+  text-decoration: none;
+}
+
+/* A link with no box has nowhere to draw its focus ring, so the row draws it,
+   the way a chip draws the ring for the radio inside it. */
+.sched:has(> a:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+
 .sched__icon {
   display: grid;
   place-items: center;

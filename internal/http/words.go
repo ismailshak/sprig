@@ -24,6 +24,28 @@ func lateWord(days int) string {
 	return daysWord(days) + " late"
 }
 
+// overdueWord is how far past its day a schedule has gone, in the lower case a
+// row reads it in. A month-precise occurrence names the month it has passed
+// rather than counting days it was never precise enough to earn: a repot
+// pencilled for March reads "overdue since March" on 1 April, where "31 days
+// late" claims a date nobody gave.
+func overdueWord(line schedule.Line, now time.Time) string {
+	if line.Precision == schedule.PrecisionMonth {
+		return "overdue since " + strings.TrimPrefix(anchorWord(line.Due, line.Precision, now), "in ")
+	}
+	return lateWord(-line.Days)
+}
+
+// comingWord is when a schedule still to come falls due. A month-precise
+// occurrence names its month in this direction too, so a repot pencilled for
+// March reads "in March" rather than "Thursday" on the 26th of February.
+func comingWord(line schedule.Line, now time.Time) string {
+	if line.Precision == schedule.PrecisionMonth {
+		return anchorWord(line.Due, line.Precision, now)
+	}
+	return whenWord(line.Days, now)
+}
+
 // whenWord names the day a care falls on, days after today. A weekday reads
 // against a plan for the week and holds for six days. Past two months a day
 // count stops being an answer, so the month replaces it, and the year joins

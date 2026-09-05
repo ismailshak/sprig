@@ -4,20 +4,44 @@
 {{define "schedule-fields"}}{{range .Schedules}}{{template "schedule-field" .}}
 {{end}}{{end}}
 
-{{/* Every control is named by its care type as well as by what it is, because
+{{/* On this form a row is open or the plant is not scheduled for that care,
+     because there is no plant yet to save one row against. The hidden field
+     says the row is open, which is how the post and the re-render agree without
+     the button being pressed again. */}}
+{{define "schedule-field"}}{{if .Open}}<li class="sched sched--editing" id="{{.ID}}">
+<span class="sched__icon">{{template "care-icon" .Slug}}</span>
+<input type="hidden" name="open" value="{{.Slug}}">
+{{template "schedule-controls" .}}
+<div class="sched__buttons">
+{{/* Don't schedule is the way out of a row on this form, because there is no
+     plant yet to save a row against. */}}
+<button class="sched__cancel" type="submit" name="close" value="{{.Slug}}" formmethod="get" formaction="{{.Path}}"
+ hx-get="{{.Path}}?close={{.Slug}}" hx-target="#{{.ID}}" hx-swap="outerHTML settle:0ms">Don't schedule</button>
+</div>
+</li>{{else}}<li class="sched sched--add" id="{{.ID}}">
+<span class="sched__icon">{{template "care-icon" .Slug}}</span>
+<div class="sched__text">
+<span class="sched__type">{{.Care}}</span>
+</div>
+<button class="sched__when" type="submit" name="open" value="{{.Slug}}" formmethod="get" formaction="{{.Path}}"
+ hx-get="{{.Path}}?open={{.Slug}}" hx-target="#{{.ID}}" hx-swap="outerHTML settle:0ms">Not scheduled</button>
+</li>{{end}}{{end}}
+
+{{/* The two questions the editor asks, shared by the add form and the in-place
+     editor on a plant's page so that the two cannot come to disagree about what
+     "every year" means. The foot is the caller's, because a row here is one
+     field of a form that has its own button and a row there is saved on its
+     own.
+
+     Every control is named by its care type as well as by what it is, because
      more than one row can be open at once and one shared "shape" would be read
      as whichever row rendered last.
 
      The two controls that decide which other controls exist re-render the row
      they are in. With no script they do not, and the post comes back drawn with
      the fields the shape needs and a line saying what is missing. */}}
-{{define "schedule-field"}}{{if .Open}}<li class="sched sched--editing" id="{{.ID}}">
-<span class="sched__icon">{{template "care-icon" .Slug}}</span>
-<div class="sched__text">
+{{define "schedule-controls"}}<div class="sched__text">
 <span class="sched__type">{{.Care}}</span>
-{{/* The hidden field says the row is open, which is how the post and the
-     re-render agree without the button being pressed again. */}}
-<input type="hidden" name="open" value="{{.Slug}}">
 <span class="sched__field">When
 <select class="input input--unit" id="{{.Slug}}-shape" name="{{.Slug}}-shape" aria-label="When {{.Care}} happens"
  hx-get="{{.Path}}" hx-trigger="change" hx-include="#{{.ID}}" hx-target="#{{.ID}}" hx-swap="outerHTML settle:0ms">{{template "options" .Shapes}}</select>
@@ -44,20 +68,6 @@ to
 </span>{{end}}
 {{end}}
 {{with .Error}}<p class="field__error">{{.}}</p>{{end}}
-</div>
-<div class="sched__buttons">
-{{/* Don't schedule is the way out of a row on this form, because there is no
-     plant yet to save a row against. */}}
-<button class="sched__cancel" type="submit" name="close" value="{{.Slug}}" formmethod="get" formaction="{{.Path}}"
- hx-get="{{.Path}}?close={{.Slug}}" hx-target="#{{.ID}}" hx-swap="outerHTML settle:0ms">Don't schedule</button>
-</div>
-</li>{{else}}<li class="sched sched--add" id="{{.ID}}">
-<span class="sched__icon">{{template "care-icon" .Slug}}</span>
-<div class="sched__text">
-<span class="sched__type">{{.Care}}</span>
-</div>
-<button class="sched__when" type="submit" name="open" value="{{.Slug}}" formmethod="get" formaction="{{.Path}}"
- hx-get="{{.Path}}?open={{.Slug}}" hx-target="#{{.ID}}" hx-swap="outerHTML settle:0ms">Not scheduled</button>
-</li>{{end}}{{end}}
+</div>{{end}}
 
 {{define "options"}}{{range .}}<option value="{{.Value}}"{{if .On}} selected{{end}}>{{.Label}}</option>{{end}}{{end}}

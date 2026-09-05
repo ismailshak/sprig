@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strings"
 	"time"
 	"uuid"
 
@@ -118,9 +117,12 @@ type plantName struct {
 }
 
 type scheduleRow struct {
+	// ID is the row's id in every state, which is the element a swap replaces.
+	ID   string
 	Care string
 	// Slug picks the row's icon, and survives a care type being renamed.
 	Slug string
+	// Rule is empty for a care type the plant is not scheduled for.
 	Rule string
 	// Season is the window a seasonal cadence runs in, and empty on the rest.
 	Season string
@@ -129,6 +131,13 @@ type scheduleRow struct {
 	// one whose season is shut.
 	Late bool
 	Off  bool
+	// Scheduled is false for a care type the plant is not on.
+	Scheduled bool
+	// Open is where the row opens as the editor, and is empty for a reader who
+	// may not change a schedule.
+	Open string
+	// Edit is the editor the row is open as, and nil for a row at rest.
+	Edit *scheduleEditor
 }
 
 type plantReference struct {
@@ -154,7 +163,7 @@ func newPlantPage(principal auth.Principal, d plantDetail) plantPage {
 		Name:      plant.DisplayName(),
 		Botanical: plant.BotanicalOnly(),
 		Names:     otherNames(plant),
-		Schedule:  scheduleRows(d.lines, d.now),
+		Schedule:  scheduleRows(principal, d),
 		Reference: newPlantReference(plant),
 		Recent:    recentLines(principal, d.recent, d.now),
 	}
@@ -223,25 +232,65 @@ func otherNames(plant store.Plant) []plantName {
 	return names
 }
 
-func scheduleRows(lines []schedule.Line, now time.Time) []scheduleRow {
-	rows := make([]scheduleRow, 0, len(lines))
-	for _, line := range lines {
+// scheduleRows is the plant's schedules and then the care types in the garden
+// it is not on. The absent ones are in the list rather than behind an Add
+// button because the reason to read this section is to change what the plant is
+// scheduled for, and they are the only way it acquires a schedule from here.
+// They are left out for a reader who cannot open one, since pressing is all
+// they are for.
+func scheduleRows(principal auth.Principal, d plantDetail) []scheduleRow {
+	edit := principal.Can(auth.ScheduleEdit) && d.plant.ArchivedAt == nil
+
+	rows := make([]scheduleRow, 0, len(d.cares))
+	scheduled := make(map[string]bool, len(d.lines))
+	for _, line := range d.lines {
 		// A one-off that has been done is over, so the plant is no longer
 		// scheduled for that care.
 		if line.State == schedule.Spent {
 			continue
 		}
-		rows = append(rows, newScheduleRow(line, now))
+		scheduled[line.CareType.Slug] = true
+		rows = append(rows, newScheduleRow(line, d, edit))
+	}
+	if !edit {
+		return rows
+	}
+	for _, care := range d.cares {
+		if !scheduled[care.Slug] {
+			rows = append(rows, scheduleRow{
+				ID:   scheduleRowID(care),
+				Care: care.Name,
+				Slug: care.Slug,
+				When: "Not scheduled",
+				Open: schedulePath(d.plant.ID, care.Slug),
+			})
+		}
 	}
 	return rows
 }
 
-func newScheduleRow(line schedule.Line, now time.Time) scheduleRow {
+// rowFor is the schedule row a care type has on the page, and nil for a care
+// type the page does not draw one for.
+func (p *plantPage) rowFor(slug string) *scheduleRow {
+	for i := range p.Schedule {
+		if p.Schedule[i].Slug == slug {
+			return &p.Schedule[i]
+		}
+	}
+	return nil
+}
+
+func newScheduleRow(line schedule.Line, d plantDetail, edit bool) scheduleRow {
 	row := scheduleRow{
-		Care: line.CareType.Name,
-		Slug: line.CareType.Slug,
-		Rule: ruleWord(line.Schedule),
-		When: dueWord(line, now),
+		ID:        scheduleRowID(line.CareType),
+		Care:      line.CareType.Name,
+		Slug:      line.CareType.Slug,
+		Rule:      ruleWord(line.Schedule),
+		When:      dueWord(line, d.now),
+		Scheduled: true,
+	}
+	if edit {
+		row.Open = schedulePath(d.plant.ID, line.CareType.Slug)
 	}
 	// The schema sets the two season months together, so the end is non-nil
 	// wherever the start is.
@@ -269,25 +318,23 @@ func dueWord(line schedule.Line, now time.Time) string {
 	case schedule.Dormant:
 		return "Out of season"
 	case schedule.Overdue:
-		// A month-precise anchor names the month it has passed, because it was
-		// never precise to a day.
-		if line.Precision == schedule.PrecisionMonth {
-			return "Overdue since " + strings.TrimPrefix(anchorWord(line.Due, line.Precision, now), "in ")
+		// The row starts its own phrase, unlike the roster's "Repot overdue
+		// since March".
+		return capitalise(overdueWord(line, now))
+	case schedule.DueToday:
+		// A month-precise occurrence is due for the whole of its month, so it
+		// is named rather than being reported as today.
+		if line.Precision != schedule.PrecisionMonth {
+			return "Due today"
 		}
-		return lateWord(-line.Days)
 	}
 	// Past the coming week an anchored schedule names its date rather than
 	// counting to it, because "1 May 2027" is what was written down and "in
-	// 241 days" has to be converted. A month-precise occurrence is named in
-	// both directions, since it is due for the whole of its month.
-	anchored := line.Schedule.AnchorDate != nil
-	if line.Precision == schedule.PrecisionMonth || (anchored && line.Days > comingWeek) {
+	// 241 days" has to be converted.
+	if line.Schedule.AnchorDate != nil && line.Days > comingWeek {
 		return "Due " + anchorWord(line.Due, line.Precision, now)
 	}
-	if line.State == schedule.DueToday {
-		return "Due today"
-	}
-	return "Due " + whenWord(line.Days, now)
+	return "Due " + comingWord(line, now)
 }
 
 // comingWeek is how far ahead a schedule is counted towards rather than
@@ -350,7 +397,13 @@ func (h *plants) plant(w http.ResponseWriter, r *http.Request) {
 		serverError(h.logger, w, r, "load the plant", err)
 		return
 	}
-	h.templates.render(w, r, view{page: "plant", fragment: plantFootFragment(r)}, newPlantPage(principal, detail))
+	page := newPlantPage(principal, detail)
+	fragment, ok := plantSwap(r, &page)
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	h.templates.render(w, r, view{page: "plant", fragment: fragment}, page)
 }
 
 // plantFootID is the id the foot keeps in both states, and it is the name of
@@ -358,11 +411,22 @@ func (h *plants) plant(w http.ResponseWriter, r *http.Request) {
 // answering it are one string.
 const plantFootID = "plant-foot"
 
-// plantFootFragment answers the foot alone to a swap aimed at it. A navigation
-// and every other swap get the whole page.
-func plantFootFragment(r *http.Request) string {
-	if r.Header.Get("HX-Target") == plantFootID {
-		return plantFootID
+// plantSwap is the fragment a swap aimed at the page is answered with, and it
+// narrows the page to what that fragment draws. A navigation and a swap aimed
+// at anything else get the whole page. It reports false for a schedule row the
+// page does not draw, because the swap asked for an element that is not on it.
+func plantSwap(r *http.Request, page *plantPage) (string, bool) {
+	target := r.Header.Get("HX-Target")
+	if target == plantFootID {
+		return plantFootID, true
 	}
-	return ""
+	if slug, ok := scheduleRowSlug(target); ok {
+		row := page.rowFor(slug)
+		if row == nil {
+			return "", false
+		}
+		page.Schedule = []scheduleRow{*row}
+		return scheduleRowsFragment, true
+	}
+	return "", true
 }

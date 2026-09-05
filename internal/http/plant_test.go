@@ -72,7 +72,7 @@ var (
 	heroName    = regexp.MustCompile(`<h1 class="hero__name([^"]*)">(.*?)</h1>`)
 	heroMeta    = regexp.MustCompile(`<p class="hero__meta">(.*?)</p>`)
 	heroWhere   = regexp.MustCompile(`<p class="hero__where">(.*?)</p>`)
-	schedRow    = regexp.MustCompile(`(?s)<li class="sched">(.*?)</li>`)
+	schedRow    = regexp.MustCompile(`(?s)<li class="sched(?: sched--add)?" id="[^"]*">(.*?)</li>`)
 	schedType   = regexp.MustCompile(`<span class="sched__type">(.*?)</span>`)
 	schedEvery  = regexp.MustCompile(`<span class="sched__every">(.*?)</span>`)
 	schedWhen   = regexp.MustCompile(`<span class="sched__when([^"]*)">(.*?)</span>`)
@@ -94,24 +94,29 @@ type testScheduleRow struct {
 	off  bool
 }
 
+// scheduleOf is the rows of the Schedule section that are at rest. A row open
+// as the editor carries controls rather than a rule and a due date, so it is
+// not one of them.
 func scheduleOf(t *testing.T, page string) []testScheduleRow {
 	t.Helper()
 
 	var rows []testScheduleRow
 	for _, m := range schedRow.FindAllStringSubmatch(page, -1) {
 		care := schedType.FindStringSubmatch(m[1])
-		every := schedEvery.FindStringSubmatch(m[1])
 		when := schedWhen.FindStringSubmatch(m[1])
-		if care == nil || every == nil || when == nil {
-			t.Fatalf("a schedule row has no care, rule or due date:\n%s", m[1])
+		if care == nil || when == nil {
+			t.Fatalf("a schedule row has no care or due date:\n%s", m[1])
 		}
-		rows = append(rows, testScheduleRow{
+		row := testScheduleRow{
 			care: text(care[1]),
-			rule: text(every[1]),
 			when: text(when[2]),
 			late: strings.Contains(when[1], "sched__when--late"),
 			off:  strings.Contains(when[1], "sched__when--off"),
-		})
+		}
+		if every := schedEvery.FindStringSubmatch(m[1]); every != nil {
+			row.rule = text(every[1])
+		}
+		rows = append(rows, row)
 	}
 	return rows
 }
@@ -300,19 +305,17 @@ func TestPlant_EachScheduleShapeStatesItsRuleAndItsConsequence(t *testing.T) {
 	}
 }
 
-func TestPlant_ASpentOneOffLeavesTheSchedule(t *testing.T) {
+func TestPlant_ASpentOneOffDropsBackToNotScheduled(t *testing.T) {
 	f := rosewoodPlant(t)
 	f.exec(t, "INSERT INTO care_schedule (garden_id, plant_id, care_type_id, anchor_date, anchor_precision, set_at) VALUES ($1, $2, $3, '2026-08-20', 'day', $4)",
 		rosewoodID, bigFellaID, feedID, day(time.August, 1))
 	f.exec(t, "INSERT INTO care_event (garden_id, plant_id, care_type_id, performed_by, performed_at, recorded_at, done) VALUES ($1, $2, $3, $4, $5, $5, true)",
 		rosewoodID, bigFellaID, feedID, readerID, day(time.August, 21))
 
-	cares := []string{}
-	for _, row := range scheduleOf(t, f.page(t, bigFellaID)) {
-		cares = append(cares, row.care)
-	}
-	if !slices.Equal(cares, []string{"Water"}) {
-		t.Errorf("the schedule lists %v, want the watering alone", cares)
+	feed := rowFor(t, f.page(t, bigFellaID), "Feed")
+
+	if feed.rule != "" || feed.when != "Not scheduled" {
+		t.Errorf("the feeding row reads %+v, want a care the plant is not scheduled for", feed)
 	}
 }
 

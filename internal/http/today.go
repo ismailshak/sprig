@@ -301,7 +301,7 @@ func newTodayEmpty(principal auth.Principal, day schedule.Day, latest []store.Ca
 		return empty
 	}
 	if next := day.Next; next != nil {
-		empty.Line = fmt.Sprintf("%s is next, %s.", next.Plant.DisplayName(), whenWord(next.Care.Days, now))
+		empty.Line = fmt.Sprintf("%s is next, %s.", next.Plant.DisplayName(), comingWord(next.Care, now))
 	}
 	empty.Action = &link{Label: "See all plants", Href: "/plants"}
 	return empty
@@ -343,9 +343,9 @@ func newCareRow(row schedule.Row, now time.Time) careRow {
 	}
 	switch row.Care.State {
 	case schedule.Overdue:
-		r.Late = lateWord(-row.Care.Days)
+		r.Late = overdueWord(row.Care, now)
 	case schedule.Upcoming:
-		r.When = whenWord(row.Care.Days, now)
+		r.When = comingWord(row.Care, now)
 	}
 	return r
 }

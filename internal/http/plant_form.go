@@ -535,7 +535,12 @@ func (h *plants) confirmArchive(w http.ResponseWriter, r *http.Request) {
 
 	page := newPlantPage(principal, detail)
 	page.Foot = page.Foot.asking()
-	h.templates.render(w, r, view{page: "plant", fragment: plantFootFragment(r)}, page)
+	fragment, ok := plantSwap(r, &page)
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	h.templates.render(w, r, view{page: "plant", fragment: fragment}, page)
 }
 
 // archive answers POST /plants/{plant}/archive. A plant is archived rather
