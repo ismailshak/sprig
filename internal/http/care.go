@@ -1,6 +1,7 @@
 package http
 
 import (
+	"errors"
 	"net/http"
 	"net/url"
 	"slices"
@@ -9,6 +10,9 @@ import (
 	"time"
 	"uuid"
 
+	"github.com/jackc/pgx/v5"
+
+	"github.com/ismailshak/sprig/internal/auth"
 	"github.com/ismailshak/sprig/internal/schedule"
 	"github.com/ismailshak/sprig/internal/store"
 )
@@ -38,6 +42,12 @@ const (
 
 func logPath(plantID uuid.UUID) string {
 	return "/plants/" + plantID.String() + "/log"
+}
+
+// undoPath is where a logged row's Undo deletes the event. The slug names the
+// row to give back because a sheet opened over a watering can log a feed.
+func undoPath(plantID, eventID uuid.UUID, slug string) string {
+	return logPath(plantID) + "/" + eventID.String() + "?row=" + url.QueryEscape(slug)
 }
 
 func sheetPath(plantID uuid.UUID, slug string) string {
@@ -411,10 +421,76 @@ func (h *today) log(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !isHTMX(r) {
-		http.Redirect(w, r, "/", http.StatusSeeOther)
+		http.Redirect(w, r, todayPath, http.StatusSeeOther)
 		return
 	}
-	h.templates.render(w, r, view{page: "today", fragment: "care-logged"}, loggedRow(plant, lines, d, care.CareType, event, g.now))
+	// The day is read again because the event has just changed what the head
+	// says. The row is drawn from the first read, which is the day the sheet
+	// was filled in against.
+	after, err := h.load(r.Context(), principal)
+	if err != nil {
+		serverError(h.logger, w, r, "load the day", err)
+		return
+	}
+	swap := careSwap{Row: loggedRow(plant, lines, d, care.CareType, event, g.now), Head: swapHead(after)}
+	h.templates.render(w, r, view{page: "today", fragment: "care-logged"}, swap)
+}
+
+// undo answers DELETE /plants/{plant}/log/{event} by deleting the event the
+// button was drawn beside. What comes back is the row as the day now has it,
+// which is the state it was in before the event.
+func (h *today) undo(w http.ResponseWriter, r *http.Request) {
+	principal := PrincipalFrom(r)
+	plantID, err := uuid.Parse(r.PathValue("plant"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	eventID, err := uuid.Parse(r.PathValue("event"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+
+	_, err = h.queries.DeleteCareEvent(r.Context(), store.DeleteCareEventParams{
+		ID:           eventID,
+		GardenID:     principal.Garden.ID,
+		PlantID:      plantID,
+		MayDeleteAny: principal.Can(auth.CareDeleteAny),
+		PerformedBy:  principal.User.ID,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		// An event of somebody else's is as hidden as one that is not there.
+		http.NotFound(w, r)
+		return
+	case err != nil:
+		serverError(h.logger, w, r, "delete the care", err)
+		return
+	}
+
+	if !isHTMX(r) {
+		http.Redirect(w, r, todayPath, http.StatusSeeOther)
+		return
+	}
+	// The day is read after the delete because the row is drawn against a
+	// schedule that no longer counts the event.
+	g, err := h.load(r.Context(), principal)
+	if err != nil {
+		serverError(h.logger, w, r, "load the day", err)
+		return
+	}
+	lines := plantLines(g.lines, plantID)
+	if len(lines) == 0 {
+		http.NotFound(w, r)
+		return
+	}
+	line := lines[0]
+	if named, ok := lineFor(lines, r.URL.Query().Get("row")); ok {
+		line = named
+	}
+	row := newCareRow(schedule.Row{Plant: line.Plant, Care: line, Lines: lines}, g.now)
+	h.templates.render(w, r, view{page: "today", fragment: "care-undone"}, careSwap{Row: row, Head: swapHead(g)})
 }
 
 func lineFor(lines []schedule.Line, slug string) (schedule.Line, bool) {
@@ -444,6 +520,9 @@ func loggedRow(plant store.Plant, lines []schedule.Line, d draft, careType store
 		Slug:      rowType.Slug,
 		Done:      true,
 		Said:      said(careType, event, d.When == whenNow, now.Location()),
+		Undo:      undoPath(plant.ID, event.ID, rowType.Slug),
+		Grace:     int(graceWindow.Milliseconds()),
+		Collapse:  collapseMS,
 	}
 	if plant.Location != nil {
 		r.Location = *plant.Location

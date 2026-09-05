@@ -368,8 +368,12 @@ a.empty__action { display: inline-flex; align-items: center; }
 /* ------------------------------------------------------------ the grace window */
 
 /* Collapsing the row rather than fading it keeps the list from jumping: the rows
-   below rise into the gap instead of appearing in a new place. */
-.row--leaving {
+   below rise into the gap instead of appearing in a new place.
+
+   htmx puts htmx-swapping on a row while it holds the delete open. The
+   collapse plays in that delay. */
+.row--leaving,
+.row.htmx-swapping {
   overflow: hidden;
   min-height: 0;
   max-height: 0;
@@ -381,7 +385,7 @@ a.empty__action { display: inline-flex; align-items: center; }
               padding .32s var(--ease), min-height .32s var(--ease);
 }
 
-.row:not(.row--leaving) { max-height: 200px; }
+.row:not(.row--leaving):not(.htmx-swapping) { max-height: 200px; }
 .row__said { color: var(--good); }
 
 /* The window is drawn as a bar along the bottom edge of the row, retreating
@@ -389,12 +393,10 @@ a.empty__action { display: inline-flex; align-items: center; }
    row rather than inside the Undo button because a rule narrow enough not to
    dominate the button has to cut across the label to be seen at all.
 
-   --grace is the length of the window and --grace-delay is negative and equal to
-   the time already elapsed, both set inline on the row. The offset is what makes
-   the bar survive a re-render: every render replaces the element, and without it
-   the bar restarts from full each time while the timer underneath keeps its
-   original deadline. That is the bug the first version of this had, which is why
-   it never visibly moved. */
+   --grace is the length of the window, set inline on the row. --grace-delay is
+   negative and equal to the time already elapsed. A row re-rendered inside its
+   window needs the offset because the bar otherwise restarts from full while
+   the timer underneath keeps its original deadline. */
 .row--done::after,
 .grace::after {
   content: "";
@@ -405,7 +407,7 @@ a.empty__action { display: inline-flex; align-items: center; }
   height: 2px;
   background: var(--accent);
   transform-origin: left;
-  animation: grace-drain var(--grace, 6000ms) linear var(--grace-delay, 0ms) forwards;
+  animation: grace-drain var(--grace, 4000ms) linear var(--grace-delay, 0ms) forwards;
 }
 
 @keyframes grace-drain { to { transform: scaleX(0) } }
@@ -661,11 +663,11 @@ legend.field__label + * { clear: both; }
    it can simply stop. */
 @media (prefers-reduced-motion: reduce) {
   .sheet__panel, .sheet__scrim { animation: none; }
-  .row--leaving { transition-duration: 1ms; }
+  .row--leaving, .row.htmx-swapping { transition-duration: 1ms; }
   .care { transition: none; }
   /* The drain bar stays. It is the only animation here that is the sole carrier
      of something the person needs — how much of the window is left — and a
-     six-second linear wipe is not the kind of motion the setting is about. */
+     four-second linear wipe is not the kind of motion the setting is about. */
 }
 
 /* ----------------------------------------------------------------- the roster */
@@ -1433,7 +1435,7 @@ a.foot-link { text-decoration: none; color: var(--ink-2); }
 
 /* Save and Delete side by side, because correcting an event and removing it are
    the same errand arriving at the same sheet. Delete is outlined and not rose:
-   rose in this app means overdue, and it is undoable for six seconds afterwards
+   rose in this app means overdue, and it is undoable for four seconds afterwards
    exactly like a logged row on Today, so it does not need the weight of a
    warning or a confirmation step in front of it. */
 .sheet__foot {

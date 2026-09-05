@@ -15,7 +15,9 @@ export default defineConfig({
   // The tests share one database and reseed it, so they run one at a time.
   workers: 1,
   fullyParallel: false,
-  retries: 0,
+  // Only CI retries because WebKit aborts a navigation with an internal error
+  // on the Linux runners.
+  retries: process.env.CI ? 2 : 0,
   forbidOnly: !!process.env.CI,
   reporter: process.env.CI ? [['github'], ['list']] : 'list',
   use: {

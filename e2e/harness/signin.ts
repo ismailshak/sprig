@@ -11,4 +11,9 @@ export async function signIn(page: Page, handle: string): Promise<void> {
   // on the press alone. A navigation started before then interrupts the
   // redirect.
   await page.waitForURL('/');
+  // networkidle waits for the heading font. WebKit requests it after first
+  // paint because the font carries font-display: swap. With JavaScript off the
+  // page reaches load before that request finishes. A navigation started while
+  // the font is in flight fails with an internal WebKit error.
+  await page.waitForLoadState('networkidle');
 }

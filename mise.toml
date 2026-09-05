@@ -9,11 +9,8 @@ sqlc = "1.31.1"
 node = "26.8.1"
 pnpm = "11.25.0"
 
-# The app runs goose as a library over an embed.FS at startup, so the image does
-# not contain this binary.
-"go:github.com/pressly/goose/v3/cmd/goose" = "v3.28.0"
-# Only the dev task uses wgo, which restarts the server when a file changes.
-"go:github.com/bokwoon95/wgo" = "v0.7.1"
+"go:github.com/pressly/goose/v3/cmd/goose" = "v3.28.0" # Only the migrate tasks need the binary because the app runs goose as a library at startup
+"go:github.com/bokwoon95/wgo" = "v0.7.1" # Only the dev task uses wgo, which restarts the server when a file changes
 
 [tasks.build]
 description = "Build the server binary at ./sprig"
@@ -22,6 +19,15 @@ run = "go build -o sprig ./cmd/sprig"
 [tasks."dev:stop"]
 description = "Stop the Postgres container the dev task leaves running"
 run = "docker compose stop db"
+
+[tasks."dev:reset"]
+description = "Delete the dev database and load the seed into a fresh one"
+run = [
+  # --volumes deletes the db-data volume the database lives in
+  "docker compose down --volumes",
+  "docker compose up -d --wait db",
+  "mise run seed",
+]
 
 [tasks.seed]
 description = "Load the prototype's garden into the dev database"
@@ -40,3 +46,7 @@ run = "goose -dir db/migrations postgres \"$SPRIG_DATABASE_URL\" up"
 description = "Create the next numbered migration in db/migrations"
 usage = 'arg "<name>" help="What the migration does, in snake_case"'
 run = 'goose -dir db/migrations -s create "${usage_name?}" sql'
+
+[tasks."generate"]
+description = "Regenerate the sqlc queries in internal/store from db/queries"
+run = "sqlc generate"

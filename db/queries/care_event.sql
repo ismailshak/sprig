@@ -12,3 +12,11 @@ ORDER BY plant_id, care_type_id, performed_at DESC;
 INSERT INTO care_event (garden_id, plant_id, care_type_id, performed_by, performed_at, recorded_at, done, note, override_interval_days)
 VALUES (@garden_id, @plant_id, @care_type_id, @performed_by, @performed_at, @recorded_at, @done, @note, @override_interval_days)
 RETURNING *;
+
+-- DeleteCareEvent matches on performed_by unless may_delete_any is set,
+-- because a check standing beside the query can be forgotten.
+-- name: DeleteCareEvent :one
+DELETE FROM care_event
+WHERE id = @id AND garden_id = @garden_id AND plant_id = @plant_id
+  AND (@may_delete_any::boolean OR performed_by = @performed_by)
+RETURNING *;

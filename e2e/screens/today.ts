@@ -27,4 +27,8 @@ export class TodayScreen {
   careButton(plant: Plant, care: string): Locator {
     return this.careRow(plant, care).getByRole('button');
   }
+
+  undoButton(plant: Plant, care: string): Locator {
+    return this.careRow(plant, care).getByRole('button', { name: 'Undo' });
+  }
 }

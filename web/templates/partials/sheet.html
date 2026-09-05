@@ -24,8 +24,9 @@
      usual interval on the skip chip belongs to the care type selected and only
      the server knows it. The form is its own definition under its own id
      because swapping the dialog would replay the entrance animation and reset
-     the panel's scroll. */}}
-{{define "sheet-form"}}{{with .Sheet}}{{$s := .}}<form class="sheet__form" id="sheet-form" method="post" action="{{.Path}}" hx-post="{{.Path}}" hx-target="#{{.Target}}" hx-swap="outerHTML">
+     the panel's scroll. The post settles in 0ms because it replaces a care
+     row. */}}
+{{define "sheet-form"}}{{with .Sheet}}{{$s := .}}<form class="sheet__form" id="sheet-form" method="post" action="{{.Path}}" hx-post="{{.Path}}" hx-target="#{{.Target}}" hx-swap="outerHTML settle:0ms">
 {{/* Enter in the note field presses the form's first submit button, which
      would otherwise be a What chip. */}}
 <button class="sheet__default" name="care" value="{{.Care}}" tabindex="-1" aria-hidden="true"></button>
