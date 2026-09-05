@@ -35,8 +35,15 @@ WHERE care_event.garden_id = @garden_id
 ORDER BY care_event.recorded_at DESC, care_event.id DESC
 LIMIT @count;
 
--- ListCareEventLog orders by performed_at because Activity groups events under
--- the day the care was done rather than the day it was written down.
+-- ListCareEventLog reads one page of Activity. It orders by performed_at rather
+-- than recorded_at because the page dates an event by when the care happened,
+-- not by when it was entered.
+--
+-- plant_id is null for the whole garden, or a plant id to show only that plant.
+--
+-- before_at and before_id are null for the newest page, and otherwise hold the
+-- performed_at and id of the last event on the previous page. Both columns are
+-- compared because backdated events can share a performed_at to the minute.
 -- name: ListCareEventLog :many
 SELECT sqlc.embed(care_event), sqlc.embed(plant), sqlc.embed(care_type), app_user.display_name AS performed_by_name
 FROM care_event
@@ -44,6 +51,9 @@ JOIN plant ON plant.id = care_event.plant_id AND plant.garden_id = care_event.ga
 JOIN care_type ON care_type.id = care_event.care_type_id AND care_type.garden_id = care_event.garden_id
 JOIN app_user ON app_user.id = care_event.performed_by
 WHERE care_event.garden_id = @garden_id
+  AND (sqlc.narg('plant_id')::uuid IS NULL OR care_event.plant_id = sqlc.narg('plant_id'))
+  AND (sqlc.narg('before_at')::timestamptz IS NULL
+       OR (care_event.performed_at, care_event.id) < (sqlc.narg('before_at'), sqlc.narg('before_id')::uuid))
 ORDER BY care_event.performed_at DESC, care_event.id DESC
 LIMIT @count;
 

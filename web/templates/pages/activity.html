@@ -3,14 +3,32 @@
 {{/* One list for the whole page rather than one per day because the stylesheet
      draws the line per item and a silence has to dash its own stretch of it. */}}
 {{define "main"}}
+{{/* The whole garden's log is reached from the tab bar, so it needs no back
+     link. Filtered to one plant it is reached from that plant's page, and the
+     bar carries a link back to it above the title. The two lines read as "Big
+     Fella" then "Activity", which says the same as "Big Fella's activity" in a
+     bar that has room for it. */}}
+{{with .Back}}
+<header class="topbar topbar--log topbar--stack">
+<a class="backlink" href="{{.Href}}">{{template "icon-back"}}{{.Label}}</a>
+<h1 class="topbar__title">Activity</h1>
+</header>
+{{else}}
 <header class="topbar topbar--log">
 <h1 class="topbar__title">Activity</h1>
 </header>
+{{end}}
 <div class="app__body app__body--log">
 {{if .Items}}
 <ol class="rail">
 {{range .Items}}{{with .Day}}{{template "day-marker" .}}{{end}}{{with .Silence}}{{template "silence" .}}{{end}}{{with .Event}}{{template "event-row" .}}{{end}}
 {{end}}</ol>
+{{end}}
+{{with .Pager}}
+<div class="pager">
+{{with .Older}}<a class="foot-link" href="{{.}}">Older activity{{template "icon-chevron"}}</a>{{end}}
+{{with .Latest}}<a class="foot-link" href="{{.}}">Latest activity</a>{{end}}
+</div>
 {{end}}
 {{with .Empty}}
 <div class="empty">
@@ -31,12 +49,16 @@
 
 {{define "silence"}}<li class="rail__gap">{{.Label}}</li>{{end}}
 
-{{/* row__avatar stays empty until photos exist. */}}
+{{/* A row is headed by whichever of the plant and the care differs from row to
+     row. On the whole garden's log that is the plant, so the row shows its name
+     and its photo (row__avatar, empty until photos are built). Filtered to one
+     plant the name would repeat down the page, so the row shows the care and
+     the care's icon instead. */}}
 {{define "event-row"}}<li class="row row--event">
-<span class="row__avatar"></span>
+{{if .Act}}<span class="row__node{{if .Skipped}} row__node--skip{{end}}">{{template "care-icon" .Slug}}</span>{{else}}<span class="row__avatar"></span>{{end}}
 <span class="row__text">
-<span class="row__name{{if .Botanical}} row__name--sp{{end}}">{{.Name}}</span>
-<span class="row__meta"><span class="row__part">{{.Who}} {{.Did}}</span><span class="dot">&middot;</span><span class="row__part">{{.At}}</span></span>
+{{if .Act}}<span class="row__act">{{.Act}}</span>{{else}}<span class="row__name{{if .Botanical}} row__name--sp{{end}}">{{.Name}}</span>{{end}}
+<span class="row__meta"><span class="row__part">{{.Who}}{{with .Did}} {{.}}{{end}}</span><span class="dot">&middot;</span><span class="row__part">{{.When}}</span></span>
 {{with .Extra}}<span class="row__extra">{{.}}</span>{{end}}
 </span>
 </li>{{end}}
