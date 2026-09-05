@@ -31,4 +31,20 @@ export class ActivityScreen {
   items(): Locator {
     return this.list().getByRole('listitem');
   }
+
+  // The event rows carry an id and the day markers and gaps do not. The id
+  // format is the server's and lives here so a change to it is one edit.
+  rows(): Locator {
+    return this.page.locator('li[id^="event-"]');
+  }
+
+  // Without JavaScript the link is a navigation rather than a swap.
+  async openSheet(row: Locator): Promise<void> {
+    await row.getByRole('link').click();
+    await this.page.waitForLoadState();
+  }
+
+  undo(row: Locator): Locator {
+    return row.getByRole('button', { name: 'Undo' });
+  }
 }

@@ -30,6 +30,16 @@ export class SheetScreen {
     await this.dialog().getByRole('button', { name: label, exact: true }).click();
   }
 
+  // Opened over a recorded event the sheet saves rather than logs, and Delete
+  // sits beside the primary button.
+  deleteButton(): Locator {
+    return this.dialog().getByRole('button', { name: 'Delete' });
+  }
+
+  recorded(): Locator {
+    return this.dialog().getByText(/^Recorded by /);
+  }
+
   async cancel(): Promise<void> {
     await this.dialog().getByRole('button', { name: 'Cancel' }).click();
   }
