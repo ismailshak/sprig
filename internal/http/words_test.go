@@ -72,3 +72,34 @@ func TestFeedWhen_ReadsTheInstantInTheReadersZone(t *testing.T) {
 		t.Errorf("feedWhen = %q, want the half hour past midnight London reads it as", got)
 	}
 }
+
+func TestDayHeading(t *testing.T) {
+	now := time.Date(2026, time.September, 3, 9, 0, 0, 0, london())
+	cases := []struct {
+		name string
+		at   time.Time
+		want string
+	}{
+		{"earlier today is named", now.Add(-2 * time.Hour), "Today"},
+		{"yesterday is named too", now.AddDate(0, 0, -1), "Yesterday"},
+		{"two days back is named as a day", now.AddDate(0, 0, -2), "Tuesday"},
+		{"six days back is the last day named", now.AddDate(0, 0, -6), "Friday"},
+		{"a week back is dated", now.AddDate(0, 0, -7), "27 August"},
+		{"a day in another year takes the year", now.AddDate(-1, 0, 0), "3 September 2025"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := dayHeading(c.at, now); got != c.want {
+				t.Errorf("dayHeading = %q, want %q", got, c.want)
+			}
+		})
+	}
+}
+
+func TestDayHeading_ReadsTheInstantInTheReadersZone(t *testing.T) {
+	now := time.Date(2026, time.September, 3, 1, 0, 0, 0, london())
+	at := time.Date(2026, time.September, 2, 23, 30, 0, 0, time.UTC)
+	if got := dayHeading(at, now); got != "Today" {
+		t.Errorf("dayHeading = %q, want the day London was on at half past midnight", got)
+	}
+}
