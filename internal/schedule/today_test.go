@@ -312,6 +312,34 @@ func TestToday_NextIsTheSoonestBeyondTheWeek(t *testing.T) {
 	}
 }
 
+func TestNearest_IsTheMostOverdueThenTheSoonest(t *testing.T) {
+	now := day(time.September, 3)
+	monty := plantNamed("Monty")
+	rows := []store.ListCareSchedulesRow{
+		scheduleRow(monty, water, cadence(set, 10, UnitDay)), // due 8 September
+		scheduleRow(monty, feed, cadence(set, 10, UnitDay)),  // due 1 September
+		// A schedule whose season is shut ranks behind both, however far past
+		// its date it is.
+		scheduleRow(monty, repot, seasonal(cadence(set, 10, UnitDay), time.March, time.May)),
+	}
+	events := []store.CareEvent{
+		eventOn(monty, water, day(time.August, 29)),
+		eventOn(monty, feed, day(time.August, 22)),
+		eventOn(monty, repot, day(time.April, 1)),
+	}
+
+	got, ok := Nearest(Resolve(rows, events, now))
+	if !ok || got.CareType.Slug != "feed" {
+		t.Errorf("Nearest = %s, %v, want the overdue feeding", got.CareType.Slug, ok)
+	}
+}
+
+func TestNearest_IsFalseForAPlantWithNoSchedules(t *testing.T) {
+	if _, ok := Nearest(nil); ok {
+		t.Error("a plant with no schedules named a care")
+	}
+}
+
 var (
 	water = careType("water")
 	feed  = careType("feed")

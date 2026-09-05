@@ -2,11 +2,13 @@ package http
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/ismailshak/sprig/internal/auth"
 	"github.com/ismailshak/sprig/internal/schedule"
 	"github.com/ismailshak/sprig/internal/store"
 )
@@ -84,19 +86,27 @@ func stamp(t time.Time) string {
 
 // feedWhen names when an event happened, as the feed on Today says it. Today
 // and yesterday carry the clock because those are the two a reader checks
-// against memory. The rest of the week names the day since a weekday is placed
-// faster than a date.
+// against memory.
 func feedWhen(at, now time.Time) string {
 	at = at.In(now.Location())
-	switch days := schedule.DaysBetween(at, now); {
-	case days <= 0:
-		return "today, " + at.Format("3:04pm")
-	case days == 1:
-		return "yesterday, " + at.Format("3:04pm")
-	case days <= 6:
-		return at.Weekday().String()
+	when := agoWord(at, now)
+	if schedule.DaysBetween(at, now) <= 1 {
+		return when + ", " + at.Format("3:04pm")
 	}
-	return at.Format("2 Jan")
+	return when
+}
+
+// whoDid names the person and the action, as every line about an event does.
+// The reader is "You", and a care that was not done reads "skipped".
+func whoDid(principal auth.Principal, performedBy string, e store.CareEvent, ct store.CareType) (who, did string) {
+	who, did = performedBy, carePast(ct)
+	if e.PerformedBy == principal.User.ID {
+		who = "You"
+	}
+	if !e.Done {
+		did = "skipped"
+	}
+	return who, did
 }
 
 // dayHeading names the day a marker on Activity stands for. Today and
@@ -116,4 +126,68 @@ func dayHeading(at, now time.Time) string {
 		return at.Format("2 January")
 	}
 	return at.Format("2 January 2006")
+}
+
+// everyWord is a schedule's interval as the row states it, following the word
+// "Every". A count of one is dropped, so a yearly schedule reads "Every year"
+// rather than "Every 1 year".
+func everyWord(count int32, unit string) string {
+	if count == 1 {
+		return unit
+	}
+	return fmt.Sprintf("%d %ss", count, unit)
+}
+
+// seasonWord is the months a seasonal schedule runs between, as the left of a
+// schedule row carries them.
+func seasonWord(start, end int16) string {
+	return fmt.Sprintf("%s–%s", shortMonth(time.Month(start)), shortMonth(time.Month(end)))
+}
+
+func shortMonth(m time.Month) string {
+	return m.String()[:3]
+}
+
+// anchorWord names the day an anchored schedule falls on, which is what
+// somebody wrote down rather than a count towards it. A month-precise anchor
+// keeps its vagueness and reads "in March". The year is dropped inside the
+// current one, where the month and the day already fix the occurrence.
+func anchorWord(due time.Time, precision string, now time.Time) string {
+	year := ""
+	if due.Year() != now.Year() {
+		year = fmt.Sprintf(" %d", due.Year())
+	}
+	if precision == schedule.PrecisionMonth {
+		return fmt.Sprintf("in %s%s", due.Month(), year)
+	}
+	return fmt.Sprintf("%d %s%s", due.Day(), due.Month(), year)
+}
+
+// acquiredWord is when a plant arrived, as the foot of the reference panel
+// gives it. It is empty for a plant with no year, since a month alone is not a
+// date.
+func acquiredWord(year, month *int16) string {
+	if year == nil {
+		return ""
+	}
+	if month == nil {
+		return strconv.Itoa(int(*year))
+	}
+	return fmt.Sprintf("%s %d", time.Month(*month), *year)
+}
+
+// agoWord names the day an event happened, as a plant's Recent gives it and
+// the feed builds on. It carries no capital because it follows the action in
+// the sentence.
+func agoWord(at, now time.Time) string {
+	at = at.In(now.Location())
+	switch days := schedule.DaysBetween(at, now); {
+	case days <= 0:
+		return "today"
+	case days == 1:
+		return "yesterday"
+	case days <= 6:
+		return at.Weekday().String()
+	}
+	return at.Format("2 Jan")
 }

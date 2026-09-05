@@ -155,16 +155,9 @@ func newEventRow(principal auth.Principal, e store.ListCareEventLogRow, now time
 	row := &eventRow{
 		Name:      e.Plant.DisplayName(),
 		Botanical: e.Plant.BotanicalOnly(),
-		Who:       e.PerformedByName,
-		Did:       carePast(e.CareType),
 		At:        e.CareEvent.PerformedAt.In(now.Location()).Format("3:04pm"),
 	}
-	if e.CareEvent.PerformedBy == principal.User.ID {
-		row.Who = "You"
-	}
-	if !e.CareEvent.Done {
-		row.Did = "skipped"
-	}
+	row.Who, row.Did = whoDid(principal, e.PerformedByName, e.CareEvent, e.CareType)
 	row.Extra = eventExtra(e.CareEvent)
 	return row
 }

@@ -1,19 +1,20 @@
-{{/* The sheet over Today and the empty slot when none is open are one
-     definition under one id so a swap in either direction lands on the other.
+{{/* The sheet and the empty slot when none is open are one definition under
+     one id so a swap in either direction lands on the other.
      Cancel and the scrim close the dialog through method="dialog", which
      needs no script. */}}
 {{define "sheet"}}{{with .Sheet}}{{$s := .}}<dialog open class="sheet" id="sheet" aria-label="{{.Label}}">
 <form method="dialog"><button class="sheet__scrim" aria-label="Close"></button></form>
 <div class="sheet__panel">
 <div class="sheet__grip"></div>
-<a class="sheet__plant" href="{{.Plant.Href}}">
+{{/* The heading is the way through to the plant, and is a plain block on the
+     plant's own page. */}}
+{{if .Plant.Href}}<a class="sheet__plant" href="{{.Plant.Href}}">{{else}}<div class="sheet__plant">{{end}}
 <span class="row__avatar"></span>
 <span class="row__text">
 <span class="row__name{{if .Plant.Botanical}} row__name--sp{{end}}">{{.Plant.Name}}</span>
 <span class="row__meta"><span class="row__part">{{with .Plant.Sub}}{{if $s.Plant.Italic}}<i>{{.}}</i>{{else}}{{.}}{{end}}{{end}}{{if and .Plant.Sub .Plant.Location}} &middot; {{end}}{{.Plant.Location}}</span></span>
 </span>
-<span class="sheet__chevron">{{template "icon-chevron"}}</span>
-</a>
+{{if .Plant.Href}}<span class="sheet__chevron">{{template "icon-chevron"}}</span></a>{{else}}</div>{{end}}
 {{template "sheet-form" $}}
 <form method="dialog"><button class="sheet__cancel">Cancel</button></form>
 </div>
@@ -26,11 +27,12 @@
      because swapping the dialog would replay the entrance animation and reset
      the panel's scroll. The post settles in 0ms because it replaces a care
      row. */}}
-{{define "sheet-form"}}{{with .Sheet}}{{$s := .}}<form class="sheet__form" id="sheet-form" method="post" action="{{.Path}}" hx-post="{{.Path}}" hx-target="#{{.Target}}" hx-swap="outerHTML settle:0ms">
+{{define "sheet-form"}}{{with .Sheet}}{{$s := .}}<form class="sheet__form" id="sheet-form" method="post" action="{{.Path}}"{{with .Target}} hx-post="{{$s.Path}}" hx-target="#{{.}}" hx-swap="outerHTML settle:0ms"{{end}}>
 {{/* Enter in the note field presses the form's first submit button, which
      would otherwise be a What chip. */}}
 <button class="sheet__default" name="care" value="{{.Care}}" tabindex="-1" aria-hidden="true"></button>
-<input type="hidden" name="row" value="{{.Row}}">
+{{with .Row}}<input type="hidden" name="row" value="{{.}}">{{end}}
+{{with .Over}}<input type="hidden" name="over" value="{{.}}">{{end}}
 {{if gt (len .Cares) 1}}<fieldset class="field">
 <legend class="field__label">What</legend>
 <div class="chips">{{range .Cares}}<button class="chip" name="care" value="{{.Value}}" formmethod="get" formaction="{{$s.Path}}" aria-pressed="{{.On}}" hx-get="{{$s.Path}}" hx-include="closest form" hx-target="#sheet-form" hx-swap="outerHTML">{{.Label}}</button>{{end}}</div>

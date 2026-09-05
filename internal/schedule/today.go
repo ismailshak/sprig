@@ -173,6 +173,22 @@ func Today(lines []Line) Day {
 	return day
 }
 
+// Nearest is the schedule a plant is closest to needing, the most overdue
+// ahead of the soonest, with a dormant or spent one behind both. It reports
+// false for a plant with no schedules.
+func Nearest(lines []Line) (Line, bool) {
+	if len(lines) == 0 {
+		return Line{}, false
+	}
+	best := lines[0]
+	for _, line := range lines[1:] {
+		if compareLines(line, best) < 0 {
+			best = line
+		}
+	}
+	return best, true
+}
+
 func rows(lines []Line) []Row {
 	var out []Row
 	at := map[uuid.UUID]int{}

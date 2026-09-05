@@ -31,6 +31,7 @@ func routes(logger *slog.Logger, sessions *auth.Sessions, queries *store.Queries
 		{pattern: assetPattern, handler: assets.handler()},
 		{pattern: "GET /{$}", handler: http.HandlerFunc(todayHandler.show)},
 		{pattern: "GET /plants", handler: http.HandlerFunc(plantsHandler.show)},
+		{pattern: "GET /plants/{plant}", handler: http.HandlerFunc(plantsHandler.plant)},
 		{pattern: "GET /activity", handler: http.HandlerFunc(activityHandler.show)},
 		{pattern: "GET /plants/{plant}/log", capability: auth.CareLog, handler: http.HandlerFunc(todayHandler.sheet)},
 		{pattern: "POST /plants/{plant}/log", capability: auth.CareLog, handler: http.HandlerFunc(todayHandler.log)},
