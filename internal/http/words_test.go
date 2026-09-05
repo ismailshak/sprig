@@ -38,3 +38,37 @@ func TestLateWord(t *testing.T) {
 		t.Errorf("lateWord(2) = %q, want 2 days late", got)
 	}
 }
+
+func TestFeedWhen(t *testing.T) {
+	now := time.Date(2026, time.September, 3, 9, 0, 0, 0, london())
+	cases := []struct {
+		name string
+		at   time.Time
+		want string
+	}{
+		{"earlier today carries the clock", now.Add(-2 * time.Hour), "today, 7:00am"},
+		{"yesterday carries it too", now.AddDate(0, 0, -1).Add(9 * time.Hour), "yesterday, 6:00pm"},
+		{"two days back is named as a day", now.AddDate(0, 0, -2), "Tuesday"},
+		{"six days back is the last day named", now.AddDate(0, 0, -6), "Friday"},
+		{"a week back is dated", now.AddDate(0, 0, -7), "27 Aug"},
+		{"a year back is dated without the year", now.AddDate(-1, 0, 0), "3 Sep"},
+		// A care's performed_at and the page's now are two reads of one clock.
+		// The first can be the later by microseconds.
+		{"an instant a shade after now is still today", now.Add(time.Millisecond), "today, 9:00am"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := feedWhen(c.at, now); got != c.want {
+				t.Errorf("feedWhen = %q, want %q", got, c.want)
+			}
+		})
+	}
+}
+
+func TestFeedWhen_ReadsTheInstantInTheReadersZone(t *testing.T) {
+	now := time.Date(2026, time.September, 3, 1, 0, 0, 0, london())
+	at := time.Date(2026, time.September, 2, 23, 30, 0, 0, time.UTC)
+	if got := feedWhen(at, now); got != "today, 12:30am" {
+		t.Errorf("feedWhen = %q, want the half hour past midnight London reads it as", got)
+	}
+}

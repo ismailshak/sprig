@@ -819,3 +819,32 @@ func TestWindow_ANavigationDrawsNoRowInsideAWindow(t *testing.T) {
 		}
 	}
 }
+
+func TestLog_TheFeedGainsTheCareThatWasJustLogged(t *testing.T) {
+	f := rosewood(t)
+	f.principal.Capabilities[auth.CareDeleteOwn] = true
+
+	logged := f.post(t, dorisID.String(), url.Values{"row": {"water"}, "care": {"water"}}, true).Body.String()
+	if !strings.Contains(logged, `id="activity" hx-swap-oob="true"`) {
+		t.Fatalf("the log's answer carries no feed to swap in:\n%s", logged)
+	}
+	line := feed(t, logged)[0]
+	if got := text(line); got != "You watered Doris · today, 9:00am Undo" {
+		t.Errorf("the feed's newest line reads %q, want the watering just logged", got)
+	}
+	if want := undoFormPath(dorisID, f.latest(t, dorisID).ID); !strings.Contains(line, want) {
+		t.Errorf("the line's Undo does not post to %s:\n%s", want, line)
+	}
+}
+
+func TestUndo_TheFeedLosesTheCareThatWasTakenBack(t *testing.T) {
+	f := rosewood(t)
+	f.principal.Capabilities[auth.CareDeleteOwn] = true
+	f.post(t, dorisID.String(), url.Values{"row": {"water"}, "care": {"water"}}, true)
+	event := f.latest(t, dorisID)
+
+	undone := f.undo(t, dorisID, event.ID, "water", true).Body.String()
+	if strings.Contains(undone, undoFormPath(dorisID, event.ID)) {
+		t.Errorf("the feed still carries the watering that was taken back:\n%s", undone)
+	}
+}

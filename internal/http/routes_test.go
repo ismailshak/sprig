@@ -45,6 +45,11 @@ var routeAccess = map[string]access{
 		path:       undoPath(rosewoodPlantID, rosewoodEventID, "water"),
 		foreign:    undoPath(fairviewPlantID, fairviewEventID, "water"),
 	},
+	"POST /plants/{plant}/log/{event}/undo": {
+		capability: auth.CareDeleteOwn,
+		path:       undoFormPath(rosewoodPlantID, rosewoodUndoEventID),
+		foreign:    undoFormPath(fairviewPlantID, fairviewUndoEventID),
+	},
 }
 
 var (
@@ -53,10 +58,14 @@ var (
 	fairviewPlantID = uuid.MustParse("00000000-0000-7000-8000-000000000212")
 	rosewoodEventID = uuid.MustParse("00000000-0000-7000-8000-000000000221")
 	fairviewEventID = uuid.MustParse("00000000-0000-7000-8000-000000000222")
+	// The two routes that delete an event take one each because the first to
+	// run would leave the second a 404.
+	rosewoodUndoEventID = uuid.MustParse("00000000-0000-7000-8000-000000000223")
+	fairviewUndoEventID = uuid.MustParse("00000000-0000-7000-8000-000000000224")
 )
 
-// routeQueries seeds two gardens, each with a scheduled plant and one care
-// event, because a route naming an object needs one in sitterPrincipal's
+// routeQueries seeds two gardens, each with a scheduled plant and two care
+// events, because a route naming an object needs one in sitterPrincipal's
 // garden and one outside it. The events are the principal's own because the
 // route that deletes one answers a caller who may delete only their own.
 func routeQueries(t *testing.T) *store.Queries {
@@ -81,6 +90,10 @@ func routeQueries(t *testing.T) *store.Queries {
 			SELECT $1, garden_id, $2, id, $3, now(), true FROM care_type WHERE garden_id = $4`, []any{rosewoodEventID, rosewoodPlantID, sitterPrincipal().User.ID, rosewoodID}},
 		{`INSERT INTO care_event (id, garden_id, plant_id, care_type_id, performed_by, performed_at, done)
 			SELECT $1, garden_id, $2, id, $3, now(), true FROM care_type WHERE garden_id = $4`, []any{fairviewEventID, fairviewPlantID, sitterPrincipal().User.ID, fairviewID}},
+		{`INSERT INTO care_event (id, garden_id, plant_id, care_type_id, performed_by, performed_at, done)
+			SELECT $1, garden_id, $2, id, $3, now(), true FROM care_type WHERE garden_id = $4`, []any{rosewoodUndoEventID, rosewoodPlantID, sitterPrincipal().User.ID, rosewoodID}},
+		{`INSERT INTO care_event (id, garden_id, plant_id, care_type_id, performed_by, performed_at, done)
+			SELECT $1, garden_id, $2, id, $3, now(), true FROM care_type WHERE garden_id = $4`, []any{fairviewUndoEventID, fairviewPlantID, sitterPrincipal().User.ID, fairviewID}},
 	}
 	for _, row := range seed {
 		if _, err := tx.Exec(ctx, row.sql, row.args...); err != nil {

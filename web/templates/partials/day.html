@@ -1,8 +1,9 @@
-{{/* The feed is one element under one id because it is replaced out of band
-     once no row is inside an undo window. */}}
-{{define "day-feed"}}<div class="app__body app__body--feed" id="day"{{if .OOB}} hx-swap-oob="true"{{end}}>
+{{/* The body is one element under one id because it is replaced out of band
+     once no row is inside a grace window. */}}
+{{define "day-body"}}<div class="app__body app__body--feed" id="day"{{if .OOB}} hx-swap-oob="true"{{end}}>
 {{template "day-head" .Head}}
 {{range .Sections}}{{template "today-section" .}}{{end}}
+{{template "activity" .Feed}}
 </div>{{end}}
 
 {{/* The three shapes share one id because a swap replaces any of them with
@@ -35,3 +36,16 @@
 {{end}}</ul>
 </section>
 {{end}}
+
+{{/* The feed is one element under one id because a log or an undo swaps it in
+     out of band beside the row the swap was aimed at. It is drawn empty rather
+     than left out because the first care logged in a garden needs a feed to
+     swap into. The stylesheet hides it while it is empty.
+
+     The Undo posts a form rather than swapping because it is the way back from
+     a logged care with no script running, where the reload after the post has
+     already taken the row off the day. The stylesheet shows it only with
+     scripting off because a running script gives the row its own window. */}}
+{{define "activity"}}<div class="activity" id="activity"{{if .OOB}} hx-swap-oob="true"{{end}}>{{range .Lines}}
+<div><b>{{.Who}}</b> {{.Did}} <b>{{.Plant}}</b> &middot; {{.When}}{{with .Undo}}<form class="activity__undo" method="post" action="{{.}}"><button>Undo</button></form>{{end}}</div>
+{{end}}</div>{{end}}

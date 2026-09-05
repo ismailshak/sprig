@@ -4,9 +4,8 @@
      the interval is a setting rather than something wanted while holding the
      watering can. The avatar is empty until photos arrive.
 
-     A logged row carries its own undo window. It asks Today when the window
-     closes rather than a route of its own because the answer is the head or
-     the whole feed.
+     A logged row asks Today when its grace window closes, rather than a
+     route of its own, because the answer is the head or the whole body.
 
      Every swap that replaces a row settles in 0ms because htmx otherwise holds
      the incoming row's class and style at the outgoing row's values for 20ms.
@@ -32,11 +31,13 @@
 {{/* The empty div closes the sheet the post came from. */}}
 {{define "care-logged"}}{{template "care-row" .Row}}
 {{template "day-head" .Head}}
+{{template "activity" .Feed}}
 <div id="sheet" hx-swap-oob="true"></div>{{end}}
 
 {{define "care-undone"}}{{template "care-row" .Row}}
-{{template "day-head" .Head}}{{end}}
+{{template "day-head" .Head}}
+{{template "activity" .Feed}}{{end}}
 
-{{/* Only the head or the feed comes back because the row goes with the swap
-     that asked for this. */}}
-{{define "care-settled"}}{{with .Feed}}{{template "day-feed" .}}{{else}}{{template "day-head" .Head}}{{end}}{{end}}
+{{/* Only the head or the whole body comes back because the row goes with the
+     swap that asked for this. */}}
+{{define "care-settled"}}{{with .Body}}{{template "day-body" .}}{{else}}{{template "day-head" .Head}}{{end}}{{end}}
