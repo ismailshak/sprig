@@ -45,7 +45,7 @@ jobs:
       - name: Install the browser and its system libraries
         run: |
           pnpm --dir e2e install --frozen-lockfile
-          pnpm --dir e2e exec playwright install --with-deps chromium
+          pnpm --dir e2e exec playwright install --with-deps webkit
       - name: Run the suite
         run: mise run e2e
       - name: Keep the traces of failed tests

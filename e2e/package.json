@@ -3,9 +3,10 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "check": "tsc --noEmit",
     "test": "playwright test",
     "test:ui": "playwright test --ui",
-    "browsers": "playwright install --with-deps chromium"
+    "browsers": "playwright install --with-deps webkit"
   },
   "devDependencies": {
     "@playwright/test": "1.62.1",

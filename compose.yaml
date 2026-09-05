@@ -31,6 +31,11 @@ services:
     environment:
       SPRIG_DATABASE_URL: postgres://sprig:sprig@db:5432/sprig?sslmode=disable
       SPRIG_LOG_FORMAT: text
+      # The session cookie drops Secure because WebKit refuses one over plain
+      # http and the suite has no TLS. The name loses its __Host- prefix, which
+      # is valid only on a Secure cookie.
+      SPRIG_COOKIE_SECURE: "false"
+      SPRIG_COOKIE_NAME: sprig_session
     ports:
       - "${APP_PORTS:-8080:8080}"
     depends_on:
