@@ -1122,12 +1122,32 @@ a.foot-link { text-decoration: none; color: var(--ink-2); }
 
 /* Archive is not delete and is not a warning. Rose in this app means overdue,
    and spending it on an ordinary tidy-up would make the two mean the same. */
-.plant__archive {
+
+/* The edit form's Archive is a link, because the question it leads to is asked
+   on the plant's own page. */
+a.plant__archive { text-decoration: none; }
+
+.plant__archive,
+.plant__keep {
   min-height: var(--tap);
   padding: 0 6px;
   font-size: 14px;
   color: var(--ink-2);
 }
+
+/* Asking replaces the foot rather than opening a dialog, the way the schedule
+   editor's Remove does, so the plant stays visible above the answer. The
+   question and its line each take the width, which puts the two buttons on a
+   row of their own at the right, where Keep it sits a Cancel-width away from
+   the button it is easiest to mis-hit. */
+.plant__foot--asking {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.plant__ask { flex: 1 1 100%; font-size: 14px; font-weight: 600; }
+.plant__note { flex: 1 1 100%; margin-bottom: 6px; font-size: 13px; color: var(--ink-3); }
 
 /* Named areas rather than source order, so the phone keeps the reading order it
    needs and the desktop can put the picture and the reference in a column of

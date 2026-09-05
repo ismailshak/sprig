@@ -104,21 +104,25 @@ type activityEmpty struct {
 
 func newActivityPage(principal auth.Principal, events []store.ListCareEventLogRow, plants int64, now time.Time) activityPage {
 	if len(events) == 0 {
-		return activityPage{Empty: newActivityEmpty(plants)}
+		return activityPage{Empty: newActivityEmpty(principal, plants)}
 	}
 	return activityPage{Items: strand(principal, events, now)}
 }
 
 // newActivityEmpty offers an action only to a garden with no plants because
-// care is logged on Today or on a plant rather than here.
-func newActivityEmpty(plants int64) *activityEmpty {
+// care is logged on Today or on a plant rather than here. A reader who may not
+// create a plant is offered none.
+func newActivityEmpty(principal auth.Principal, plants int64) *activityEmpty {
 	if plants == 0 {
-		return &activityEmpty{
+		empty := &activityEmpty{
 			NoPlants: true,
 			Title:    "No plants yet",
 			Line:     "Add one and sprig will tell you when it needs water.",
-			Action:   &link{Label: "Add a plant", Href: "/plants/new"},
 		}
+		if principal.Can(auth.PlantCreate) {
+			empty.Action = &link{Label: "Add a plant", Href: newPlantPath}
+		}
+		return empty
 	}
 	return &activityEmpty{
 		Title: "Nothing recorded yet",

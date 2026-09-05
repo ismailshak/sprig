@@ -555,7 +555,7 @@ func (h *today) log(w http.ResponseWriter, r *http.Request) {
 	}
 	swap := careSwap{
 		Row:  loggedRow(plant, lines, d, care.CareType, event, g.now),
-		Head: swapHead(after),
+		Head: swapHead(principal, after),
 		Feed: swapFeed(principal, after),
 	}
 	h.templates.render(w, r, view{page: "today", fragment: "care-logged"}, swap)
@@ -690,7 +690,7 @@ func (h *today) undo(w http.ResponseWriter, r *http.Request) {
 		line = named
 	}
 	row := newCareRow(schedule.Row{Plant: line.Plant, Care: line, Lines: lines}, g.now)
-	swap := careSwap{Row: row, Head: swapHead(g), Feed: swapFeed(principal, g)}
+	swap := careSwap{Row: row, Head: swapHead(principal, g), Feed: swapFeed(principal, g)}
 	h.templates.render(w, r, view{page: "today", fragment: "care-undone"}, swap)
 }
 

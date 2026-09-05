@@ -36,11 +36,35 @@ var routeAccess = map[string]access{
 	"GET /healthz": {public: true},
 	// The hashed URL is known only at startup, so this path is a plain one the
 	// pattern matches.
-	assetPattern:               {public: true, path: assetPrefix + "app.css"},
-	"GET /{$}":                 {},
-	"GET /plants":              {},
-	"GET /activity":            {},
-	"GET /plants/{plant}":      {path: plantPath(rosewoodPlantID), foreign: plantPath(fairviewPlantID)},
+	assetPattern:          {public: true, path: assetPrefix + "app.css"},
+	"GET /{$}":            {},
+	"GET /plants":         {},
+	"GET /activity":       {},
+	"GET /plants/new":     {capability: auth.PlantCreate},
+	"POST /plants/new":    {capability: auth.PlantCreate},
+	"GET /plants/{plant}": {path: plantPath(rosewoodPlantID), foreign: plantPath(fairviewPlantID)},
+	"GET /plants/{plant}/edit": {
+		capability: auth.PlantEdit,
+		path:       editPlantPath(rosewoodPlantID),
+		foreign:    editPlantPath(fairviewPlantID),
+	},
+	"POST /plants/{plant}/edit": {
+		capability: auth.PlantEdit,
+		path:       editPlantPath(rosewoodPlantID),
+		foreign:    editPlantPath(fairviewPlantID),
+	},
+	// This route shares the plant the edit routes use because asking the
+	// question changes nothing.
+	"GET /plants/{plant}/archive": {
+		capability: auth.PlantArchive,
+		path:       archivePlantPath(rosewoodPlantID),
+		foreign:    archivePlantPath(fairviewPlantID),
+	},
+	"POST /plants/{plant}/archive": {
+		capability: auth.PlantArchive,
+		path:       archivePlantPath(rosewoodArchivedID),
+		foreign:    archivePlantPath(fairviewArchivedID),
+	},
 	"GET /plants/{plant}/log":  {capability: auth.CareLog, path: logPath(rosewoodPlantID), foreign: logPath(fairviewPlantID)},
 	"POST /plants/{plant}/log": {capability: auth.CareLog, path: logPath(rosewoodPlantID), foreign: logPath(fairviewPlantID)},
 	"DELETE /plants/{plant}/log/{event}": {
@@ -65,6 +89,11 @@ var (
 	// run would leave the second a 404.
 	rosewoodUndoEventID = uuid.MustParse("00000000-0000-7000-8000-000000000223")
 	fairviewUndoEventID = uuid.MustParse("00000000-0000-7000-8000-000000000224")
+	// The archive route takes a plant each because the request it answers
+	// leaves that plant archived, and the edit routes would then find nothing
+	// to edit.
+	rosewoodArchivedID = uuid.MustParse("00000000-0000-7000-8000-000000000231")
+	fairviewArchivedID = uuid.MustParse("00000000-0000-7000-8000-000000000232")
 )
 
 // routeQueries seeds two gardens, each with a scheduled plant and two care
@@ -84,6 +113,7 @@ func routeQueries(t *testing.T) *store.Queries {
 		{"INSERT INTO garden (id, name) VALUES ($1, 'Rosewood'), ($2, 'Fairview')", []any{rosewoodID, fairviewID}},
 		{"INSERT INTO care_type (garden_id, name, slug) VALUES ($1, 'Water', 'water'), ($2, 'Water', 'water')", []any{rosewoodID, fairviewID}},
 		{"INSERT INTO plant (id, garden_id, nickname) VALUES ($1, $2, 'Big Fella'), ($3, $4, 'Gerald')", []any{rosewoodPlantID, rosewoodID, fairviewPlantID, fairviewID}},
+		{"INSERT INTO plant (id, garden_id, nickname) VALUES ($1, $2, 'Doris'), ($3, $4, 'Nigel')", []any{rosewoodArchivedID, rosewoodID, fairviewArchivedID, fairviewID}},
 		{`INSERT INTO care_schedule (garden_id, plant_id, care_type_id, interval_count, interval_unit)
 			SELECT garden_id, $1, id, 7, 'day' FROM care_type WHERE garden_id = $2`, []any{rosewoodPlantID, rosewoodID}},
 		{`INSERT INTO care_schedule (garden_id, plant_id, care_type_id, interval_count, interval_unit)

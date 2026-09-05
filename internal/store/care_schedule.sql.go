@@ -7,9 +7,61 @@ package store
 
 import (
 	"context"
+	"time"
 
 	"uuid"
 )
+
+const createCareSchedule = `-- name: CreateCareSchedule :one
+INSERT INTO care_schedule (garden_id, plant_id, care_type_id, interval_count, interval_unit,
+                           anchor_date, anchor_precision, season_start_month, season_end_month)
+VALUES ($1, $2, $3, $4, $5,
+        $6, $7, $8, $9)
+RETURNING id, garden_id, plant_id, care_type_id, interval_count, interval_unit, anchor_date, anchor_precision, season_start_month, season_end_month, set_at
+`
+
+type CreateCareScheduleParams struct {
+	GardenID         uuid.UUID
+	PlantID          uuid.UUID
+	CareTypeID       uuid.UUID
+	IntervalCount    *int32
+	IntervalUnit     *string
+	AnchorDate       *time.Time
+	AnchorPrecision  *string
+	SeasonStartMonth *int16
+	SeasonEndMonth   *int16
+}
+
+// set_at defaults to now, so a plant added today with a ten-day cadence is due
+// in ten days rather than overdue on arrival.
+func (q *Queries) CreateCareSchedule(ctx context.Context, arg CreateCareScheduleParams) (CareSchedule, error) {
+	row := q.db.QueryRow(ctx, createCareSchedule,
+		arg.GardenID,
+		arg.PlantID,
+		arg.CareTypeID,
+		arg.IntervalCount,
+		arg.IntervalUnit,
+		arg.AnchorDate,
+		arg.AnchorPrecision,
+		arg.SeasonStartMonth,
+		arg.SeasonEndMonth,
+	)
+	var i CareSchedule
+	err := row.Scan(
+		&i.ID,
+		&i.GardenID,
+		&i.PlantID,
+		&i.CareTypeID,
+		&i.IntervalCount,
+		&i.IntervalUnit,
+		&i.AnchorDate,
+		&i.AnchorPrecision,
+		&i.SeasonStartMonth,
+		&i.SeasonEndMonth,
+		&i.SetAt,
+	)
+	return i, err
+}
 
 const listCareSchedules = `-- name: ListCareSchedules :many
 SELECT care_schedule.id, care_schedule.garden_id, care_schedule.plant_id, care_schedule.care_type_id, care_schedule.interval_count, care_schedule.interval_unit, care_schedule.anchor_date, care_schedule.anchor_precision, care_schedule.season_start_month, care_schedule.season_end_month, care_schedule.set_at, plant.id, plant.garden_id, plant.nickname, plant.common_name, plant.botanical_name, plant.location, plant.sun, plant.water_needs, plant.feed_needs, plant.soil, plant.climate, plant.pot, plant.notes, plant.acquired_year, plant.acquired_month, plant.created_at, plant.archived_at, care_type.id, care_type.garden_id, care_type.name, care_type.slug, care_type.created_at, care_type.archived_at
