@@ -101,6 +101,32 @@ var routeAccess = map[string]access{
 		path:       undoFormPath(rosewoodPlantID, rosewoodUndoEventID),
 		foreign:    undoFormPath(fairviewPlantID, fairviewUndoEventID),
 	},
+	// The correcting sheet, its save and the restore share an event, since none
+	// of the three changes it here: opening the sheet changes nothing, the save
+	// is refused before it writes because a request with no body names no care
+	// type, and the restore reaches no event at all.
+	"GET /plants/{plant}/log/{event}": {
+		capability: auth.CareEditOwn,
+		path:       eventPath(rosewoodPlantID, rosewoodCorrectEventID, "", logQuery{}),
+		foreign:    eventPath(fairviewPlantID, fairviewCorrectEventID, "", logQuery{}),
+	},
+	"POST /plants/{plant}/log/{event}": {
+		capability: auth.CareEditOwn,
+		path:       eventPath(rosewoodPlantID, rosewoodCorrectEventID, "", logQuery{}),
+		foreign:    eventPath(fairviewPlantID, fairviewCorrectEventID, "", logQuery{}),
+	},
+	"POST /plants/{plant}/log/{event}/delete": {
+		capability: auth.CareDeleteOwn,
+		path:       eventPath(rosewoodPlantID, rosewoodDeleteEventID, "/delete", logQuery{}),
+		foreign:    eventPath(fairviewPlantID, fairviewDeleteEventID, "/delete", logQuery{}),
+	},
+	// Restore puts back an event that has been deleted, so it reads no event.
+	// The plant in the path is what has to be the garden's.
+	"POST /plants/{plant}/log/{event}/restore": {
+		capability: auth.CareDeleteOwn,
+		path:       eventPath(rosewoodPlantID, rosewoodCorrectEventID, "/restore", logQuery{}),
+		foreign:    eventPath(fairviewPlantID, fairviewCorrectEventID, "/restore", logQuery{}),
+	},
 }
 
 var (
@@ -113,6 +139,12 @@ var (
 	// would leave the second a 404.
 	rosewoodUndoEventID = uuid.MustParse("00000000-0000-7000-8000-000000000223")
 	fairviewUndoEventID = uuid.MustParse("00000000-0000-7000-8000-000000000224")
+	// The sheet's Delete needs a third pair for the same reason, and the sheet
+	// itself a fourth, since the two delete routes leave the first two gone.
+	rosewoodDeleteEventID  = uuid.MustParse("00000000-0000-7000-8000-000000000225")
+	fairviewDeleteEventID  = uuid.MustParse("00000000-0000-7000-8000-000000000226")
+	rosewoodCorrectEventID = uuid.MustParse("00000000-0000-7000-8000-000000000227")
+	fairviewCorrectEventID = uuid.MustParse("00000000-0000-7000-8000-000000000228")
 	// The archive route uses its own plant, since the request archives it and
 	// the edit routes would then find nothing to edit.
 	rosewoodArchivedID = uuid.MustParse("00000000-0000-7000-8000-000000000231")
@@ -153,6 +185,14 @@ func routeQueries(t *testing.T) *store.Queries {
 			SELECT $1, garden_id, $2, id, $3, now(), true FROM care_type WHERE garden_id = $4 AND slug = 'water'`, []any{rosewoodUndoEventID, rosewoodPlantID, sitterPrincipal().User.ID, rosewoodID}},
 		{`INSERT INTO care_event (id, garden_id, plant_id, care_type_id, performed_by, performed_at, done)
 			SELECT $1, garden_id, $2, id, $3, now(), true FROM care_type WHERE garden_id = $4 AND slug = 'water'`, []any{fairviewUndoEventID, fairviewPlantID, sitterPrincipal().User.ID, fairviewID}},
+		{`INSERT INTO care_event (id, garden_id, plant_id, care_type_id, performed_by, performed_at, done)
+			SELECT $1, garden_id, $2, id, $3, now(), true FROM care_type WHERE garden_id = $4 AND slug = 'water'`, []any{rosewoodDeleteEventID, rosewoodPlantID, sitterPrincipal().User.ID, rosewoodID}},
+		{`INSERT INTO care_event (id, garden_id, plant_id, care_type_id, performed_by, performed_at, done)
+			SELECT $1, garden_id, $2, id, $3, now(), true FROM care_type WHERE garden_id = $4 AND slug = 'water'`, []any{fairviewDeleteEventID, fairviewPlantID, sitterPrincipal().User.ID, fairviewID}},
+		{`INSERT INTO care_event (id, garden_id, plant_id, care_type_id, performed_by, performed_at, done)
+			SELECT $1, garden_id, $2, id, $3, now(), true FROM care_type WHERE garden_id = $4 AND slug = 'water'`, []any{rosewoodCorrectEventID, rosewoodPlantID, sitterPrincipal().User.ID, rosewoodID}},
+		{`INSERT INTO care_event (id, garden_id, plant_id, care_type_id, performed_by, performed_at, done)
+			SELECT $1, garden_id, $2, id, $3, now(), true FROM care_type WHERE garden_id = $4 AND slug = 'water'`, []any{fairviewCorrectEventID, fairviewPlantID, sitterPrincipal().User.ID, fairviewID}},
 	}
 	for _, row := range seed {
 		if _, err := tx.Exec(ctx, row.sql, row.args...); err != nil {

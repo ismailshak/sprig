@@ -31,6 +31,7 @@
 <button class="sheet__default" name="care" value="{{.Care}}" tabindex="-1" aria-hidden="true"></button>
 {{with .Row}}<input type="hidden" name="row" value="{{.}}">{{end}}
 {{with .Over}}<input type="hidden" name="over" value="{{.}}">{{end}}
+{{range .Query}}<input type="hidden" name="{{.Name}}" value="{{.Value}}">{{end}}
 {{if gt (len .Cares) 1}}<fieldset class="field">
 <legend class="field__label">What</legend>
 <div class="chips">{{range .Cares}}<button class="chip" name="care" value="{{.Value}}" formmethod="get" formaction="{{$s.Path}}" aria-pressed="{{.On}}" hx-get="{{$s.Path}}" hx-include="closest form" hx-target="#sheet-form" hx-swap="outerHTML">{{.Label}}</button>{{end}}</div>
@@ -57,8 +58,20 @@
 <label class="field__label" for="sheet-note">Note <span class="field__hint">optional</span></label>
 <input class="input" id="sheet-note" name="note" type="text" placeholder="{{if .Skipped}}Soil still damp{{else}}Anything worth remembering{{end}}" value="{{.Note}}">
 </div>
+{{if .Correcting}}
+{{/* Correcting an event says who wrote it down and when. That is the only
+     place both of an event's times are shown. Its one button saves whatever the
+     outcome is. Delete posts the same form to its own URL, so it works without
+     JavaScript, and swaps the row it came from when htmx is running. */}}
+<p class="sheet__record">{{.Recorded}}</p>
+<div class="sheet__foot">
+<button class="sheet__go" name="care" value="{{.Care}}">Save changes</button>
+{{with .Delete}}<button class="sheet__delete" formaction="{{.}}" hx-post="{{.}}" hx-target="#{{$s.DeleteTarget}}" hx-swap="outerHTML settle:0ms">Delete</button>{{end}}
+</div>
+{{else}}
 {{/* Both buttons are rendered. The stylesheet shows the one matching the
      selected outcome. */}}
 <button class="sheet__go sheet__done" name="care" value="{{.Care}}">Log {{.Noun}}</button>
 <button class="sheet__go sheet__skipped" name="care" value="{{.Care}}">Record a skip</button>
+{{end}}
 </form>{{end}}{{end}}

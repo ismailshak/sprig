@@ -47,6 +47,10 @@ func routes(logger *slog.Logger, sessions *auth.Sessions, queries *store.Queries
 		{pattern: "POST /plants/{plant}/log", capability: auth.CareLog, handler: http.HandlerFunc(todayHandler.log)},
 		{pattern: "DELETE /plants/{plant}/log/{event}", capability: auth.CareDeleteOwn, handler: http.HandlerFunc(todayHandler.undo)},
 		{pattern: "POST /plants/{plant}/log/{event}/undo", capability: auth.CareDeleteOwn, handler: http.HandlerFunc(todayHandler.undo)},
+		{pattern: "GET /plants/{plant}/log/{event}", capability: auth.CareEditOwn, handler: http.HandlerFunc(activityHandler.correct)},
+		{pattern: "POST /plants/{plant}/log/{event}", capability: auth.CareEditOwn, handler: http.HandlerFunc(activityHandler.save)},
+		{pattern: "POST /plants/{plant}/log/{event}/delete", capability: auth.CareDeleteOwn, handler: http.HandlerFunc(activityHandler.remove)},
+		{pattern: "POST /plants/{plant}/log/{event}/restore", capability: auth.CareDeleteOwn, handler: http.HandlerFunc(activityHandler.restore)},
 	}
 	return append(base, devRoutes(sessions, queries, templates)...)
 }

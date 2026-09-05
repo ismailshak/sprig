@@ -19,7 +19,14 @@
 <h1 class="topbar__title">Activity</h1>
 </header>
 {{end}}
-<div class="app__body app__body--log">
+{{template "log-body" .}}
+{{end}}
+
+{{/* The list, the pager and the empty state under one id. A saved correction
+     and the end of a delete's undo window both swap this, because either can
+     move a row to another day, change a day's count, change the gap labels
+     around a row, or leave the page with nothing on it. */}}
+{{define "log-body"}}<div class="app__body app__body--log" id="log-body">
 {{if .Items}}
 <ol class="rail">
 {{range .Items}}{{with .Day}}{{template "day-marker" .}}{{end}}{{with .Silence}}{{template "silence" .}}{{end}}{{with .Event}}{{template "event-row" .}}{{end}}
@@ -39,8 +46,12 @@
 {{with .Action}}<a class="empty__action" href="{{.Href}}">{{.Label}}</a>{{end}}
 </div>
 {{end}}
-</div>
-{{end}}
+</div>{{end}}
+
+{{/* The saved correction, with the empty #sheet div swapped out of band to
+     close the dialog. */}}
+{{define "log-saved"}}{{template "log-body" .}}
+<div id="sheet" hx-swap-oob="true"></div>{{end}}
 
 {{define "day-marker"}}<li class="rail__day">
 <span class="section__title">{{.Title}}</span>
@@ -54,14 +65,50 @@
      row. On the whole garden's log that is the plant, so the row shows its name
      and its photo (row__avatar, empty until photos are built). Filtered to one
      plant the name would repeat down the page, so the row shows the care and
-     the care's icon instead. */}}
-{{define "event-row"}}<li class="row row--event">
+     the care's icon instead.
+
+     The row opens the sheet that corrects the event. It is a plain <li> with no
+     link for a reader who may not correct it, and for the four seconds after a
+     delete, when pressing it would open a sheet on an event that is gone.
+
+     A deleted row keeps its place and its lead, says "Deleted" and offers Undo.
+     When the window ends it fetches the log and replaces the whole body, since
+     the row leaving changes the count on its day and the gaps around it.
+
+     That response is the log rebuilt from the database, so a second row deleted
+     while this one's window was running is not in it: that row goes with the
+     swap and loses the rest of its window. The event is deleted either way, and
+     only the Undo goes early. Replacing the row alone instead would leave a
+     count of 3 standing over two rows after every delete, which is wrong on the
+     screen until the next page load. */}}
+{{define "event-row"}}<li class="row row--event{{if .Deleted}} row--done{{end}}" id="{{.ID}}"{{if .Deleted}} style="--grace:{{.Grace}}ms" hx-get="{{.Settled}}" hx-trigger="load delay:{{.Grace}}ms" hx-target="#log-body" hx-swap="outerHTML settle:0ms"{{end}}>
+{{if .Href}}<a class="row__open" href="{{.Href}}" hx-get="{{.Href}}" hx-target="#sheet" hx-swap="outerHTML">{{else}}<span class="row__open">{{end}}
 {{if .Act}}<span class="row__node{{if .Skipped}} row__node--skip{{end}}">{{template "care-icon" .Slug}}</span>{{else}}<span class="row__avatar"></span>{{end}}
 <span class="row__text">
 {{if .Act}}<span class="row__act">{{.Act}}</span>{{else}}<span class="row__name{{if .Botanical}} row__name--sp{{end}}">{{.Name}}</span>{{end}}
-<span class="row__meta"><span class="row__part">{{.Who}}{{with .Did}} {{.}}{{end}}</span><span class="dot">&middot;</span><span class="row__part">{{.When}}</span></span>
-{{with .Extra}}<span class="row__extra">{{.}}</span>{{end}}
+<span class="row__meta">{{if .Deleted}}<span class="row__part row__said row__said--gone">Deleted</span>{{else}}<span class="row__part">{{.Who}}{{with .Did}} {{.}}{{end}}</span><span class="dot">&middot;</span><span class="row__part">{{.When}}</span>{{end}}</span>
+{{if not .Deleted}}{{with .Extra}}<span class="row__extra">{{.}}</span>{{end}}{{end}}
 </span>
+{{if .Href}}</a>{{else}}</span>{{end}}
+{{/* The event is already deleted, so what puts it back travels with the
+     button. */}}
+{{with .Fields}}<form method="post" action="{{$.Restore}}" hx-post="{{$.Restore}}" hx-target="#{{$.ID}}" hx-swap="outerHTML settle:0ms">
+<input type="hidden" name="care" value="{{.Care}}">
+<input type="hidden" name="by" value="{{.PerformedBy}}">
+<input type="hidden" name="at" value="{{.PerformedAt}}">
+<input type="hidden" name="recorded" value="{{.RecordedAt}}">
+<input type="hidden" name="done" value="{{.Done}}">
+<input type="hidden" name="note" value="{{.Note}}">
+<input type="hidden" name="again" value="{{.Again}}">
+<button class="care care--undo">{{template "icon-undo"}}<span>Undo</span></button>
+</form>{{end}}
 </li>{{end}}
 
+{{/* The deleted row, with the empty #sheet div swapped out of band to close the
+     dialog the Delete button was pressed in. */}}
+{{define "event-deleted"}}{{template "event-row" .}}
+<div id="sheet" hx-swap-oob="true"></div>{{end}}
+
 {{define "nav"}}{{template "tabs" "Activity"}}{{end}}
+
+{{define "overlay"}}{{template "sheet" .}}{{end}}

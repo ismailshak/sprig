@@ -178,10 +178,13 @@ func daysBack(newest, oldest int) []int {
 }
 
 // railItemElement matches every item in the log, whichever of the three kinds
-// it is.
-var railItemElement = regexp.MustCompile(`(?s)<li class="(rail__day|rail__gap|row row--event)"[^>]*>(.*?)</li>`)
+// it is. The classes are captured rather than listed, because a deleted row
+// carries row--done as well.
+var railItemElement = regexp.MustCompile(`(?s)<li class="([^"]*)"[^>]*>(.*?)</li>`)
 
 type logEntry struct {
+	// kind is the item's class attribute, which starts with one of dayKind,
+	// gapKind and eventKind.
 	kind string
 	text string
 }
@@ -197,11 +200,26 @@ func logEntries(page string) []logEntry {
 func textOf(lines []logEntry, kind string) []string {
 	var out []string
 	for _, l := range lines {
-		if l.kind == kind {
+		if strings.HasPrefix(l.kind, kind) {
 			out = append(out, l.text)
 		}
 	}
 	return out
+}
+
+// dayOf is the title of the day marker above the first row starting with this
+// text, and "" when no row does.
+func dayOf(page, lead string) string {
+	day := ""
+	for _, l := range logEntries(page) {
+		if strings.HasPrefix(l.kind, dayKind) {
+			day, _, _ = strings.Cut(l.text, " · ")
+		}
+		if strings.HasPrefix(l.text, lead) {
+			return day
+		}
+	}
+	return ""
 }
 
 const (
@@ -709,5 +727,32 @@ func TestActivity_AMalformedPlantParameterIsNotFound(t *testing.T) {
 
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("status = %d, want %d", rec.Code, http.StatusNotFound)
+	}
+}
+
+func TestActivity_ASwapAimedAtTheLogBodyGetsTheListAndNotTheWholePage(t *testing.T) {
+	f := rosewoodLog(t)
+	// The row a delete leaves fetches the log when its window ends and swaps
+	// the body with what comes back.
+	ctx := context.WithValue(t.Context(), principalKey, f.principal)
+	req := httptest.NewRequestWithContext(ctx, http.MethodGet, activityPath, nil)
+	req.Header.Set("HX-Request", "true")
+	req.Header.Set("HX-Target", logBodyID)
+	rec := httptest.NewRecorder()
+
+	f.handler.show(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d:\n%s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if strings.HasPrefix(body, "<!doctype html>") {
+		t.Errorf("the response is the whole page, want the log body alone:\n%.120s", body)
+	}
+	if !strings.Contains(body, `id="`+logBodyID+`"`) {
+		t.Errorf("the response does not hold the log body:\n%.120s", body)
+	}
+	if got := len(textOf(logEntries(body), eventKind)); got != 7 {
+		t.Errorf("the log body holds %d rows, want the garden's 7", got)
 	}
 }
