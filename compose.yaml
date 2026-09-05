@@ -23,6 +23,8 @@ services:
   # This service is mainly for the e2e suite.
   app:
     profiles: [app]
+    # Fixes the tag because up without --build starts whatever image carries this name
+    image: sprig-app:dev
     build:
       context: .
       args:
