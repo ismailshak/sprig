@@ -46,3 +46,15 @@ JOIN app_user ON app_user.id = care_event.performed_by
 WHERE care_event.garden_id = @garden_id
 ORDER BY care_event.performed_at DESC, care_event.id DESC
 LIMIT @count;
+
+-- The order is performed_at because a plant's Recent is a history of the plant
+-- rather than of what was typed. Nothing here joins plant, because the page is
+-- the plant.
+-- name: ListPlantCareEvents :many
+SELECT sqlc.embed(care_event), sqlc.embed(care_type), app_user.display_name AS performed_by_name
+FROM care_event
+JOIN care_type ON care_type.id = care_event.care_type_id AND care_type.garden_id = care_event.garden_id
+JOIN app_user ON app_user.id = care_event.performed_by
+WHERE care_event.garden_id = @garden_id AND care_event.plant_id = @plant_id
+ORDER BY care_event.performed_at DESC, care_event.id DESC
+LIMIT @count;
