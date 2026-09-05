@@ -1,6 +1,6 @@
-// The seeded people and plants the tests name, copied from the Go seed. An id
-// here is the one the seed writes, so a test reaches the row the server draws
-// without asking the database.
+// The seeded people and plants the tests refer to, copied from the Go seed.
+// The ids are the ones the seed writes, so a test can find a row by id without
+// querying the database.
 
 export const people = {
   ellie: { name: 'Ellie', handle: 'ellie' },
@@ -14,19 +14,17 @@ export const plants = {
   nigel: { id: '00000000-0000-7000-8000-050000000005', name: 'Nigel' },
   trailMix: { id: '00000000-0000-7000-8000-050000000007', name: 'Trail Mix' },
   motherInLaw: { id: '00000000-0000-7000-8000-050000000004', name: 'Mother-in-Law' },
-  // goldenPothos carries the common name because the seed gives the plant no
-  // nickname.
+  // The seed gives this plant no nickname, so the page shows its common name.
   goldenPothos: { id: '00000000-0000-7000-8000-050000000008', name: 'Golden pothos' },
   littleFella: { id: '00000000-0000-7000-8000-050000000009', name: 'Little Fella' },
   // Opuntia microdasys has only a botanical name.
   opuntia: { id: '00000000-0000-7000-8000-050000000011', name: 'Opuntia microdasys' },
-  // The roster puts Sprout under No room because the seed gives it no
-  // location.
+  // The seed gives Sprout no location, so Plants lists it under No room.
   sprout: { id: '00000000-0000-7000-8000-050000000012', name: 'Sprout' },
 } as const;
 
-// No room is the heading the roster gives the plants with no location rather
-// than a room the seed writes.
+// No room is the heading Plants uses for plants with no location. It is not a
+// room the seed writes.
 export const rooms = {
   bathroom: 'Bathroom',
   bedroom: 'Bedroom',

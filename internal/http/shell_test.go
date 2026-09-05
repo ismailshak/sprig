@@ -35,7 +35,7 @@ func renderShell(t *testing.T, assets *Assets, tab string) string {
 
 var localReference = regexp.MustCompile(`(?:href|src)="([^"]+)"`)
 
-func TestShell_EveryFileItNamesIsOneTheServerServes(t *testing.T) {
+func TestShell_EveryAssetItReferencesIsServed(t *testing.T) {
 	assets := testAssets()
 	shell := renderShell(t, assets, "Today")
 

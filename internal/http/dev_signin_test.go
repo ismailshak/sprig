@@ -33,8 +33,8 @@ var (
 	robinID    = uuid.MustParse("00000000-0000-7000-8000-000000000005")
 )
 
-// devStack is the handler New builds over a transaction, with the resolver so
-// a test can ask what a cookie the handler set resolves to.
+// devStack builds the handler with New over a transaction, and returns the
+// resolver so a test can check what a cookie the handler set resolves to.
 func devStack(t *testing.T) (http.Handler, *auth.Resolver) {
 	t.Helper()
 
@@ -79,7 +79,7 @@ func postHandle(t *testing.T, handler http.Handler, handle string, cookie *http.
 	return rec
 }
 
-func TestDevSignIn_ThePageOffersEveryUser(t *testing.T) {
+func TestDevSignIn_ThePageListsEveryUser(t *testing.T) {
 	handler, _ := devStack(t)
 
 	rec := httptest.NewRecorder()
@@ -138,7 +138,7 @@ func TestDevSignIn_TheSessionStartsOnTheOldestLiveMembership(t *testing.T) {
 	}
 }
 
-func TestDevSignIn_SwitchingUsersEndsTheSessionSwitchedFrom(t *testing.T) {
+func TestDevSignIn_SwitchingUsersDeletesThePreviousSession(t *testing.T) {
 	handler, resolver := devStack(t)
 
 	first := cookieNamed(t, postHandle(t, handler, "ellie", nil), "__Host-sprig_session")
@@ -165,7 +165,7 @@ func TestDevSignIn_SwitchingUsersEndsTheSessionSwitchedFrom(t *testing.T) {
 	}
 }
 
-func TestDevSignIn_RefusesWhatItCannotSignIn(t *testing.T) {
+func TestDevSignIn_AnUnknownHandleIs404AndAUserWithNoGardenIs409(t *testing.T) {
 	handler, _ := devStack(t)
 
 	cases := []struct {
@@ -190,7 +190,7 @@ func TestDevSignIn_RefusesWhatItCannotSignIn(t *testing.T) {
 	}
 }
 
-func TestDevSignIn_SignInPathLeadsHere(t *testing.T) {
+func TestDevSignIn_TheSignInPathRedirectsToTheDevSignIn(t *testing.T) {
 	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
 	handler := New(logger, testSessions(), rejectEveryToken, nil, testTemplates(), testAssets())
 

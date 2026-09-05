@@ -2,7 +2,7 @@ import { people, plants as seeded } from '../harness/garden';
 import { signIn } from '../harness/signin';
 import { expect, test } from '../harness/test';
 
-// springYear is two years out, which is inside the seven the year select
+// springYear is two years ahead, within the seven years the year select
 // offers.
 const springYear = String(new Date().getFullYear() + 2);
 
@@ -41,7 +41,7 @@ test('a plant with no name is refused and the location typed is kept', async ({ 
   await expect(plantForm.field('Location')).toHaveValue('Study');
 });
 
-test('a name finished with Enter adds the plant', async ({ plantForm, plant }) => {
+test('pressing Enter in a name field adds the plant', async ({ plantForm, plant }) => {
   await plantForm.openNew();
   await plantForm.field('Nickname').fill('Ada');
 
@@ -50,7 +50,7 @@ test('a name finished with Enter adds the plant', async ({ plantForm, plant }) =
   await expect(plant.heading()).toHaveText('Ada');
 });
 
-test('a plant added with no schedule is on none of the care types', async ({ plantForm, plant }) => {
+test('a plant added with no schedule shows every care type as not scheduled', async ({ plantForm, plant }) => {
   await plantForm.openNew();
   await plantForm.field('Nickname').fill('Ada');
 
@@ -63,8 +63,8 @@ test('a plant added with no schedule is on none of the care types', async ({ pla
   }
 });
 
-// The shape decides which fields the row draws, and the swap that redraws it is
-// the one thing on this page a script does.
+// The When select decides which fields the row shows. Re-rendering the row on
+// change is the only thing JavaScript does on this page.
 test('a one-off repot shows its month and year as the due date @js', async ({ plantForm, plant }) => {
   await plantForm.openNew();
   await plantForm.field('Nickname').fill('Ada');
@@ -79,8 +79,8 @@ test('a one-off repot shows its month and year as the due date @js', async ({ pl
   await expect(plant.scheduleRow('Repot')).toContainText(`Due in March ${springYear}`);
 });
 
-// The shape arrives without the fields it needs because the row does not redraw
-// itself with no script.
+// Without JavaScript the row does not re-render on change, so the post arrives
+// without the fields the chosen option needs.
 test('a one-off schedule posted without a date is refused until a date is given @nojs', async ({
   page,
   plantForm,
@@ -101,7 +101,7 @@ test('a one-off schedule posted without a date is refused until a date is given 
   await expect(plant.scheduleRow('Repot')).toContainText(`Due in March ${springYear}`);
 });
 
-// Big Fella carries all six reference fields.
+// Big Fella has all six reference fields set.
 test('the edit form shows the reference fields for a plant that has reference notes', async ({ plantForm }) => {
   await plantForm.openEdit(seeded.bigFella);
 
@@ -109,7 +109,7 @@ test('the edit form shows the reference fields for a plant that has reference no
   await expect(plantForm.field('Nickname')).toHaveValue('Big Fella');
 });
 
-// Sprout carries a nickname and nothing else.
+// Sprout has a nickname and nothing else.
 test('the edit form hides the reference fields for a plant with no reference notes', async ({ plantForm }) => {
   await plantForm.openEdit(seeded.sprout);
 
@@ -127,8 +127,8 @@ test('a plant is renamed from its own page', async ({ page, plant, plantForm }) 
   await expect(plant.heading()).toHaveText('Doris the Second');
 });
 
-// The edit form carries no schedule because a schedule is changed on the
-// plant's own page.
+// The edit form has no schedule section. Schedules are changed on the plant's
+// own page.
 test('the edit form has no Schedule section', async ({ page, plantForm }) => {
   await plantForm.openEdit(seeded.bigFella);
 
@@ -144,15 +144,15 @@ test('an archived plant is not listed on Plants', async ({ page, plant, plants }
   await expect(plants.row(seeded.doris)).toHaveCount(0);
 });
 
-// Archiving asks first because the press takes the plant off the Plants list
-// and leaves no row to undo from.
+// Archiving asks for confirmation because it removes the plant from Plants and
+// leaves no row to undo from.
 test('Archive asks for confirmation and the plant stays listed until it is given', async ({ page, plant, plants }) => {
   await plant.open(seeded.doris);
 
   await plant.askToArchive();
 
   await expect(plant.foot()).toContainText(`Archive ${seeded.doris.name}?`);
-  await expect(plant.foot()).toContainText('Its history stays');
+  await expect(plant.foot()).toContainText('Its history is kept');
   await expect(plant.heading()).toHaveText(seeded.doris.name);
   await plants.open();
   await expect(plants.row(seeded.doris)).toHaveCount(1);

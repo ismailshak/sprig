@@ -26,8 +26,8 @@ type CreateSessionParams struct {
 	Now       time.Time
 }
 
-// The instants are written from the caller's clock rather than the database's,
-// so the expiry decision in Go compares two readings of one clock.
+// Timestamps come from the caller's clock rather than now(), so the expiry
+// check in Go compares two readings of the same clock.
 func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) (Session, error) {
 	row := q.db.QueryRow(ctx, createSession,
 		arg.TokenHash,
@@ -64,8 +64,8 @@ SELECT id, token_hash, user_id, garden_id, user_agent, created_at, last_seen_at 
 WHERE token_hash = $1
 `
 
-// The session row is what tells a request which garden it is on, so this query
-// cannot take a garden as an input and reads by the hash of the token instead.
+// The session row is how a request learns its garden, so this query cannot
+// take a garden_id. It reads by token hash instead.
 func (q *Queries) GetSessionByTokenHash(ctx context.Context, tokenHash string) (Session, error) {
 	row := q.db.QueryRow(ctx, getSessionByTokenHash, tokenHash)
 	var i Session
@@ -88,8 +88,8 @@ WHERE token_hash = $2
 RETURNING id, token_hash, user_id, garden_id, user_agent, created_at, last_seen_at
 `
 
-// The expiry check runs in Go before this query, so an expired row is deleted
-// rather than revived.
+// The caller checks expiry in Go before calling this, so an expired row is
+// deleted rather than refreshed.
 func (q *Queries) TouchSession(ctx context.Context, lastSeenAt time.Time, tokenHash string) (Session, error) {
 	row := q.db.QueryRow(ctx, touchSession, lastSeenAt, tokenHash)
 	var i Session

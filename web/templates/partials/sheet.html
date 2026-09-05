@@ -1,13 +1,12 @@
-{{/* The sheet and the empty slot when none is open are one definition under
-     one id so a swap in either direction lands on the other.
-     Cancel and the scrim close the dialog through method="dialog", which
-     needs no script. */}}
+{{/* The open sheet and the empty placeholder share the id sheet, so a swap in
+     either direction replaces the other. Cancel and the scrim close the dialog
+     through method="dialog", so they work without JavaScript. */}}
 {{define "sheet"}}{{with .Sheet}}{{$s := .}}<dialog open class="sheet" id="sheet" aria-label="{{.Label}}">
 <form method="dialog"><button class="sheet__scrim" aria-label="Close"></button></form>
 <div class="sheet__panel">
 <div class="sheet__grip"></div>
-{{/* The heading is the way through to the plant, and is a plain block on the
-     plant's own page. */}}
+{{/* The heading links to the plant's page. On that page itself it is a plain
+     block. */}}
 {{if .Plant.Href}}<a class="sheet__plant" href="{{.Plant.Href}}">{{else}}<div class="sheet__plant">{{end}}
 <span class="row__avatar"></span>
 <span class="row__text">
@@ -20,16 +19,15 @@
 </div>
 </dialog>{{else}}<div id="sheet"></div>{{end}}{{end}}
 
-{{/* The stylesheet shows the fieldset the outcome chips name, sheet__done or
-     sheet__skipped. A What chip submits the form back as a query because the
-     usual interval on the skip chip belongs to the care type selected and only
-     the server knows it. The form is its own definition under its own id
-     because swapping the dialog would replay the entrance animation and reset
-     the panel's scroll. The post settles in 0ms because it replaces a care
-     row. */}}
+{{/* The stylesheet shows the fieldset for the selected outcome, sheet__done or
+     sheet__skipped. A What chip submits the form as a GET because the usual
+     interval on the skip chip depends on the selected care type and only the
+     server knows it. The form has its own id because swapping the whole dialog
+     would replay its entrance animation and reset the panel's scroll. The post
+     uses settle:0ms because it replaces a care row. */}}
 {{define "sheet-form"}}{{with .Sheet}}{{$s := .}}<form class="sheet__form" id="sheet-form" method="post" action="{{.Path}}"{{with .Target}} hx-post="{{$s.Path}}" hx-target="#{{.}}" hx-swap="outerHTML settle:0ms"{{end}}>
-{{/* Enter in the note field presses the form's first submit button, which
-     would otherwise be a What chip. */}}
+{{/* Enter in the note field submits through the form's first submit button.
+     Without this hidden one, that would be a What chip. */}}
 <button class="sheet__default" name="care" value="{{.Care}}" tabindex="-1" aria-hidden="true"></button>
 {{with .Row}}<input type="hidden" name="row" value="{{.}}">{{end}}
 {{with .Over}}<input type="hidden" name="over" value="{{.}}">{{end}}
@@ -59,8 +57,8 @@
 <label class="field__label" for="sheet-note">Note <span class="field__hint">optional</span></label>
 <input class="input" id="sheet-note" name="note" type="text" placeholder="{{if .Skipped}}Soil still damp{{else}}Anything worth remembering{{end}}" value="{{.Note}}">
 </div>
-{{/* The sheet draws both wordings. The stylesheet shows the one the outcome
-     chips call for. */}}
+{{/* Both buttons are rendered. The stylesheet shows the one matching the
+     selected outcome. */}}
 <button class="sheet__go sheet__done" name="care" value="{{.Care}}">Log {{.Noun}}</button>
 <button class="sheet__go sheet__skipped" name="care" value="{{.Care}}">Record a skip</button>
 </form>{{end}}{{end}}

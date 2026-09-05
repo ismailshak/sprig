@@ -33,18 +33,18 @@ var (
 	earlierWatering = time.Date(2026, 3, 5, 9, 0, 0, 0, time.UTC)
 )
 
-// sharedTx is pgtest.Tx over the app's migrations. Two tests inserting
-// testGardenID at once would serialise on the unique index, so none of them
-// runs in parallel.
+// sharedTx returns a transaction on a database with the app's migrations
+// applied. Two tests inserting testGardenID at once would block on the unique
+// index, so none of them runs in parallel.
 func sharedTx(t *testing.T) pgx.Tx {
 	t.Helper()
 	return pgtest.Tx(t, migrateSchema)
 }
 
-// seedTwoGardens fills a transaction with Rosewood and one other garden. With
-// a single garden in the database a query that lost its WHERE returns the
-// right answer anyway, so every assertion below reads Rosewood and expects
-// nothing of Fairview in the answer.
+// seedTwoGardens inserts Rosewood and a second garden, Fairview. With only
+// one garden in the database a query missing its garden WHERE clause would
+// still return the right rows, so every assertion below reads Rosewood and
+// checks that nothing from Fairview is included.
 func seedTwoGardens(t *testing.T) (*Queries, pgx.Tx) {
 	t.Helper()
 
@@ -66,8 +66,8 @@ func seedTwoGardens(t *testing.T) (*Queries, pgx.Tx) {
 		($1, $2, 'Monty',  'Swiss cheese plant', 'Living room'),
 		($3, $2, 'Fern',   'Boston fern',        'Bathroom')`,
 		montyID, testGardenID, fernID)
-	// Aloe has no location and no nickname, so it lands on the last term of
-	// both the NULLS LAST and the coalesce.
+	// Aloe has no location and no nickname, so it exercises the NULLS LAST and
+	// the last coalesce term in the ordering.
 	exec("INSERT INTO plant (id, garden_id, common_name) VALUES ($1, $2, 'Aloe')", sprigID, testGardenID)
 	exec(`INSERT INTO plant (id, garden_id, nickname, location, archived_at)
 		VALUES ($1, $2, 'Departed', 'Bedroom', now())`, departedID, testGardenID)
@@ -87,8 +87,8 @@ func seedTwoGardens(t *testing.T) (*Queries, pgx.Tx) {
 		($1, $5, $3, 3,  'day'),
 		($1, $6, $3, 10, 'day')`,
 		testGardenID, montyID, waterTypeID, feedTypeID, fernID, departedID)
-	// Fern is live and the mist type is archived, which is the pair
-	// ListCareSchedules has to drop.
+	// Fern is live but the mist care type is archived. ListCareSchedules must
+	// drop this schedule.
 	exec(`INSERT INTO care_schedule (garden_id, plant_id, care_type_id, interval_count, interval_unit)
 		VALUES ($1, $2, $3, 2, 'day')`, testGardenID, fernID, mistTypeID)
 	exec(`INSERT INTO care_schedule (garden_id, plant_id, care_type_id, interval_count, interval_unit)
@@ -106,7 +106,7 @@ func seedTwoGardens(t *testing.T) (*Queries, pgx.Tx) {
 	return New(tx), tx
 }
 
-func TestGetPlant_ReadsThePlantAsked(t *testing.T) {
+func TestGetPlant_ReturnsThePlantWithTheGivenID(t *testing.T) {
 	queries, _ := seedTwoGardens(t)
 
 	plant, err := queries.GetPlant(t.Context(), testGardenID, montyID)
@@ -124,10 +124,10 @@ func TestGetPlant_ReadsThePlantAsked(t *testing.T) {
 	}
 }
 
-// The overrides in sqlc.yaml decide the generated types, and no other test
-// here asserts them. A nullable column arrives as a pointer, so a column
-// holding nothing and one holding the empty string stay apart.
-func TestQueries_TheColumnTypesAreTheOnesTheOverridesAskFor(t *testing.T) {
+// The overrides in sqlc.yaml decide the generated Go types, and no other test
+// checks them. A nullable column becomes a pointer, so NULL and the empty
+// string are distinguishable.
+func TestQueries_GeneratedColumnTypesMatchTheSqlcOverrides(t *testing.T) {
 	ctx := t.Context()
 	queries, _ := seedTwoGardens(t)
 
@@ -157,9 +157,9 @@ func TestQueries_TheColumnTypesAreTheOnesTheOverridesAskFor(t *testing.T) {
 	}
 }
 
-// Another garden's plant is no row at all, so a handler has nothing it could
-// answer with a 403.
-func TestGetPlant_AnotherGardensPlantIsNoRow(t *testing.T) {
+// Another garden's plant returns no row, so a handler has nothing to return a
+// 403 for.
+func TestGetPlant_AnotherGardensPlantReturnsNoRow(t *testing.T) {
 	queries, _ := seedTwoGardens(t)
 
 	_, err := queries.GetPlant(t.Context(), testGardenID, otherPlantID)
@@ -168,7 +168,7 @@ func TestGetPlant_AnotherGardensPlantIsNoRow(t *testing.T) {
 	}
 }
 
-func TestListPlants_LeavesOutArchivedAndOrdersLikeTheRoster(t *testing.T) {
+func TestListPlants_OmitsArchivedPlantsAndOrdersByRoomThenName(t *testing.T) {
 	queries, _ := seedTwoGardens(t)
 
 	plants, err := queries.ListPlants(t.Context(), testGardenID)
@@ -180,15 +180,14 @@ func TestListPlants_LeavesOutArchivedAndOrdersLikeTheRoster(t *testing.T) {
 	for i, p := range plants {
 		got[i] = p.ID
 	}
-	// Bathroom sorts before Living room, and the plant with no room comes
-	// after both.
+	// Bathroom sorts before Living room. The plant with no room sorts last.
 	want := []uuid.UUID{fernID, montyID, sprigID}
 	if !slices.Equal(got, want) {
 		t.Errorf("listed\n\t%v\nwant\n\t%v", got, want)
 	}
 }
 
-func TestListCareTypes_LeavesOutTheArchivedOne(t *testing.T) {
+func TestListCareTypes_OmitsArchivedTypes(t *testing.T) {
 	queries, _ := seedTwoGardens(t)
 
 	types, err := queries.ListCareTypes(t.Context(), testGardenID)
@@ -205,7 +204,7 @@ func TestListCareTypes_LeavesOutTheArchivedOne(t *testing.T) {
 	}
 }
 
-func TestListCareSchedules_CarriesThePlantAndTheCareTypeItBelongsTo(t *testing.T) {
+func TestListCareSchedules_ReturnsEachScheduleWithItsPlantAndCareType(t *testing.T) {
 	queries, _ := seedTwoGardens(t)
 
 	rows, err := queries.ListCareSchedules(t.Context(), testGardenID)
@@ -226,15 +225,16 @@ func TestListCareSchedules_CarriesThePlantAndTheCareTypeItBelongsTo(t *testing.T
 		got[i] = line{row.Plant.ID, row.CareType.Slug}
 	}
 
-	// Fern's misting is absent because the type is archived, Departed's watering
-	// because the plant is, and Fairview's because it is another garden's.
+	// Fern's misting is missing because its care type is archived. Departed's
+	// watering is missing because the plant is archived. Fairview's is missing
+	// because it is another garden.
 	want := []line{{fernID, "water"}, {montyID, "water"}, {montyID, "feed"}}
 	if !slices.Equal(got, want) {
 		t.Errorf("listed\n\t%v\nwant\n\t%v", got, want)
 	}
 }
 
-func TestListLatestCareEvents_IsOneRowPerPlantAndCareType(t *testing.T) {
+func TestListLatestCareEvents_ReturnsOneRowPerPlantAndCareType(t *testing.T) {
 	queries, _ := seedTwoGardens(t)
 
 	events, err := queries.ListLatestCareEvents(t.Context(), testGardenID)
@@ -257,7 +257,7 @@ func TestListLatestCareEvents_IsOneRowPerPlantAndCareType(t *testing.T) {
 		t.Errorf("Monty was last watered at %v, want the newer of the two events at %v",
 			monty.PerformedAt, lastWatering)
 	}
-	// Fern's only event is a skip, which is still its latest.
+	// Fern's only event is a skip. A skip still counts as the latest event.
 	if fern := latest[fernID]; fern.Done {
 		t.Error("Fern's latest event reads as done, and the row seeded was a skip")
 	}
@@ -266,9 +266,9 @@ func TestListLatestCareEvents_IsOneRowPerPlantAndCareType(t *testing.T) {
 	}
 }
 
-// The events query joins nothing, so a plant or care type archived after its
-// last event keeps its row here. ListCareSchedules excludes both, and the
-// caller pairing the two drops what it cannot match.
+// The events query has no joins, so a plant or care type archived after its
+// last event still has a row here. ListCareSchedules excludes both, and the
+// caller pairing the two results drops events it cannot match.
 func TestListLatestCareEvents_KeepsTheEventsOfAnArchivedPlantAndCareType(t *testing.T) {
 	ctx := t.Context()
 	queries, tx := seedTwoGardens(t)
@@ -300,9 +300,9 @@ func TestListLatestCareEvents_KeepsTheEventsOfAnArchivedPlantAndCareType(t *test
 	}
 }
 
-// sqlc returns a nil slice for an empty :many, so a caller asks for the length
-// rather than comparing the slice to nil.
-func TestListPlants_AnEmptyGardenIsNoRowsAndNoError(t *testing.T) {
+// sqlc returns a nil slice for an empty :many result, so callers check the
+// length rather than comparing to nil.
+func TestListPlants_AnEmptyGardenReturnsNoRowsAndNoError(t *testing.T) {
 	ctx := t.Context()
 	queries, tx := seedTwoGardens(t)
 
@@ -320,17 +320,16 @@ func TestListPlants_AnEmptyGardenIsNoRowsAndNoError(t *testing.T) {
 	}
 }
 
-// A query touching a table that hangs off a garden takes the garden as a
+// Every query on a table with a garden_id column takes the garden as a
 // parameter, so there is no unscoped read for a handler to call. A query that
-// reads more than one scoped table scopes each of them, because binding the
-// garden on the driving table alone leaves a join free to cross.
+// reads more than one scoped table must scope each of them, because scoping
+// only the driving table leaves a join free to cross gardens.
 //
-// Two tables are exempt when a query reads nothing else, because each is how a
-// request finds out which garden it is on and the lookup cannot take the garden
-// as an input. A read of session alone binds @token_hash instead, and a read of
-// membership alone binds @user_id, so every row it returns belongs to the
-// caller. A query joining either to another scoped table binds @garden_id like
-// any other.
+// Two tables are exempt when read alone, because they are how a request finds
+// out which garden it is on, so the lookup cannot take the garden as input. A
+// read of session alone binds @token_hash, and a read of membership alone
+// binds @user_id, so every row returned belongs to the caller. A query joining
+// either to another scoped table binds @garden_id like any other.
 func TestQueries_EveryQueryOnAGardenScopedTableBindsTheGarden(t *testing.T) {
 	tx := sharedTx(t)
 
@@ -444,9 +443,9 @@ func readQueries(t *testing.T) []namedQuery {
 	return queries
 }
 
-// A query's text runs to the next -- name: line, which sweeps up the comments
-// written above the query after it. Dropping the comment lines leaves the SQL,
-// so a table named in prose is not read as one the query touches.
+// A query's text runs to the next "-- name:" line, so it includes the comments
+// written above the following query. Dropping comment lines leaves only SQL,
+// so a table named in a comment is not counted as one the query reads.
 func stripSQLComments(body string) string {
 	var kept []string
 	for line := range strings.SplitSeq(body, "\n") {

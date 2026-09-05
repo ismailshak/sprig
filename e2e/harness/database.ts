@@ -6,10 +6,10 @@ const run = promisify(execFile);
 
 const root = path.resolve(import.meta.dirname, '../..');
 
-// requireOwnStack refuses a database the suite could not have created, since
-// every test reseeds it. The e2e task names its compose project
-// sprig-e2e-<pid>, and nothing else does. The seed and pgtest accept the same
-// hosts.
+// requireOwnStack refuses to run against a database the e2e task did not
+// create, because every test reseeds it. The task names its compose project
+// sprig-e2e-<pid> and nothing else does. The allowed hostnames are the ones the
+// seed and pgtest accept.
 export function requireOwnStack(env: NodeJS.ProcessEnv): void {
   if (!env.COMPOSE_PROJECT_NAME?.startsWith('sprig-e2e-')) {
     throw new Error('refusing to run outside a stack of its own: run the suite through mise run e2e');
@@ -31,9 +31,8 @@ export function requireOwnStack(env: NodeJS.ProcessEnv): void {
   }
 }
 
-// seed writes the prototype's garden into SPRIG_DATABASE_URL, replacing what
-// the previous run wrote and leaving everything else alone. It is the only way
-// the suite touches the database.
+// seed runs the Go seed against SPRIG_DATABASE_URL, replacing the previous
+// run's data. It is the only way the suite touches the database.
 export async function seed(): Promise<void> {
   await run('go', ['run', './cmd/seed'], { cwd: root });
 }

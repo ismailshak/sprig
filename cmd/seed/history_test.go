@@ -8,8 +8,8 @@ import (
 	engine "github.com/ismailshak/sprig/internal/schedule"
 )
 
-// A Wednesday in September, which is the day the prototype draws and a month
-// in which every seasonal schedule is open.
+// A Wednesday in September: the day the prototype shows, and a month in which
+// every seasonal schedule is in season.
 func testReference(t *testing.T) time.Time {
 	t.Helper()
 
@@ -20,10 +20,10 @@ func testReference(t *testing.T) time.Time {
 	return time.Date(2026, time.September, 2, 0, 0, 0, 0, loc)
 }
 
-// A schedule's most recent event plus one interval is when it next falls due,
-// so the seed places that event one interval before the due date it wants. Get
-// it wrong and every plant lands in the wrong section of Today.
-func TestOccurrences_TheNewestEventIsOneIntervalBeforeTheScheduleFallsDue(t *testing.T) {
+// A schedule is next due one interval after its newest event, so the seed
+// places that event one interval before the due date it wants. Getting this
+// wrong puts every plant in the wrong section of Today.
+func TestOccurrences_TheNewestEventIsOneIntervalBeforeTheDueDate(t *testing.T) {
 	ref := testReference(t)
 
 	for _, tc := range []struct {
@@ -42,8 +42,8 @@ func TestOccurrences_TheNewestEventIsOneIntervalBeforeTheScheduleFallsDue(t *tes
 			newest: time.Date(2026, time.August, 12, 0, 0, 0, 0, ref.Location()),
 		},
 		{
-			// A month is the calendar's rather than thirty days, so the answer
-			// is the fourth of August.
+			// A month is a calendar month, not 30 days, so the answer is 4
+			// August.
 			name:   "months",
 			s:      schedule{slug: "water", count: 1, unit: engine.UnitMonth, dueIn: 2},
 			newest: time.Date(2026, time.August, 4, 0, 0, 0, 0, ref.Location()),
@@ -61,12 +61,12 @@ func TestOccurrences_TheNewestEventIsOneIntervalBeforeTheScheduleFallsDue(t *tes
 	}
 }
 
-func TestOccurrences_TheHistoryStopsAtTheHorizonAndAtToday(t *testing.T) {
+func TestOccurrences_HistoryStopsAtTheHorizonAndBeforeToday(t *testing.T) {
 	ref := testReference(t)
 	s := schedule{slug: "water", count: 4, unit: engine.UnitDay, dueIn: 0}
 
-	// The horizon is exclusive and the newest event is four days back, so the
-	// oldest is 196 days ago and there are 49 of them rather than 50.
+	// The horizon is exclusive and the newest event is 4 days ago, so the
+	// oldest is 196 days ago and there are 49 events, not 50.
 	occs := occurrences(&s, ref)
 	if len(occs) != 49 {
 		t.Errorf("derived %d events over %d days of a four-day cadence, want 49", len(occs), historyDays)
@@ -79,7 +79,7 @@ func TestOccurrences_TheHistoryStopsAtTheHorizonAndAtToday(t *testing.T) {
 	}
 }
 
-func TestOccurrences_AClosedSeasonLeavesAHoleInTheLog(t *testing.T) {
+func TestOccurrences_AClosedSeasonLeavesAGapInTheHistory(t *testing.T) {
 	ref := testReference(t)
 	s := schedule{slug: "feed", count: 3, unit: engine.UnitWeek, dueIn: 14, seasonStart: 3, seasonEnd: 9}
 
@@ -100,9 +100,8 @@ func TestOccurrences_AOneOffProducesNoHistory(t *testing.T) {
 }
 
 // An anchored schedule is fixed to the calendar rather than counted from the
-// last time it was done, so its history steps back from the next occurrence
-// rather than from the last event.
-func TestSchedule_AnAnchoredSeriesFallsDueOnItsNextOccurrence(t *testing.T) {
+// last event, so its history steps back from the next calendar occurrence.
+func TestSchedule_AnAnchoredScheduleIsNextDueOnItsNextCalendarOccurrence(t *testing.T) {
 	ref := testReference(t)
 	s := schedule{slug: "feed", count: 1, unit: engine.UnitYear, anchorMonth: time.May, anchorDay: 1}
 
@@ -122,8 +121,9 @@ func TestSchedule_AnAnchoredSeriesFallsDueOnItsNextOccurrence(t *testing.T) {
 	}
 }
 
-// A skip resets the schedule by its own override rather than by the interval,
-// so a skip in the newest position would make the log disagree with the roster.
+// A skip pushes the schedule back by its own override rather than the
+// interval, so a skip as the newest event would make the due date disagree
+// with dueIn.
 func TestHistory_TheNewestEventOfACareTypeIsNeverASkip(t *testing.T) {
 	ref := testReference(t)
 	g := home()
@@ -148,7 +148,7 @@ func TestHistory_TheNewestEventOfACareTypeIsNeverASkip(t *testing.T) {
 	}
 }
 
-func TestHistory_ASkipCarriesAnOverrideAndADoneEventDoesNot(t *testing.T) {
+func TestHistory_ASkipHasAnOverrideAndADoneEventDoesNot(t *testing.T) {
 	ref := testReference(t)
 	g := home()
 
@@ -164,9 +164,9 @@ func TestHistory_ASkipCarriesAnOverrideAndADoneEventDoesNot(t *testing.T) {
 	}
 }
 
-// The log is read out of a hash rather than out of a random source, which is
-// the whole reason the e2e suite can assert against it.
-func TestHistory_TwoDerivationsAgree(t *testing.T) {
+// The history is derived from a hash rather than a random source, which is
+// what lets the e2e suite assert against it.
+func TestHistory_TwoRunsProduceTheSameEvents(t *testing.T) {
 	ref := testReference(t)
 	g := home()
 
@@ -182,8 +182,8 @@ func TestHistory_TwoDerivationsAgree(t *testing.T) {
 	}
 }
 
-// A fixture where every event is the owner's never shows care somebody else
-// gave.
+// If every event were the owner's, no page would ever show care given by
+// someone else.
 func TestHistory_BothMembersAppearInTheLog(t *testing.T) {
 	ref := testReference(t)
 	g := home()
@@ -201,9 +201,9 @@ func TestHistory_BothMembersAppearInTheLog(t *testing.T) {
 	}
 }
 
-// The two columns exist to hold different instants, so a fixture where they
-// always agree would let a reader of either one look right.
-func TestHistory_AnEventIsRecordedWhenItHappenedOrAfterward(t *testing.T) {
+// performed_at and recorded_at exist to hold different instants. If the fixture
+// always made them equal, code reading the wrong column would look correct.
+func TestHistory_SomeEventsAreRecordedAfterTheyHappened(t *testing.T) {
 	ref := testReference(t)
 	g := home()
 
@@ -252,7 +252,7 @@ func TestAdvance_MonthsAndYearsMoveByTheCalendar(t *testing.T) {
 }
 
 // The clocks go forward on 29 March 2026 and back on 25 October.
-func TestDaysBetween_ACountsWholeDaysAcrossAClockChange(t *testing.T) {
+func TestDaysBetween_CountsWholeDaysAcrossAClockChange(t *testing.T) {
 	loc := testReference(t).Location()
 
 	for _, tc := range []struct {
@@ -272,8 +272,8 @@ func TestDaysBetween_ACountsWholeDaysAcrossAClockChange(t *testing.T) {
 	}
 }
 
-// The three shapes are told apart by which fields are set, here and in the
-// schema, and a fourth combination is a row no reader has an answer for.
+// The three shapes are distinguished by which fields are set, here and in the
+// schema. Any other combination is a row the schema rejects.
 func TestFixture_EveryScheduleIsOneOfTheThreeShapes(t *testing.T) {
 	for _, g := range []garden{home(), upstairs()} {
 		for i := range g.plants {
@@ -286,8 +286,8 @@ func TestFixture_EveryScheduleIsOneOfTheThreeShapes(t *testing.T) {
 				if s.repeats() && s.unit == "" {
 					t.Errorf("%s's %s schedule has a count and no unit", p.displayName(), s.slug)
 				}
-				// An anchored schedule already names its month, so a season on
-				// top of it would say nothing.
+				// An anchored schedule already names its month, so a season
+				// on it would be meaningless.
 				if s.anchored() && s.seasonStart != 0 {
 					t.Errorf("%s's %s schedule is anchored and carries a season", p.displayName(), s.slug)
 				}
@@ -299,9 +299,9 @@ func TestFixture_EveryScheduleIsOneOfTheThreeShapes(t *testing.T) {
 	}
 }
 
-// A slug is how the seed finds the care type to hang a row off, so one that
-// names nothing writes a schedule against a care type the garden lacks.
-func TestFixture_EverySlugNamesACareTypeItsGardenHas(t *testing.T) {
+// The seed looks up care types by slug, so a slug the garden does not have
+// would write a schedule against a missing care type.
+func TestFixture_EveryScheduleSlugIsACareTypeInItsGarden(t *testing.T) {
 	for _, g := range []garden{home(), upstairs()} {
 		known := map[string]bool{}
 		for _, ct := range g.careTypes {
@@ -323,8 +323,7 @@ func TestFixture_EverySlugNamesACareTypeItsGardenHas(t *testing.T) {
 	}
 }
 
-// At least one of the three names is required, because a plant with none of
-// them renders as a blank row.
+// A plant needs at least one of its three names, or it renders as a blank row.
 func TestFixture_EveryPlantHasAName(t *testing.T) {
 	for _, g := range []garden{home(), upstairs()} {
 		for i := range g.plants {
@@ -335,9 +334,9 @@ func TestFixture_EveryPlantHasAName(t *testing.T) {
 	}
 }
 
-// Two rows sharing an identifier is the one way a written identifier fails
-// where a generated one could not.
-func TestSeedID_TheFixtureNamesEveryRowOnlyOnce(t *testing.T) {
+// Two rows sharing an id is the one failure a hand-written id can have that a
+// generated one cannot.
+func TestSeedID_EveryFixtureIDIsUnique(t *testing.T) {
 	seen := map[uuid.UUID]string{}
 	claim := func(id uuid.UUID, what string) {
 		t.Helper()
@@ -368,9 +367,9 @@ func TestSeedID_TheFixtureNamesEveryRowOnlyOnce(t *testing.T) {
 	}
 }
 
-// The identifier is written by hand into a shape Postgres reads back as the
-// version 7 the column defaults to.
-func TestSeedID_IsAWellFormedVersion7Identifier(t *testing.T) {
+// The hand-written id must be a valid version 7 UUID, the same version the
+// column generates by default.
+func TestSeedID_IsAWellFormedVersion7UUID(t *testing.T) {
 	id := seedID(tableCareEvent, 319)
 	if got, want := id.String(), "00000000-0000-7000-8000-070000000319"; got != want {
 		t.Errorf("seedID = %s, want %s", got, want)
@@ -383,11 +382,11 @@ func TestSeedID_IsAWellFormedVersion7Identifier(t *testing.T) {
 	}
 }
 
-// The reference is a local midnight, so a whole number of days from it lands on
-// a whole day whatever hour the seed was run at.
-func TestReference_IsTheStartOfTodayWhereTheGardenIs(t *testing.T) {
-	// Late enough in the evening in New York to be the following day in London,
-	// which is the case a reference taken in the machine's own zone gets wrong.
+// The reference is a local midnight, so a whole number of days from it is a
+// whole day whatever hour the seed runs.
+func TestReference_IsMidnightTodayInTheGardensTimezone(t *testing.T) {
+	// Late evening in New York is already the next day in London. A reference
+	// taken in the machine's own zone would get this wrong.
 	newYork, err := time.LoadLocation("America/New_York")
 	if err != nil {
 		t.Fatalf("loading America/New_York: %v", err)

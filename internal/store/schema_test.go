@@ -13,8 +13,8 @@ import (
 	"github.com/ismailshak/sprig/internal/pgtest"
 )
 
-// wantCapabilities is written out rather than read from the migration, so
-// granting one takes two edits.
+// wantCapabilities is written out here rather than read from the migration,
+// so granting a capability takes a deliberate edit in two places.
 var wantCapabilities = map[string][]string{
 	"owner": {
 		"care.delete_any", "care.delete_own", "care.edit_any", "care.edit_own",
@@ -31,9 +31,9 @@ var wantCapabilities = map[string][]string{
 	"sitter": {"care.delete_own", "care.edit_own", "care.log"},
 }
 
-// A capability granted to nobody is invisible to the test below, and a name
-// only Go knows is the thing the whole table exists to prevent.
-func TestSchema_TheCapabilityNamesAreTheOnesWrittenDown(t *testing.T) {
+// The test below only sees capabilities granted to some role. This one checks
+// the full list, so a capability named only in Go and never inserted is caught.
+func TestSchema_TheCapabilityTableHoldsExactlyTheExpectedNames(t *testing.T) {
 	pool := migratedPool(t)
 
 	rows, err := pool.Query(t.Context(), "SELECT name FROM capability ORDER BY name")
@@ -51,7 +51,7 @@ func TestSchema_TheCapabilityNamesAreTheOnesWrittenDown(t *testing.T) {
 	}
 }
 
-func TestSchema_RolesHoldTheCapabilitiesTheyAreDescribedWith(t *testing.T) {
+func TestSchema_EachRoleHasItsExpectedCapabilities(t *testing.T) {
 	pool := migratedPool(t)
 
 	rows, err := pool.Query(t.Context(), "SELECT role, capability FROM role_capability ORDER BY role, capability")
@@ -96,7 +96,8 @@ func TestSchema_OneMembershipPerUserAndGarden(t *testing.T) {
 	}
 }
 
-// The middleware refuses it at request time, so nothing in the schema may.
+// Expiry is enforced by the middleware at request time, so the schema must
+// keep the row.
 func TestSchema_AnExpiredMembershipIsStillARow(t *testing.T) {
 	ctx := t.Context()
 	pool := migratedPool(t)
@@ -120,8 +121,9 @@ func TestSchema_AnExpiredMembershipIsStillARow(t *testing.T) {
 	}
 }
 
-// The care events they recorded point at the user row.
-func TestSchema_AMembershipIsDeletedAndAUserIsNot(t *testing.T) {
+// Care events point at the user row, so removing someone from a garden deletes
+// the membership and keeps the user.
+func TestSchema_RemovingAMemberDeletesTheMembershipAndKeepsTheUser(t *testing.T) {
 	ctx := t.Context()
 	pool := migratedPool(t)
 	garden, user := seedGardenAndUser(t, pool)
@@ -150,7 +152,7 @@ func TestSchema_AMembershipIsDeletedAndAUserIsNot(t *testing.T) {
 	}
 }
 
-func TestSchema_AHandleIsUniqueAcrossTheInstall(t *testing.T) {
+func TestSchema_AHandleIsUniqueAcrossAllGardens(t *testing.T) {
 	pool := migratedPool(t)
 	seedGardenAndUser(t, pool)
 
@@ -178,8 +180,9 @@ func TestSchema_TheDigestHourDefaultsToEight(t *testing.T) {
 	}
 }
 
-// role is a table so the two columns that name one cannot disagree.
-func TestSchema_ARoleIsOneTheRoleTableNames(t *testing.T) {
+// role is a table so that membership.role and role_capability.role cannot name
+// a role that does not exist.
+func TestSchema_ARoleMustExistInTheRoleTable(t *testing.T) {
 	pool := migratedPool(t)
 	garden, user := seedGardenAndUser(t, pool)
 
@@ -191,8 +194,8 @@ func TestSchema_ARoleIsOneTheRoleTableNames(t *testing.T) {
 	}
 }
 
-// The primary key index only stays append-mostly if the default is v7, and
-// nothing else in the app would notice if it quietly became v4.
+// Primary key indexes only stay append-mostly if the default is a v7 UUID, and
+// nothing else in the app would notice if it silently became v4.
 func TestSchema_AnIdentifierDefaultsToATimeOrderedUUID(t *testing.T) {
 	ctx := t.Context()
 	pool := migratedPool(t)
@@ -209,8 +212,8 @@ func TestSchema_AnIdentifierDefaultsToATimeOrderedUUID(t *testing.T) {
 	if version != 7 {
 		t.Errorf("the default minted a v%d uuid, want v7", version)
 	}
-	// Either side of now(), because now() is the transaction's start time and
-	// the identifier is minted a few hundred microseconds after it.
+	// Allow a window either side of now(), because now() is the transaction's
+	// start time and the id is generated a few hundred microseconds later.
 	if d := minted.Sub(now).Abs(); d > time.Minute {
 		t.Errorf("the identifier's timestamp is %v from now, want the instant it was inserted", d)
 	}
@@ -223,7 +226,7 @@ func migratedPool(t *testing.T) *pgxpool.Pool {
 }
 
 // The ids are fixed and obviously synthetic, so a failure names the same row
-// every run. Both are well-formed v7 uuids.
+// every run. Both are well-formed v7 UUIDs.
 var (
 	testGardenID = uuid.MustParse("00000000-0000-7000-8000-000000000001")
 	testUserID   = uuid.MustParse("00000000-0000-7000-8000-000000000002")

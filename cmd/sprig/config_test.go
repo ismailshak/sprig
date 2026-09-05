@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-func TestLoadConfig_MissingRequiredNamesAll(t *testing.T) {
+func TestLoadConfig_NamesEveryMissingRequiredVariable(t *testing.T) {
 	env := map[string]string{}
 	getenv := func(k string) string { return env[k] }
 
@@ -69,7 +69,7 @@ func TestLoadConfig_Defaults(t *testing.T) {
 	}
 }
 
-func TestLoadConfig_APlainCookieOverHTTPTakesBothVariables(t *testing.T) {
+func TestLoadConfig_APlainCookieOverHTTPNeedsBothCookieVariables(t *testing.T) {
 	env := map[string]string{
 		"SPRIG_DATABASE_URL":  "postgres://example/db",
 		"SPRIG_COOKIE_NAME":   "sprig_session",

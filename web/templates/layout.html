@@ -5,29 +5,29 @@
 <meta name="color-scheme" content="light dark">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>{{block "title" .}}sprig{{end}}</title>
-{{/* palettes holds the colour values, tokens maps one half of them onto the
-     token names, and app.css reads the tokens, so the links are in that order. */}}
+{{/* The order matters. palettes.css defines the colours, tokens.css maps them
+     to token names, and app.css uses the tokens. */}}
 <link rel="stylesheet" href="{{asset "palettes.css"}}">
 <link rel="stylesheet" href="{{asset "tokens.css"}}">
 <link rel="stylesheet" href="{{asset "app.css"}}">
 <script src="{{asset "vendor/htmx-2.0.10.min.js"}}" defer></script>
-{{/* htmx leaves a 4xx alone by default. A 422 here is the sheet coming back
-     with a sentence under a field. */}}
+{{/* htmx does not swap a 4xx response by default. A 422 is a form re-rendered
+     with an error message, so it has to swap. */}}
 <meta name="htmx-config" content='{"responseHandling":[{"code":"204","swap":false},{"code":"[23]..","swap":true},{"code":"422","swap":true},{"code":"[45]..","swap":false,"error":true}]}'>
 </head>
 <body>
 <div class="app">
 <div class="app__main">
-{{/* A page writes its own topbar and app__body. The width those two are capped
-     to above 900px varies by page, and the modifier that sets it goes on them. */}}
+{{/* Each page renders its own topbar and app__body, because their max width
+     above 900px differs by page and is set by a modifier class on them. */}}
 {{block "main" .}}{{end}}
 </div>
-{{/* The layout declares a block rather than calling the partial, because sign
-     in, invite and setup leave it undefined and get no tab bar. */}}
+{{/* A block rather than a direct call to the tabs partial, so sign in, invite
+     and setup can leave it undefined and render no tab bar. */}}
 {{block "nav" .}}{{end}}
 </div>
-{{/* The logging sheet sits after the app because no column of the app's
-     layout can contain it. */}}
+{{/* The log-care sheet is outside .app so it is not laid out inside one of
+     the app's columns. */}}
 {{block "overlay" .}}{{end}}
 </body>
 </html>

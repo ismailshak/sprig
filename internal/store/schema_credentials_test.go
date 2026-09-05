@@ -11,9 +11,9 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// Removing somebody has to take effect at once rather than on whatever page
-// they load next.
-func TestSchema_ASessionGoesWithTheMembershipItBelongsTo(t *testing.T) {
+// Removing someone from a garden must end their session immediately, not on
+// the next page they load.
+func TestSchema_DeletingAMembershipDeletesItsSessions(t *testing.T) {
 	ctx := t.Context()
 	pool := migratedPool(t)
 	garden, user := seedGardenAndUser(t, pool)
@@ -55,8 +55,7 @@ func TestSchema_ASessionCannotNameAGardenItsUserIsNotIn(t *testing.T) {
 	}
 }
 
-// That there is an expiry at all is the schema's rule. The ninety-day ceiling on
-// top of it is a constant in Go.
+// The schema requires an expiry. The 90-day ceiling is a constant in Go.
 func TestSchema_AnAPITokenCannotBeWrittenWithoutAnExpiry(t *testing.T) {
 	ctx := t.Context()
 	pool := migratedPool(t)
@@ -124,7 +123,7 @@ func TestSchema_ADigestIsClaimedOncePerMembershipAndLocalDate(t *testing.T) {
 	}
 }
 
-func TestSchema_TheNotificationKindsAreTheTwoWrittenDown(t *testing.T) {
+func TestSchema_TheNotificationKindTableHoldsExactlyTheTwoKinds(t *testing.T) {
 	pool := migratedPool(t)
 
 	rows, err := pool.Query(t.Context(), "SELECT name FROM notification_kind ORDER BY name")
@@ -218,7 +217,7 @@ func TestSchema_AReEnrolmentInviteNamesTheUserItAdmits(t *testing.T) {
 	}
 }
 
-func TestSchema_RecoveryCodesAndInvitesGoWithTheUserTheyName(t *testing.T) {
+func TestSchema_DeletingAUserDeletesTheirRecoveryCodesAndInvites(t *testing.T) {
 	ctx := t.Context()
 	pool := migratedPool(t)
 	garden, user := seedGardenAndUser(t, pool)

@@ -1,22 +1,22 @@
 {{define "title"}}sprig — {{.Name}}{{end}}
 
-{{/* The bar carries the way back and nothing else, because the heading below
-     it already names the plant. */}}
+{{/* The top bar holds only the back link. The heading below it already names
+     the plant. */}}
 {{define "main"}}
 <header class="topbar topbar--back">
 <a class="backlink" href="/plants">{{template "icon-back"}}Plants</a>
 </header>
-{{/* The order is the phone's. The stylesheet's named areas move the picture
-     and the reference into a column of their own above 900px, so the wide
-     layout needs no second copy of this markup. */}}
+{{/* Sections are in phone order. Above 900px the stylesheet's grid areas move
+     the picture and the reference into their own column, so the wide layout
+     reuses this markup. */}}
 <div class="app__body app__body--plant">
 <div class="hero">
-{{/* The picture is empty until photos exist. */}}
+{{/* Empty until photos are implemented. */}}
 <span class="hero__pic"></span>
 <h1 class="hero__name{{if .Botanical}} hero__name--sp{{end}}">{{.Name}}</h1>
 {{with .Names}}<p class="hero__meta">{{range $i, $name := .}}{{if $i}} &middot; {{end}}{{if $name.Italic}}<i>{{$name.Text}}</i>{{else}}{{$name.Text}}{{end}}{{end}}</p>{{end}}
-{{/* The room is a different kind of fact from a name, so it is not a third
-     item in the dot-separated run above it. */}}
+{{/* The room is on its own line rather than as a third item in the names line
+     above, because it is not a name. */}}
 {{with .Room}}<p class="hero__where">{{.}}</p>{{end}}
 </div>
 
@@ -47,8 +47,8 @@
 </section>
 {{end}}
 
-{{/* The strip is empty until photos exist. The section is drawn anyway,
-     because a plant with no photo is the ordinary state. */}}
+{{/* The strip is empty until photos are implemented. The section is rendered
+     anyway, because a plant with no photos is the normal state. */}}
 <section class="section section--photos" aria-labelledby="photos">
 <div class="section__head">
 <h2 class="section__title" id="photos">Photos</h2>
@@ -56,8 +56,8 @@
 <div class="strip"></div>
 </section>
 
-{{/* Recent names the person and the action and not the plant, because the
-     subject of every line here is the page it is on. */}}
+{{/* Recent lines say who did what, without the plant's name, because every
+     line is about this plant. */}}
 <section class="section section--history" aria-labelledby="recent">
 <div class="section__head">
 <h2 class="section__title" id="recent">Recent</h2>
@@ -73,19 +73,19 @@
 </div>
 {{end}}
 
-{{/* The rows of the Schedule section, and the fragment a swap aimed at one of
-     them is answered with. */}}
+{{/* The rows of the Schedule section. Also the fragment returned when a swap
+     targets one row. */}}
 {{define "schedule-rows"}}{{range .Schedule}}{{template "schedule-row" .}}
 {{end}}{{end}}
 
-{{/* The rule on the left and the consequence on the right. An anchored line
-     carries no window, because the schema puts a season only on a cadence. A
-     care type the plant is not on keeps the same row and says so on the right,
-     because that row is the only way it gets a schedule here.
+{{/* The rule on the left, the due date on the right. A dated schedule shows no
+     season, because the schema allows a season only on a repeating one. A care
+     type with no schedule still gets a row, reading "Not scheduled" on the
+     right, because this row is the only place to add one.
 
-     Every state of the row carries the same id, and settle:0ms keeps htmx from
-     painting a frame at the outgoing row's classes. The whole row is the
-     control, so with no script it is a link to the editor's own page. */}}
+     Every state of the row shares the same id, and settle:0ms stops htmx
+     painting a frame with the old row's classes. The whole row is the control.
+     Without JavaScript it is a link to the editor's own page. */}}
 {{define "schedule-row"}}{{if .Edit}}{{template "schedule-editor" .Edit}}{{else}}<li class="sched{{if not .Scheduled}} sched--add{{end}}" id="{{.ID}}">
 {{if .Open}}<a href="{{.Open}}" hx-get="{{.Open}}" hx-target="#{{.ID}}" hx-swap="outerHTML settle:0ms">{{end}}
 <span class="sched__icon">{{template "care-icon" .Slug}}</span>
@@ -97,18 +97,19 @@
 {{if .Open}}</a>{{end}}
 </li>{{end}}{{end}}
 
-{{/* The row as the small form it is edited in, because there is a plant here to
-     save one row against. One URL answers the editor and the save, a second the
-     question Remove asks and the removal itself.
+{{/* A schedule row as an inline edit form. This page can save one row at a
+     time because the plant already exists. One URL serves the editor and the
+     save, and a second serves the remove confirmation and the removal.
 
-     Save is the only submit button while the editor is at rest, and Keep it is
-     the first while it is asking, so Enter in a field never presses Remove. The
-     other two answers are GETs and go by link.
+     Save is the only submit button while editing, and Keep it is the first
+     while the confirmation is showing, so Enter in a field never triggers
+     Remove. Cancel and Remove are GET links.
 
-     Remove asks first, and the question replaces the foot rather than opening a
-     dialog, so the schedule being discussed stays visible above the answer.
-     Everything else in the app answers a mistake with undo, and undo needs the
-     undone thing still on screen: removing a schedule takes its own row away. */}}
+     Remove asks for confirmation, and the confirmation replaces the buttons
+     rather than opening a dialog, so the schedule stays visible above it.
+     Everywhere else the app handles a mistake with Undo, but Undo needs the
+     undone thing still on screen, and removing a schedule deletes its own
+     row. */}}
 {{define "schedule-editor"}}<li class="sched sched--editing" id="{{.ID}}">
 <form method="post" action="{{.Path}}" hx-post="{{.Path}}" hx-target="#{{.ID}}" hx-swap="outerHTML settle:0ms">
 <span class="sched__icon">{{template "care-icon" .Slug}}</span>

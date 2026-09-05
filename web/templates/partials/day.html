@@ -1,13 +1,13 @@
-{{/* The body is one element under one id because it is replaced out of band
-     once no row is inside a grace window. */}}
+{{/* One element under one id, because the whole body is swapped in out of
+     band once no row is left inside its grace window. */}}
 {{define "day-body"}}<div class="app__body app__body--feed" id="day"{{if .OOB}} hx-swap-oob="true"{{end}}>
 {{template "day-head" .Head}}
 {{range .Sections}}{{template "today-section" .}}{{end}}
 {{template "activity" .Feed}}
 </div>{{end}}
 
-{{/* The three shapes share one id because a swap replaces any of them with
-     any other. */}}
+{{/* The three variants share the id day-head, because a swap can replace any
+     one of them with any other. */}}
 {{define "day-head"}}
 {{- with .Summary}}<div class="summary" id="day-head"{{if $.OOB}} hx-swap-oob="true"{{end}}>
 <span class="summary__count">{{.Outstanding}}</span>
@@ -37,15 +37,15 @@
 </section>
 {{end}}
 
-{{/* The feed is one element under one id because a log or an undo swaps it in
-     out of band beside the row the swap was aimed at. It is drawn empty rather
-     than left out because the first care logged in a garden needs a feed to
-     swap into. The stylesheet hides it while it is empty.
+{{/* One element under one id, because a log or an undo swaps a new feed in
+     out of band alongside the row it targeted. It is rendered even when empty
+     so the first care logged in a garden has an element to swap into. The
+     stylesheet hides it while empty.
 
-     The Undo posts a form rather than swapping because it is the way back from
-     a logged care with no script running, where the reload after the post has
-     already taken the row off the day. The stylesheet shows it only with
-     scripting off because a running script gives the row its own window. */}}
+     Undo here is a form post, not a swap. It exists for the no-JavaScript case,
+     where the redirect after logging has already removed the row from the day
+     and this is the only place left to undo from. The stylesheet hides this
+     button when JavaScript is running, because then the row has its own Undo. */}}
 {{define "activity"}}<div class="activity" id="activity"{{if .OOB}} hx-swap-oob="true"{{end}}>{{range .Lines}}
 <div><b>{{.Who}}</b> {{.Did}} <b>{{.Plant}}</b> &middot; {{.When}}{{with .Undo}}<form class="activity__undo" method="post" action="{{.}}"><button>Undo</button></form>{{end}}</div>
 {{end}}</div>{{end}}

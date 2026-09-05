@@ -1,6 +1,6 @@
--- Every caller hands these rows to the due-date engine in Go, so no due date
--- is computed here. The ordering is the roster's, and id ends it so two
--- plants agreeing on room and name keep their order.
+-- Due dates are computed in Go from these rows, never here. The order matches
+-- the plant list: by room, then display name, with id last so two plants with
+-- the same room and name keep a stable order.
 -- name: ListCareSchedules :many
 SELECT sqlc.embed(care_schedule), sqlc.embed(plant), sqlc.embed(care_type)
 FROM care_schedule
@@ -11,8 +11,8 @@ WHERE care_schedule.garden_id = @garden_id
   AND care_type.archived_at IS NULL
 ORDER BY plant.location NULLS LAST, coalesce(plant.nickname, plant.common_name, plant.botanical_name), plant.id, care_type.created_at, care_type.id;
 
--- set_at defaults to now, so a plant added today with a ten-day cadence is due
--- in ten days rather than overdue on arrival.
+-- set_at defaults to now(), so a plant added today with a ten-day cadence is
+-- due in ten days rather than overdue immediately.
 -- name: CreateCareSchedule :one
 INSERT INTO care_schedule (garden_id, plant_id, care_type_id, interval_count, interval_unit,
                            anchor_date, anchor_precision, season_start_month, season_end_month)
@@ -20,10 +20,9 @@ VALUES (@garden_id, @plant_id, @care_type_id, @interval_count, @interval_unit,
         @anchor_date, @anchor_precision, @season_start_month, @season_end_month)
 RETURNING *;
 
--- A plant is scheduled for a care type at most once, so saving the editor
--- either writes the row or replaces it. set_at moves with the save, which is
--- what leaves a schedule newly set with no history due a full interval from
--- now and what brings a spent one-off back.
+-- A plant has at most one schedule per care type, so saving the editor inserts
+-- or replaces. set_at is reset on every save, so a schedule with no history is
+-- due a full interval from now, and a completed one-off becomes due again.
 -- name: UpsertCareSchedule :one
 INSERT INTO care_schedule (garden_id, plant_id, care_type_id, interval_count, interval_unit,
                            anchor_date, anchor_precision, season_start_month, season_end_month)
@@ -39,8 +38,8 @@ SET interval_count     = excluded.interval_count,
     set_at             = now()
 RETURNING *;
 
--- The events the schedule produced stay where they are, so the care type drops
--- back to being one the plant is not on rather than losing its history.
+-- The schedule's events are kept. The plant simply has no schedule for the
+-- care type any more, and its history stays readable.
 -- name: DeleteCareSchedule :one
 DELETE FROM care_schedule
 WHERE garden_id = @garden_id AND plant_id = @plant_id AND care_type_id = @care_type_id

@@ -1,4 +1,4 @@
-// Package db embeds the migrations the server applies to its own schema at startup.
+// Package db embeds the migrations the server applies at startup.
 package db
 
 import (
@@ -9,14 +9,15 @@ import (
 //go:embed migrations
 var embedded embed.FS
 
-// Migrations is db/migrations rooted at the directory itself, because goose
-// reads migrations from the top of the tree it is given.
+// Migrations is the db/migrations directory with the "migrations/" prefix
+// stripped, because goose reads migrations from the root of the fs.FS it is
+// given.
 var Migrations = mustSub(embedded, "migrations")
 
 func mustSub(fsys fs.FS, dir string) fs.FS {
 	sub, err := fs.Sub(fsys, dir)
 	if err != nil {
-		panic(err) // the tree is compiled in, so a failure here is a broken build
+		panic(err) // the directory is compiled in, so this can only fail on a broken build
 	}
 	return sub
 }

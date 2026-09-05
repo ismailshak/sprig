@@ -7,8 +7,8 @@ export class SheetScreen {
     return this.page.getByRole('dialog');
   }
 
-  // A What chip is a button rather than a radio because it fetches the sheet
-  // again for the care it names.
+  // A What chip is a button, not a radio, because clicking it fetches the sheet
+  // again for that care type.
   what(care: string): Locator {
     return this.dialog().getByRole('button', { name: care, exact: true });
   }

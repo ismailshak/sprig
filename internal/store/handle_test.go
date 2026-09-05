@@ -36,7 +36,7 @@ func TestHandleFor(t *testing.T) {
 	}
 }
 
-func TestHandleFor_ACollisionTakesARandomSuffixRatherThanTheNextNumber(t *testing.T) {
+func TestHandleFor_ACollisionGetsARandomSuffixNotACounter(t *testing.T) {
 	shape := regexp.MustCompile(`^emma_[a-z2-7]{4}$`)
 
 	seen := map[string]bool{}
@@ -52,7 +52,7 @@ func TestHandleFor_ACollisionTakesARandomSuffixRatherThanTheNextNumber(t *testin
 	}
 }
 
-func TestHandleFor_ASuffixedCandidateStillFits(t *testing.T) {
+func TestHandleFor_ASuffixedCandidateStaysWithinTheLengthLimit(t *testing.T) {
 	got := handleFor(strings.Repeat("a", 40), 2)
 	if len(got) != maxHandleLength {
 		t.Errorf("handleFor on a forty-character name = %q, %d characters, want %d",

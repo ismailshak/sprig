@@ -30,7 +30,8 @@ type CreateCareEventParams struct {
 	OverrideIntervalDays *int32
 }
 
-// The handler passes recorded_at because its clock and the row have to agree.
+// recorded_at comes from the handler's clock rather than now(), so the row and
+// the handler agree on the time.
 func (q *Queries) CreateCareEvent(ctx context.Context, arg CreateCareEventParams) (CareEvent, error) {
 	row := q.db.QueryRow(ctx, createCareEvent,
 		arg.GardenID,
@@ -74,10 +75,10 @@ type DeleteCareEventParams struct {
 	PerformedBy  uuid.UUID
 }
 
-// DeleteCareEvent matches on performed_by unless may_delete_any is set,
-// because a check standing beside the query can be forgotten. Nothing bounds
-// how old the event may be because the undo window decides what the feed
-// draws rather than what the delete accepts.
+// Matches on performed_by unless may_delete_any is set, so the ownership check
+// is in the query and cannot be forgotten by a caller. There is no age limit
+// here. The undo window decides whether an Undo button is rendered, not
+// whether a delete is accepted.
 func (q *Queries) DeleteCareEvent(ctx context.Context, arg DeleteCareEventParams) (CareEvent, error) {
 	row := q.db.QueryRow(ctx, deleteCareEvent,
 		arg.ID,
@@ -208,9 +209,9 @@ WHERE garden_id = $1
 ORDER BY plant_id, care_type_id, performed_at DESC
 `
 
-// A skipped event is a plant's latest one too, so nothing here filters on done.
-// An event whose plant or care type was archived stays in, because the caller
-// pairs these rows against ListCareSchedules, which already excludes both.
+// A skip counts as the latest event, so this does not filter on done. Events
+// of archived plants and care types are included, because the caller matches
+// these rows against ListCareSchedules, which already excludes both.
 func (q *Queries) ListLatestCareEvents(ctx context.Context, gardenID uuid.UUID) ([]CareEvent, error) {
 	rows, err := q.db.Query(ctx, listLatestCareEvents, gardenID)
 	if err != nil {
@@ -264,9 +265,9 @@ type ListPlantCareEventsRow struct {
 	PerformedByName string
 }
 
-// The order is performed_at because a plant's Recent is a history of the plant
-// rather than of what was typed. Nothing here joins plant, because the page is
-// the plant.
+// Ordered by performed_at because a plant's Recent section is a history of the
+// plant, not of data entry. No plant join, because the caller already has the
+// plant.
 func (q *Queries) ListPlantCareEvents(ctx context.Context, arg ListPlantCareEventsParams) ([]ListPlantCareEventsRow, error) {
 	rows, err := q.db.Query(ctx, listPlantCareEvents, arg.GardenID, arg.PlantID, arg.Count)
 	if err != nil {
@@ -323,8 +324,8 @@ type ListRecentCareEventsRow struct {
 	PerformedByName string
 }
 
-// The order is recorded_at rather than performed_at so a backdated care still
-// lands at the top of the feed.
+// Ordered by recorded_at rather than performed_at, so a backdated care still
+// appears at the top of the feed.
 func (q *Queries) ListRecentCareEvents(ctx context.Context, gardenID uuid.UUID, count int32) ([]ListRecentCareEventsRow, error) {
 	rows, err := q.db.Query(ctx, listRecentCareEvents, gardenID, count)
 	if err != nil {

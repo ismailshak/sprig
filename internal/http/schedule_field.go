@@ -13,16 +13,15 @@ import (
 	"github.com/ismailshak/sprig/internal/store"
 )
 
-// The three shapes a schedule takes, as the When select names them. Each
-// carries a sentence under it because a label is too small a space to explain a
-// scheduling rule.
+// The three kinds of schedule, as the When select names them. Each has a hint
+// sentence under it because a label is too short to explain a scheduling rule.
 const (
 	shapeCadence = "cadence"
 	shapeDate    = "date"
 	shapeOnce    = "once"
 )
 
-// shape is one option of the When select and the sentence under it.
+// shape is one option of the When select and its hint.
 type shape struct {
 	value, label, hint string
 }
@@ -33,27 +32,27 @@ var shapes = []shape{
 	{shapeOnce, "Just once", "One date, and then nothing"},
 }
 
-// anyDay is the day select's first option. A month with no day is the answer a
-// repot actually gets, and forcing a 1st would invent a precision the plant's
-// page then reports back as days late.
+// anyDay is the day select's first option, meaning a month with no specific
+// day. A repot is usually planned to a month, and forcing the 1st would invent
+// a precision the plant's page then reports as days late.
 const anyDay = 0
 
-// maxInterval is the largest count the number field offers. It bounds the
-// message the field gives back as well as the field itself.
+// maxInterval is the largest value the interval field accepts. It appears in
+// the field's max attribute and in the error message.
 const maxInterval = 999
 
-// anchorSpan is how many years the date selects reach, this one included.
+// anchorSpan is how many years the year select offers, this year included.
 const anchorSpan = 7
 
-// scheduleDraft is one care type's row as far as it has been filled in. A row
-// is open or the plant is not scheduled for that care and there is no third
-// state, because this form has no plant yet to save a row against.
+// scheduleDraft is the values of one care type's schedule row as filled in so
+// far. A row is either open or unscheduled. There is no saved state, because
+// on the add form the plant does not exist yet.
 type scheduleDraft struct {
 	care  store.CareType
 	open  bool
 	shape string
-	// every is what was typed rather than a number because a count the row
-	// refuses comes back in the field it was typed into.
+	// every is kept as typed rather than parsed, so a rejected value is shown
+	// back in the field.
 	every    string
 	unit     string
 	seasonal bool
@@ -62,14 +61,13 @@ type scheduleDraft struct {
 	month    int
 	year     int
 	// A shape picked without JavaScript arrives without the fields that shape
-	// needs because a browser posts only the controls it drew. These two say
-	// whether the group was drawn.
+	// needs, because a browser posts only the controls it rendered. These two
+	// record whether each field group was in the form.
 	hasInterval bool
 	hasAnchor   bool
 }
 
-// newScheduleDraft is a row nobody has touched, on the weekly cadence most
-// people set.
+// newScheduleDraft returns an untouched row, defaulting to weekly.
 func newScheduleDraft(care store.CareType, now time.Time) scheduleDraft {
 	return scheduleDraft{
 		care:        care,
@@ -86,11 +84,11 @@ func newScheduleDraft(care store.CareType, now time.Time) scheduleDraft {
 	}
 }
 
-// readScheduleDraft reads one row of the add form from a query or a form body.
-// It returns false for a value none of the row's controls offers.
+// readScheduleDraft reads one row of the add form from a query string or a
+// form body. It returns false for a value none of the row's controls offers.
 //
-// open names the rows that are open and close the one a button just closed,
-// which is how the open rows survive a re-render with no JavaScript.
+// The "open" values list the rows that are open and "close" the one a button
+// just closed. That is how open rows survive a re-render without JavaScript.
 func readScheduleDraft(values url.Values, care store.CareType, now time.Time) (scheduleDraft, bool) {
 	f := newScheduleDraft(care, now)
 	f.open = slices.Contains(values["open"], care.Slug) && !slices.Contains(values["close"], care.Slug)
@@ -100,13 +98,13 @@ func readScheduleDraft(values url.Values, care store.CareType, now time.Time) (s
 	return f.fill(values, now)
 }
 
-// fill reads the row's own controls over the draft. It is separate from
-// readScheduleDraft because the in-place editor has one row and no button
-// saying whether it is open.
+// fill applies the row's posted values over the draft. It is separate from
+// readScheduleDraft because the in-place editor has one row and no open or
+// close button.
 func (f scheduleDraft) fill(values url.Values, now time.Time) (scheduleDraft, bool) {
 	name := func(part string) string { return f.care.Slug + "-" + part }
-	// The years are read from the draft the row was drawn from, so a schedule
-	// anchored before this year comes back under the year it already had.
+	// The year options come from the draft the row was rendered from, so a
+	// schedule anchored before this year keeps its year as an option.
 	years := anchorYears(now, f.year)
 	if picked := values.Get(name("shape")); picked != "" {
 		if !slices.ContainsFunc(shapes, func(s shape) bool { return s.value == picked }) {
@@ -125,9 +123,9 @@ func (f scheduleDraft) fill(values url.Values, now time.Time) (scheduleDraft, bo
 	}
 
 	f.seasonal = values.Has(name("seasonal"))
-	// A box ticked without JavaScript arrives without the months because they
-	// are drawn only where the box was already ticked. The row keeps the window
-	// the editor would have offered.
+	// A box ticked without JavaScript arrives without the months, because they
+	// are rendered only when the box was already ticked. The row keeps the
+	// default months.
 	if values.Has(name("from")) {
 		if f.from, ok = monthIn(values.Get(name("from"))); !ok {
 			return f, false
@@ -152,11 +150,10 @@ func (f scheduleDraft) fill(values url.Values, now time.Time) (scheduleDraft, bo
 	return f, true
 }
 
-// params is the row as care_schedule holds it. The second result is what the
-// row says when the answer its shape needs is missing or is not a number the
-// field offers, and is empty for a row the form takes. PlantID is the caller's
-// to fill in, because the plant these rows arrive with does not exist until
-// they are written.
+// params converts the draft to a care_schedule row. The second result is the
+// error message to show when a required value is missing or out of range, and
+// is empty when the row is valid. The caller fills in PlantID, because on the
+// add form the plant does not exist until it is written.
 func (f scheduleDraft) params(gardenID uuid.UUID) (store.CreateCareScheduleParams, string) {
 	p := store.CreateCareScheduleParams{GardenID: gardenID, CareTypeID: f.care.ID}
 
@@ -173,8 +170,8 @@ func (f scheduleDraft) params(gardenID uuid.UUID) (store.CreateCareScheduleParam
 	}
 
 	if f.shape == shapeCadence {
-		// The schema puts a season only on a cadence, because a date already
-		// names its month.
+		// The schema allows a season only on a repeating schedule, since a
+		// dated one already names its month.
 		if f.seasonal {
 			p.SeasonStartMonth = smallint(f.from)
 			p.SeasonEndMonth = smallint(f.to)
@@ -185,8 +182,8 @@ func (f scheduleDraft) params(gardenID uuid.UUID) (store.CreateCareScheduleParam
 	if !f.hasAnchor {
 		return p, "Give it a date."
 	}
-	// A month-precise anchor is stored on the first of its month, because the
-	// day is the part nobody gave and the engine is meant to ignore it.
+	// A month-only anchor is stored on the 1st of its month with month
+	// precision, so the schedule engine knows to ignore the day.
 	day, precision := f.day, schedule.PrecisionDay
 	if day == anyDay {
 		day, precision = 1, schedule.PrecisionMonth
@@ -200,9 +197,8 @@ func (f scheduleDraft) params(gardenID uuid.UUID) (store.CreateCareScheduleParam
 	return p, ""
 }
 
-// scheduleDraftOf is the editor opened on a schedule the plant already has. The
-// three shapes are told apart the way the schema tells them apart, by which of
-// the nullable groups are set.
+// scheduleDraftOf builds a draft from an existing schedule. The shape is
+// worked out the way the schema defines it, by which nullable groups are set.
 func scheduleDraftOf(care store.CareType, s store.CareSchedule, now time.Time) scheduleDraft {
 	f := newScheduleDraft(care, now)
 	switch {
@@ -224,11 +220,9 @@ func scheduleDraftOf(care store.CareType, s store.CareSchedule, now time.Time) s
 		f.from, f.to = int(*s.SeasonStartMonth), int(*s.SeasonEndMonth)
 	}
 	if s.AnchorDate != nil {
-		// The column is a date, so its parts are read as they were written
-		// rather than converted into the reader's location first.
+		// The column is a date, so its parts are read as stored rather than
+		// converted to the reader's timezone first.
 		year, month, day := s.AnchorDate.Date()
-		// A month-precise anchor is stored on the first of its month, and that
-		// day is the part nobody gave.
 		f.day = day
 		if *s.AnchorPrecision == schedule.PrecisionMonth {
 			f.day = anyDay
@@ -238,43 +232,42 @@ func scheduleDraftOf(care store.CareType, s store.CareSchedule, now time.Time) s
 	return f
 }
 
-// upsert is the row as the editor saves it against a plant that already
-// exists. The two generated params differ only in the query they belong to.
+// upsert converts the draft to the row the in-place editor saves. The two
+// generated params types have the same fields and differ only in their query.
 func (f scheduleDraft) upsert(gardenID, plantID uuid.UUID) (store.UpsertCareScheduleParams, string) {
 	p, message := f.params(gardenID)
 	p.PlantID = plantID
 	return store.UpsertCareScheduleParams(p), message
 }
 
-// scheduleField is one row of the schedule list as the form draws it. An open
-// row is the editor and a closed one names a care the plant is not scheduled
-// for.
+// scheduleField is the data one schedule row renders from. An open row is the
+// editor and a closed one names a care type the plant has no schedule for.
 type scheduleField struct {
-	// ID is the row's id in both states.
+	// ID is the row's HTML id, the same open or closed.
 	ID   string
 	Care string
 	Slug string
 	Open bool
-	// Path is where the row re-renders from, which is the form's own URL.
+	// Path is the URL the row re-renders from, the form's own URL.
 	Path string
-	// Shapes draws the When select, and Hint the sentence under it.
+	// Shapes is the When select's options, and Hint the sentence under it.
 	Shapes []option
 	Hint   string
-	// Repeats and Dated are which of the two field groups the shape needs.
+	// Repeats and Dated say which of the two field groups the shape needs.
 	Repeats bool
 	Dated   bool
 	Every   string
-	// Max is the largest count the field takes.
+	// Max is the interval field's max attribute.
 	Max   int
 	Units []option
-	// Seasonal draws the months, which only a cadence can carry.
+	// Seasonal shows the month selects, which only a repeating schedule has.
 	Seasonal bool
 	From     []option
 	To       []option
 	Days     []option
 	Months   []option
 	Years    []option
-	// Error is what the row says when a post could not be taken from it.
+	// Error is the message shown when the posted row was invalid.
 	Error string
 }
 
@@ -297,8 +290,7 @@ func newScheduleField(f scheduleDraft, path string, now time.Time) scheduleField
 			field.Hint = s.hint
 		}
 	}
-	// A count of one takes the singular because the label reads in the number's
-	// company.
+	// The unit is singular after 1, since the label reads with the number.
 	for _, unit := range units {
 		label := unit
 		if f.every != "1" {
@@ -314,11 +306,12 @@ func newScheduleField(f scheduleDraft, path string, now time.Time) scheduleField
 	return field
 }
 
-// units is the four the schema allows, in the order the select offers them.
+// units is the four units the schema allows, in the order the select lists
+// them.
 var units = []string{schedule.UnitDay, schedule.UnitWeek, schedule.UnitMonth, schedule.UnitYear}
 
-// option is one of a select's options, drawn in Go so that what the form offers
-// and what it accepts back are one list.
+// option is one option of a select. Options are built in Go so the form offers
+// and accepts the same list.
 type option struct {
 	Value string
 	Label string
@@ -341,7 +334,7 @@ func numberOptions(numbers []int, selected int) []option {
 	return out
 }
 
-// days is Any day and then every day a month can have.
+// days is anyDay followed by 1 to 31.
 func days() []int {
 	out := make([]int, 0, 32)
 	for d := anyDay; d <= 31; d++ {
@@ -350,9 +343,9 @@ func days() []int {
 	return out
 }
 
-// anchorYears is this year and the six after it, with of prepended where it
-// comes before this year, so a schedule anchored earlier keeps an option of
-// its own instead of being redrawn as a date nobody gave.
+// anchorYears is this year and the six after it. If of is earlier than this
+// year it is prepended, so a schedule anchored in the past keeps its year as an
+// option.
 func anchorYears(now time.Time, of int) []int {
 	out := make([]int, 0, anchorSpan+1)
 	if of < now.Year() {
@@ -376,8 +369,8 @@ func months() []int {
 	return out
 }
 
-// numberIn is value as one of the numbers offered, and false for anything
-// else.
+// numberIn parses value and returns false unless it is one of the offered
+// numbers.
 func numberIn(value string, offered []int) (int, bool) {
 	n, err := strconv.Atoi(value)
 	if err != nil || !slices.Contains(offered, n) {

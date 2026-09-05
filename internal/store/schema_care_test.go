@@ -28,8 +28,9 @@ func TestSchema_ACareTypeSlugIsUniqueWithinItsGarden(t *testing.T) {
 	}
 }
 
-// Every other combination has to be refused rather than merely never written.
-func TestSchema_TheThreeScheduleShapesAreTheOnlyOnes(t *testing.T) {
+// Every other combination of nullable columns must be rejected by the schema,
+// not merely never written by the app.
+func TestSchema_OnlyTheThreeScheduleShapesAreAccepted(t *testing.T) {
 	ctx := t.Context()
 	pool := migratedPool(t)
 	garden, _ := seedGardenAndUser(t, pool)
@@ -99,8 +100,9 @@ func TestSchema_OneSchedulePerPlantAndCareType(t *testing.T) {
 	}
 }
 
-// Garden scoping is a store rule everywhere else, and here it is also a foreign
-// key, so a row spanning two gardens cannot be written by anybody.
+// Garden scoping is a query rule everywhere else. Here it is also a foreign
+// key, so nobody can write a schedule joining a plant and a care type from
+// different gardens.
 func TestSchema_ARowCannotSpanTwoGardens(t *testing.T) {
 	ctx := t.Context()
 	pool := migratedPool(t)
@@ -128,7 +130,8 @@ func TestSchema_ARowCannotSpanTwoGardens(t *testing.T) {
 	}
 }
 
-// Deleting one would take the meaning of every event recorded against it.
+// Deleting a care type would strip the meaning from every event recorded
+// against it.
 func TestSchema_ACareTypeWithEventsCanOnlyBeArchived(t *testing.T) {
 	ctx := t.Context()
 	pool := migratedPool(t)
@@ -156,7 +159,7 @@ func TestSchema_ACareTypeWithEventsCanOnlyBeArchived(t *testing.T) {
 	}
 }
 
-// The reminder counts from when the care happened, not from when it was typed in.
+// Due dates count from when the care happened, not from when it was entered.
 func TestSchema_AnEventRecordsWhenItHappenedAndWhenItWasEntered(t *testing.T) {
 	ctx := t.Context()
 	pool := migratedPool(t)
@@ -180,8 +183,9 @@ func TestSchema_AnEventRecordsWhenItHappenedAndWhenItWasEntered(t *testing.T) {
 	}
 }
 
-// A skip is an event, and its override is what makes "ask again in 2 days" work.
-func TestSchema_ASkipCarriesItsOwnInterval(t *testing.T) {
+// A skip is an event whose override_interval_days holds the "ask again in 2
+// days" interval.
+func TestSchema_ASkipStoresItsOwnInterval(t *testing.T) {
 	ctx := t.Context()
 	pool := migratedPool(t)
 	garden, user := seedGardenAndUser(t, pool)
@@ -207,8 +211,7 @@ func TestSchema_ASkipCarriesItsOwnInterval(t *testing.T) {
 		t.Errorf("override interval = %d, want the 2 days the skip asked for", *override)
 	}
 
-	// The column is only for a skip that named its own interval, so ordinary
-	// care leaves it empty.
+	// Only a skip sets the column. Ordinary care leaves it NULL.
 	err = pool.QueryRow(ctx, `
 		INSERT INTO care_event (garden_id, plant_id, care_type_id, performed_by, performed_at, done)
 		VALUES ($1, $2, $3, $4, now(), true)

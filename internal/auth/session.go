@@ -18,13 +18,13 @@ import (
 	"github.com/ismailshak/sprig/internal/store"
 )
 
-// ErrNoSession reports a token that resolves to no live session. A token never
-// issued, one signed out, one revoked and one unused past the TTL share it,
-// because a caller treats each the same and a distinct error would tell a
-// stranger which tokens were once real.
+// ErrNoSession is returned for a token with no live session. A token that was
+// never issued, one signed out, one revoked and one unused past the TTL all
+// return the same error, because callers treat them the same and a distinct
+// error would tell an attacker which tokens were once real.
 var ErrNoSession = errors.New("no live session")
 
-// sessionTokenBytes gives a token 256 bits of randomness.
+// sessionTokenBytes is 256 bits of randomness per token.
 const sessionTokenBytes = 32
 
 // NewSessionToken returns a fresh token for the cookie, encoded as base64url so
@@ -36,8 +36,8 @@ func NewSessionToken() string {
 	return base64.RawURLEncoding.EncodeToString(raw)
 }
 
-// HashToken returns the hex SHA-256 of token, which is what a table stores in
-// place of a secret shown once.
+// HashToken returns the hex SHA-256 of token. Tables store the hash, never the
+// token itself.
 func HashToken(token string) string {
 	sum := sha256.Sum256([]byte(token))
 	return hex.EncodeToString(sum[:])
@@ -45,28 +45,29 @@ func HashToken(token string) string {
 
 // SessionDeadline returns the instant a session last used at lastSeen stops
 // working. The deadline counts from the last request rather than from sign-in,
-// and no absolute cap sits on top of it, because a stolen cookie is in use and
-// slides too, so the only session a cap would end is a legitimate one.
+// with no absolute cap, because a stolen cookie is in use and would slide too,
+// so the only session a cap would end is a legitimate one.
 func SessionDeadline(lastSeen time.Time, ttl time.Duration) time.Time {
 	return lastSeen.Add(ttl)
 }
 
-// SessionExpired reports whether a session last used at lastSeen is past its
-// deadline at now. The deadline itself counts as expired, which is the instant
-// a browser drops a cookie whose Max-Age has run out.
+// SessionExpired reports whether a session last used at lastSeen has passed
+// its deadline at now. The deadline instant itself counts as expired, matching
+// when a browser drops a cookie whose Max-Age has run out.
 func SessionExpired(lastSeen, now time.Time, ttl time.Duration) bool {
 	return !now.Before(SessionDeadline(lastSeen, ttl))
 }
 
-// CookieSettings is what a deployment chooses about the session cookie. A
-// __Host- name is valid only on a Secure cookie, so a browser that refuses
-// Secure over plain http needs both changed at once.
+// CookieSettings is the session cookie's name and Secure flag, set per
+// deployment. A __Host- name is only valid on a Secure cookie, so a local
+// deployment over plain http has to change both.
 type CookieSettings struct {
 	Name   string
 	Secure bool
 }
 
-// Validate refuses a combination a browser would silently drop.
+// Validate returns an error for a name and Secure combination a browser would
+// silently drop.
 func (c CookieSettings) Validate() error {
 	if c.Name == "" {
 		return errors.New("the cookie name is empty")
@@ -82,25 +83,25 @@ func (c CookieSettings) Validate() error {
 	return nil
 }
 
-// Sessions starts, resolves and ends sessions against the session table, and
-// builds the cookie that carries one.
+// Sessions creates, looks up and deletes rows in the session table, and builds
+// the cookie that holds a session token.
 type Sessions struct {
 	queries *store.Queries
 	ttl     time.Duration
 	cookie  CookieSettings
 }
 
-// NewSessions returns Sessions over queries with a session surviving ttl of
-// disuse. It truncates ttl to whole seconds, because Max-Age is an integer and
-// the cookie and the row have to name the same deadline.
+// NewSessions returns Sessions whose sessions expire after ttl without use.
+// ttl is truncated to whole seconds, because Max-Age is an integer and the
+// cookie and the row have to agree on the deadline.
 func NewSessions(queries *store.Queries, ttl time.Duration, cookie CookieSettings) *Sessions {
 	return &Sessions{queries: queries, ttl: ttl.Truncate(time.Second), cookie: cookie}
 }
 
 // Create starts a session for userID on gardenID at now and returns the token
-// to put in the cookie. userAgent may be empty. The row's foreign key is the
-// membership, so a user who is not in the garden cannot be given a session
-// on it.
+// to put in the cookie. userAgent may be empty. The row's foreign key points at
+// the membership, so a user who is not in the garden cannot get a session on
+// it.
 func (s *Sessions) Create(ctx context.Context, now time.Time, userID, gardenID uuid.UUID, userAgent string) (string, store.Session, error) {
 	token := NewSessionToken()
 	params := store.CreateSessionParams{
@@ -119,10 +120,9 @@ func (s *Sessions) Create(ctx context.Context, now time.Time, userID, gardenID u
 	return token, session, nil
 }
 
-// Lookup resolves the token a request presented at now, sliding the window
-// forward when it is live. An expired row is deleted here rather than by a
-// sweep, since the request that presents it is the only thing that will ever
-// touch it again.
+// Lookup returns the session for token and moves its deadline forward to now
+// plus the TTL. An expired row is deleted here rather than by a sweep, since
+// the request presenting it is the only thing that will ever touch it again.
 func (s *Sessions) Lookup(ctx context.Context, now time.Time, token string) (store.Session, error) {
 	hash := HashToken(token)
 
@@ -141,13 +141,13 @@ func (s *Sessions) Lookup(ctx context.Context, now time.Time, token string) (sto
 		return store.Session{}, ErrNoSession
 	}
 
-	// A clock reading earlier than the row must not move the window back.
+	// A clock reading earlier than the row must not move the deadline back.
 	if !now.After(session.LastSeenAt) {
 		return session, nil
 	}
 	session, err = s.queries.TouchSession(ctx, now, hash)
 	if errors.Is(err, pgx.ErrNoRows) {
-		// The row went between the read and the touch, through a sign-out
+		// The row was deleted between the read and the update, by a sign-out
 		// elsewhere or a deleted membership.
 		return store.Session{}, ErrNoSession
 	}
@@ -157,9 +157,9 @@ func (s *Sessions) Lookup(ctx context.Context, now time.Time, token string) (sto
 	return session, nil
 }
 
-// Delete ends the session behind token, so a cookie still carrying it resolves
-// to nothing. Sign out calls this rather than only clearing the cookie, because
-// a cleared cookie ends the copy in one browser.
+// Delete removes the session for token, so a cookie still holding it no longer
+// resolves. Sign out calls this as well as clearing the cookie, because clearing
+// the cookie only ends the copy in one browser.
 func (s *Sessions) Delete(ctx context.Context, token string) error {
 	if err := s.queries.DeleteSession(ctx, HashToken(token)); err != nil {
 		return fmt.Errorf("delete the session: %w", err)
@@ -167,12 +167,12 @@ func (s *Sessions) Delete(ctx context.Context, token string) error {
 	return nil
 }
 
-// Cookie returns the cookie carrying token. HttpOnly keeps it from script,
-// SameSite=Lax withholds it from a cross-site form post, and Path=/ is what
-// __Host- requires. Max-Age is the TTL, so a browser closed for longer does not
-// send a cookie the server would refuse. A caller issues it at sign-in and
-// again on every request that slides the window, so the browser's deadline
-// follows the row's.
+// Cookie returns the session cookie holding token. HttpOnly keeps it from
+// script, SameSite=Lax keeps it out of cross-site form posts, and Path=/ is
+// required by a __Host- name. Max-Age is the TTL, so a browser closed for
+// longer does not send a cookie the server would refuse. Callers set it at
+// sign-in and again on every request that moves the deadline, so the browser's
+// deadline tracks the row's.
 func (s *Sessions) Cookie(token string) *http.Cookie {
 	return &http.Cookie{
 		Name:     s.cookie.Name,
@@ -185,17 +185,17 @@ func (s *Sessions) Cookie(token string) *http.Cookie {
 	}
 }
 
-// ClearedCookie returns the cookie that removes the session cookie from the
-// browser. It carries the attributes of Cookie, because a browser replaces only
-// a cookie whose name, path and host prefix match.
+// ClearedCookie returns a cookie that removes the session cookie from the
+// browser. It has the same attributes as Cookie, because a browser only
+// replaces a cookie whose name, path and host prefix match.
 func (s *Sessions) ClearedCookie() *http.Cookie {
 	cookie := s.Cookie("")
 	cookie.MaxAge = -1
 	return cookie
 }
 
-// TokenFromRequest returns the token the request's session cookie carries, or
-// the empty string when there is none.
+// TokenFromRequest returns the token in the request's session cookie, or the
+// empty string when there is none.
 func (s *Sessions) TokenFromRequest(r *http.Request) string {
 	cookie, err := r.Cookie(s.cookie.Name)
 	if err != nil {

@@ -7,7 +7,7 @@ import (
 	"uuid"
 )
 
-func TestInTx_AStatementThatFailsTakesTheOnesBeforeItWithIt(t *testing.T) {
+func TestInTx_AFailedStatementRollsBackTheEarlierOnes(t *testing.T) {
 	queries, _ := seedTwoGardens(t)
 	before := plantCount(t, queries)
 
@@ -16,7 +16,7 @@ func TestInTx_AStatementThatFailsTakesTheOnesBeforeItWithIt(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		// Another garden's care type, which the composite foreign key refuses.
+		// A care type from another garden. The composite foreign key rejects it.
 		_, err = q.CreateCareSchedule(t.Context(), CreateCareScheduleParams{
 			GardenID:      testGardenID,
 			PlantID:       plant.ID,
@@ -35,7 +35,7 @@ func TestInTx_AStatementThatFailsTakesTheOnesBeforeItWithIt(t *testing.T) {
 	}
 }
 
-func TestInTx_WhatItCommitsIsReadableAfterwards(t *testing.T) {
+func TestInTx_CommittedRowsAreReadableAfterwards(t *testing.T) {
 	queries, _ := seedTwoGardens(t)
 
 	var id uuid.UUID
@@ -57,9 +57,9 @@ func TestInTx_WhatItCommitsIsReadableAfterwards(t *testing.T) {
 	}
 }
 
-// The tests run inside a transaction of their own, which pgx makes a
-// savepoint. A rollback of the inner one has to leave the outer one usable, or
-// every handler test that writes would fail on the read after it.
+// Tests run inside their own transaction, so InTx's transaction becomes a
+// savepoint. Rolling back the savepoint must leave the outer transaction
+// usable, or every handler test that writes would fail on the following read.
 func TestInTx_ARollbackLeavesTheSurroundingTransactionOpen(t *testing.T) {
 	queries, _ := seedTwoGardens(t)
 

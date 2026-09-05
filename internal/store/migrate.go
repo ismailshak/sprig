@@ -13,28 +13,28 @@ import (
 	"github.com/pressly/goose/v3/lock"
 )
 
-// goose polls every five seconds by default, which is five seconds a restart
-// spends waiting on a lock that has already been released.
+// goose polls the advisory lock every five seconds by default. Polling every
+// second means a restart waits at most a second on a lock already released.
 const (
 	lockPollSeconds  = 1
 	lockPollAttempts = 300
 )
 
-// Migrate applies every outstanding migration in migrations. It holds a Postgres
-// advisory lock for the run, so two processes starting together cannot apply the
-// same migration twice.
+// Migrate applies every outstanding migration in migrations. It holds a
+// Postgres advisory lock for the run, so two processes starting together cannot
+// apply the same migration twice.
 func Migrate(ctx context.Context, pool *pgxpool.Pool, migrations fs.FS, logger *slog.Logger) error {
 	locker, err := lock.NewPostgresSessionLocker(lock.WithLockTimeout(lockPollSeconds, lockPollAttempts))
 	if err != nil {
 		return fmt.Errorf("build the migration locker: %w", err)
 	}
 
-	// goose speaks database/sql, so the run borrows the pool through pgx's adapter.
+	// goose needs a database/sql handle, so the pool is wrapped in pgx's adapter.
 	db := stdlib.OpenDBFromPool(pool)
 	defer db.Close() //nolint:errcheck // the pool outlives it and owns the connections
 
-	// Without WithAllowMissing, goose refuses a migration numbered behind an
-	// applied one.
+	// Without WithAllowMissing, goose refuses to apply a migration numbered
+	// lower than one already applied.
 	provider, err := goose.NewProvider(goose.DialectPostgres, db, migrations, goose.WithSessionLocker(locker))
 	if err != nil {
 		if errors.Is(err, goose.ErrNoMigrations) {

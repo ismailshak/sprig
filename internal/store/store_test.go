@@ -5,8 +5,8 @@ import (
 	"testing"
 )
 
-func TestOpen_UnreachableDatabaseFailsWithoutLeakingThePassword(t *testing.T) {
-	// Port 1 on loopback, where nothing is listening and nothing ever will be.
+func TestOpen_AnUnreachableDatabaseFailsWithoutThePasswordInTheError(t *testing.T) {
+	// Port 1 on loopback has nothing listening.
 	pool, err := Open(t.Context(), "postgres://sprig:hunter2@127.0.0.1:1/sprig")
 	if err == nil {
 		pool.Close()

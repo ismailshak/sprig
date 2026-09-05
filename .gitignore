@@ -2,7 +2,7 @@
 /sprig
 /seed
 
-# SPRIG_PHOTO_DIR's default. What the deployment mounts here is its business
+# SPRIG_PHOTO_DIR's default. The deployment mounts its own directory here
 /photos/
 
 # The e2e subproject

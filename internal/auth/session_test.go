@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-func TestNewSessionToken_Is256BitsInACookieValueAndTwoDiffer(t *testing.T) {
+func TestNewSessionToken_Is256BitsOfBase64urlAndTwoCallsDiffer(t *testing.T) {
 	first := NewSessionToken()
 	second := NewSessionToken()
 
@@ -27,7 +27,7 @@ func TestNewSessionToken_Is256BitsInACookieValueAndTwoDiffer(t *testing.T) {
 	}
 }
 
-func TestSessionExpired_CountsFromLastSeenAndTheDeadlineIsExpired(t *testing.T) {
+func TestSessionExpired_CountsFromLastSeenAndTheDeadlineInstantIsExpired(t *testing.T) {
 	const ttl = 30 * 24 * time.Hour
 	lastSeen := time.Date(2026, time.September, 4, 9, 0, 0, 0, time.UTC)
 
@@ -51,7 +51,7 @@ func TestSessionExpired_CountsFromLastSeenAndTheDeadlineIsExpired(t *testing.T) 
 	}
 }
 
-func TestCookie_CarriesTheAttributesTheDesignNames(t *testing.T) {
+func TestCookie_HasThePathHttpOnlySameSiteAndMaxAgeAttributes(t *testing.T) {
 	sessions := NewSessions(nil, 720*time.Hour, CookieSettings{Name: "__Host-sprig_session", Secure: true})
 
 	cookie := sessions.Cookie("tok")
@@ -78,8 +78,8 @@ func TestCookie_CarriesTheAttributesTheDesignNames(t *testing.T) {
 	}
 }
 
-func TestCookie_MaxAgeIsTheServersDeadline(t *testing.T) {
-	// A TTL with a fraction of a second, which Max-Age cannot carry.
+func TestCookie_MaxAgeMatchesTheSessionTTL(t *testing.T) {
+	// Max-Age is whole seconds, so the fraction must be dropped.
 	ttl := 720*time.Hour + 750*time.Millisecond
 	sessions := NewSessions(nil, ttl, CookieSettings{Name: "__Host-sprig_session", Secure: true})
 	lastSeen := time.Date(2026, time.September, 4, 9, 0, 0, 0, time.UTC)
@@ -101,7 +101,7 @@ func TestCookie_SecureFollowsTheSetting(t *testing.T) {
 	}
 }
 
-func TestClearedCookie_MatchesTheOneItRemoves(t *testing.T) {
+func TestClearedCookie_HasTheSameNamePathAndFlagsAsTheSessionCookie(t *testing.T) {
 	sessions := NewSessions(nil, time.Hour, CookieSettings{Name: "__Host-sprig_session", Secure: true})
 
 	issued := sessions.Cookie("tok")

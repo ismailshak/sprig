@@ -14,49 +14,50 @@ import (
 	"github.com/ismailshak/sprig/internal/store"
 )
 
-// schedulePath is where one care type's schedule is read as an editor and
-// saved. The care type is named by slug because renaming one is free.
+// schedulePath is the URL for editing one care type's schedule. A GET renders
+// the editor and a POST saves. The care type is named by slug so renaming one
+// does not change the URL.
 func schedulePath(plantID uuid.UUID, slug string) string {
 	return plantPath(plantID) + "/schedule/" + slug
 }
 
-// removeSchedulePath answers both halves of removing a schedule, a GET asking
-// the question and a POST doing it.
+// removeSchedulePath is the URL for removing a schedule. A GET renders the
+// confirmation and a POST removes.
 func removeSchedulePath(plantID uuid.UUID, slug string) string {
 	return schedulePath(plantID, slug) + "/remove"
 }
 
-// scheduleEditor is a schedule row open as the small form it is edited in. The
-// controls are the add form's, and the foot is this page's, because a row here
-// is saved on its own and a row there is one field of a form with its own
-// button.
+// scheduleEditor is the data for a schedule row while it is being edited. The
+// controls are shared with the add-plant form. The buttons are this page's
+// own, because a row here saves on its own and a row there is one field of a
+// larger form.
 type scheduleEditor struct {
 	scheduleField
-	// Cancel is the way back to the row at rest, which the plant's own page
-	// answers.
+	// Cancel is the URL the Cancel link points at. It goes back to the plant's page.
 	Cancel string
-	// Remove is empty for a care type the plant has no schedule for, which is
-	// the state Remove leads to.
+	// Remove is the URL the Remove link points at. Empty when there is no
+	// schedule to remove.
 	Remove string
-	// Asking draws the question in place of the foot's three controls.
+	// Asking is true once Remove has been clicked and the row is showing the
+	// confirmation.
 	Asking bool
 }
 
-// editSchedule answers GET /plants/{plant}/schedule/{care} with the plant's
-// page, that row open as the editor. It opens on the schedule the plant has,
-// and on a weekly cadence for a care type it is not scheduled for.
+// editSchedule handles GET /plants/{plant}/schedule/{care}. It renders the
+// plant's page with that row open as an editor, on the schedule the plant has
+// or on a weekly cadence if it has none.
 func (h *plants) editSchedule(w http.ResponseWriter, r *http.Request) {
 	h.editor(w, r, false)
 }
 
-// confirmRemoveSchedule answers GET /plants/{plant}/schedule/{care}/remove with
-// the same editor, its foot carrying the question.
+// confirmRemoveSchedule handles GET /plants/{plant}/schedule/{care}/remove. It
+// renders the same editor with the remove confirmation showing.
 func (h *plants) confirmRemoveSchedule(w http.ResponseWriter, r *http.Request) {
 	h.editor(w, r, true)
 }
 
-// editor renders the editor from a GET. A swap gets the row alone because that
-// is the element that differs between the states.
+// editor renders the editor for a GET. An htmx request gets the row alone,
+// since that is the only element that changes.
 func (h *plants) editor(w http.ResponseWriter, r *http.Request, asking bool) {
 	principal := PrincipalFrom(r)
 	detail, care, ok := h.plantAndCare(w, r, principal)
@@ -79,8 +80,8 @@ func (h *plants) editor(w http.ResponseWriter, r *http.Request, asking bool) {
 	h.renderRow(w, r, page, *row, 0)
 }
 
-// saveSchedule answers POST /plants/{plant}/schedule/{care}. A row the editor
-// cannot take comes back with a sentence under the field it is about.
+// saveSchedule handles POST /plants/{plant}/schedule/{care}. Invalid input
+// re-renders the editor with a message under the field it concerns.
 func (h *plants) saveSchedule(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	detail, care, ok := h.plantAndCare(w, r, principal)
@@ -117,9 +118,9 @@ func (h *plants) saveSchedule(w http.ResponseWriter, r *http.Request) {
 	h.settledRow(w, r, principal, detail.plant.ID, care.Slug)
 }
 
-// removeSchedule answers POST /plants/{plant}/schedule/{care}/remove. The
-// events the schedule produced stay where they are, so the care type drops back
-// to one the plant is not on rather than losing its history.
+// removeSchedule handles POST /plants/{plant}/schedule/{care}/remove. The
+// events the schedule produced are kept, so the care type goes back to
+// unscheduled without losing its history.
 func (h *plants) removeSchedule(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	detail, care, ok := h.plantAndCare(w, r, principal)
@@ -142,10 +143,10 @@ func (h *plants) removeSchedule(w http.ResponseWriter, r *http.Request) {
 	h.settledRow(w, r, principal, detail.plant.ID, care.Slug)
 }
 
-// plantAndCare resolves the plant and the care type every half of the editor
-// acts on. It answers the request itself and reports false where there is nothing to
-// edit. An archived plant is as far out of reach as one the garden does not
-// have because its page carries no schedule to change.
+// plantAndCare resolves the plant and care type from the URL for every editor
+// handler. It writes the response itself and returns false when there is
+// nothing to edit. An archived plant is a 404 like a plant the garden does not
+// have, since its page has no schedule to change.
 func (h *plants) plantAndCare(w http.ResponseWriter, r *http.Request, principal auth.Principal) (plantDetail, store.CareType, bool) {
 	var none store.CareType
 	plantID, err := uuid.Parse(r.PathValue("plant"))
@@ -174,8 +175,8 @@ func (h *plants) plantAndCare(w http.ResponseWriter, r *http.Request, principal 
 	return detail, care, true
 }
 
-// renderRow answers a swap with the one row and a navigation with the whole
-// page. A status of zero is 200.
+// renderRow renders the one row for an htmx request and the whole page
+// otherwise. A status of zero means 200.
 func (h *plants) renderRow(w http.ResponseWriter, r *http.Request, page plantPage, row scheduleRow, status int) {
 	v := view{page: "plant", status: status}
 	if isHTMX(r) {
@@ -185,9 +186,9 @@ func (h *plants) renderRow(w http.ResponseWriter, r *http.Request, page plantPag
 	h.templates.render(w, r, v, page)
 }
 
-// settledRow is the row a write left behind, read again so that the due date
-// beside the rule is the server's answer rather than the browser's. A browser
-// running no script is sent back to the plant instead.
+// settledRow renders a row after a save or remove. It re-reads the row from
+// the database so the due date shown is the server's, not the browser's.
+// Without JavaScript it redirects to the plant's page instead.
 func (h *plants) settledRow(w http.ResponseWriter, r *http.Request, principal auth.Principal, plantID uuid.UUID, slug string) {
 	if !isHTMX(r) {
 		http.Redirect(w, r, plantPath(plantID), http.StatusSeeOther)
@@ -207,8 +208,8 @@ func (h *plants) settledRow(w http.ResponseWriter, r *http.Request, principal au
 	h.renderRow(w, r, page, *row, 0)
 }
 
-// newScheduleEditor is the row open as the editor. Remove is drawn where there
-// is a schedule to remove, which a care type the plant is not on has not.
+// newScheduleEditor builds the row's editor. Remove is set only when there is
+// a schedule to remove.
 func newScheduleEditor(f scheduleDraft, d plantDetail, asking bool) *scheduleEditor {
 	editor := &scheduleEditor{
 		scheduleField: newScheduleField(f, schedulePath(d.plant.ID, f.care.Slug), d.now),
@@ -221,9 +222,9 @@ func newScheduleEditor(f scheduleDraft, d plantDetail, asking bool) *scheduleEdi
 	return editor
 }
 
-// scheduleDraftFor is what the editor holds: the schedule the plant has, with
-// whatever the row's own controls sent read over it. A request carrying none of
-// them is the row being opened.
+// scheduleDraftFor builds the editor's draft: the plant's current schedule
+// with any values the row's controls sent applied over it. A request with no
+// values is the row being opened.
 func scheduleDraftFor(values url.Values, d plantDetail, care store.CareType) (scheduleDraft, bool) {
 	f := newScheduleDraft(care, d.now)
 	if line, ok := scheduledLine(d.lines, care.Slug); ok {
@@ -236,10 +237,10 @@ func scheduleDraftFor(values url.Values, d plantDetail, care store.CareType) (sc
 	return f.fill(values, d.now)
 }
 
-// scheduledLine is the schedule the plant is on for a care type, and false for
-// one it is not on. A one-off that has been done is over: its row reads "Not
-// scheduled", so the editor opens on a weekly cadence and offers nothing to
-// remove, and the next save replaces the spent row.
+// scheduledLine returns the plant's schedule for a care type, or false if it
+// has none. A one-off that has been done counts as none: its row reads "Not
+// scheduled", the editor opens on a weekly cadence with nothing to remove, and
+// the next save replaces the spent row.
 func scheduledLine(lines []schedule.Line, slug string) (schedule.Line, bool) {
 	line, ok := lineFor(lines, slug)
 	if !ok || line.State == schedule.Spent {
@@ -257,22 +258,22 @@ func careFor(cares []store.CareType, slug string) (store.CareType, bool) {
 	return store.CareType{}, false
 }
 
-// scheduleRowsFragment is the template that draws the Schedule section's rows,
-// and the fragment a swap aimed at one of them is answered with.
+// scheduleRowsFragment is the template that renders the Schedule section's
+// rows, and the fragment returned for a swap targeting one of them.
 const scheduleRowsFragment = "schedule-rows"
 
-// scheduleRowPrefix opens the id of every schedule row, so a swap target names
-// the care type its row is about.
+// scheduleRowPrefix starts every schedule row id, so a swap target names the
+// care type its row is for.
 const scheduleRowPrefix = "sched-"
 
-// scheduleRowID names the row for the swap that replaces it. It uses the slug
-// rather than the name because renaming a care type is free.
+// scheduleRowID is the HTML id of a care type's schedule row. It uses the slug
+// rather than the name so renaming a care type does not change it.
 func scheduleRowID(care store.CareType) string {
 	return scheduleRowPrefix + care.Slug
 }
 
-// scheduleRowSlug is the care type a swap target names, and false for a target
-// that is not a schedule row.
+// scheduleRowSlug returns the care type slug a swap target names, or false if
+// the target is not a schedule row.
 func scheduleRowSlug(target string) (string, bool) {
 	return strings.CutPrefix(target, scheduleRowPrefix)
 }

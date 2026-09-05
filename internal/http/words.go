@@ -24,11 +24,10 @@ func lateWord(days int) string {
 	return daysWord(days) + " late"
 }
 
-// overdueWord is how far past its day a schedule has gone, in the lower case a
-// row reads it in. A month-precise occurrence names the month it has passed
-// rather than counting days it was never precise enough to earn: a repot
-// pencilled for March reads "overdue since March" on 1 April, where "31 days
-// late" claims a date nobody gave.
+// overdueWord returns how far past due a schedule is, in lower case, such as
+// "3 days late". A schedule precise only to a month names the month instead: a
+// repot planned for March reads "overdue since March" on 1 April, since "31
+// days late" would claim a date nobody gave.
 func overdueWord(line schedule.Line, now time.Time) string {
 	if line.Precision == schedule.PrecisionMonth {
 		return "overdue since " + strings.TrimPrefix(anchorWord(line.Due, line.Precision, now), "in ")
@@ -36,9 +35,9 @@ func overdueWord(line schedule.Line, now time.Time) string {
 	return lateWord(-line.Days)
 }
 
-// comingWord is when a schedule still to come falls due. A month-precise
-// occurrence names its month in this direction too, so a repot pencilled for
-// March reads "in March" rather than "Thursday" on the 26th of February.
+// comingWord returns when an upcoming schedule is due, such as "tomorrow" or
+// "in 12 days". A schedule precise only to a month names the month, so a repot
+// planned for March reads "in March" rather than "Thursday" on 26 February.
 func comingWord(line schedule.Line, now time.Time) string {
 	if line.Precision == schedule.PrecisionMonth {
 		return anchorWord(line.Due, line.Precision, now)
@@ -46,10 +45,9 @@ func comingWord(line schedule.Line, now time.Time) string {
 	return whenWord(line.Days, now)
 }
 
-// whenWord names the day a care falls on, days after today. A weekday reads
-// against a plan for the week and holds for six days. Past two months a day
-// count stops being an answer, so the month replaces it, and the year joins
-// the month once the next twelve months no longer fix it.
+// whenWord returns the day a care falls on, given days after today. Up to six
+// days ahead it is a weekday name. Up to 60 days it is a count. Beyond that it
+// is a month, with the year added once it is more than a year away.
 func whenWord(days int, today time.Time) string {
 	switch {
 	case days == 1:
@@ -66,9 +64,9 @@ func whenWord(days int, today time.Time) string {
 	return fmt.Sprintf("in %s %d", due.Month(), due.Year())
 }
 
-// The five care types a garden starts with have English forms their names
-// cannot give. A type the map does not know falls back to its own name, as in
-// "Log dust" and "Logged dust just now".
+// careWords holds the noun and past tense for the five default care types,
+// which cannot be derived from the name. Any other type falls back to its name,
+// as in "Log dust" and "Logged dust just now".
 var careWords = map[string]struct{ noun, past string }{
 	"water": {"watering", "watered"},
 	"feed":  {"feeding", "fed"},
@@ -77,7 +75,7 @@ var careWords = map[string]struct{ noun, past string }{
 	"prune": {"pruning", "pruned"},
 }
 
-// careNoun is the act as a noun, for "Log watering".
+// careNoun returns the care as a noun, as in "Log watering".
 func careNoun(ct store.CareType) string {
 	if w, ok := careWords[ct.Slug]; ok {
 		return w.noun
@@ -85,7 +83,7 @@ func careNoun(ct store.CareType) string {
 	return strings.ToLower(ct.Name)
 }
 
-// carePast is the act done, for "watered just now".
+// carePast returns the care in the past tense, as in "watered just now".
 func carePast(ct store.CareType) string {
 	if w, ok := careWords[ct.Slug]; ok {
 		return w.past
@@ -101,18 +99,18 @@ func capitalise(s string) string {
 	return string(unicode.ToUpper(r)) + s[size:]
 }
 
-// stamp names an instant the way a row does, "Tue 1 Sep, 6:00pm".
+// stamp formats a time as "Tue 1 Sep, 6:00pm".
 func stamp(t time.Time) string {
 	return t.Format("Mon 2 Jan, 3:04pm")
 }
 
-// clockWord is the time of day a log row gives, in the reader's zone.
+// clockWord formats the time of day in the reader's zone, for a log row.
 func clockWord(at, now time.Time) string {
 	return at.In(now.Location()).Format("3:04pm")
 }
 
-// feedWhen names when an event happened, as the feed on Today says it. Today
-// and yesterday carry the clock because those are the two a reader checks
+// feedWhen formats when an event happened for the feed on Today. Today and
+// yesterday include the time of day, since those are the two a reader checks
 // against memory.
 func feedWhen(at, now time.Time) string {
 	when := agoWord(at, now)
@@ -122,8 +120,8 @@ func feedWhen(at, now time.Time) string {
 	return when
 }
 
-// whoDid names the person and the action, as every line about an event does.
-// The reader is "You", and a care that was not done reads "skipped".
+// whoDid returns the person and the action for an event line. The reader is
+// "You", and a skipped care reads "skipped".
 func whoDid(principal auth.Principal, performedBy string, e store.CareEvent, ct store.CareType) (who, did string) {
 	who, did = performedBy, carePast(ct)
 	if e.PerformedBy == principal.User.ID {
@@ -135,9 +133,9 @@ func whoDid(principal auth.Principal, performedBy string, e store.CareEvent, ct 
 	return who, did
 }
 
-// dayHeading names the day a marker on Activity stands for. Today and
-// yesterday are named rather than dated because a reader checks those two
-// against memory.
+// dayHeading formats the day for a marker on Activity. Today and yesterday are
+// named rather than dated, since those are the two a reader checks against
+// memory.
 func dayHeading(at, now time.Time) string {
 	at = at.In(now.Location())
 	switch days := schedule.DaysBetween(at, now); {
@@ -154,9 +152,8 @@ func dayHeading(at, now time.Time) string {
 	return at.Format("2 January 2006")
 }
 
-// everyWord is a schedule's interval as the row states it, following the word
-// "Every". A count of one is dropped, so a yearly schedule reads "Every year"
-// rather than "Every 1 year".
+// everyWord formats a schedule's interval to follow "Every". A count of one is
+// dropped, so a yearly schedule reads "Every year" rather than "Every 1 year".
 func everyWord(count int32, unit string) string {
 	if count == 1 {
 		return unit
@@ -164,8 +161,7 @@ func everyWord(count int32, unit string) string {
 	return fmt.Sprintf("%d %ss", count, unit)
 }
 
-// seasonWord is the months a seasonal schedule runs between, as the left of a
-// schedule row carries them.
+// seasonWord formats a season as "Mar–Sep".
 func seasonWord(start, end int16) string {
 	return fmt.Sprintf("%s–%s", shortMonth(time.Month(start)), shortMonth(time.Month(end)))
 }
@@ -174,10 +170,9 @@ func shortMonth(m time.Month) string {
 	return m.String()[:3]
 }
 
-// anchorWord names the day an anchored schedule falls on, which is what
-// somebody wrote down rather than a count towards it. A month-precise anchor
-// keeps its vagueness and reads "in March". The year is dropped inside the
-// current one, where the month and the day already fix the occurrence.
+// anchorWord formats the date an anchored schedule falls on, such as "1 May"
+// or "in March" for a month-only anchor. The year is included only when it is
+// not the current one.
 func anchorWord(due time.Time, precision string, now time.Time) string {
 	year := ""
 	if due.Year() != now.Year() {
@@ -189,9 +184,8 @@ func anchorWord(due time.Time, precision string, now time.Time) string {
 	return fmt.Sprintf("%d %s%s", due.Day(), due.Month(), year)
 }
 
-// acquiredWord is when a plant arrived, as the foot of the reference panel
-// gives it. It is empty for a plant with no year, since a month alone is not a
-// date.
+// acquiredWord formats when a plant was acquired, as "2021" or "March 2021".
+// It is empty when there is no year, since a month alone is not a date.
 func acquiredWord(year, month *int16) string {
 	if year == nil {
 		return ""
@@ -202,9 +196,9 @@ func acquiredWord(year, month *int16) string {
 	return fmt.Sprintf("%s %d", time.Month(*month), *year)
 }
 
-// agoWord names the day an event happened, as a plant's Recent gives it and
-// the feed builds on. It carries no capital because it follows the action in
-// the sentence.
+// agoWord formats the day an event happened, as "today", "yesterday", a
+// weekday or "2 Jan". It is lower case because it follows the action in the
+// sentence.
 func agoWord(at, now time.Time) string {
 	at = at.In(now.Location())
 	switch days := schedule.DaysBetween(at, now); {

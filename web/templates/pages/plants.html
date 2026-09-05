@@ -1,7 +1,7 @@
 {{define "title"}}sprig — plants{{end}}
 
-{{/* Add sits in the bar and is outlined rather than filled because the roster
-     is opened to look a plant up far more often than to add one. */}}
+{{/* Add is an outlined button rather than a filled one, because people open
+     this page to look up a plant far more often than to add one. */}}
 {{define "main"}}
 <header class="topbar">
 <h1 class="topbar__title">Plants</h1>
@@ -16,7 +16,7 @@
 <div class="empty">
 <span class="empty__mark">{{template "icon-plants"}}</span>
 <h2 class="empty__title">No plants yet</h2>
-<p class="empty__line">Add one and sprig will tell you when it needs water.</p>
+<p class="empty__line">Add a plant and sprig will remind you when to water it.</p>
 {{if .Add}}<a class="empty__action" href="/plants/new">Add a plant</a>{{end}}
 </div>
 {{end}}
@@ -30,13 +30,13 @@
 <span class="section__count">{{len .Plants}}</span>
 </div>
 <ul class="list">
-{{range .Plants}}{{template "roster-row" .}}
+{{range .Plants}}{{template "plant-row" .}}
 {{end}}</ul>
 </section>
 {{end}}
 
-{{/* row__avatar stays empty until photos exist. */}}
-{{define "roster-row"}}<li>
+{{/* row__avatar is empty until photos are implemented. */}}
+{{define "plant-row"}}<li>
 <a class="row row--link" href="{{.Href}}">
 <span class="row__avatar"></span>
 <span class="row__text">

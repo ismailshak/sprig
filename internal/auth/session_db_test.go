@@ -39,9 +39,10 @@ func TestMain(m *testing.M) {
 	pgtest.Main(m)
 }
 
-// sessionsOnTx is Sessions over a transaction holding one garden, one user and
-// the membership joining them, rolled back when the test ends. Every test
-// inserts the same ids, so none of them runs in parallel.
+// sessionsOnTx returns Sessions running inside a transaction that holds one
+// garden, one user and the membership joining them. The transaction is rolled
+// back when the test ends. Every test inserts the same ids, so none runs in
+// parallel.
 func sessionsOnTx(t *testing.T) (*Sessions, pgx.Tx) {
 	t.Helper()
 
@@ -66,7 +67,7 @@ func sessionsOnTx(t *testing.T) (*Sessions, pgx.Tx) {
 }
 
 // Sessions holds nothing in memory, so a second instance over the same table
-// stands in for a restarted process.
+// behaves like a restarted process.
 func TestSessions_ATokenResolvesFromTheTableAlone(t *testing.T) {
 	ctx := t.Context()
 	sessions, tx := sessionsOnTx(t)
@@ -102,7 +103,7 @@ func TestSessions_AnUnknownTokenIsNoSession(t *testing.T) {
 	}
 }
 
-func TestSessions_LookupSlidesTheWindow(t *testing.T) {
+func TestSessions_LookupMovesTheDeadlineForward(t *testing.T) {
 	ctx := t.Context()
 	sessions, _ := sessionsOnTx(t)
 
@@ -123,14 +124,14 @@ func TestSessions_LookupSlidesTheWindow(t *testing.T) {
 		t.Errorf("created at moved to %s, want it left at %s", got.CreatedAt, signedInAt)
 	}
 
-	// Day 45 is past the TTL counted from sign-in and inside it counted from
-	// day 29.
+	// Day 45 is past the TTL counted from sign-in but inside it counted from
+	// the day 29 lookup.
 	if _, err := sessions.Lookup(ctx, signedInAt.AddDate(0, 0, 45), token); err != nil {
 		t.Errorf("Lookup on day 45, sixteen days after the last use: %v", err)
 	}
 }
 
-func TestSessions_AClockReadingBehindTheRowDoesNotMoveItBack(t *testing.T) {
+func TestSessions_AClockEarlierThanTheRowDoesNotMoveTheDeadlineBack(t *testing.T) {
 	ctx := t.Context()
 	sessions, _ := sessionsOnTx(t)
 
@@ -147,7 +148,7 @@ func TestSessions_AClockReadingBehindTheRowDoesNotMoveItBack(t *testing.T) {
 	}
 }
 
-func TestSessions_AnExpiredSessionIsRefusedAndItsRowIsGone(t *testing.T) {
+func TestSessions_AnExpiredSessionIsRefusedAndItsRowDeleted(t *testing.T) {
 	ctx := t.Context()
 	sessions, tx := sessionsOnTx(t)
 
@@ -193,8 +194,8 @@ func TestSessions_DeleteEndsTheSessionServerSide(t *testing.T) {
 	}
 }
 
-// The two rows share a user and a garden, so only the token hash tells them
-// apart.
+// The two sessions share a user and a garden, so only the token hash
+// distinguishes them.
 func TestSessions_DeleteEndsOneSessionAndLeavesTheOthers(t *testing.T) {
 	ctx := t.Context()
 	sessions, _ := sessionsOnTx(t)

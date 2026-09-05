@@ -26,7 +26,7 @@ func fixtureAssets(t *testing.T, files map[string]string) *Assets {
 	return assets
 }
 
-func TestAssets_TheHashSitsBeforeTheExtension(t *testing.T) {
+func TestAssets_TheHashComesBeforeTheExtension(t *testing.T) {
 	assets := fixtureAssets(t, map[string]string{"vendor/htmx.min.js": "var htmx"})
 
 	url, err := assets.Path("vendor/htmx.min.js")
@@ -85,7 +85,7 @@ func TestAssets_ServesTheHashedPathWithTheHeadersThatMakeItCacheable(t *testing.
 	}
 }
 
-func TestAssets_AnswersNothingButTheTwoURLsAFileHas(t *testing.T) {
+func TestAssets_ServesOnlyTheTwoURLsAFileHas(t *testing.T) {
 	assets := fixtureAssets(t, map[string]string{"app.css": "body {}"})
 	hashed, err := assets.Path("app.css")
 	if err != nil {
@@ -109,7 +109,7 @@ func TestAssets_AnswersNothingButTheTwoURLsAFileHas(t *testing.T) {
 	}
 }
 
-func TestAssets_ServesThePlainNameAStylesheetResolvesTo(t *testing.T) {
+func TestAssets_ServesThePlainNameForRelativeStylesheetURLs(t *testing.T) {
 	const woff2 = "wOF2 pretend"
 	assets := fixtureAssets(t, map[string]string{"fonts/fraunces.woff2": woff2})
 
@@ -153,7 +153,7 @@ func TestAssets_APlainNameRevalidatesToNotModified(t *testing.T) {
 var cssURL = regexp.MustCompile(`url\(\s*["']?([^"')]+)["']?\s*\)`)
 
 // Renaming a font would break the page, and nothing else would say so.
-func TestAssets_EveryFileTheStylesheetsNameIsOneTheServerServes(t *testing.T) {
+func TestAssets_EveryFileTheStylesheetsReferenceIsServed(t *testing.T) {
 	assets := testAssets()
 	sheets, err := fs.Glob(web.Static, "*.css")
 	if err != nil {

@@ -1,15 +1,15 @@
 -- +goose Up
 
--- Two conventions every table after this one follows.
+-- Two conventions every table follows.
 --
--- An identifier is a uuid defaulting to uuidv7(). v7 puts a millisecond
--- timestamp in the high bits, so a new row appends to the primary key index
--- instead of scattering across it, and Postgres supplies it so there is no
--- generator to write and no library to depend on.
+-- Ids are uuid DEFAULT uuidv7(). v7 puts a millisecond timestamp in the high
+-- bits, so new rows append to the primary key index instead of scattering
+-- across it. Postgres generates it, so there is no generator in Go and no
+-- library to depend on.
 --
--- A text column holding a program identifier rather than prose is COLLATE "C".
--- It compares by byte instead of through the database's en_US collation, and
--- its index does not have to be rebuilt when libc changes how it sorts.
+-- A text column holding an identifier rather than prose is COLLATE "C". It
+-- compares by byte instead of through the database's en_US collation, and its
+-- index does not need rebuilding when libc changes how it sorts.
 
 CREATE TABLE garden (
     id         uuid PRIMARY KEY DEFAULT uuidv7(),
@@ -17,21 +17,21 @@ CREATE TABLE garden (
     created_at timestamptz NOT NULL DEFAULT now()
 );
 
--- app_user because Postgres reserves user.
+-- Named app_user because user is a reserved word in Postgres.
 CREATE TABLE app_user (
     id           uuid PRIMARY KEY DEFAULT uuidv7(),
     display_name text NOT NULL,
-    -- Slugified from the display name. Nothing authenticates with it.
+    -- Slugified from the display name. Not used for authentication.
     handle       text COLLATE "C" NOT NULL UNIQUE,
-    -- No default, because due-today is computed in it and a zone nobody
-    -- chose is wrong by up to a day.
+    -- No default. Due dates are computed in this zone, and a zone nobody
+    -- chose could be wrong by up to a day.
     timezone     text NOT NULL,
     created_at   timestamptz NOT NULL DEFAULT now()
 );
 
 CREATE TABLE role (
     name text PRIMARY KEY COLLATE "C",
-    -- Orders the select on a member's row.
+    -- Orders the role dropdown on a member's row.
     rank smallint NOT NULL UNIQUE
 );
 
@@ -50,10 +50,10 @@ INSERT INTO capability (name) VALUES
     ('plant.archive'),
     ('schedule.edit'),
     ('care.log'),
-    -- own and any are separate so somebody can fix their own mistake without
-    -- touching anybody else's. A photo and a care event both record who made
-    -- them; choosing a plant's profile picture acts on the plant, so it does
-    -- not split.
+    -- own and any are separate so a person can fix their own mistakes without
+    -- being able to touch anyone else's. Photos and care events both record
+    -- who created them. Setting a plant's profile photo acts on the plant, so
+    -- it has no own/any split.
     ('care.edit_own'),
     ('care.delete_own'),
     ('care.edit_any'),
@@ -68,15 +68,15 @@ INSERT INTO capability (name) VALUES
     ('member.manage'),
     ('token.manage');
 
--- Neither reference cascades. Dropping a capability a role still grants is
--- refused rather than quietly taking the permission with it.
+-- Neither foreign key cascades. Deleting a capability a role still grants is
+-- rejected rather than silently removing the grant.
 CREATE TABLE role_capability (
     role       text COLLATE "C" NOT NULL REFERENCES role (name),
     capability text COLLATE "C" NOT NULL REFERENCES capability (name),
     PRIMARY KEY (role, capability)
 );
 
--- Selected rather than listed, so this cannot fall out of step with the names above.
+-- Selected rather than listed, so the owner always has every capability.
 INSERT INTO role_capability (role, capability)
 SELECT 'owner', name FROM capability;
 
@@ -101,19 +101,19 @@ INSERT INTO role_capability (role, capability) VALUES
 CREATE TABLE membership (
     id          uuid PRIMARY KEY DEFAULT uuidv7(),
     garden_id   uuid NOT NULL REFERENCES garden (id) ON DELETE CASCADE,
-    -- A membership is deleted and a user never is.
+    -- Memberships are deleted. Users never are.
     user_id     uuid NOT NULL REFERENCES app_user (id) ON DELETE RESTRICT,
     role        text COLLATE "C" NOT NULL REFERENCES role (name),
     invited_by  uuid REFERENCES app_user (id) ON DELETE RESTRICT,
     created_at  timestamptz NOT NULL DEFAULT now(),
-    -- Null is a permanent member.
+    -- NULL means a permanent member.
     expires_at  timestamptz,
-    -- Read in the timezone on the user row.
+    -- Interpreted in the user's timezone.
     digest_hour smallint NOT NULL DEFAULT 8,
     UNIQUE (garden_id, user_id)
 );
 
--- Resolving a session means finding the memberships a user holds.
+-- Resolving a session looks up memberships by user.
 CREATE INDEX membership_user_id_idx ON membership (user_id);
 
 -- +goose Down

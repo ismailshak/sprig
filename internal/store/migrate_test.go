@@ -19,8 +19,8 @@ import (
 	"github.com/ismailshak/sprig/internal/pgtest"
 )
 
-// migrateSchema builds the template every test database in this package is
-// copied from.
+// migrateSchema migrates the template database that every test database in
+// this package is copied from.
 func migrateSchema(ctx context.Context, databaseURL string) error {
 	pool, err := Open(ctx, databaseURL)
 	if err != nil {
@@ -71,8 +71,8 @@ func TestMigrate_ConcurrentStartsDoNotRunTheSameMigrationTwice(t *testing.T) {
 		pools[i] = openPool(t, databaseURL)
 	}
 
-	// Apply the first migration on its own, so the race is over the second one
-	// rather than over the version table goose creates first.
+	// Apply the first migration alone first, so the race below is over the
+	// second migration and not over goose creating its version table.
 	logger, _ := recordingLogger()
 	if err := Migrate(ctx, pools[0], firstMigrationOnly(t), logger); err != nil {
 		t.Fatalf("applying the first migration: %v", err)
@@ -155,7 +155,7 @@ func TestMigrate_EmptySetIsNotAFailure(t *testing.T) {
 	}
 }
 
-// firstMigrationOnly is testdata/migrations with the second migration held back.
+// firstMigrationOnly is testdata/migrations without the second migration.
 func firstMigrationOnly(t *testing.T) fs.FS {
 	t.Helper()
 
@@ -177,8 +177,8 @@ func schemaVersion(t *testing.T, pool *pgxpool.Pool) int64 {
 	return version
 }
 
-// recordingLogger returns a logger and a count of the migrations it has been
-// told were applied.
+// recordingLogger returns a logger and a counter of the "migration applied"
+// records logged through it.
 func recordingLogger() (*slog.Logger, func() int) {
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&buf, nil))
@@ -198,7 +198,7 @@ func openPool(t *testing.T, databaseURL string) *pgxpool.Pool {
 	return pool
 }
 
-func TestMigrate_MigrationNumberedBehindAnAppliedOneIsRefused(t *testing.T) {
+func TestMigrate_AMigrationNumberedLowerThanAnAppliedOneIsRefused(t *testing.T) {
 	ctx := t.Context()
 	pool := openPool(t, pgtest.Empty(t))
 
@@ -207,7 +207,7 @@ func TestMigrate_MigrationNumberedBehindAnAppliedOneIsRefused(t *testing.T) {
 		t.Fatalf("applying the first set: %v", err)
 	}
 
-	// 00002 lands from another branch after 00003 has already run.
+	// 00002 arrives from another branch after 00003 has already been applied.
 	err := Migrate(ctx, pool, numberedMigrations("00001_first", "00002_second", "00003_third"), logger)
 	if err == nil {
 		t.Fatal("expected an error for a migration numbered behind an applied one, got nil")
@@ -217,8 +217,8 @@ func TestMigrate_MigrationNumberedBehindAnAppliedOneIsRefused(t *testing.T) {
 	}
 }
 
-// numberedMigrations builds a migration set where each one creates a table named
-// after its own file.
+// numberedMigrations builds a migration set in which each migration creates a
+// table named after its own file.
 func numberedMigrations(names ...string) fs.FS {
 	fsys := fstest.MapFS{}
 	for _, name := range names {

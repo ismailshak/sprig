@@ -17,7 +17,7 @@ WHERE garden_id = $1 AND archived_at IS NULL
 ORDER BY created_at
 `
 
-// A garden's care types are shown in the order the garden created them.
+// Care types are listed in creation order.
 func (q *Queries) ListCareTypes(ctx context.Context, gardenID uuid.UUID) ([]CareType, error) {
 	rows, err := q.db.Query(ctx, listCareTypes, gardenID)
 	if err != nil {

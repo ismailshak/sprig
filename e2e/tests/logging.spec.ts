@@ -7,7 +7,7 @@ test.beforeEach(async ({ page, today }) => {
   await today.open();
 });
 
-test('a row opens the sheet for its care', async ({ today, sheet }) => {
+test('clicking a care row opens the log sheet for that care', async ({ today, sheet }) => {
   await today.openSheet(plants.nigel, 'water');
 
   await expect(sheet.dialog()).toHaveAccessibleName('Log care for Nigel');
@@ -18,14 +18,14 @@ test('a row opens the sheet for its care', async ({ today, sheet }) => {
   await expect(sheet.dialog().getByRole('button', { name: 'Log watering' })).toBeVisible();
 });
 
-test('a plant with one care is not asked what', async ({ today, sheet }) => {
+test('the sheet has no care type choice for a plant with one care', async ({ today, sheet }) => {
   await today.openSheet(plants.doris, 'water');
 
   await expect(sheet.dialog()).toBeVisible();
   await expect(sheet.dialog().getByText('What', { exact: true })).toHaveCount(0);
 });
 
-test('logging from the sheet takes the plant off the list', async ({ today, sheet }) => {
+test("logging a care from the sheet removes the plant from today's list", async ({ today, sheet }) => {
   await today.openSheet(plants.doris, 'water');
   await sheet.submit('Log watering');
   await expect(sheet.dialog()).toHaveCount(0);
@@ -34,17 +34,17 @@ test('logging from the sheet takes the plant off the list', async ({ today, shee
   await expect(today.careRow(plants.doris, 'water')).toHaveCount(0);
 });
 
-test('the care button logs the care as now', async ({ today }) => {
+test('the care button on a row logs the care with the current time', async ({ today }) => {
   await today.careButton(plants.doris, 'water').click();
-  // With JavaScript the row is still there in its logged state. A locator for
-  // any button would match its Undo.
+  // With JavaScript the row stays in its logged state, so a locator for any
+  // button would match its Undo.
   await expect(today.careRow(plants.doris, 'water').getByRole('button', { name: 'Water' })).toHaveCount(0);
 
   await today.open();
   await expect(today.careRow(plants.doris, 'water')).toHaveCount(0);
 });
 
-test('a skip asks again in the chosen days', async ({ today, sheet }) => {
+test('a skip makes the care due again after the chosen number of days', async ({ today, sheet }) => {
   await today.openSheet(plants.nigel, 'water');
   await sheet.chip('Skipped').check();
   await sheet.chip('1 day').check();
@@ -57,7 +57,7 @@ test('a skip asks again in the chosen days', async ({ today, sheet }) => {
   await expect(row).toContainText('Water tomorrow');
 });
 
-test("switching what names that care's usual interval", async ({ today, sheet }) => {
+test("switching the care type relabels the usual chip with that type's interval", async ({ today, sheet }) => {
   await today.openSheet(plants.nigel, 'water');
   await sheet.chip('Skipped').check();
   await expect(sheet.chip('The usual 4 days')).toBeVisible();
@@ -80,7 +80,7 @@ test('a time later than now is refused', async ({ today, sheet }) => {
   await expect(sheet.chip('Earlier today')).toBeChecked();
 });
 
-test('cancelling the sheet leaves the row as it was', async ({ today, sheet }) => {
+test('cancelling the sheet leaves the row unchanged', async ({ today, sheet }) => {
   await today.openSheet(plants.doris, 'water');
   await sheet.cancel();
 
@@ -88,7 +88,7 @@ test('cancelling the sheet leaves the row as it was', async ({ today, sheet }) =
   await expect(today.careRow(plants.doris, 'water')).toBeVisible();
 });
 
-test('a logged row says what was recorded without a reload @js', async ({ today, sheet }) => {
+test('a logged row shows what was recorded without a reload @js', async ({ today, sheet }) => {
   await today.openSheet(plants.doris, 'water');
   await sheet.submit('Log watering');
 
@@ -96,7 +96,7 @@ test('a logged row says what was recorded without a reload @js', async ({ today,
   await expect(sheet.dialog()).toHaveCount(0);
 });
 
-test('a logged row can be taken back inside its window @js', async ({ today }) => {
+test('a logged row can be undone inside its grace window @js', async ({ today }) => {
   await today.careButton(plants.doris, 'water').click();
   await expect(today.careRow(plants.doris, 'water')).toContainText('Watered just now');
 
@@ -109,30 +109,29 @@ test('a logged row can be taken back inside its window @js', async ({ today }) =
 
 // The 15s wait covers the 4s grace window and the collapse after it, inside
 // Playwright's 30s test timeout.
-test('a logged row leaves the list when its window closes @js', async ({ today }) => {
+test('a logged row disappears from the list when its grace window closes @js', async ({ today }) => {
   await today.careButton(plants.doris, 'water').click();
   await expect(today.undoButton(plants.doris, 'water')).toBeVisible();
 
   await expect(today.careRow(plants.doris, 'water')).toHaveCount(0, { timeout: 15_000 });
 });
 
-// Five is the server's bound on the feed rather than a count of the seed,
-// which holds months of history.
-test('the feed carries the five newest events', async ({ today }) => {
+// The seed holds months of history. Five is the server's limit on the feed.
+test('the feed shows the five newest events', async ({ today }) => {
   await expect(today.feedLines()).toHaveCount(5);
 });
 
-test('a care logged from the sheet reaches the top of the feed @js', async ({ today, sheet }) => {
+test('a care logged from the sheet appears at the top of the feed @js', async ({ today, sheet }) => {
   await today.openSheet(plants.doris, 'water');
   await sheet.submit('Log watering');
 
   await expect(today.feedLines().first()).toContainText('You watered Doris');
 });
 
-// The row leaves the day on the reload that follows the post. The feed holds
-// the only Undo, on the care just logged, because every seeded event is days
-// old and outside the window.
-test('a logged care is taken back from the feed with no script running @nojs', async ({ today }) => {
+// The reload after the post removes the row from the day. The only Undo is in
+// the feed, on the care just logged, because every seeded event is days old and
+// outside the undo window.
+test('a logged care can be undone from the feed without JavaScript @nojs', async ({ today }) => {
   await today.careButton(plants.doris, 'water').click();
   await expect(today.careRow(plants.doris, 'water')).toHaveCount(0);
 

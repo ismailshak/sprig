@@ -9,7 +9,7 @@ import (
 func TestTokenExpiry(t *testing.T) {
 	now := time.Date(2026, time.September, 3, 9, 0, 0, 0, time.UTC)
 
-	// The four the create form offers, and the four it has to refuse.
+	// The four lifetimes the create form offers, then four it must refuse.
 	cases := []struct {
 		name     string
 		lifetime time.Duration

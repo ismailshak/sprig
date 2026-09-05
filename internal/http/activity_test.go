@@ -18,12 +18,12 @@ import (
 	"github.com/ismailshak/sprig/internal/store"
 )
 
-// rosewoodSamID is a second member of the garden Today is tested on because a
-// row on the strand names who did the care.
+// rosewoodSamID is a second member of the garden Today is tested on, since a
+// log row names who did the care.
 var rosewoodSamID = uuid.MustParse("00000000-0000-7000-8000-000000000105")
 
-// fairviewWaterID is the other garden's care type because an event needs one
-// before the strand can be shown leaving that garden out.
+// fairviewWaterID is the other garden's care type, needed to insert an event
+// there and check it is not listed.
 var fairviewWaterID = uuid.MustParse("00000000-0000-7000-8000-000000000203")
 
 type logFixture struct {
@@ -32,8 +32,8 @@ type logFixture struct {
 	principal auth.Principal
 }
 
-// rosewoodLog writes the garden's history by hand because a history derived
-// from the schedules holds no silence for the strand to draw.
+// rosewoodLog inserts the garden's events directly, because events derived
+// from the schedules would have no gaps for the log to mark.
 func rosewoodLog(t *testing.T) *logFixture {
 	t.Helper()
 
@@ -48,7 +48,7 @@ func rosewoodLog(t *testing.T) *logFixture {
 		by    uuid.UUID
 		at    time.Time
 		done  bool
-		// again is the skip's re-check and zero on any other event.
+		// again is the skip's override interval, zero for any other event.
 		again int
 		note  string
 	}{
@@ -78,7 +78,7 @@ func rosewoodLog(t *testing.T) *logFixture {
 	}
 }
 
-// at is an instant in London, the zone the reader keeps.
+// at returns a time in London, the reader's timezone.
 func at(month time.Month, d, hour, minute int) time.Time {
 	return time.Date(2026, month, d, hour, minute, 0, 0, london())
 }
@@ -177,23 +177,24 @@ func daysBack(newest, oldest int) []int {
 	return out
 }
 
-// railItemElement matches every item on the strand, whichever of the three it is.
+// railItemElement matches every item in the log, whichever of the three kinds
+// it is.
 var railItemElement = regexp.MustCompile(`(?s)<li class="(rail__day|rail__gap|row row--event)"[^>]*>(.*?)</li>`)
 
-type strandLine struct {
+type logEntry struct {
 	kind string
 	text string
 }
 
-func strandLines(page string) []strandLine {
-	var lines []strandLine
+func logEntries(page string) []logEntry {
+	var lines []logEntry
 	for _, m := range railItemElement.FindAllStringSubmatch(page, -1) {
-		lines = append(lines, strandLine{kind: m[1], text: text(m[2])})
+		lines = append(lines, logEntry{kind: m[1], text: text(m[2])})
 	}
 	return lines
 }
 
-func textOf(lines []strandLine, kind string) []string {
+func textOf(lines []logEntry, kind string) []string {
 	var out []string
 	for _, l := range lines {
 		if l.kind == kind {
@@ -209,14 +210,14 @@ const (
 	eventKind = "row row--event"
 )
 
-func TestActivity_TheStrandRunsFromTheNewestEventToTheOldest(t *testing.T) {
+func TestActivity_EventsAreListedNewestFirst(t *testing.T) {
 	f := rosewoodLog(t)
 
-	got := textOf(strandLines(f.show(t)), eventKind)
+	got := textOf(logEntries(f.show(t)), eventKind)
 
 	want := []string{"Big Fella", "Doris", "Nigel", "Trail Mix", "Sprout", "Spike", "Opuntia microdasys"}
 	if len(got) != len(want) {
-		t.Fatalf("the strand carries %d events, want %d:\n%v", len(got), len(want), got)
+		t.Fatalf("the log carries %d events, want %d:\n%v", len(got), len(want), got)
 	}
 	for i, name := range want {
 		if !strings.HasPrefix(got[i], name) {
@@ -225,10 +226,10 @@ func TestActivity_TheStrandRunsFromTheNewestEventToTheOldest(t *testing.T) {
 	}
 }
 
-func TestActivity_ADayMarkerCountsWhatTheDayHolds(t *testing.T) {
+func TestActivity_ADayMarkerCountsThatDaysEvents(t *testing.T) {
 	f := rosewoodLog(t)
 
-	got := textOf(strandLines(f.show(t)), dayKind)
+	got := textOf(logEntries(f.show(t)), dayKind)
 
 	want := []string{"Today · 2", "Yesterday · 1", "21 August · 1", "19 August · 1", "16 August · 1", "12 August · 1"}
 	if !slices.Equal(got, want) {
@@ -236,32 +237,32 @@ func TestActivity_ADayMarkerCountsWhatTheDayHolds(t *testing.T) {
 	}
 }
 
-func TestActivity_ASilenceIsNamedByTheDaysItHeld(t *testing.T) {
+func TestActivity_AGapMarkerSaysHowManyDaysHadNothing(t *testing.T) {
 	f := rosewoodLog(t)
 
-	got := textOf(strandLines(f.show(t)), gapKind)
+	got := textOf(logEntries(f.show(t)), gapKind)
 
 	want := []string{"nothing for 11 days", "nothing for 3 days"}
 	if !slices.Equal(got, want) {
-		t.Errorf("the strand marks %v, want %v", got, want)
+		t.Errorf("the log marks %v, want %v", got, want)
 	}
 }
 
-// The one and two quiet days in the history are under gardenSilence.
-func TestActivity_AQuietDayOrTwoIsNotASilence(t *testing.T) {
+// The gaps of one and two days in the fixture are under gardenSilence.
+func TestActivity_AGapUnderThreeDaysGetsNoMarker(t *testing.T) {
 	f := rosewoodLog(t)
 
 	for _, unwanted := range []string{"nothing for 1 day", "nothing for 2 days"} {
 		if strings.Contains(f.show(t), unwanted) {
-			t.Errorf("the strand says %q, and a garden that quiet for a day or two is not silent", unwanted)
+			t.Errorf("the log says %q, and a garden that quiet for a day or two is not silent", unwanted)
 		}
 	}
 }
 
-func TestActivity_ASilenceIsDrawnBetweenTheDaysItSeparates(t *testing.T) {
+func TestActivity_AGapMarkerIsPlacedBetweenTheDaysItSeparates(t *testing.T) {
 	f := rosewoodLog(t)
 
-	lines := strandLines(f.show(t))
+	lines := logEntries(f.show(t))
 
 	var before, after string
 	for i, l := range lines {
@@ -277,14 +278,14 @@ func TestActivity_ASilenceIsDrawnBetweenTheDaysItSeparates(t *testing.T) {
 
 func TestActivity_AnEventIsUnderTheDayItWasPerformed(t *testing.T) {
 	f := rosewoodLog(t)
-	// Performed on Tuesday and recorded on Thursday, the one event where the
-	// two orderings disagree.
+	// Performed on Tuesday and recorded on Thursday, the one event where
+	// ordering by performed_at and by recorded_at disagree.
 	f.exec(t, `INSERT INTO care_event (garden_id, plant_id, care_type_id, performed_by, performed_at, recorded_at, done)
 		VALUES ($1, $2, $3, $4, $5, $6, true)`, rosewoodID, dorisID, waterID, readerID, at(time.September, 1, 10, 0), thursday)
 
-	got := textOf(strandLines(f.show(t)), dayKind)
+	got := textOf(logEntries(f.show(t)), dayKind)
 
-	// Under recorded_at the Tuesday marker would sit at the top of the strand.
+	// Ordered by recorded_at, the Tuesday marker would be at the top.
 	want := []string{"Today · 2", "Yesterday · 1", "Tuesday · 1", "21 August · 1", "19 August · 1", "16 August · 1", "12 August · 1"}
 	if !slices.Equal(got, want) {
 		t.Errorf("the day markers read %v, want %v", got, want)
@@ -297,7 +298,7 @@ func TestActivity_AnEventAfterMidnightBelongsToTheReadersDay(t *testing.T) {
 	f.exec(t, `INSERT INTO care_event (garden_id, plant_id, care_type_id, performed_by, performed_at, recorded_at, done)
 		VALUES ($1, $2, $3, $4, $5, $5, true)`, rosewoodID, sproutID, waterID, readerID, at(time.September, 3, 0, 30))
 
-	lines := strandLines(f.show(t))
+	lines := logEntries(f.show(t))
 
 	if got := textOf(lines, dayKind)[0]; got != "Today · 3" {
 		t.Errorf("today's marker reads %q, want the half hour past midnight counted under it", got)
@@ -310,7 +311,7 @@ func TestActivity_AnEventAfterMidnightBelongsToTheReadersDay(t *testing.T) {
 func TestActivity_ARowSaysWhoDidWhatAndWhen(t *testing.T) {
 	f := rosewoodLog(t)
 
-	got := textOf(strandLines(f.show(t)), eventKind)[0]
+	got := textOf(logEntries(f.show(t)), eventKind)[0]
 
 	if want := "Big Fella You watered · 7:30am"; got != want {
 		t.Errorf("the newest row reads %q, want %q", got, want)
@@ -320,7 +321,7 @@ func TestActivity_ARowSaysWhoDidWhatAndWhen(t *testing.T) {
 func TestActivity_ASkipSaysWhenItWillBeAskedAgain(t *testing.T) {
 	f := rosewoodLog(t)
 
-	got := textOf(strandLines(f.show(t)), eventKind)[1]
+	got := textOf(logEntries(f.show(t)), eventKind)[1]
 
 	if want := "Doris Sam skipped · 6:15am Asking again in 2 days"; got != want {
 		t.Errorf("the skipped row reads %q, want %q", got, want)
@@ -330,14 +331,14 @@ func TestActivity_ASkipSaysWhenItWillBeAskedAgain(t *testing.T) {
 func TestActivity_ANoteIsQuotedUnderTheRow(t *testing.T) {
 	f := rosewoodLog(t)
 
-	got := textOf(strandLines(f.show(t)), eventKind)[2]
+	got := textOf(logEntries(f.show(t)), eventKind)[2]
 
 	if want := "Nigel You fed · 6:00pm “New pot”"; got != want {
 		t.Errorf("the noted row reads %q, want %q", got, want)
 	}
 }
 
-func TestActivity_APlantDownToItsBotanicalNameIsSetInItalic(t *testing.T) {
+func TestActivity_APlantWithOnlyABotanicalNameIsShownInItalics(t *testing.T) {
 	f := rosewoodLog(t)
 
 	if !strings.Contains(f.show(t), `<span class="row__name row__name--sp">Opuntia microdasys</span>`) {
@@ -345,24 +346,25 @@ func TestActivity_APlantDownToItsBotanicalNameIsSetInItalic(t *testing.T) {
 	}
 }
 
-func TestActivity_OnePageOfEventsIsDrawn(t *testing.T) {
+func TestActivity_OnlyOnePageOfEventsIsShown(t *testing.T) {
 	f := rosewoodLog(t)
-	// Twenty events newer than everything above fill the page on their own.
+	// Twenty events newer than everything in the fixture fill the page on
+	// their own.
 	f.exec(t, `INSERT INTO care_event (garden_id, plant_id, care_type_id, performed_by, performed_at, recorded_at, done)
 		SELECT $1, $2, $3, $4, $5::timestamptz - make_interval(mins => n), $5::timestamptz - make_interval(mins => n), true
 		FROM generate_series(1, 20) AS n`, rosewoodID, nigelID, waterID, readerID, at(time.September, 3, 8, 0))
 
-	got := textOf(strandLines(f.show(t)), eventKind)
+	got := textOf(logEntries(f.show(t)), eventKind)
 
-	if len(got) != strandPage {
-		t.Errorf("the strand carries %d events, want %d", len(got), strandPage)
+	if len(got) != logPageSize {
+		t.Errorf("the log carries %d events, want %d", len(got), logPageSize)
 	}
 	if strings.Contains(strings.Join(got, "\n"), "Opuntia") {
 		t.Error("the oldest event is on the page, and a page of twenty cannot hold twenty-seven")
 	}
 }
 
-func TestActivity_AnotherGardensEventsAreNotOnTheStrand(t *testing.T) {
+func TestActivity_AnotherGardensEventsAreNotListed(t *testing.T) {
 	f := rosewoodLog(t)
 	f.exec(t, "INSERT INTO garden (id, name) VALUES ($1, 'Fairview')", fairviewID)
 	f.exec(t, "INSERT INTO plant (id, garden_id, nickname) VALUES ($1, $2, 'Hedge')", fairviewPlantID, fairviewID)
@@ -373,10 +375,10 @@ func TestActivity_AnotherGardensEventsAreNotOnTheStrand(t *testing.T) {
 	page := f.show(t)
 
 	if strings.Contains(page, "Hedge") {
-		t.Error("the strand names a plant from another garden")
+		t.Error("the log names a plant from another garden")
 	}
-	if got := len(textOf(strandLines(page), eventKind)); got != 7 {
-		t.Errorf("the strand carries %d events, want the garden's own 7", got)
+	if got := len(textOf(logEntries(page), eventKind)); got != 7 {
+		t.Errorf("the log carries %d events, want the garden's own 7", got)
 	}
 }
 
@@ -389,12 +391,12 @@ func TestActivity_AGardenWithNothingRecordedSaysSo(t *testing.T) {
 	if got := text(page); !strings.Contains(got, "Nothing recorded yet") {
 		t.Errorf("the empty log reads %q, want it to say nothing is recorded", got)
 	}
-	if strandLines(page) != nil {
-		t.Error("the empty log draws a strand")
+	if logEntries(page) != nil {
+		t.Error("the empty log renders a list")
 	}
 }
 
-func TestActivity_ASitterWithNoPlantsIsOfferedNothing(t *testing.T) {
+func TestActivity_ASitterInAGardenWithNoPlantsGetsNoAddLink(t *testing.T) {
 	f := rosewoodLog(t)
 	f.principal.Capabilities = auth.Capabilities{}
 	f.exec(t, "DELETE FROM care_event WHERE garden_id = $1", rosewoodID)
@@ -410,7 +412,7 @@ func TestActivity_ASitterWithNoPlantsIsOfferedNothing(t *testing.T) {
 	}
 }
 
-func TestActivity_AGardenWithNoPlantsIsOfferedItsFirst(t *testing.T) {
+func TestActivity_AGardenWithNoPlantsGetsAnAddPlantLink(t *testing.T) {
 	f := rosewoodLog(t)
 	f.exec(t, "DELETE FROM care_event WHERE garden_id = $1", rosewoodID)
 	f.exec(t, "DELETE FROM plant WHERE garden_id = $1", rosewoodID)
@@ -439,8 +441,8 @@ func TestActivity_TheOlderLinkOpensAtTheEventAfterTheLastOneOnThePage(t *testing
 	first := f.show(t)
 	second := f.follow(t, first, olderLink)
 
-	firstDays := textOf(strandLines(first), dayKind)
-	secondDays := textOf(strandLines(second), dayKind)
+	firstDays := textOf(logEntries(first), dayKind)
+	secondDays := textOf(logEntries(second), dayKind)
 	if want := "23 July · 1"; firstDays[len(firstDays)-1] != want {
 		t.Errorf("the first page ends on %q, want %q", firstDays[len(firstDays)-1], want)
 	}
@@ -449,8 +451,8 @@ func TestActivity_TheOlderLinkOpensAtTheEventAfterTheLastOneOnThePage(t *testing
 	}
 }
 
-// The reason the link carries a timestamp rather than an offset.
-func TestActivity_TheOlderPageIsUnchangedByCareLoggedAfterTheLinkWasDrawn(t *testing.T) {
+// This is why the link holds a timestamp rather than an offset.
+func TestActivity_TheOlderPageIsUnchangedByCareLoggedAfterTheLinkWasRendered(t *testing.T) {
 	f := rosewoodLog(t)
 	f.waterings(t, nigelID, daysBack(30, 50)...)
 
@@ -458,10 +460,10 @@ func TestActivity_TheOlderPageIsUnchangedByCareLoggedAfterTheLinkWasDrawn(t *tes
 	f.care(t, spikeID, waterID, thursday)
 	second := f.get(t, older)
 
-	if got := textOf(strandLines(second), dayKind)[0]; got != "22 July · 1" {
+	if got := textOf(logEntries(second), dayKind)[0]; got != "22 July · 1" {
 		t.Errorf("the second page starts on %q, want 22 July: an event logged at the top of the log should not move it", got)
 	}
-	if got := len(textOf(strandLines(second), eventKind)); got != 8 {
+	if got := len(textOf(logEntries(second), eventKind)); got != 8 {
 		t.Errorf("the second page holds %d events, want the 8 below the first page", got)
 	}
 }
@@ -478,10 +480,10 @@ func TestActivity_TwoEventsWithOneTimestampAreBothShownAcrossAPageBoundary(t *te
 	first := f.show(t)
 	second := f.follow(t, first, olderLink)
 
-	firstEvents := textOf(strandLines(first), eventKind)
-	secondEvents := textOf(strandLines(second), eventKind)
-	if len(firstEvents) != strandPage {
-		t.Fatalf("the first page holds %d events, want %d", len(firstEvents), strandPage)
+	firstEvents := textOf(logEntries(first), eventKind)
+	secondEvents := textOf(logEntries(second), eventKind)
+	if len(firstEvents) != logPageSize {
+		t.Fatalf("the first page holds %d events, want %d", len(firstEvents), logPageSize)
 	}
 	if len(secondEvents) != 1 {
 		t.Fatalf("the second page holds %d events, want the one sharing a timestamp with the last row of the first page: %v", len(secondEvents), secondEvents)
@@ -544,7 +546,7 @@ func TestActivity_AMalformedBeforeParameterIsNotFound(t *testing.T) {
 func TestActivity_AFilteredRowShowsTheCareAndTheDateInsteadOfThePlantName(t *testing.T) {
 	f := rosewoodLog(t)
 
-	got := textOf(strandLines(f.get(t, plantActivityPath(bigFellaID))), eventKind)
+	got := textOf(logEntries(f.get(t, plantActivityPath(bigFellaID))), eventKind)
 
 	want := []string{"Watered You · today, 7:30am"}
 	if !slices.Equal(got, want) {
@@ -558,7 +560,7 @@ func TestActivity_AFilteredLogHasNoDayHeadings(t *testing.T) {
 	f := rosewoodLog(t)
 	f.waterings(t, bigFellaID, 10, 20, 30)
 
-	got := strandLines(f.get(t, plantActivityPath(bigFellaID)))
+	got := logEntries(f.get(t, plantActivityPath(bigFellaID)))
 
 	if days := textOf(got, dayKind); days != nil {
 		t.Errorf("the filtered log has the day headings %v, want none", days)
@@ -573,7 +575,7 @@ func TestActivity_ASkippedCareOnAFilteredRowIsShownAsSkipped(t *testing.T) {
 
 	page := f.get(t, plantActivityPath(dorisID))
 
-	if got := textOf(strandLines(page), eventKind)[0]; got != "Skipped Sam · today, 6:15am Asking again in 2 days" {
+	if got := textOf(logEntries(page), eventKind)[0]; got != "Skipped Sam · today, 6:15am Asking again in 2 days" {
 		t.Errorf("the skipped row reads %q, want it to say Skipped", got)
 	}
 }
@@ -583,7 +585,7 @@ func TestActivity_AFilteredLogLabelsAGapTwiceThePlantsUsualInterval(t *testing.T
 	// Watered every ten days, with one thirty-day gap.
 	f.waterings(t, bigFellaID, 10, 20, 30, 60, 70)
 
-	got := textOf(strandLines(f.get(t, plantActivityPath(bigFellaID))), gapKind)
+	got := textOf(logEntries(f.get(t, plantActivityPath(bigFellaID))), gapKind)
 
 	want := []string{"nothing for 30 days"}
 	if !slices.Equal(got, want) {
@@ -597,7 +599,7 @@ func TestActivity_AFilteredLogDoesNotLabelAGapUnderTwiceThePlantsUsualInterval(t
 	f := rosewoodLog(t)
 	f.waterings(t, bigFellaID, 20, 40, 60, 90, 110)
 
-	got := textOf(strandLines(f.get(t, plantActivityPath(bigFellaID))), gapKind)
+	got := textOf(logEntries(f.get(t, plantActivityPath(bigFellaID))), gapKind)
 
 	if got != nil {
 		t.Errorf("the log of a plant watered every twenty days labels the gaps %v, want none", got)
@@ -610,7 +612,7 @@ func TestActivity_AFilteredLogDoesNotLabelAGapOfUnderTwoWeeks(t *testing.T) {
 	f := rosewoodLog(t)
 	f.waterings(t, bigFellaID, append(daysBack(1, 10), 22)...)
 
-	got := textOf(strandLines(f.get(t, plantActivityPath(bigFellaID))), gapKind)
+	got := textOf(logEntries(f.get(t, plantActivityPath(bigFellaID))), gapKind)
 
 	if got != nil {
 		t.Errorf("the log of a plant watered daily labels the gaps %v, want none: twelve days is under the two-week floor", got)
@@ -640,7 +642,7 @@ func TestActivity_TheOlderLinkOnAFilteredLogKeepsTheFilter(t *testing.T) {
 
 	second := f.follow(t, f.get(t, plantActivityPath(bigFellaID)), olderLink)
 
-	if got := len(textOf(strandLines(second), eventKind)); got != 6 {
+	if got := len(textOf(logEntries(second), eventKind)); got != 6 {
 		t.Errorf("the second page holds %d events, want the plant's own 6", got)
 	}
 }
@@ -683,7 +685,7 @@ func TestActivity_AFilteredLogWithNoEventsSaysNothingIsRecorded(t *testing.T) {
 	if got := text(page); !strings.Contains(got, "Nothing recorded yet") {
 		t.Errorf("the filtered log with no events reads %q, want it to say nothing is recorded", got)
 	}
-	if strandLines(page) != nil {
+	if logEntries(page) != nil {
 		t.Error("the filtered log with no events still renders a list of rows")
 	}
 }

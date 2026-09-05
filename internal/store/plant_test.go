@@ -2,7 +2,7 @@ package store
 
 import "testing"
 
-func TestPlant_OtherNameIsWhicheverNameDisplayNameDidNotUse(t *testing.T) {
+func TestPlant_OtherNameIsTheNameDisplayNameDidNotUse(t *testing.T) {
 	name := func(s string) *string { return &s }
 
 	tests := []struct {
@@ -23,17 +23,17 @@ func TestPlant_OtherNameIsWhicheverNameDisplayNameDidNotUse(t *testing.T) {
 			botanical: true,
 		},
 		{
-			name:      "the botanical name follows a common name that leads",
+			name:      "the botanical name follows a common name used as the display name",
 			plant:     Plant{CommonName: name("Sweet basil"), BotanicalName: name("Ocimum basilicum")},
 			want:      "Ocimum basilicum",
 			botanical: true,
 		},
 		{
-			name:  "a plant down to one name has no second",
+			name:  "a plant with one name has no other name",
 			plant: Plant{BotanicalName: name("Opuntia microdasys")},
 		},
 		{
-			name:  "an empty name is no name",
+			name:  "an empty string counts as no name",
 			plant: Plant{Nickname: name("Sprout"), CommonName: name(""), BotanicalName: name("")},
 		},
 	}

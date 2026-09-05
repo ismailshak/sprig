@@ -24,15 +24,15 @@ const activityPath = "/activity"
 // plantActivityPath is the URL of the activity log filtered to one plant. It is
 // the same page as the whole garden's log with a query parameter on it.
 func plantActivityPath(plantID uuid.UUID) string {
-	return strandQuery{plant: &plantID}.href()
+	return logQuery{plant: &plantID}.href()
 }
 
-// strandPage is how many events one page of the strand holds. Twenty is a few
-// days of a garden that logs about five cares a day.
-const strandPage = 20
+// logPageSize is how many events one page of the activity log shows. Twenty is
+// a few days for a garden that logs about five cares a day.
+const logPageSize = 20
 
-// gardenSilence is the shortest run of empty days the strand marks. A floor of
-// one would put "nothing for 1 day" between most of the markers because
+// gardenSilence is the shortest gap between days that gets a "nothing for N
+// days" marker. A minimum of one would put a marker between most days, since
 // something is logged most days.
 const gardenSilence = 3
 
@@ -51,9 +51,9 @@ type activity struct {
 	now       func() time.Time
 }
 
-// strandQuery is the query string of a request for the log. plant is nil for the
+// logQuery is the query string of a request for the log. plant is nil for the
 // whole garden, before is nil for the newest page.
-type strandQuery struct {
+type logQuery struct {
 	plant  *uuid.UUID
 	before *cursor
 }
@@ -63,11 +63,11 @@ const (
 	beforeParam = "before"
 )
 
-// parseStrandQuery reads the query string. It returns false when either
-// parameter is present and unparseable, and the handler then answers 404: such a
-// URL names no page.
-func parseStrandQuery(r *http.Request) (strandQuery, bool) {
-	var q strandQuery
+// parseLogQuery reads the query string. It returns false when either
+// parameter is present and unparseable. The handler then returns 404, because
+// such a URL names no page.
+func parseLogQuery(r *http.Request) (logQuery, bool) {
+	var q logQuery
 	values := r.URL.Query()
 	if s := values.Get(plantParam); s != "" {
 		id, err := uuid.Parse(s)
@@ -86,7 +86,7 @@ func parseStrandQuery(r *http.Request) (strandQuery, bool) {
 	return q, true
 }
 
-func (q strandQuery) href() string {
+func (q logQuery) href() string {
 	values := url.Values{}
 	if q.plant != nil {
 		values.Set(plantParam, q.plant.String())
@@ -140,7 +140,7 @@ func parseCursor(s string) (cursor, bool) {
 
 func (h *activity) show(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
-	q, ok := parseStrandQuery(r)
+	q, ok := parseLogQuery(r)
 	if !ok {
 		http.NotFound(w, r)
 		return
@@ -159,16 +159,16 @@ func (h *activity) show(w http.ResponseWriter, r *http.Request) {
 	// under it, so send the reader to the top of the log rather than to a page
 	// holding one sentence and no way on.
 	if page.Empty != nil && q.before != nil {
-		http.Redirect(w, r, strandQuery{plant: q.plant}.href(), http.StatusSeeOther)
+		http.Redirect(w, r, logQuery{plant: q.plant}.href(), http.StatusSeeOther)
 		return
 	}
 	h.templates.render(w, r, view{page: "activity"}, page)
 }
 
-func (h *activity) page(ctx context.Context, principal auth.Principal, q strandQuery) (activityPage, error) {
+func (h *activity) page(ctx context.Context, principal auth.Principal, q logQuery) (activityPage, error) {
 	now := h.now().In(locationFor(principal.User))
 
-	// Read the plant first so that an id from another garden answers 404. Passing
+	// Read the plant first so that an id from another garden returns 404. Passing
 	// the id straight to the query would instead return no rows and render an
 	// empty log for a plant the reader may not see.
 	var plant *store.Plant
@@ -183,9 +183,9 @@ func (h *activity) page(ctx context.Context, principal auth.Principal, q strandQ
 	params := store.ListCareEventLogParams{
 		GardenID: principal.Garden.ID,
 		PlantID:  q.plant,
-		// One row more than the page holds. If it comes back there is another
-		// page, which is cheaper to learn than counting the whole log.
-		Count: strandPage + 1,
+		// One row more than the page holds. If it is returned there is another
+		// page. That is cheaper than counting the whole log.
+		Count: logPageSize + 1,
 	}
 	if q.before != nil {
 		params.BeforeAt = &q.before.at
@@ -207,7 +207,7 @@ type activityPage struct {
 	// Back links to the plant the log is filtered to. It is nil for the whole
 	// garden's log, which is reached from the tab bar and needs no way back.
 	Back  *link
-	Items []strandItem
+	Items []logItem
 	// Pager is nil when the log fits on one page.
 	Pager *pager
 	// Empty is set only when Items is empty.
@@ -225,9 +225,8 @@ type pager struct {
 	Latest string
 }
 
-// strandItem is one item on the strand, and exactly one of the three fields is
-// set.
-type strandItem struct {
+// logItem is one item in the activity log. Exactly one field is set.
+type logItem struct {
 	Day     *dayMarker
 	Silence *silence
 	Event   *eventRow
@@ -235,7 +234,7 @@ type strandItem struct {
 
 type dayMarker struct {
 	Title string
-	// Count is how many events the day holds.
+	// Count is how many events were logged that day.
 	Count int
 }
 
@@ -249,12 +248,12 @@ type eventRow struct {
 	// every row and the care is what differs. The template renders the plant's
 	// name instead when Act is empty.
 	Act string
-	// Slug is the care type's slug, which picks the icon shown in place of the
-	// plant's photo on a filtered row.
+	// Slug picks the icon shown in place of the plant's photo on a filtered row.
 	Slug string
-	// Skipped draws that icon in grey rather than green.
-	Skipped   bool
-	Name      string
+	// Skipped is true for a skip. The icon is then grey instead of green.
+	Skipped bool
+	Name    string
+	// Botanical is true when Name is the plant's botanical name.
 	Botanical bool
 	// Who and Did make up "Sam watered". Did is empty on a filtered row, where
 	// Act has already said what was done.
@@ -264,29 +263,29 @@ type eventRow struct {
 	// the row gives the date. A filtered log has no headings, so When there is
 	// the date and the time.
 	When string
-	// Extra is the note and, on a skip, when it will be asked again. It is empty
-	// on most rows.
+	// Extra is the note and, on a skip, when it will be asked again. Empty on
+	// most rows.
 	Extra string
 }
 
 type activityEmpty struct {
-	// NoPlants picks the plants icon over the activity one because a garden
-	// with no plants is a first run rather than an empty history.
+	// NoPlants shows the plants icon rather than the activity one, since a
+	// garden with no plants is a first run rather than an empty history.
 	NoPlants bool
 	Title    string
 	Line     string
 	Action   *link
 }
 
-func newActivityPage(principal auth.Principal, q strandQuery, plant *store.Plant, events []store.ListCareEventLogRow, plants int64, now time.Time) activityPage {
+func newActivityPage(principal auth.Principal, q logQuery, plant *store.Plant, events []store.ListCareEventLogRow, plants int64, now time.Time) activityPage {
 	var page activityPage
 	if plant != nil {
 		page.Back = &link{Label: plant.DisplayName(), Href: plantPath(plant.ID)}
 	}
 
-	more := len(events) > strandPage
+	more := len(events) > logPageSize
 	if more {
-		events = events[:strandPage]
+		events = events[:logPageSize]
 	}
 	if len(events) == 0 {
 		page.Empty = newActivityEmpty(principal, plants)
@@ -294,23 +293,23 @@ func newActivityPage(principal auth.Principal, q strandQuery, plant *store.Plant
 	}
 
 	if plant != nil {
-		page.Items = plantStrand(principal, events, now)
+		page.Items = plantLogItems(principal, events, now)
 	} else {
-		page.Items = strand(principal, events, now)
+		page.Items = logItems(principal, events, now)
 	}
 	page.Pager = newPager(q, events[len(events)-1].CareEvent, more)
 	return page
 }
 
 // newPager returns nil when neither link applies, which is a log of one page.
-func newPager(q strandQuery, last store.CareEvent, more bool) *pager {
+func newPager(q logQuery, last store.CareEvent, more bool) *pager {
 	var p pager
 	if more {
-		next := strandQuery{plant: q.plant, before: &cursor{at: last.PerformedAt, id: last.ID}}
+		next := logQuery{plant: q.plant, before: &cursor{at: last.PerformedAt, id: last.ID}}
 		p.Older = next.href()
 	}
 	if q.before != nil {
-		p.Latest = strandQuery{plant: q.plant}.href()
+		p.Latest = logQuery{plant: q.plant}.href()
 	}
 	if p.Older == "" && p.Latest == "" {
 		return nil
@@ -318,15 +317,15 @@ func newPager(q strandQuery, last store.CareEvent, more bool) *pager {
 	return &p
 }
 
-// newActivityEmpty offers an action only to a garden with no plants because
-// care is logged on Today or on a plant rather than here. A reader who may not
-// create a plant is offered none.
+// newActivityEmpty builds the empty state. Only a garden with no plants gets a
+// link, since care is logged on Today or a plant's page rather than here. A
+// reader who may not create a plant gets no link.
 func newActivityEmpty(principal auth.Principal, plants int64) *activityEmpty {
 	if plants == 0 {
 		empty := &activityEmpty{
 			NoPlants: true,
 			Title:    "No plants yet",
-			Line:     "Add one and sprig will tell you when it needs water.",
+			Line:     "Add a plant and sprig will remind you when to water it.",
 		}
 		if principal.Can(auth.PlantCreate) {
 			empty.Action = &link{Label: "Add a plant", Href: newPlantPath}
@@ -339,10 +338,10 @@ func newActivityEmpty(principal auth.Principal, plants int64) *activityEmpty {
 	}
 }
 
-// strand takes events newest first because a day's marker counts the run of
-// events that follows it.
-func strand(principal auth.Principal, events []store.ListCareEventLogRow, now time.Time) []strandItem {
-	items := make([]strandItem, 0, len(events))
+// logItems builds the log items from events ordered newest first. Each day
+// marker counts the run of events that follows it.
+func logItems(principal auth.Principal, events []store.ListCareEventLogRow, now time.Time) []logItem {
+	items := make([]logItem, 0, len(events))
 	day := func(i int) int { return schedule.DaysBetween(events[i].CareEvent.PerformedAt, now) }
 
 	for i := 0; i < len(events); {
@@ -352,19 +351,19 @@ func strand(principal auth.Principal, events []store.ListCareEventLogRow, now ti
 		}
 		if i > 0 {
 			if quiet := day(i) - day(i-1) - 1; quiet >= gardenSilence {
-				items = append(items, strandItem{Silence: &silence{Label: silenceLabel(quiet)}})
+				items = append(items, logItem{Silence: &silence{Label: silenceLabel(quiet)}})
 			}
 		}
-		items = append(items, strandItem{Day: &dayMarker{Title: dayHeading(events[i].CareEvent.PerformedAt, now), Count: run}})
+		items = append(items, logItem{Day: &dayMarker{Title: dayHeading(events[i].CareEvent.PerformedAt, now), Count: run}})
 		for _, e := range events[i : i+run] {
-			items = append(items, strandItem{Event: newEventRow(principal, e, now)})
+			items = append(items, logItem{Event: newEventRow(principal, e, now)})
 		}
 		i += run
 	}
 	return items
 }
 
-// plantStrand builds the list for the log filtered to one plant, newest event
+// plantLogItems builds the list for the log filtered to one plant, newest event
 // first.
 //
 // It writes no day headings. A heading exists to give a date once for the
@@ -374,17 +373,17 @@ func strand(principal auth.Principal, events []store.ListCareEventLogRow, now ti
 //
 // A gap here is the number of days between two cares, where the whole garden's
 // log counts the days that held nothing at all.
-func plantStrand(principal auth.Principal, events []store.ListCareEventLogRow, now time.Time) []strandItem {
+func plantLogItems(principal auth.Principal, events []store.ListCareEventLogRow, now time.Time) []logItem {
 	floor := plantSilenceFloor(events, now)
 
-	items := make([]strandItem, 0, len(events))
+	items := make([]logItem, 0, len(events))
 	for i, e := range events {
 		if i > 0 {
 			if gap := daysApart(events[i-1], e, now); gap >= floor {
-				items = append(items, strandItem{Silence: &silence{Label: silenceLabel(gap)}})
+				items = append(items, logItem{Silence: &silence{Label: silenceLabel(gap)}})
 			}
 		}
-		items = append(items, strandItem{Event: newPlantEventRow(principal, e, now)})
+		items = append(items, logItem{Event: newPlantEventRow(principal, e, now)})
 	}
 	return items
 }

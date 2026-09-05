@@ -1,5 +1,5 @@
-{{/* The three care types a garden starts with have an icon each, and a type
-     the garden added gets the drop, since most care is watering. */}}
+{{/* The three default care types each have an icon. A care type the garden
+     added gets the water drop. */}}
 {{define "care-icon"}}{{if eq . "feed"}}{{template "icon-feed"}}{{else if eq . "repot"}}{{template "icon-repot"}}{{else}}{{template "icon-water"}}{{end}}{{end}}
 
 {{define "icon-water"}}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3s6 6.4 6 10.5a6 6 0 0 1-12 0C6 9.4 12 3 12 3Z"/></svg>{{end}}

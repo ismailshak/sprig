@@ -25,8 +25,8 @@ const (
 
 var testLogger = slog.New(slog.NewJSONHandler(io.Discard, nil))
 
-// testSessions is a Sessions over no database. The middleware asks it only
-// for the cookie's name and shape, which need no query.
+// testSessions is a Sessions with no database. The middleware only asks it for
+// the cookie's name and attributes, which need no query.
 func testSessions() *auth.Sessions {
 	return auth.NewSessions(nil, testTTL, auth.CookieSettings{Name: "__Host-sprig_session", Secure: true})
 }
@@ -91,7 +91,7 @@ func cookieNamed(t *testing.T, rec *httptest.ResponseRecorder, name string) *htt
 	return nil
 }
 
-func TestAuthenticate_APublicRouteAnswersWithoutASession(t *testing.T) {
+func TestAuthenticate_APublicRouteIsServedWithoutASession(t *testing.T) {
 	called := false
 	handler, _ := protected(t, ResolverFunc(func(context.Context, time.Time, string) (auth.Principal, error) {
 		called = true
@@ -108,7 +108,7 @@ func TestAuthenticate_APublicRouteAnswersWithoutASession(t *testing.T) {
 	}
 }
 
-func TestAuthenticate_NoCookieIsSentToSignIn(t *testing.T) {
+func TestAuthenticate_ARequestWithNoCookieIsRedirectedToSignIn(t *testing.T) {
 	handler, _ := protected(t, acceptEveryToken(sitterPrincipal()))
 
 	for _, method := range []string{http.MethodGet, http.MethodPost} {
@@ -123,7 +123,7 @@ func TestAuthenticate_NoCookieIsSentToSignIn(t *testing.T) {
 	}
 }
 
-func TestAuthenticate_ATokenThatResolvesToNothingIsClearedAndSentToSignIn(t *testing.T) {
+func TestAuthenticate_AnUnknownTokenClearsTheCookieAndRedirectsToSignIn(t *testing.T) {
 	handler, _ := protected(t, rejectEveryToken)
 
 	rec := httptest.NewRecorder()
@@ -137,7 +137,7 @@ func TestAuthenticate_ATokenThatResolvesToNothingIsClearedAndSentToSignIn(t *tes
 	}
 }
 
-func TestAuthenticate_AResolvedSessionReachesTheHandlerAndSlidesTheCookie(t *testing.T) {
+func TestAuthenticate_AValidSessionReachesTheHandlerAndExtendsTheCookie(t *testing.T) {
 	handler, seen := protected(t, acceptEveryToken(sitterPrincipal()))
 
 	rec := httptest.NewRecorder()
@@ -158,7 +158,7 @@ func TestAuthenticate_AResolvedSessionReachesTheHandlerAndSlidesTheCookie(t *tes
 	}
 }
 
-func TestAuthenticate_AnEndedMembershipIsToldSoAndSignedOut(t *testing.T) {
+func TestAuthenticate_AnEndedMembershipGetsA403AndIsSignedOut(t *testing.T) {
 	sitter := sitterPrincipal()
 	ended := &auth.MembershipEndedError{
 		User:   sitter.User,

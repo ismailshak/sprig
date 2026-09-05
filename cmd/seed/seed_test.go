@@ -18,7 +18,7 @@ import (
 	"github.com/ismailshak/sprig/internal/store"
 )
 
-// The tables two runs of the seed have to agree on.
+// seededTables lists the tables two runs of the seed must write identically.
 var seededTables = []string{
 	"garden", "app_user", "membership",
 	"care_type", "plant", "care_schedule", "care_event",
@@ -30,8 +30,8 @@ func TestMain(m *testing.M) {
 	pgtest.Main(m)
 }
 
-// migrateSchema builds the template every test database in this package is
-// copied from.
+// migrateSchema migrates the template database that every test database in
+// this package is copied from.
 func migrateSchema(ctx context.Context, databaseURL string) error {
 	pool, err := store.Open(ctx, databaseURL)
 	if err != nil {
@@ -43,8 +43,8 @@ func migrateSchema(ctx context.Context, databaseURL string) error {
 	return store.Migrate(ctx, pool, db.Migrations, slog.New(slog.DiscardHandler))
 }
 
-// seeded is a database of the test's own holding the prototype's garden. The
-// seed commits, so these tests cannot share one database and roll back.
+// seeded returns a fresh database with the seed applied. The seed commits, so
+// these tests cannot share one database and roll back.
 func seeded(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 
@@ -60,9 +60,9 @@ func seeded(t *testing.T) *pgxpool.Pool {
 	return pool
 }
 
-// The e2e suite seeds from empty every run and asserts against what it finds,
-// so a second run that differed from the first anywhere would be a suite that
-// failed on a day nobody changed anything.
+// The e2e suite seeds from empty and asserts against what it finds, so any
+// difference between two runs would make the suite fail on a day nobody
+// changed anything.
 func TestSeed_RunningItTwiceWritesTheSameRows(t *testing.T) {
 	pool := seeded(t)
 	first := dumpRows(t, pool)
@@ -90,12 +90,11 @@ func TestSeed_RunningItTwiceWritesTheSameRows(t *testing.T) {
 	}
 }
 
-// The seed places a cadence's most recent event one interval before the day the
-// roster says the plant is next due, which is what makes Today show the same
-// three sections the prototype does. Postgres does the arithmetic here rather
-// than the seed's own advance, so that a mistake in that function has somewhere
-// to show up.
-func TestSeed_EveryCadenceFallsDueOnTheDayTheRosterSays(t *testing.T) {
+// The seed places a cadence's newest event one interval before its dueIn, so
+// Today shows the same three sections as the prototype. Postgres does the date
+// arithmetic here rather than the seed's own advance function, so a mistake in
+// that function is caught.
+func TestSeed_EveryCadenceFallsDueOnItsDueInDay(t *testing.T) {
 	pool := seeded(t)
 	ref := testReference(t)
 
@@ -149,9 +148,9 @@ func TestSeed_EveryCadenceFallsDueOnTheDayTheRosterSays(t *testing.T) {
 	}
 }
 
-// A completed one-off produces no date, so one in the fixture leaves a schedule
-// line missing from a plant page. The fixture is checked against Next rather
-// than against a copy of the rule in SQL.
+// A completed one-off produces no due date, so one in the fixture would leave
+// a schedule line missing from a plant page. The check uses schedule.Next
+// rather than a copy of the rule in SQL.
 func TestSeed_NoOneOffIsCompleted(t *testing.T) {
 	pool := seeded(t)
 	ref := testReference(t)
@@ -186,10 +185,9 @@ func TestSeed_NoOneOffIsCompleted(t *testing.T) {
 	}
 }
 
-// The second garden exists so that a query which lost its WHERE has somewhere
-// to be caught, which only works if none of its rows can be reached from the
-// first.
-func TestSeed_NoRowOfTheSecondGardenReachesTheFirst(t *testing.T) {
+// The second garden exists to catch a query missing its garden WHERE clause.
+// That only works if none of its rows is reachable from the first garden.
+func TestSeed_NoRowOfTheSecondGardenIsReachableFromTheFirst(t *testing.T) {
 	pool := seeded(t)
 	ctx := t.Context()
 	queries := store.New(pool)
@@ -206,7 +204,7 @@ func TestSeed_NoRowOfTheSecondGardenReachesTheFirst(t *testing.T) {
 	}
 	for _, p := range plants {
 		if strangers[p.ID] {
-			t.Errorf("%s's roster holds a plant belonging to %s", first.name, second.name)
+			t.Errorf("%s's plant list holds a plant belonging to %s", first.name, second.name)
 		}
 	}
 
@@ -220,16 +218,16 @@ func TestSeed_NoRowOfTheSecondGardenReachesTheFirst(t *testing.T) {
 		}
 	}
 
-	// A scope miss is 404 rather than 403, so the other garden's plant has to
-	// be no row at all rather than a row a handler decides about.
+	// Another garden's plant returns 404, not 403, so the query must return
+	// no row rather than a row a handler then rejects.
 	if _, err := queries.GetPlant(ctx, first.id, second.plants[0].id); !errors.Is(err, pgx.ErrNoRows) {
 		t.Errorf("reading %s's plant from %s returned %v, want pgx.ErrNoRows", second.name, first.name, err)
 	}
 }
 
-// An archived plant and an archived care type are both rows the roster leaves
-// out, and the seed writes one of each so a query that forgot to is caught.
-func TestSeed_TheRosterLeavesOutWhatWasArchived(t *testing.T) {
+// The plant list omits archived plants and archived care types. The seed writes
+// one of each so a query that forgets to filter them is caught.
+func TestSeed_ThePlantListOmitsArchivedPlantsAndCareTypes(t *testing.T) {
 	pool := seeded(t)
 	ctx := t.Context()
 	queries := store.New(pool)
@@ -240,7 +238,7 @@ func TestSeed_TheRosterLeavesOutWhatWasArchived(t *testing.T) {
 		t.Fatalf("listing plants: %v", err)
 	}
 	if got, want := len(plants), len(livingPlants()); got != want {
-		t.Errorf("the roster holds %d plants, want the %d that are not archived", got, want)
+		t.Errorf("the plant list holds %d plants, want the %d that are not archived", got, want)
 	}
 
 	careTypes, err := queries.ListCareTypes(ctx, first.id)
@@ -257,9 +255,9 @@ func TestSeed_TheRosterLeavesOutWhatWasArchived(t *testing.T) {
 	}
 }
 
-// One account in two gardens is the case a session's garden_id exists for. A
-// fixture where every user held one membership would let a query resolving a
-// user to "their garden" look right.
+// One account in two gardens is why session has a garden_id. If every user
+// had one membership, a query resolving a user to "their garden" would look
+// correct.
 func TestSeed_OneAccountHoldsMembershipsInBothGardens(t *testing.T) {
 	pool := seeded(t)
 
@@ -294,8 +292,8 @@ func TestSeed_OneAccountHoldsMembershipsInBothGardens(t *testing.T) {
 }
 
 // dumpRows reads every seeded table as JSON text, so two runs can be compared
-// column by column without naming the columns here. The rows are ordered by
-// that text rather than by id, because notification_preference has none.
+// column by column without naming the columns here. Rows are ordered by that
+// text rather than by id, because notification_preference has no id.
 func dumpRows(t *testing.T, pool *pgxpool.Pool) map[string][]string {
 	t.Helper()
 
@@ -324,8 +322,8 @@ func dumpRows(t *testing.T, pool *pgxpool.Pool) map[string][]string {
 }
 
 // A schedule's dueIn is how many days after the reference it next falls due,
-// so the seeded rows have to put each plant in the section that offset names.
-func TestSeed_TodayPlacesEachPlantWhereTheRosterSays(t *testing.T) {
+// so each plant must land in the Today section that offset implies.
+func TestSeed_TodayPlacesEachPlantInTheSectionItsDueInImplies(t *testing.T) {
 	pool := seeded(t)
 	ref := testReference(t)
 	ctx := t.Context()

@@ -1,11 +1,10 @@
-/* Structure and layout. No colour values live here — anything a palette could
-   change is a token, so this file is the same file whatever the palette is.
+/* Structure and layout. No colour values here. Anything a palette could change
+   is a token, so this file is the same whatever the palette.
 
-   Two layouts, one markup. Phone is the primary target and gets a bottom tab bar;
-   at 900px the tabs become a rail on the left, and at 1180px the activity feed
-   moves out of the main column into its own. Nothing is hidden at either size:
-   the desktop view has to be reviewable as its own design rather than as a wide
-   phone. */
+   Two layouts, one markup. Phone is the primary target and has a bottom tab bar.
+   At 900px the tabs become a rail on the left, and at 1180px the activity feed
+   moves out of the main column into its own. Nothing is hidden at either size,
+   so the desktop view is a design of its own and not a wide phone. */
 
 *, *::before, *::after { box-sizing: border-box; }
 
@@ -40,9 +39,9 @@ button {
   height: 100dvh;
 }
 
-/* One scroll container at both sizes, which is what lets the topbar be sticky
-   inside it rather than pinned outside it. Mobile stacks main above the tabs;
-   desktop puts the rail beside it with order. */
+/* One scroll container at both sizes, so the topbar can be sticky inside it
+   rather than fixed outside it. Mobile stacks main above the tabs. Desktop puts
+   the rail beside it using order. */
 .app__main {
   flex: 1;
   min-width: 0;
@@ -162,16 +161,16 @@ button {
 .list .row + .row,
 .list li + li .row { border-top: var(--row-divider); }
 
-/* The row opens the sheet, so it has to advertise that it can be pressed. Hover
-   is gated on a pointer that can actually hover: on a touchscreen the state
-   sticks after the tap and leaves the last row you touched looking selected.
-   A row inside its undo window is no longer openable and drops both. */
+/* The row opens the sheet, so it shows a pointer cursor. Hover styling is
+   limited to devices that can hover, because on a touchscreen the hover state
+   sticks after a tap and the last row touched looks selected. A row inside its
+   undo window cannot be opened and gets neither. */
 .row:not(.row--done) { cursor: pointer; }
 
 @media (hover: hover) {
   .row:not(.row--done):hover { background: var(--surface-2); }
-  /* The button lifts on its own so the two targets stay distinguishable while
-     the row underneath is also lit. */
+  /* The button scales on hover so it stays distinguishable from the row
+     underneath, highlighted at the same time. */
   .care:hover { transform: scale(1.04); }
 }
 
@@ -214,8 +213,8 @@ button {
   text-overflow: ellipsis;
 }
 
-/* Each part shrinks and ellipsises on its own; a flex container cannot do it for
-   its children, which is how a long location used to get sliced mid-letter. */
+/* Each part truncates with its own ellipsis. A flex container cannot truncate
+   its children for them, and a long location used to be clipped mid-letter. */
 .row__part { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .row__meta .dot { color: var(--ink-3); flex: none; }
 .row__meta .late { color: var(--alert); font-weight: 600; }
@@ -238,15 +237,15 @@ button {
 }
 
 .care:active { transform: scale(.96); }
-/* Some of these are anchors — Add, Edit plant, and the empty garden's one action
-   — because they go somewhere, and a page navigation is what they have to be. */
+/* Add, Edit plant and the empty state's action are links styled as buttons,
+   because they navigate to another page. */
 a.care, a.empty__action { text-decoration: none; color: inherit; }
 a.empty__action { display: inline-flex; align-items: center; }
 .care svg { width: 16px; height: 16px; }
 
-/* Undo, not Done. The chip is a button and it reverses what just happened, so it
-   says what it does; the confirmation of what was recorded is on the meta line
-   beside it, where it cannot be mistaken for something to press. */
+/* The button says Undo, not Done, because it reverses what just happened. What
+   was recorded is shown on the meta line beside it, where it cannot be mistaken
+   for something to press. */
 .care--undo {
   background: transparent;
   color: var(--ink-2);
@@ -278,12 +277,12 @@ a.empty__action { display: inline-flex; align-items: center; }
 
 .activity b { color: var(--ink); font-weight: 600; }
 
-/* An empty feed stays in the page so a swap has somewhere to land. Hiding it
-   keeps its border, and at 1180px its heading, off the page. */
+/* An empty feed stays in the page so a swap has an element to replace. Hiding
+   it keeps its border, and at 1180px its heading, off the page. */
 .activity:empty { display: none; }
 
-/* The feed's Undo shows only with scripting off because a running script
-   gives the row its own Undo and the two would sit side by side. */
+/* The feed's Undo is shown only when JavaScript is off. With JavaScript the row
+   has its own Undo, and this would be a second one beside it. */
 .activity__undo { display: none; }
 
 @media (scripting: none) {
@@ -330,8 +329,8 @@ a.empty__action { display: inline-flex; align-items: center; }
 
 /* --------------------------------------------------------------- empty states */
 
-/* An empty Today is a normal day for a garden of long intervals, not an error,
-   so it gets a designed screen rather than the absence of one. */
+/* An empty Today is a normal day for a garden with long intervals, so it gets a
+   designed empty state rather than a blank page. */
 .empty {
   display: grid;
   justify-items: center;
@@ -381,11 +380,11 @@ a.empty__action { display: inline-flex; align-items: center; }
 
 /* ------------------------------------------------------------ the grace window */
 
-/* Collapsing the row rather than fading it keeps the list from jumping: the rows
-   below rise into the gap instead of appearing in a new place.
+/* The row collapses rather than fades, so the rows below slide up into the gap
+   instead of jumping to a new position.
 
-   htmx puts htmx-swapping on a row while it holds the delete open. The
-   collapse plays in that delay. */
+   htmx adds htmx-swapping to a row during the delay before a delete swap. The
+   collapse animation runs in that delay. */
 .row--leaving,
 .row.htmx-swapping {
   overflow: hidden;
@@ -402,15 +401,16 @@ a.empty__action { display: inline-flex; align-items: center; }
 .row:not(.row--leaving):not(.htmx-swapping) { max-height: 200px; }
 .row__said { color: var(--good); }
 
-/* The window is drawn as a bar along the bottom edge of the row, retreating
-   leftward as it closes, and the row leaves when it reaches zero. It sits on the
-   row rather than inside the Undo button because a rule narrow enough not to
-   dominate the button has to cut across the label to be seen at all.
+/* The undo window is a bar along the bottom edge of the row that shrinks from
+   the right as time runs out. The row is removed when it reaches zero. The bar
+   is on the row rather than inside the Undo button, because a bar thin enough
+   not to dominate the button would have to cross the label to be visible.
 
-   --grace is the length of the window, set inline on the row. --grace-delay is
-   negative and equal to the time already elapsed. A row re-rendered inside its
-   window needs the offset because the bar otherwise restarts from full while
-   the timer underneath keeps its original deadline. */
+   --grace is the length of the window and --grace-delay is the negative of the
+   time already elapsed, both set inline on the row. The negative delay keeps the
+   bar in step with the timer when the row is re-rendered inside its window.
+   Re-rendering replaces the element, and without the offset the bar would
+   restart from full. */
 .row--done::after,
 .grace::after {
   content: "";
@@ -450,8 +450,9 @@ a.empty__action { display: inline-flex; align-items: center; }
   background: var(--line); margin: 0 auto 12px;
 }
 
-/* The plant heading is also the way to the plant. One target with one meaning,
-   rather than a row that opens two different places depending on where it is hit. */
+/* The plant heading is a link to the plant's page. It is one target with one
+   destination, rather than a row that opens different places depending on where
+   it is tapped. */
 .sheet__plant {
   display: flex; align-items: center; gap: 13px; width: 100%;
   padding: 8px 8px 14px; margin: 0 -8px; text-align: left;
@@ -498,8 +499,9 @@ a.empty__action { display: inline-flex; align-items: center; }
 
 .input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
-/* A clock or a date is a fixed-width thing. Stretching the field to the panel
-   leaves a bar of empty box beside the value and reads as a text input. */
+/* A time or date value has a fixed width. Stretching the field to the panel
+   width leaves empty space beside the value and makes it look like a text
+   input. */
 .input--narrow { width: auto; min-width: 150px; }
 
 .sheet__go {
@@ -516,22 +518,23 @@ a.empty__action { display: inline-flex; align-items: center; }
 
 /* ------------------------------------------------- the sheet as form controls */
 
-/* The built app draws the sheet with form controls because the same markup
-   has to work with scripting off. */
+/* The built app renders the sheet with real form controls, because the same
+   markup has to work with JavaScript off. */
 
-/* The stylesheet's button reset does not reach these two because they are
-   links where the prototype has buttons. */
+/* These two are links where the prototype has buttons, so the button reset
+   above does not apply to them. */
 .row__open, a.sheet__plant { color: inherit; text-decoration: none; }
 
 .row__open {
   display: flex; align-items: center; gap: 13px;
   flex: 1; min-width: 0;
 }
-/* The form's box is dropped so the care button joins the row's flex line. */
+/* display: contents removes the form's box, so the care button inside it is
+   laid out as a direct flex child of the row. */
 .row > form { display: contents; }
 
-/* These rules undo the browser's dialog styling. A closed dialog needs hiding
-   again because .sheet sets display. */
+/* Resets the browser's default dialog styling. A closed dialog has to be hidden
+   again explicitly because .sheet sets display. */
 dialog.sheet {
   margin: 0; padding: 0; border: 0;
   width: auto; height: auto; max-width: none; max-height: none;
@@ -540,8 +543,8 @@ dialog.sheet {
 .sheet:not([open]) { display: none; }
 button.sheet__scrim { cursor: default; }
 
-/* The radio fills its chip. The tap target and the focus ring are then the
-   chip's. */
+/* The radio fills its chip, so the whole chip is the tap target and gets the
+   focus ring. */
 .chip { position: relative; cursor: pointer; }
 .chip > input { position: absolute; inset: 0; margin: 0; opacity: 0; cursor: pointer; }
 .chip:has(> input:checked) {
@@ -551,17 +554,18 @@ button.sheet__scrim { cursor: default; }
 .chip:has(> input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 fieldset.field { border: 0; padding: 0; margin: 18px 0 0; min-width: 0; }
-/* The legend floats to leave the fieldset's own rendering and lay out as a
-   block. */
+/* The legend is floated so it escapes the fieldset's special legend rendering
+   and lays out as an ordinary block. */
 legend.field__label { float: left; width: 100%; padding: 0; }
-/* Chips clear the floated legend because a flex container won't flow under a
-   float. */
+/* Chips clear the floated legend, because a flex container does not flow
+   around a float. */
 legend.field__label + * { clear: both; }
 
 .sheet__default { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 
-/* The outcome chips show either When it happened or Ask again in. The day
-   chip shows a clock, a day and clock, or neither. */
+/* The Outcome chips decide whether When it happened or Ask again in is shown.
+   The When chips decide whether the time input, the date and time input, or
+   neither is shown. */
 .sheet__form:has([name="outcome"][value="skipped"]:checked) .sheet__done,
 .sheet__form:not(:has([name="outcome"][value="skipped"]:checked)) .sheet__skipped,
 .sheet__form:not(:has([name="when"][value="today"]:checked, [name="when"][value="yesterday"]:checked)) .sheet__clock,
@@ -569,9 +573,9 @@ legend.field__label + * { clear: both; }
 
 /* ================================================================== desktop */
 
-/* The tab bar becomes a rail. Same markup, same items, same order — a tab that
-   only exists on one of the two sizes is a second information architecture to
-   keep in agreement, and there is no version of this app that needs one. */
+/* The tab bar becomes a rail. Same markup, same items, same order. A tab that
+   exists at only one size would be a second navigation structure to keep in
+   sync, and this app does not need one. */
 @media (min-width: 900px) {
   .app { flex-direction: row; }
 
@@ -604,8 +608,8 @@ legend.field__label + * { clear: both; }
     font-weight: 600;
   }
 
-  /* Wide measure is the failure mode here, not wasted space: a care row stretched
-     to 1400px puts the plant name and its button at opposite ends of the screen. */
+  /* The column is capped because a care row stretched to 1400px puts the plant
+     name and its button at opposite ends of the screen. Unused space is fine. */
   .topbar,
   .app__body {
     max-width: 1180px;
@@ -623,8 +627,8 @@ legend.field__label + * { clear: both; }
   }
 }
 
-/* Above this the main column has room to spare, so the activity feed stops being
-   a footnote under the lists and becomes a column of its own. */
+/* Above this width the main column has room to spare, so the activity feed
+   moves from under the lists into a column of its own. */
 @media (min-width: 1180px) {
   .app__body--feed {
     display: grid;
@@ -637,9 +641,9 @@ legend.field__label + * { clear: both; }
   .app__body--feed > .summary,
   .app__body--feed > .section { grid-column: 1; }
 
-  /* The feed spans the four rows the first column holds, the summary and the
-     three sections, because an item in row 1 alone sizes that row and a feed
-     taller than the summary pushes the sections down. */
+  /* The feed spans all four rows of the first column (the summary and the three
+     sections). If it sat in row 1 alone its height would size that row, and a
+     feed taller than the summary would push the sections down. */
   .activity {
     grid-column: 2;
     grid-row: 1 / span 4;
@@ -662,8 +666,8 @@ legend.field__label + * { clear: both; }
   }
 }
 
-/* At desktop the sheet is a dialog. Sliding a panel up from the bottom edge of a
-   1400px window puts the controls a long way from the row that was clicked. */
+/* On desktop the sheet is a centred dialog. A panel sliding up from the bottom
+   of a 1400px window would put the controls far from the row that was clicked. */
 @media (min-width: 900px) {
   .sheet { justify-content: center; align-items: center; }
   .sheet__grip { display: none; }
@@ -676,26 +680,26 @@ legend.field__label + * { clear: both; }
   }
 }
 
-/* Nothing here carries meaning that the motion is the only carrier of, so all of
-   it can simply stop. */
+/* None of the motion here conveys information on its own, so it can all be
+   turned off. */
 @media (prefers-reduced-motion: reduce) {
   .sheet__panel, .sheet__scrim { animation: none; }
   .row--leaving, .row.htmx-swapping { transition-duration: 1ms; }
   .care { transition: none; }
-  /* The drain bar stays. It is the only animation here that is the sole carrier
-     of something the person needs — how much of the window is left — and a
-     four-second linear wipe is not the kind of motion the setting is about. */
+  /* The undo bar keeps animating. It is the only way to see how much of the
+     window is left, and a four-second linear wipe is not the kind of motion
+     reduced-motion is meant to remove. */
 }
 
-/* ----------------------------------------------------------------- the roster */
+/* ------------------------------------------------------------- the plant list */
 
-/* The Plants topbar has no eyebrow line, so its title sits alone and the bar's
-   spare half carries the page's creation action. */
+/* The Plants topbar has no date line above the title, so the title sits alone
+   and the Add button takes the other half of the bar. */
 .topbar__action { align-self: center; }
 
-/* A plant's standing, which on this page only ever means overdue. It is text
-   rather than a chip because it is a statement and not a control — the row it
-   sits on is the control, and a pill here would read as a second button. */
+/* The overdue marker on a plant row. It is plain text rather than a chip
+   because it is a statement, not a control. The row is the control, and a pill
+   here would look like a second button. */
 .standing {
   flex: none;
   font-size: 12.5px;
@@ -718,19 +722,19 @@ legend.field__label + * { clear: both; }
 }
 
 .foot-link svg { width: 15px; height: 15px; color: var(--ink-3); }
-/* Some of these navigate — the archive, the older page of the log, a plant's
-   whole history — so they are anchors and have to stop looking like ones. */
+/* Some of these are links (the archive, the older page of the log, a plant's
+   full history), so the default link styling is removed. */
 a.foot-link { text-decoration: none; color: var(--ink-2); }
 
-/* Rooms come thicker than Today's three sections do, so they carry less air
-   between them; at six headings on a phone the page is navigated by heading and
-   the gap only costs scroll. */
+/* There are more rooms than Today has sections, so the gap between them is
+   smaller. With six headings on a phone the page is scanned by heading, and a
+   larger gap only adds scrolling. */
 .app__body--grid .section { margin-bottom: 18px; }
 
-/* One column on the phone. Wide, the rooms sit side by side rather than the rows
-   growing: a row is tuned to phone measure and a 1100px-wide plant name with its
-   species at the far edge is the failure this app's desktop layout exists to
-   avoid. Each room is a whole card, so a group never splits across columns. */
+/* One column on the phone. On wide screens the rooms sit side by side rather
+   than the rows stretching, because a row is designed for phone width and a
+   1100px row puts the plant name at one edge and its species at the other. Each
+   room is one grid item, so a room never splits across columns. */
 @media (min-width: 900px) {
   .app__body--grid {
     display: grid;
@@ -743,7 +747,7 @@ a.foot-link { text-decoration: none; color: var(--ink-2); }
 
 /* ------------------------------------------------------------- a single plant */
 
-/* Not a tab root, so the bar carries the way back instead of a title. */
+/* This page is not a tab, so the bar has a back link instead of a title. */
 .topbar--back { padding-top: 14px; padding-bottom: 8px; }
 
 .backlink {
@@ -760,14 +764,14 @@ a.foot-link { text-decoration: none; color: var(--ink-2); }
 
 .backlink svg { width: 20px; height: 20px; }
 
-/* The picture is the point of the top of this page: telling one green thing from
-   another is what a 46px circle in a list cannot do. It is wider than it is tall
-   so the name still lands above the fold on a phone. */
+/* The picture is large because telling one plant from another is what a 46px
+   circle in a list cannot do. It is wider than it is tall so the name still
+   fits above the fold on a phone. */
 .hero { margin-bottom: 22px; }
 
-/* Pressable, because it goes to the photo's own page. The mark in the corner is
-   the only thing saying so, and it sits on a scrim rather than on the picture so
-   it is legible over a pale leaf and a dark pot alike. */
+/* The picture is a link to the photo's own page. The icon in the corner is the
+   only indication, and it sits on a dark scrim so it is legible over a pale leaf
+   and a dark pot alike. */
 .hero__pic {
   position: relative;
   display: block;
@@ -810,14 +814,14 @@ a.foot-link { text-decoration: none; color: var(--ink-2); }
 
 .hero__meta { margin: 3px 0 0; font-size: 14px; color: var(--ink-2); }
 
-/* The room is a different kind of fact from a name, so it is a line of its own
-   rather than a third item in a dot-separated run. */
+/* The room is on its own line rather than as a third item in the names line,
+   because it is not a name. */
 .hero__where { margin: 2px 0 0; font-size: 13px; color: var(--ink-3); }
 
 /* ---------------------------------------------------------------- schedule row */
 
-/* The same card and the same divider as a list of plants, because it is the same
-   kind of object: a line you can press to change one thing about it. */
+/* The same card and divider as the plant list, because a schedule row is the
+   same kind of thing: a row you press to change one thing. */
 .sched {
   display: flex;
   align-items: center;
@@ -833,9 +837,9 @@ a.foot-link { text-decoration: none; color: var(--ink-2); }
   .sched:hover { background: var(--surface-2); }
 }
 
-/* The whole row is the control and the editor is one form, so with no script a
-   row at rest is a link and an open one is a form. display: contents drops the
-   wrapper's box, which leaves the row's parts as the flex line's own children. */
+/* The whole row is the control and the editor is one form. Without JavaScript a
+   closed row is a link and an open one is a form. display: contents removes the
+   wrapper's box so the row's parts are laid out as direct flex children. */
 .sched > a,
 .sched > form {
   display: contents;
@@ -843,8 +847,8 @@ a.foot-link { text-decoration: none; color: var(--ink-2); }
   text-decoration: none;
 }
 
-/* A link with no box has nowhere to draw its focus ring, so the row draws it,
-   the way a chip draws the ring for the radio inside it. */
+/* A link with display: contents has no box to draw a focus ring on, so the row
+   draws it instead, as a chip does for the radio inside it. */
 .sched:has(> a:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 .sched__icon {
@@ -880,24 +884,24 @@ a.foot-link { text-decoration: none; color: var(--ink-2); }
 
 .sched__when--late { color: var(--alert); font-weight: 600; }
 
-/* A dormant schedule is not a problem and not a countdown. It reads at the
-   weight of an aside, because that is what it is until the window opens. */
+/* A schedule outside its season is not a problem and not a countdown, so its
+   due text is dimmed until the season starts. */
 .sched__when--off { color: var(--ink-3); }
 
-/* A care type this plant is not on. It is in the list rather than behind a
-   button, because the reason to open this section is to change what the plant is
-   scheduled for and the absent types are half that question. */
+/* A care type with no schedule. It is listed rather than hidden behind an Add
+   button, because people open this section to change what the plant is
+   scheduled for, and the unscheduled types are half of that. */
 .sched--add .sched__icon { background: var(--surface-2); color: var(--ink-3); }
 .sched--add .sched__type { color: var(--ink-2); font-weight: 500; }
 .sched--add .sched__when { color: var(--ink-3); }
 
-/* The editing row trades the status column for two buttons, so it carries less
-   air between its parts than a row that is only being read. */
+/* The editing row replaces the due date column with buttons, so it has less
+   space between its parts than a row being read. */
 .sched--editing { gap: 8px; }
 
-/* Editing happens where the number is read. Changing an interval is a seasonal
-   adjustment of one field, and sending it to a form page to do it is the reason
-   the interval never gets changed. */
+/* Editing happens in place. Changing an interval is a one-field adjustment made
+   a few times a year, and sending people to a separate form page for it means
+   it never gets done. */
 .sched__field {
   display: flex;
   align-items: center;
@@ -908,14 +912,14 @@ a.foot-link { text-decoration: none; color: var(--ink-2); }
   margin-top: 6px;
 }
 
-/* The three selects of a date are one control, so they wrap together onto the
-   line under their label rather than breaking between the month and the year. */
+/* The three date selects are one control, so they wrap together onto the line
+   under their label rather than breaking between the month and the year. */
 .sched__field > .input { flex: none; }
 
-/* The sentence under the shape select. It is the only running text in the
-   editor, so it takes --ink-2 rather than the --ink-3 a label modifier can
-   afford: 3.37 is enough for "optional" beside a heading and not enough for a
-   line somebody has to read to make the choice. */
+/* The explanation under the When select. It is the only running text in the
+   editor, so it uses --ink-2 rather than the --ink-3 hints use. A contrast of
+   3.37 is enough for "optional" beside a heading but not for a sentence
+   somebody has to read to make a choice. */
 .sched__hint {
   margin-top: 5px;
   font-size: 12px;
@@ -926,18 +930,18 @@ a.foot-link { text-decoration: none; color: var(--ink-2); }
 .input--tiny { width: 62px; margin-top: 0; padding: 6px 8px; font-size: 15px; }
 .input--unit { width: auto; max-width: 100%; margin-top: 0; padding: 6px 6px; font-size: 14px; }
 
-/* The editing row grows past one line, so its buttons stack to the right of the
-   fields rather than sitting on the row's centre line. */
+/* The editing row is taller than one line, so its buttons sit to the right of
+   the fields rather than on the row's centre line. */
 .sched--editing { align-items: flex-start; flex-wrap: wrap; }
 .sched--editing .sched__text { flex: 1 1 200px; }
 
 .sched__buttons { display: flex; align-items: center; gap: 4px; margin-top: 8px; margin-left: auto; }
 
-/* The question takes the whole width and the answers sit under it on the right,
-   where the buttons it replaced were. Asking on one line and answering on the
-   next is what keeps "Remove this schedule?" from being read as a label on the
-   button beside it. The rule above it separates the question from the fields it
-   is asking about. */
+/* The question takes the full width and the buttons sit under it on the right,
+   where the buttons it replaced were. Putting the question and the buttons on
+   separate lines stops "Remove this schedule?" reading as a label on the button
+   beside it. The border above separates the question from the fields it is
+   about. */
 .sched__confirm {
   flex: 1 1 100%;
   display: flex;
@@ -964,8 +968,9 @@ a.foot-link { text-decoration: none; color: var(--ink-2); }
 
 .sched__season input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--accent); }
 
-/* The two months on their own line. "Only from March to May" does not fit a
-   phone row, and letting it wrap leaves "to" stranded at the end of a line. */
+/* The two month selects go on their own line. "Only from March to May" does not
+   fit a phone row, and letting it wrap leaves "to" stranded at the end of a
+   line. */
 .sched__months {
   display: flex;
   align-items: center;
@@ -977,16 +982,16 @@ a.foot-link { text-decoration: none; color: var(--ink-2); }
 
 .care--small { height: 32px; padding: 0 12px; font-size: 13px; }
 
-/* An editor that can only be committed is one a mis-tap traps you in. Cancel is
-   text rather than a second pill so the row still has one obvious button. */
+/* Without Cancel, a mis-tap into the editor could only be left by saving.
+   Cancel is styled as text rather than a second pill so the row still has one
+   obvious button. */
 .sched__cancel { flex: none; padding: 0 8px; font-size: 13px; color: var(--ink-2); }
 .care--small svg { width: 14px; height: 14px; }
 
 /* ------------------------------------------------------------- the wide action */
 
-/* Log care is the second of the page's two errands and it is not attached to any
-   one line above it, so it is a full-width button under the schedule rather than
-   a chip inside it. */
+/* Log care is a full-width button under the schedule rather than a chip inside
+   it, because it is not tied to any one schedule row. */
 .wide-action {
   width: 100%;
   min-height: var(--tap);
@@ -1008,9 +1013,9 @@ a.foot-link { text-decoration: none; color: var(--ink-2); }
   padding: 14px;
 }
 
-/* Label and value on one line each, the label in the quiet register the app uses
-   for every other label. A grid rather than two columns of text, so a long value
-   wraps under itself instead of under its own label. */
+/* Label and value side by side, the label in the same muted style as every
+   other label in the app. A grid rather than two text columns, so a long value
+   wraps under itself instead of under its label. */
 .facts {
   display: grid;
   grid-template-columns: 92px minmax(0, 1fr);
@@ -1056,9 +1061,10 @@ a.foot-link { text-decoration: none; color: var(--ink-2); }
 
 .section__link { font-size: 13px; color: var(--ink-2); padding: 0; }
 
-/* A strip, not a grid. The question is whether it has grown, and the answer is
-   two pictures a long way apart in time; the grid is a page of its own. It runs
-   to the screen edge so a half-cut tile says there is more to the right. */
+/* A horizontal strip, not a grid. This section exists to show whether the
+   plant has grown, and two pictures far apart in time show that. The full grid
+   is its own page. The strip runs to the screen edge so a half-visible
+   tile shows there is more to the right. */
 .strip {
   display: flex;
   gap: 10px;
@@ -1134,11 +1140,11 @@ a.foot-link { text-decoration: none; color: var(--ink-2); }
   margin-top: 6px;
 }
 
-/* Archive is not delete and is not a warning. Rose in this app means overdue,
-   and spending it on an ordinary tidy-up would make the two mean the same. */
+/* Archive is not delete and is not styled as a warning. Rose in this app means
+   overdue, and using it for an ordinary tidy-up would blur the two. */
 
-/* The edit form's Archive is a link, because the question it leads to is asked
-   on the plant's own page. */
+/* The edit form's Archive is a link, because the confirmation is asked on the
+   plant's own page. */
 a.plant__archive { text-decoration: none; }
 
 .plant__archive,
@@ -1149,11 +1155,11 @@ a.plant__archive { text-decoration: none; }
   color: var(--ink-2);
 }
 
-/* Asking replaces the foot rather than opening a dialog, the way the schedule
-   editor's Remove does, so the plant stays visible above the answer. The
-   question and its line each take the width, which puts the two buttons on a
-   row of their own at the right, where Keep it sits a Cancel-width away from
-   the button it is easiest to mis-hit. */
+/* The confirmation replaces the buttons rather than opening a dialog, as the
+   schedule editor's Remove does, so the plant stays visible above it. The
+   question and its note each take the full width, so the two buttons end up on
+   their own row at the right. Keep it sits a button's width from Archive, so a
+   mis-tap on one is less likely to hit the other. */
 .plant__foot--asking {
   flex-wrap: wrap;
   justify-content: flex-end;
@@ -1163,9 +1169,9 @@ a.plant__archive { text-decoration: none; }
 .plant__ask { flex: 1 1 100%; font-size: 14px; font-weight: 600; }
 .plant__note { flex: 1 1 100%; margin-bottom: 6px; font-size: 13px; color: var(--ink-3); }
 
-/* Named areas rather than source order, so the phone keeps the reading order it
-   needs and the desktop can put the picture and the reference in a column of
-   their own without a second copy of the markup. */
+/* Named grid areas rather than source order, so the phone keeps its reading
+   order and the desktop can move the picture and the reference into their own
+   column without duplicating the markup. */
 .app__body--plant {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -1180,16 +1186,14 @@ a.plant__archive { text-decoration: none; }
 .section--history { grid-area: history; }
 .plant__foot { grid-area: foot; }
 
-/* Wide, the page splits along the line its two halves already fall on: what the
-   plant is on the left, what you do to it on the right. The picture stops
-   growing there, because past about 340px it is a poster rather than an
-   identification. */
+/* On wide screens the page splits in two. What the plant is on the left, what
+   you do to it on the right. The picture stops growing at about 340px, because
+   past that it is a poster rather than an identification. */
 @media (min-width: 900px) {
-  /* Narrower than the 1180px the list pages take. A schedule line is a label and
-     a date, and at 700px wide it puts "Water, every 10 days" at one edge of the
-     screen and "2 days late" at the other — the same failure the desktop layout
-     exists to avoid on a care row. The topbar matches so the back link stays
-     over the picture. */
+  /* Narrower than the 1180px the list pages use. A schedule row is a label and a
+     date, and at 700px wide "Water, every 10 days" sits at one edge and "2 days
+     late" at the other, the same problem the desktop layout avoids on a care
+     row. The topbar matches so the back link stays over the picture. */
   .topbar--back,
   .app__body--plant { max-width: 980px; }
 
@@ -1210,10 +1214,10 @@ a.plant__archive { text-decoration: none; }
 
 /* ------------------------------------------------------------- the plant form */
 
-/* Cancel rather than a back arrow, and text rather than a button: what it says
-   is that the typing will be thrown away, which is a different message from
-   "the previous page", and it should not look like the thing you press when
-   you are finished. */
+/* Cancel rather than a back arrow, and text rather than a button. Cancel says
+   the typed input will be discarded, where a back arrow only says the page will
+   be left. It is text so it does not look like the button you press when you
+   are finished. */
 .topbar__cancel {
   align-self: center;
   padding: 0 4px;
@@ -1225,10 +1229,9 @@ a.plant__archive { text-decoration: none; }
   text-decoration: none;
 }
 
-/* A form is one column and a narrow one. The 1180px the lists take would put a
-   text input at the full width of the window, which is the same failure as a
-   care row stretched across a desktop and reads as a search box rather than as
-   a field with an answer of a few words in it. */
+/* A form is one narrow column. At the 1180px the lists use, a text input would
+   stretch across the window and look like a search box rather than a field for
+   a few words. */
 @media (min-width: 900px) {
   .topbar--form,
   .app__body--form { max-width: 680px; }
@@ -1236,16 +1239,16 @@ a.plant__archive { text-decoration: none; }
 
 .app__body--form { padding-bottom: 40px; }
 
-/* A form is a column of fields and its rhythm is the gap between them. The
-   sheet's label sits further from its control because it has chips under it as
-   often as an input; here everything is an input and the pair reads as one
-   thing. */
+/* The gap between label and input is smaller here than in the sheet. The sheet
+   often has chips under a label, so it needs more space. Here every field is an
+   input, and label and input read as one thing. */
 .app__body--form .field { margin-top: 20px; }
 .app__body--form .field__label { margin-bottom: 2px; }
 .app__body--form .section { margin-top: 30px; }
 
-/* The three names are one question — "what is this called" — so they sit
-   together with one message under them rather than three required fields. */
+/* The three name fields are one question, what the plant is called, so they
+   are grouped with one error message under them rather than three required
+   fields. */
 .form__names { margin-bottom: 4px; }
 
 .field__error {
@@ -1260,16 +1263,16 @@ a.plant__archive { text-decoration: none; }
 
 .input--tall { resize: vertical; line-height: 1.5; }
 
-/* The picture is the first field because it is the first thing a person has:
-   the plant is in front of them and the phone is already in their hand. It is
-   also the one field allowed to be absent — where the browser cannot resize
-   before upload it is not offered at all. */
+/* The picture is the first field because the plant is in front of the person
+   and the phone is already in their hand. It is also the one field that can be
+   missing entirely. Where the browser cannot resize an image before upload, the
+   field is not offered. */
 .photo-field { margin-bottom: 4px; }
 
-/* Empty, it is the size of a field, because that is what it is until it holds
-   something. Filled, it takes the 5:3 the plant page gives it, so what is framed
-   here is what will be seen there. A dashed 5:3 box for the empty state was the
-   first version and it spent a quarter of the first screen on a hole. */
+/* Empty, the picture field is the height of an ordinary field. Filled, it takes
+   the 5:3 ratio the plant page uses, so what is framed here is what will be
+   shown there. The first version used a dashed 5:3 box when empty, and it spent
+   a quarter of the first screen on an empty box. */
 .photo-field__empty {
   display: flex;
   align-items: center;
@@ -1304,9 +1307,9 @@ a.plant__archive { text-decoration: none; }
   margin-top: 10px;
 }
 
-/* Behind a disclosure, because a form that opens with eight empty boxes reads
-   as work. It is a details element rather than a scripted panel so that it
-   opens on a page the server rendered and stays open through a failed post. */
+/* Behind a disclosure, because a form that opens with eight empty boxes looks
+   like work. It is a details element rather than a scripted panel so it works
+   on a server-rendered page and stays open after a failed post. */
 .disclosure {
   margin: 26px 0 18px;
   border-top: var(--row-divider);
@@ -1325,9 +1328,9 @@ a.plant__archive { text-decoration: none; }
 
 .disclosure__head::-webkit-details-marker { display: none; }
 
-/* The mark is a chevron that turns, drawn in CSS rather than pulled from the
-   icon set: it is a piece of the control rather than a thing with a meaning of
-   its own, and it has to rotate. */
+/* The marker is a chevron drawn in CSS rather than an icon from the set,
+   because it is part of the control, not a symbol with its own meaning, and it
+   has to rotate. */
 .disclosure__head::after {
   content: "";
   width: 8px; height: 8px;
@@ -1345,9 +1348,9 @@ a.plant__archive { text-decoration: none; }
 
 /* --------------------------------------------------------- the room combobox */
 
-/* Rooms are the grouping the roster is built on, so a typo does not make a
-   spelling mistake, it makes a room. The list is what you pick from and typing
-   is what filters it; naming a new room is the last row and says so. */
+/* Plants is grouped by room, so a typo in a room name creates a new room. The
+   list is what you pick from and typing filters it. Creating a new room is the
+   last option and is labelled as such. */
 .combo { position: relative; }
 .combo > .input { padding-right: 36px; }
 
@@ -1392,8 +1395,8 @@ a.plant__archive { text-decoration: none; }
 
 .combo__option[aria-selected="true"] { background: var(--accent-soft); }
 
-/* The new room is quieter than the ones that exist and is separated from them,
-   because it is the answer that changes the garden rather than reads it. */
+/* The new-room option is dimmer than the existing rooms and separated from
+   them, because choosing it changes the garden rather than picking from it. */
 .combo__option--new {
   margin-top: 4px;
   padding-top: 12px;
@@ -1406,9 +1409,8 @@ a.plant__archive { text-decoration: none; }
   .combo__option:hover { background: var(--surface-2); }
 }
 
-/* Archive sits under the button that saves, not beside it. They are not two
-   options of the same weight, and a destructive-ish action next to the primary
-   one is a mis-tap waiting to happen. */
+/* Archive sits under Save, not beside it. They are not equal choices, and a
+   destructive action next to the primary one invites mis-taps. */
 .form__foot { display: flex; justify-content: center; margin-top: 4px; }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1417,10 +1419,10 @@ a.plant__archive { text-decoration: none; }
 
 /* ---------------------------------------------------------------- the activity log */
 
-/* A log is read top to bottom and nothing lives at its right-hand edge, so the
-   column is set to a reading measure rather than to the 1180px the two lists
-   take. A row here is a sentence and a clock, and given the width of a window it
-   puts "Big Fella" at one edge and nothing at the other. */
+/* The log is read top to bottom and nothing sits at its right edge, so the
+   column is a reading width rather than the 1180px the two lists use. A row
+   here is a sentence and a time, and at full window width it would put "Big
+   Fella" at one edge and nothing at the other. */
 @media (min-width: 900px) {
   .topbar--log,
   .app__body--log,
@@ -1428,16 +1430,16 @@ a.plant__archive { text-decoration: none; }
   .app__body--more { max-width: 760px; }
 }
 
-/* Filtered to one plant the row loses its picture, so its two lines sit at the
-   left edge on their own. The row keeps its tap floor, which is what stops it
-   collapsing to the height of two lines of small text. */
+/* When the log is filtered to one plant the row has no picture, so its two
+   lines sit at the left edge. The row keeps its minimum height so it does not
+   collapse to two lines of small text. */
 .row--event { cursor: pointer; }
 
-/* The parts of an event whose length nobody controls, wrapping rather than
-   ellipsising, on a line under the meta rather than in a slot inside it. Same
-   ink as the meta above: the quotation marks and the line break are what say the
-   note is quoted speech, and making it darker would put somebody's aside above
-   the plant's own name in the order the row is read. */
+/* The free-text parts of an event, such as a note. They wrap rather than
+   truncate, on their own line under the meta rather than inside it. Same colour
+   as the meta, because the quotation marks and the line break already mark the
+   note as quoted, and darker text would draw the eye to the note before the
+   plant's name. */
 .row__extra {
   display: block;
   margin-top: 3px;
@@ -1446,10 +1448,10 @@ a.plant__archive { text-decoration: none; }
   color: var(--ink-2);
 }
 
-/* A row lead in the body face rather than in Fraunces: the care that was done on
-   a log filtered to one plant, and the name of a settings page on More. The
-   display face is for plant names, screen titles and empty states, and neither
-   "Watered" nor "Notifications" is any of those. */
+/* A row title in the body font rather than Fraunces. Used for the care name on
+   a log filtered to one plant, and for the page names on More. The display font
+   is for plant names, screen titles and empty states, and neither "Watered" nor
+   "Notifications" is one of those. */
 .row__act,
 .row__label {
   font-size: 16px;
@@ -1457,12 +1459,12 @@ a.plant__archive { text-decoration: none; }
   line-height: 1.2;
 }
 
-/* A deleted row says so in the quiet register rather than in the green a logged
-   one takes. Nothing was accomplished; something was removed. */
+/* A deleted row's status is in the muted colour rather than the green a logged
+   row uses, because nothing was accomplished. */
 .row__said--gone { color: var(--ink-2); font-weight: 500; }
 
-/* One control most of the time and two on a page that is not the first, so they
-   sit at opposite ends rather than stacking. */
+/* Usually one control, two on any page after the first. They sit at opposite
+   ends rather than stacking. */
 .pager {
   display: flex;
   align-items: center;
@@ -1470,10 +1472,10 @@ a.plant__archive { text-decoration: none; }
   gap: 16px;
 }
 
-/* The bar on the filtered view carries the way back to the plant above the
-   title, which is two rows where every other bar is one. Both are links or
-   headings rather than controls, so the bar stays the same height as a row of
-   chrome and not a block of it. */
+/* On the filtered view the bar has a back link to the plant above the title,
+   so it is two rows where every other bar is one. Both rows are links or
+   headings rather than controls, so the bar stays as tall as a row of chrome
+   rather than a block of it. */
 .topbar--stack {
   flex-direction: column;
   align-items: flex-start;
@@ -1485,10 +1487,10 @@ a.plant__archive { text-decoration: none; }
 .topbar--stack .backlink { margin-left: -4px; }
 
 /* Save and Delete side by side, because correcting an event and removing it are
-   the same errand arriving at the same sheet. Delete is outlined and not rose:
-   rose in this app means overdue, and it is undoable for four seconds afterwards
-   exactly like a logged row on Today, so it does not need the weight of a
-   warning or a confirmation step in front of it. */
+   done from the same sheet. Delete is outlined, not rose. Rose in this app
+   means overdue, and a delete can be undone for four seconds afterwards, like a
+   logged row on Today, so it needs neither a warning colour nor a confirmation
+   step. */
 .sheet__foot {
   display: flex;
   align-items: center;
@@ -1508,9 +1510,9 @@ a.plant__archive { text-decoration: none; }
   font-weight: 600;
 }
 
-/* Who wrote it down and when, as against who did it and when. It is a statement
-   and not a field, so it takes the quietest ink and sits above the buttons
-   rather than among the labelled controls. */
+/* Who recorded the event and when, as distinct from who did the care and when.
+   It is a statement, not a field, so it uses the most muted colour and sits
+   above the buttons rather than among the labelled controls. */
 .sheet__record {
   margin: 24px 0 10px;
   font-size: 13px;
@@ -1520,13 +1522,14 @@ a.plant__archive { text-decoration: none; }
 
 /* ------------------------------------------------- the activity log as a rail */
 
-/* Activity is a strand, not a stack of day-headed cards: one continuous line
-   down the left with a node per event, day markers and silences drawn on it.
+/* Activity is a timeline, not a stack of day-headed cards. One continuous
+   vertical line down the left, with a node per event, and day markers and gaps
+   drawn on it.
 
-   The trade it makes is horizontal. The strand and its node take the 47px the
-   portrait had, so the portrait shrinks from 46px to 34px to become the node —
-   which is the whole cost, and the gain is that a silence can be drawn rather
-   than left as the distance between two headings. */
+   The cost is horizontal space. The line and its node take the 47px the
+   portrait had, so the portrait shrinks from 46px to 34px to become the node.
+   The gain is that a gap between events can be drawn rather than left as the
+   distance between two headings. */
 .rail {
   list-style: none;
   margin: 0 -10px 16px;
@@ -1535,9 +1538,9 @@ a.plant__archive { text-decoration: none; }
 
 .rail > li { position: relative; }
 
-/* The line is drawn per item rather than once behind the list, because a gap has
-   to be able to dash its own stretch of it and a deleted row has to be able to
-   take its stretch with it as it collapses. */
+/* The line is drawn per item rather than once behind the list, because a gap
+   item has to dash its own stretch of it and a deleted row has to take its
+   stretch with it as it collapses. */
 .rail > li::before {
   content: "";
   position: absolute;
@@ -1548,10 +1551,10 @@ a.plant__archive { text-decoration: none; }
   background: var(--line);
 }
 
-/* The strand starts at the first mark and stops at the last, rather than running
-   out of the top of the page and into the pager. Below it the log continues on
-   another URL, and a line pointing at the "Older activity" link would promise a
-   continuity the cursor cannot keep. */
+/* The line starts at the first item and stops at the last, rather than running
+   off the top of the page and into the pager. The log continues on another URL,
+   and a line pointing at the "Older activity" link would promise a continuity
+   that paging does not have. */
 .rail > li:first-child::before { top: 14px; }
 .rail > li:last-child::before { bottom: auto; height: 30px; }
 
@@ -1561,15 +1564,16 @@ a.plant__archive { text-decoration: none; }
   border-radius: var(--radius);
 }
 
-/* Small enough to be a node, large enough to still identify the plant. This is
-   the twelve pixels of face the rail costs. Positioned so it paints over the
-   line rather than under it: the line is an absolute pseudo-element, and a
-   static sibling sits in a lower layer however opaque it is. */
+/* Small enough to be a node on the line, large enough to identify the plant.
+   Positioned so it paints over the line rather than under it. The line is an
+   absolutely positioned pseudo-element, and a static sibling would paint
+   beneath it however opaque it is. */
 .rail .row__avatar { width: 34px; height: 34px; position: relative; }
 
-/* Filtered to one plant the node is the care, which is the thing that varies
-   there. It is the same treatment a schedule row's icon gets on a plant's page,
-   at the same size, so the two readings of the same care type match. */
+/* Filtered to one plant, the node shows the care type instead of the plant,
+   because the care type is what varies. It uses the same treatment and size as
+   a schedule row's icon on the plant's page, so the same care type looks the
+   same in both places. */
 .row__node {
   position: relative;
   flex: none;
@@ -1584,14 +1588,14 @@ a.plant__archive { text-decoration: none; }
 
 .row__node svg { width: 18px; height: 18px; }
 
-/* A skip is not an accomplishment, so its node drops out of the accent and into
-   the quiet register — the same distinction the deleted row's "Deleted" makes
-   against a logged row's green. */
+/* A skip is not an accomplishment, so its node uses the muted colour rather
+   than the accent, the same distinction a deleted row makes against a logged
+   row's green. */
 .row__node--skip { background: var(--surface-2); color: var(--ink-3); }
 
-/* The day heading off its card and onto the line, with a hollow ring where a
-   filled node would be. Text aligns with the rows' text so the left edge of the
-   column is one edge and not two. */
+/* The day heading sits on the line, with a hollow ring where a filled node
+   would be. Its text aligns with the rows' text so the column has one left edge
+   rather than two. */
 .rail__day {
   display: flex;
   align-items: baseline;
@@ -1615,39 +1619,39 @@ a.plant__archive { text-decoration: none; }
   border: 2px solid var(--line);
 }
 
-/* The silence, drawn. The line dashes for exactly the stretch nothing happened
-   in, which is the one thing the list cannot say: under day headings a fortnight
-   of nothing and a single quiet day are both just the next heading. */
+/* A gap between events. The line is dashed for exactly the stretch in which
+   nothing happened. Day headings alone cannot show this, because a fortnight of
+   nothing and a single quiet day both look like the next heading. */
 .rail__gap {
   padding: 12px 10px 12px 57px;
   font-size: 12px;
   color: var(--ink-3);
 }
 
-/* A real dash rather than `border-left: dashed`, which at 2px wide draws dashes
-   two pixels long and reads as a slightly paler solid line. */
+/* A custom dash rather than border-left: dashed, because at 2px wide the
+   browser draws dashes two pixels long and the result looks like a slightly
+   paler solid line. */
 .rail__gap::before {
   background: repeating-linear-gradient(var(--line) 0 5px, transparent 5px 11px);
 }
 
-/* The undo window is the same bar along the row's bottom edge it is everywhere
-   else, inset to the text column. Drawing it across the full row would cut the
-   strand at the one moment the strand matters — the row is still there and can
-   still be brought back — and starting it at the text's left edge puts it on
-   empty pixels, which is the whole reason the bar lives on the row and not in
-   the Undo button. */
+/* The undo window is the same bar along the row's bottom edge as everywhere
+   else, inset to the text column. Drawn across the full row it would cut
+   through the timeline while the row is still there and can still be undone.
+   Starting at the text's left edge keeps it on empty pixels. That is the reason
+   the bar is on the row and not in the Undo button. */
 .rail .row--done::after { left: 57px; right: 10px; }
 
-/* The hover band is inset from the strand rather than covering it, which is why
-   the list carries a negative margin and the rows carry the padding back. */
+/* The hover highlight is inset from the line rather than covering it. That is
+   why the list has a negative margin and the rows add the padding back. */
 @media (hover: hover) {
   .rail .row:not(.row--done):hover { background: var(--surface-2); }
 }
 
-/* On the phone the strand runs on the page itself; at desktop it runs inside a
-   panel, which is the same move every other list makes here. Without it the log
-   is a 280px ribbon of text adrift in a 1400px window and the 760px cap stops
-   meaning anything, because nothing is drawing its width. */
+/* On the phone the timeline sits directly on the page. On desktop it sits
+   inside a panel, as every other list does. Without the panel the log is a
+   280px ribbon of text in a 1400px window and the 760px cap is invisible,
+   because nothing draws its width. */
 @media (min-width: 900px) {
   .rail {
     margin-inline: 0;
@@ -1660,10 +1664,10 @@ a.plant__archive { text-decoration: none; }
 
 /* ------------------------------------------------------------------- more foot */
 
-/* Install, Sign out and the build, in that order and each quieter than the last.
-   They are stacked at the left rather than spread across the column, because the
-   right-hand end of a row on this page carries nothing and putting Sign out
-   there would be the only thing in the app that lives at that edge. */
+/* Install, Sign out and the build version, in that order and each more muted
+   than the last. They are stacked at the left rather than spread across the
+   column, because nothing else on this page uses the right-hand end of a row,
+   and Sign out there would be the only thing in the app at that edge. */
 .more__foot {
   display: flex;
   flex-direction: column;
@@ -1671,8 +1675,8 @@ a.plant__archive { text-decoration: none; }
   margin-top: 4px;
 }
 
-/* Quiet for the reason Archive is: rose means overdue here, and spending it on
-   the thing every session ends with would make the two mean the same. */
+/* Muted for the same reason Archive is. Rose means overdue here, and using it
+   on the action every session ends with would blur the two. */
 .more__signout {
   min-height: var(--tap);
   padding: 0 2px;
@@ -1688,11 +1692,11 @@ a.plant__archive { text-decoration: none; }
 
 /* -------------------------------------------------------------- more's rows */
 
-/* A row here is a name and a chevron, so it is one line and it is the height of
-   the tap floor and no more. The stacked two-line row this started as was
-   Plants' row grammar, where a 46px portrait sets the height and the name and
-   its meta stack beside it — with no portrait it kept the height and lost the
-   thing that filled it, and every row read as a plant row carrying nothing. */
+/* A row here is a name and a chevron, so it is one line at the minimum tap
+   height and no taller. The first version reused the two-line Plants row, where
+   a 46px portrait sets the height and the name and meta stack beside it. With
+   no portrait it kept the height and lost what filled it, and every row looked
+   like an empty plant row. */
 .row--setting {
   gap: 12px;
   min-height: var(--tap);
@@ -1702,9 +1706,9 @@ a.plant__archive { text-decoration: none; }
 
 .row--setting .row__label { flex: none; }
 
-/* Only ever an exception: notifications off, an invite nobody has taken up. It
-   sits before the chevron rather than at the very edge, so the chevron stays the
-   thing every row ends with. */
+/* A status note, shown only for exceptions such as notifications off or an
+   invite nobody has accepted. It sits before the chevron rather than at the
+   edge, so every row still ends with the chevron. */
 .row__note {
   flex: 1;
   min-width: 0;
@@ -1723,16 +1727,16 @@ a.plant__archive { text-decoration: none; }
   color: var(--ink-3);
 }
 
-/* A note takes the free space, so the chevron stops claiming it. */
+/* The note takes the free space, so the chevron no longer expands into it. */
 .row__note + .row__go { margin-left: 0; }
 
 .row__go svg { width: 17px; height: 17px; }
 
 /* ------------------------------------------------------- more's own pages */
 
-/* Eight pages share one shell, so they share one column. It is More's 760px and
-   not the form's 680: stepping into a row from the index should not make the
-   page you arrived at a different width from the one you left. */
+/* Eight pages share one shell, so they share one column width. It is More's
+   760px rather than the form's 680px, so opening a row from More does not
+   change the page width. */
 @media (min-width: 900px) {
   .topbar--sub,
   .app__body--sub { max-width: 760px; }
@@ -1740,20 +1744,20 @@ a.plant__archive { text-decoration: none; }
 
 .app__body--sub { padding-bottom: 40px; }
 
-/* The plant form's rhythm, for the same reason: a label and its input are one
-   thing, and the gap between fields is what separates them. */
+/* The plant form's spacing, for the same reason. A label and its input are one
+   thing, and the gap between fields separates them. */
 .app__body--sub .field { margin-top: 20px; }
 .app__body--sub .field__label { margin-bottom: 2px; }
 .app__body--sub .section { margin-top: 28px; }
 .app__body--sub .section .care--outline { margin-top: 12px; }
 
 /* The wide action follows a field, a list or a paragraph rather than sitting
-   under a heading of its own, so it carries the gap that separates it from the
-   thing above it. Four pixels — the plant page's, where a schedule list is
-   already a bounded block — left Save looking welded to the input. */
+   under its own heading, so it has a top margin to separate it from the thing
+   above. The plant page's 4px, where the schedule list is already a bounded
+   block, left Save looking attached to the input. */
 .app__body--sub .wide-action { margin-top: 20px; }
 
-/* Invite someone goes to a page, so it is an anchor wearing the button. */
+/* Invite someone navigates to a page, so it is a link styled as a button. */
 a.wide-action {
   display: flex;
   align-items: center;
@@ -1761,10 +1765,10 @@ a.wide-action {
   text-decoration: none;
 }
 
-/* A sentence under the title, on the pages whose subject is a thing somebody may
-   never have met: a passkey, a bearer token, a link that works once. It is the
-   quiet register rather than the body one, because it is the page explaining
-   itself and not the page's content. */
+/* An explanatory sentence under the title, on pages about something the person
+   may not have met before, such as a passkey, a bearer token or a single-use
+   link. It uses the muted colour rather than the body colour because it is the
+   page explaining itself, not the page's content. */
 .lead {
   margin: 0 0 14px;
   font-size: 15px;
@@ -1772,10 +1776,10 @@ a.wide-action {
   color: var(--ink-2);
 }
 
-/* The smaller sibling of the lead: a footnote under the thing it is about. Every
-   one of these exists because the rule it states is invisible — that a link is
-   shown once, that the last passkey cannot go, that an hour is read in a
-   timezone set on another page. */
+/* A smaller version of the lead, placed under the thing it explains. Each one
+   states a rule the interface cannot show, such as a link being shown once, the
+   last passkey not being removable, or an hour being read in a timezone set on
+   another page. */
 .note {
   margin: 10px 2px 0;
   font-size: 13px;
@@ -1785,10 +1789,10 @@ a.wide-action {
 
 .note a { color: var(--ink-2); }
 
-/* A two-line row whose only control is at its right-hand end, which is every
-   list on these pages: a device, a browser, a token, a person, an invite. It
-   goes back to the row's own padding after More's index squeezed it to one line,
-   and it is not itself pressable — Remove is the control and the row is not a
+/* A two-line row with its only control at the right-hand end. Every list on
+   these pages is one: a device, a browser, a token, a person, an invite. It
+   restores the row's normal padding after More's index reduced it to one line.
+   The row itself is not pressable. Remove is the control, and the row is not a
    second, larger copy of it. */
 .row--stack {
   padding: 12px 14px;
@@ -1800,10 +1804,9 @@ a.wide-action {
   .row--stack:hover { background: none; }
 }
 
-/* The display face is the garden's: plant names, screen titles, the line on an
-   empty state. A browser called "iPhone · Safari" set in Fraunces reads as a
-   plant, so a name that is not a plant's is in the body face at the weight that
-   still makes it the row's first thing. */
+/* The display font is for plant names, screen titles and empty-state text. A
+   browser called "iPhone · Safari" set in Fraunces looks like a plant, so names
+   that are not plants use the body font, bold enough to still lead the row. */
 .row--stack .row__name,
 .check .row__name {
   font-family: var(--font-body);
@@ -1812,10 +1815,9 @@ a.wide-action {
   letter-spacing: 0;
 }
 
-/* These say a whole sentence rather than three words and a dot, so they wrap.
-   What a grade can do is the reason the select beside it is meaningful, and an
-   ellipsis two words in ("Everything, including in…") is the row keeping the
-   answer to itself. */
+/* These are whole sentences rather than three words and a dot, so they wrap.
+   What a grade can do is what makes the select beside it meaningful, and
+   truncating it two words in ("Everything, including in…") hides what it says. */
 .check .row__meta,
 .row--check .row__meta,
 .row--stack .row__meta { white-space: normal; }
@@ -1830,9 +1832,9 @@ a.wide-action {
 }
 
 /* Remove, Revoke, Turn it off. Text at the right-hand end rather than a rose
-   button: each of them is undone by making another one of the thing, and rose in
-   this app means overdue. It is the size of the row's own text so that the one
-   control on the row is easy to hit. */
+   button, because each is reversed by creating the thing again, and rose in this
+   app means overdue. It is the size of the row's own text so the one control on
+   the row is easy to hit. */
 .row__drop {
   flex: none;
   min-height: var(--tap);
@@ -1841,9 +1843,8 @@ a.wide-action {
   color: var(--ink-2);
 }
 
-/* A checkbox and the sentence saying what it will send. The label fills the row
-   so the whole line is the target, which is what the row would have been if the
-   row itself were the control. */
+/* A checkbox and a sentence saying what it will send. The label fills the row
+   so the whole line is the tap target. */
 .row--check { padding: 0; cursor: default; }
 
 @media (hover: hover) {
@@ -1869,9 +1870,9 @@ a.wide-action {
   accent-color: var(--accent);
 }
 
-/* A care type being renamed, which is the plant page's schedule row grammar
-   applied to a one-field row: the row becomes the editor in place, because there
-   is a real care type on the server to post a single row against. */
+/* A care type being renamed. The row becomes the editor in place, as a
+   schedule row does on the plant page, because there is a saved care type on
+   the server to post a single row against. */
 .row--editing {
   flex-wrap: wrap;
   align-items: flex-start;
@@ -1885,9 +1886,9 @@ a.wide-action {
 .row__edits { flex: 1 1 100%; }
 .row__edits .row__drop { padding-left: 0; }
 
-/* Why this row offers Turn it off rather than Delete, said in the row at the
-   moment the choice is in front of somebody. Finding it out from a refused post
-   afterwards is the version of this page worth avoiding. */
+/* Explains why this row offers Turn it off rather than Delete, at the moment
+   the choice is in front of somebody, rather than through a refused post
+   afterwards. */
 .row__why {
   margin: 2px 0 0;
   font-size: 13px;
@@ -1895,9 +1896,8 @@ a.wide-action {
   color: var(--ink-3);
 }
 
-/* The destructive one at the left and the two ordinary ones at the right, which
-   is the arrangement that keeps Turn it off from being the thing a thumb reaches
-   for on its way to Save. */
+/* The destructive button at the left and the two ordinary ones at the right,
+   so a thumb reaching for Save does not pass over Turn it off. */
 .row__buttons {
   flex: 1 1 100%;
   display: flex;
@@ -1909,12 +1909,11 @@ a.wide-action {
 
 .row__buttons .row__drop { padding-left: 0; }
 
-/* Remove, asking. The row becomes the question, which is the schedule editor's
-   confirm moved onto a list row: the question takes the whole width and the two
-   answers sit under it at the right, because asking on one line and answering on
-   the next is what keeps "Remove Ellie?" from reading as a label on the button
-   beside it. Nothing here is destructive at the left, so there is no pair to
-   push apart and the buttons end the row together. */
+/* The Remove confirmation. The row becomes the question, as the schedule
+   editor's does. The question takes the whole width and the two buttons sit
+   under it at the right, because keeping the question and the buttons on
+   separate lines stops "Remove Ellie?" reading as a label on the button beside
+   it. Nothing here is destructive at the left, so the buttons sit together. */
 .row--asking .row__ask {
   flex: 1 1 100%;
   font-size: 15px;
@@ -1924,21 +1923,21 @@ a.wide-action {
 .row--asking .row__buttons { justify-content: flex-end; margin-top: 8px; }
 .row__buttons > span { display: flex; align-items: center; gap: 4px; }
 
-/* A care type that has been turned off keeps its place in the list, because the
-   history that kept it alive still refers to it and somebody looking for the
-   misting they recorded should find where it went. */
-/* A care type that is off and a token that has run out. Both keep their place
-   in the list because both are the row somebody came looking for, and both are
-   quiet because neither is doing anything. Stack rows name themselves in
-   .row__name rather than .row__label, so the rule covers the two. */
+/* A care type that has been turned off stays in the list, because past events
+   still refer to it and somebody looking for the misting they recorded should
+   be able to find it. */
+/* A care type that is off and a token that has expired. Both stay in the list
+   because they are what somebody came looking for, and both are muted because
+   neither is active. Stack rows use .row__name rather than .row__label, so the
+   rule covers both. */
 .row--off .row__label,
 .row--off .row__name,
 .row--off .row__life,
 .row--off .row__meta { color: var(--ink-3); }
 
-/* A token's date, on a line of its own under the meta rather than as a third
-   part of it. It is the row's status where the meta is the row's identity, and
-   the two do not compete for the same width. */
+/* A token's date, on its own line under the meta rather than as a third part
+   of it. The meta identifies the row and the date is its status, and the two
+   should not compete for width. */
 .row__life {
   display: block;
   margin-top: 2px;
@@ -1946,9 +1945,9 @@ a.wide-action {
   color: var(--ink-2);
 }
 
-/* An invite link and a bearer token: shown once, in a box, with the sentence
-   saying so directly under the value rather than above it. The value is what the
-   eye lands on, so the warning has to be the next thing it reads. */
+/* An invite link or a bearer token, shown once, in a box, with the warning
+   directly under the value rather than above it. The eye lands on the value, so
+   the warning has to be the next thing it reads. */
 .secret {
   margin: 4px 0 8px;
   padding: 14px;
@@ -1985,8 +1984,8 @@ a.wide-action {
   font-size: 12px;
 }
 
-/* Numbered because the order is the whole content: a Share sheet that has not
-   been opened has nothing in it to scroll to. */
+/* Numbered because the steps have to be done in order, and each depends on the
+   one before. */
 .steps {
   margin: 16px 0 0;
   padding-left: 20px;
@@ -2000,12 +1999,11 @@ a.wide-action {
 
 /* ------------------------------------------------------------- the handle */
 
-/* Drawn only on a row where two members share a display name, so it is never a
-   second identifier under a name that did not need one. Mono because it is a
-   string that gets read character by character and typed somewhere else, which
-   is the same reason a token's prefix is mono. No sigil in front of it: an @
-   would make it read as the username the whole page is at pains to say it is
-   not. */
+/* Shown only when two members share a display name, so it is never a second
+   identifier under a name that did not need one. Monospace because it is read
+   character by character and typed elsewhere, the same reason a token's prefix
+   is monospace. No @ in front of it, because the page is clear that a handle is
+   not a username and an @ would suggest otherwise. */
 .row__handle {
   font-family: var(--font-mono);
   font-size: 12px;
@@ -2013,10 +2011,10 @@ a.wide-action {
   color: var(--ink-3);
 }
 
-/* Three controls at a row's right-hand end, which People is the only page to
-   need: a grade to choose, a device to give back, and the way out. They stay on
-   one line together and the row's text takes what is left, because a member's
-   name and the sentence under it wrap and these do not. */
+/* Three controls at the row's right-hand end. Only People needs this many: a
+   grade select, a device to return, and Remove. They stay together on one line
+   and the row's text takes what is left, because a member's name and the
+   sentence under it can wrap and the controls cannot. */
 .row__controls {
   flex: none;
   display: flex;
@@ -2026,39 +2024,37 @@ a.wide-action {
   gap: 2px;
 }
 
-/* Three of them do not fit beside the text on a phone: 250 pixels of select and
-   two buttons left the capability sentence a five-word-tall column. So the row
-   wraps and the controls take a line of their own under the name, still at the
-   right-hand end. The 200px basis is what decides it rather than a breakpoint —
-   below about 450 the two cannot share a line and above it they can, which is
-   the same answer a media query would give without having to pick the number
-   twice. */
+/* Three controls do not fit beside the text on a phone. 250px of select plus
+   two buttons left the capability sentence as a narrow column five words tall.
+   So the row wraps and the controls take their own line under the name, still
+   at the right-hand end. The 200px flex basis decides this rather than a
+   breakpoint. Below about 450px the two cannot share a line and above it they
+   can, the same result a media query would give without repeating the number. */
 .row--people { flex-wrap: wrap; gap: 8px 12px; }
 .row--people .row__text { flex: 1 1 200px; }
 .row--people .row__controls { flex: 0 1 auto; margin-left: auto; }
 
-/* Four controls do not fit across a phone either — the date alone is 137 of the
-   323 a row has — so they take two lines, and this is what decides where the
-   break falls. The two fields go together and the two quiet actions go together,
-   which is the only split of the four that groups like with like; letting them
-   wrap where they happened to run out put Re-enrol beside the select and left
-   Remove on a line of its own. */
+/* Four controls do not fit across a phone either. The date alone takes 137 of
+   the row's 323px, so they take two lines, and this decides where the break
+   falls. The two fields go together and the two text actions go together, the
+   only split that groups like with like. Letting them wrap wherever they ran out
+   put Re-enrol beside the select and left Remove on a line of its own. */
 .row__acts { flex: none; display: flex; align-items: center; gap: 2px; }
 
-/* The grade word does not shrink. It is six characters from a list of three, and
-   flex takes width off every part of a meta line equally — which on this row
-   spent it on the one part that had none to give and produced "Sitt… · Access
-   ended 21 Aug". The date beside it is the part with room to ellipsise, and it
-   is the part that never has to. */
+/* The grade word does not shrink. It is at most six characters from a list of
+   three, and flex takes width from every part of a meta line equally. On this
+   row that truncated the one part with nothing to spare and produced "Sitt… ·
+   Access ended 21 Aug". The date beside it has room to truncate and never needs
+   to. */
 .row__part--word { flex: none; }
 
 /* ---------------------------------------------------------- recovery codes */
 
-/* Ten values in the box one value normally sits in. Two columns rather than a
-   column of ten: a list that tall pushes the sentence explaining it off a phone
-   screen, and the sentence is the part that has to be read before anybody leaves
-   the page. No markers — the codes are interchangeable and a number down the
-   side would suggest an order that using them does not have. */
+/* Ten codes in the box that normally holds one value. Two columns rather than
+   one column of ten, because a list that tall pushes the explanation below the
+   fold on a phone, and the explanation has to be read before anybody leaves the
+   page. No list markers, because the codes are interchangeable and numbering
+   would suggest an order. */
 .secret__codes {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
@@ -2077,10 +2073,9 @@ a.wide-action {
 
 /* ------------------------------------------------- the pages outside the tabs */
 
-/* No tab bar, so nothing holds the bottom of the window and the column is
-   centred in it instead. It is narrower than every other page in the app: there
-   is one field on it, and a single input stretched across a desktop window reads
-   as a layout that failed rather than a page that is simple. */
+/* No tab bar, so the column is centred in the window. It is narrower than any
+   other page because it has one field, and a single input stretched across a
+   desktop window looks like a broken layout rather than a simple page. */
 .app--bare .app__main { display: flex; }
 
 .app__body--bare {
@@ -2099,8 +2094,8 @@ a.wide-action {
   line-height: 1.15;
 }
 
-/* The answer to an attempt, in the body register rather than the note one: it is
-   the page's content and not a footnote on it. */
+/* The result of a sign-in attempt, in the body colour rather than the muted
+   note colour, because it is the page's content and not a footnote. */
 .bare__line {
   margin: 0;
   font-size: 15px;

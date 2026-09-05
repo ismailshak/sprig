@@ -39,7 +39,7 @@ func TestRun_UnreachableDatabaseStopsBeforeListening(t *testing.T) {
 
 	env := map[string]string{
 		"SPRIG_ADDR": addr,
-		// Port 1 on loopback, where nothing is listening and nothing ever will be.
+		// Port 1 on loopback has nothing listening.
 		"SPRIG_DATABASE_URL": "postgres://sprig@127.0.0.1:1/sprig",
 	}
 	getenv := func(k string) string { return env[k] }
@@ -49,7 +49,7 @@ func TestRun_UnreachableDatabaseStopsBeforeListening(t *testing.T) {
 		t.Fatal("expected an error for a database nothing is listening on, got nil")
 	}
 
-	// Nothing was served against a database the process never reached.
+	// The process must not have started listening.
 	dialer := net.Dialer{Timeout: time.Second}
 	conn, err := dialer.DialContext(ctx, "tcp", addr)
 	if err == nil {

@@ -1,16 +1,16 @@
-{{/* The row is one element under one id, so a swap replacing it lands on a
-     target the server named. The form is beside the link because a link
-     can't contain a button. A row due today gives the location alone, since
-     the interval is a setting rather than something wanted while holding the
-     watering can. The avatar is empty until photos arrive.
+{{/* One <li> under one id, so a swap can target the whole row. The form is
+     beside the link rather than inside it because a link cannot contain a
+     button. A row due today shows only the location, since the interval is a
+     setting and not something needed while watering. The avatar is empty until
+     photos are implemented.
 
-     A logged row asks Today when its grace window closes, rather than a
-     route of its own, because the answer is the head or the whole body.
+     A logged row fetches "/" when its grace window ends, not a route of its
+     own, because the response is either the day header or the whole day body.
 
-     Every swap that replaces a row settles in 0ms because htmx otherwise holds
-     the incoming row's class and style at the outgoing row's values for 20ms.
-     The stylesheet collapses a row under row--done or htmx-swapping to
-     nothing. */}}
+     Every swap that replaces a row uses settle:0ms. Otherwise htmx keeps the
+     new row's class and style at the old row's values for 20ms and the browser
+     paints that frame. The stylesheet collapses a row with row--done or
+     htmx-swapping to zero height. */}}
 {{define "care-row"}}<li class="row{{if .Done}} row--done{{end}}" id="{{.ID}}"{{if .Done}} style="--grace:{{.Grace}}ms" hx-get="/" hx-trigger="load delay:{{.Grace}}ms" hx-swap="delete swap:{{.Collapse}}ms settle:0ms"{{end}}>
 {{if .Done}}<span class="row__open">{{else}}<a class="row__open" href="{{.Href}}" hx-get="{{.Href}}" hx-target="#sheet" hx-swap="outerHTML">{{end}}
 <span class="row__avatar"></span>
@@ -28,7 +28,7 @@
 </form>{{end}}
 </li>{{end}}
 
-{{/* The empty div closes the sheet the post came from. */}}
+{{/* The empty #sheet div swaps out the open dialog, closing it. */}}
 {{define "care-logged"}}{{template "care-row" .Row}}
 {{template "day-head" .Head}}
 {{template "activity" .Feed}}
@@ -38,6 +38,6 @@
 {{template "day-head" .Head}}
 {{template "activity" .Feed}}{{end}}
 
-{{/* Only the head or the whole body comes back because the row goes with the
-     swap that asked for this. */}}
+{{/* Either the day header alone or the whole day body. The row that made
+     this request is removed by its own swap, so it is not included. */}}
 {{define "care-settled"}}{{with .Body}}{{template "day-body" .}}{{else}}{{template "day-head" .Head}}{{end}}{{end}}

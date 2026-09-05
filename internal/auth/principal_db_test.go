@@ -18,9 +18,10 @@ var (
 	otherUserID   = uuid.MustParse("00000000-0000-7000-8000-000000000004")
 )
 
-// resolverOnTx is a Resolver over a transaction holding two gardens: Emma owns
-// Rosewood, Noor owns Fairview and sits for Rosewood from a week before
-// signedInAt until endsAt. Noor's Fairview membership is the older one.
+// resolverOnTx returns a Resolver running inside a transaction that holds two
+// gardens. Emma owns Rosewood. Noor owns Fairview and is a sitter on Rosewood
+// from a week before signedInAt until endsAt. Noor's Fairview membership is
+// the older one.
 func resolverOnTx(t *testing.T, endsAt *time.Time) (*Resolver, pgx.Tx) {
 	t.Helper()
 
@@ -82,7 +83,7 @@ func TestResolver_AnOwnerResolvesWithEveryCapability(t *testing.T) {
 	}
 }
 
-func TestResolver_ASitterResolvesWithTheSittersCapabilitiesOnly(t *testing.T) {
+func TestResolver_ASitterResolvesWithOnlyTheSitterRolesCapabilities(t *testing.T) {
 	r, _ := resolverOnTx(t, nil)
 	token := signIn(t, r, otherUserID, testGardenID)
 
@@ -105,7 +106,7 @@ func TestResolver_ASitterResolvesWithTheSittersCapabilitiesOnly(t *testing.T) {
 	}
 }
 
-func TestResolver_TheSessionRowSaysWhichGardenAndOneColumnMovesIt(t *testing.T) {
+func TestResolver_GardenComesFromTheSessionRow(t *testing.T) {
 	ctx := t.Context()
 	r, tx := resolverOnTx(t, nil)
 	token := signIn(t, r, otherUserID, testGardenID)
@@ -133,7 +134,7 @@ func TestResolver_TheSessionRowSaysWhichGardenAndOneColumnMovesIt(t *testing.T) 
 	}
 }
 
-func TestResolver_AnEndedMembershipIsRefusedAndTheSessionIsGone(t *testing.T) {
+func TestResolver_AnEndedMembershipIsRefusedAndTheSessionDeleted(t *testing.T) {
 	ctx := t.Context()
 	endsAt := signedInAt.AddDate(0, 0, 7)
 	r, tx := resolverOnTx(t, &endsAt)
@@ -176,7 +177,7 @@ func TestResolver_OldestLiveMembershipSkipsAnEndedOne(t *testing.T) {
 	endsAt := signedInAt.AddDate(0, 0, 7)
 	r, tx := resolverOnTx(t, &endsAt)
 
-	// Fairview is the older row, and it wins while both are live.
+	// Fairview is the older membership, so it is chosen while both are live.
 	got, err := r.OldestLiveMembership(ctx, signedInAt, otherUserID)
 	if err != nil {
 		t.Fatalf("OldestLiveMembership: %v", err)
@@ -201,7 +202,7 @@ func TestResolver_OldestLiveMembershipSkipsAnEndedOne(t *testing.T) {
 	}
 }
 
-func TestCapability_TheConstantsAreTheTable(t *testing.T) {
+func TestCapability_TheConstantsMatchTheCapabilityTable(t *testing.T) {
 	_, tx := sessionsOnTx(t)
 
 	rows, err := tx.Query(t.Context(), "SELECT name FROM capability ORDER BY name")

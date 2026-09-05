@@ -1,30 +1,31 @@
--- A skipped event is a plant's latest one too, so nothing here filters on done.
--- An event whose plant or care type was archived stays in, because the caller
--- pairs these rows against ListCareSchedules, which already excludes both.
+-- A skip counts as the latest event, so this does not filter on done. Events
+-- of archived plants and care types are included, because the caller matches
+-- these rows against ListCareSchedules, which already excludes both.
 -- name: ListLatestCareEvents :many
 SELECT DISTINCT ON (plant_id, care_type_id) *
 FROM care_event
 WHERE garden_id = @garden_id
 ORDER BY plant_id, care_type_id, performed_at DESC;
 
--- The handler passes recorded_at because its clock and the row have to agree.
+-- recorded_at comes from the handler's clock rather than now(), so the row and
+-- the handler agree on the time.
 -- name: CreateCareEvent :one
 INSERT INTO care_event (garden_id, plant_id, care_type_id, performed_by, performed_at, recorded_at, done, note, override_interval_days)
 VALUES (@garden_id, @plant_id, @care_type_id, @performed_by, @performed_at, @recorded_at, @done, @note, @override_interval_days)
 RETURNING *;
 
--- DeleteCareEvent matches on performed_by unless may_delete_any is set,
--- because a check standing beside the query can be forgotten. Nothing bounds
--- how old the event may be because the undo window decides what the feed
--- draws rather than what the delete accepts.
+-- Matches on performed_by unless may_delete_any is set, so the ownership check
+-- is in the query and cannot be forgotten by a caller. There is no age limit
+-- here. The undo window decides whether an Undo button is rendered, not
+-- whether a delete is accepted.
 -- name: DeleteCareEvent :one
 DELETE FROM care_event
 WHERE id = @id AND garden_id = @garden_id AND plant_id = @plant_id
   AND (@may_delete_any::boolean OR performed_by = @performed_by)
 RETURNING *;
 
--- The order is recorded_at rather than performed_at so a backdated care still
--- lands at the top of the feed.
+-- Ordered by recorded_at rather than performed_at, so a backdated care still
+-- appears at the top of the feed.
 -- name: ListRecentCareEvents :many
 SELECT sqlc.embed(care_event), sqlc.embed(plant), sqlc.embed(care_type), app_user.display_name AS performed_by_name
 FROM care_event
@@ -57,9 +58,9 @@ WHERE care_event.garden_id = @garden_id
 ORDER BY care_event.performed_at DESC, care_event.id DESC
 LIMIT @count;
 
--- The order is performed_at because a plant's Recent is a history of the plant
--- rather than of what was typed. Nothing here joins plant, because the page is
--- the plant.
+-- Ordered by performed_at because a plant's Recent section is a history of the
+-- plant, not of data entry. No plant join, because the caller already has the
+-- plant.
 -- name: ListPlantCareEvents :many
 SELECT sqlc.embed(care_event), sqlc.embed(care_type), app_user.display_name AS performed_by_name
 FROM care_event

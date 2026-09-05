@@ -12,11 +12,11 @@ import (
 	"github.com/ismailshak/sprig/internal/auth"
 )
 
-// The rows the More screens read are Ellie's and Home's, because the prototype
-// draws each of those screens as Ellie.
+// The rows the More screens read belong to Ellie and Home, because the
+// prototype shows each of those screens as Ellie.
 
-// An API token is presented to /api/chores as a bearer token, and an invite is
-// opened as /invite/<token>.
+// An API token is sent to /api/chores as a bearer token. An invite is opened
+// as /invite/<token>.
 //
 //nolint:gosec // These are development constants that only ever reach a database on this machine.
 const (
@@ -34,10 +34,10 @@ type passkey struct {
 	usedDaysAgo int
 }
 
-// The public key is a label rather than a COSE key, and no private half
-// exists, so neither row can sign anybody in. Code that parses a stored key
-// fails on both rows, so a passkey flow is tested against a credential the
-// browser registered.
+// passkeys returns two credentials for Ellie. The public key is a text label
+// rather than a COSE key and there is no private key, so neither can sign
+// anyone in. Code that parses a stored key fails on both, so passkey flows are
+// tested with a credential the browser registered.
 func passkeys() []passkey {
 	return []passkey{
 		{id: seedID(tablePasskeyCredential, 1), owner: &ellie, name: "iPhone", transports: []string{"internal", "hybrid"}, daysOld: ellie.daysOld},
@@ -62,7 +62,7 @@ type apiToken struct {
 	createdBy   *person
 	daysOld     int
 	usedDaysAgo int
-	// Negative is a token that has already run out.
+	// Negative means the token has already expired.
 	expiresInDays int
 }
 
@@ -70,11 +70,11 @@ type recoveryBatch struct {
 	owner   *person
 	daysOld int
 	codes   []string
-	// One entry per used code, taken in order from the start of codes.
+	// One entry per used code, applied to codes in order from the start.
 	usedDaysAgo []int
 }
 
-// The codes are the ten the prototype shows.
+// recovery returns the ten codes the prototype shows, two of them used.
 func recovery() recoveryBatch {
 	return recoveryBatch{
 		owner:       &ellie,
@@ -92,15 +92,16 @@ type browser struct {
 	id    uuid.UUID
 	owner *person
 	slug  string
-	// The screen derives the row's name from this, so it is the string a
-	// browser sends rather than the name.
+	// The Notifications page derives the row's label from this, so it is a
+	// real User-Agent string rather than a name.
 	userAgent   string
 	daysOld     int
 	sentDaysAgo int
 }
 
-// The endpoints are under the .invalid domain, which never resolves, so a
-// digest job run against a seeded database fails at DNS.
+// browsers returns two push subscriptions for Ellie. Their endpoints are under
+// the .invalid domain, which never resolves, so a digest job run against a
+// seeded database fails at DNS rather than sending anything.
 func browsers() []browser {
 	return []browser{
 		{
@@ -126,8 +127,9 @@ func (b *browser) endpoint() string {
 	return "https://push.invalid/development/" + b.slug
 }
 
-// writeIdentity writes the rows that belong to a user. An invite and a token
-// belong to a garden, so writeGarden writes those.
+// writeIdentity writes the rows that belong to a user: passkeys, recovery codes
+// and push subscriptions. Invites and tokens belong to a garden, so writeGarden
+// writes those.
 func writeIdentity(ctx context.Context, tx pgx.Tx, ref time.Time) error {
 	for _, k := range passkeys() {
 		if _, err := tx.Exec(ctx,
@@ -201,8 +203,8 @@ func writeTokens(ctx context.Context, tx pgx.Tx, g *garden, ref time.Time) error
 	return nil
 }
 
-// writePreferences writes both kinds, as the handler that creates a membership
-// does, so the Notifications page always finds a row.
+// writePreferences writes a row for both notification kinds, as the handler
+// that creates a membership does, so the Notifications page always finds one.
 func writePreferences(ctx context.Context, tx pgx.Tx, g *garden, m *membership) error {
 	kinds := []struct {
 		kind    string

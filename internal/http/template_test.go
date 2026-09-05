@@ -25,8 +25,8 @@ func testTemplates() *Templates {
 	return templates
 }
 
-// The tree is the one the binary ships rather than a fixture, so a template
-// naming a file that is not there fails here as well as in a browser.
+// The template tree is the real one rather than a fixture, so a template
+// referencing a missing file fails here as well as in a browser.
 func testAssets() *Assets {
 	assets, err := NewAssets(web.Static)
 	if err != nil {
@@ -35,8 +35,8 @@ func testAssets() *Assets {
 	return assets
 }
 
-// The fixture's rows come from a partial rather than from markup written
-// inline, so one definition answers both a swap and a page load.
+// The fixture's rows come from a partial rather than inline markup, so one
+// definition serves both a swap and a page load.
 const (
 	fixtureLayout = `<!doctype html>
 <title>{{block "title" .}}sprig{{end}}</title>
@@ -127,9 +127,9 @@ func TestRender_ANavigationGetsTheWholePage(t *testing.T) {
 	}
 }
 
-// Otherwise every htmx call site would need to know whether its route has a
-// fragment.
-func TestRender_AViewWithNoFragmentAnswersHTMXWithThePage(t *testing.T) {
+// Otherwise every htmx attribute in the templates would need to know whether
+// its route has a fragment.
+func TestRender_AViewWithNoFragmentGivesHTMXTheWholePage(t *testing.T) {
 	templates, _ := fixtureTemplates(t)
 
 	rec := renderTo(t, templates, true, view{page: "today"}, struct{ Rows []fixtureRowData }{})
@@ -139,8 +139,8 @@ func TestRender_AViewWithNoFragmentAnswersHTMXWithThePage(t *testing.T) {
 	}
 }
 
-// The layout writes the top of the page before the range that fails on an
-// int, so without the buffer the browser would get that much under a 200.
+// The layout writes the top of the page before the range that fails, so
+// without the buffer the browser would get that much under a 200.
 func TestRender_ATemplateThatFailsHalfwayWritesNothing(t *testing.T) {
 	templates, logged := fixtureTemplates(t)
 

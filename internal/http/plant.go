@@ -15,31 +15,30 @@ import (
 	"github.com/ismailshak/sprig/internal/store"
 )
 
-// recentLength is how many events a plant's Recent carries. Four is a month of
-// a plant watered weekly, which is enough to see its rhythm.
+// recentLength is how many events the Recent section shows. Four is a month for
+// a plant watered weekly, enough to see the pattern.
 const recentLength = 4
 
 func plantSheetPath(plantID uuid.UUID) string {
 	return logPath(plantID) + "?over=" + overPlant
 }
 
-// plantDetail is one read of a plant, serving both the page and the sheet the
-// page opens.
+// plantDetail is everything a plant's page and the sheet it opens render from.
 type plantDetail struct {
 	plant store.Plant
 	// lines is every schedule the plant has, resolved against now.
 	lines []schedule.Line
-	// cares is every care type the garden has, because the sheet opened here
+	// cares is every care type in the garden, since the sheet on this page
 	// offers all of them.
 	cares  []store.CareType
 	recent []store.ListPlantCareEventsRow
-	// now is in the reader's location.
+	// now is in the reader's timezone.
 	now time.Time
 }
 
-// loadPlant reads the plant and everything its page draws. It returns
-// pgx.ErrNoRows for a plant the garden does not have, the same answer as for
-// one that does not exist.
+// loadPlant reads the plant and everything its page shows. It returns
+// pgx.ErrNoRows for a plant the garden does not have, the same as for one that
+// does not exist.
 func loadPlant(ctx context.Context, queries *store.Queries, principal auth.Principal, plantID uuid.UUID, now time.Time) (plantDetail, error) {
 	d := plantDetail{now: now.In(locationFor(principal.User))}
 
@@ -74,8 +73,8 @@ func loadPlant(ctx context.Context, queries *store.Queries, principal auth.Princ
 	return d, nil
 }
 
-// offers is every care type the garden has, carrying the plant's schedule
-// where it has one.
+// offers returns every care type in the garden, with the plant's schedule where
+// it has one.
 func (d plantDetail) offers() []offer {
 	out := make([]offer, 0, len(d.cares))
 	for _, care := range d.cares {
@@ -90,27 +89,25 @@ func (d plantDetail) offers() []offer {
 
 type plantPage struct {
 	Name string
-	// Botanical marks the heading as the botanical name, which is set in
-	// italic wherever it appears.
+	// Botanical is true when the heading is the botanical name, which is shown
+	// in italics.
 	Botanical bool
-	// Names is the names the heading did not use, the common one ahead of the
-	// botanical one.
+	// Names is the plant's other names, the common name before the botanical.
 	Names    []plantName
 	Room     string
 	Schedule []scheduleRow
-	// Log is where the Log care button opens the sheet. It is empty for a
-	// reader who may not record care and for an archived plant.
+	// Log is the URL the Log care button opens the sheet from. Empty for a
+	// reader who may not log care and for an archived plant.
 	Log string
-	// Foot is nil for an archived plant, and the page then ends at its
-	// history.
+	// Foot is nil for an archived plant.
 	Foot *plantFoot
-	// Reference is nil for a plant with nothing written down. The page draws
-	// no section rather than an empty one.
+	// Reference is nil when the plant has no facts or notes, and the section
+	// is not rendered.
 	Reference *plantReference
 	Recent    []recentLine
-	// Activity is the whole log filtered to this plant, at the foot of Recent.
-	// It is nil for a plant with nothing recorded, where the link would lead to
-	// a page saying what the line above it already says.
+	// Activity is the link under Recent to the log filtered to this plant. Nil
+	// for a plant with nothing recorded, since that page would only repeat the
+	// line above the link.
 	Activity *link
 	Sheet    *sheet
 }
@@ -121,26 +118,27 @@ type plantName struct {
 }
 
 type scheduleRow struct {
-	// ID is the row's id in every state, which is the element a swap replaces.
+	// ID is the HTML id of the row's <li>. It is the same whether the row is
+	// closed or being edited, so htmx can replace one with the other.
 	ID   string
 	Care string
-	// Slug picks the row's icon, and survives a care type being renamed.
+	// Slug picks the row's icon.
 	Slug string
-	// Rule is empty for a care type the plant is not scheduled for.
+	// Rule is the schedule as text, such as "Every 7 days". Empty for a care
+	// type the plant has no schedule for.
 	Rule string
-	// Season is the window a seasonal cadence runs in, and empty on the rest.
+	// Season is the months a seasonal schedule runs in, empty otherwise.
 	Season string
 	When   string
-	// Late colours the right-hand end for an overdue schedule. Off dims it for
-	// one whose season is shut.
-	Late bool
-	Off  bool
-	// Scheduled is false for a care type the plant is not on.
+	// Late is true for an overdue schedule and Off for one out of season. Each
+	// changes the colour of the due text.
+	Late      bool
+	Off       bool
 	Scheduled bool
-	// Open is where the row opens as the editor, and is empty for a reader who
-	// may not change a schedule.
+	// Open is the URL that opens the row as an editor. Empty for a reader who
+	// may not edit schedules.
 	Open string
-	// Edit is the editor the row is open as, and nil for a row at rest.
+	// Edit is set while the row is being edited, nil otherwise.
 	Edit *scheduleEditor
 }
 
@@ -187,22 +185,22 @@ func newPlantPage(principal auth.Principal, d plantDetail) plantPage {
 	return page
 }
 
-// plantFoot is the end of a plant's page: Edit plant and Archive, or the
-// question Archive swaps them for.
+// plantFoot is the buttons at the bottom of a plant's page: Edit plant and
+// Archive, or the archive confirmation that replaces them.
 type plantFoot struct {
-	// One URL answers both halves of archiving, a GET asking the question and a
-	// POST doing it.
-	Edit    string
+	Edit string
+	// Archive is the URL for archiving. A GET renders the confirmation and a
+	// POST archives.
 	Archive string
-	// Asking draws the question in place of the two controls. Keep is the way
-	// back to them.
+	// Asking is true while the confirmation replaces the two buttons. Keep is
+	// the URL of the Keep link, which goes back to the plant's page.
 	Asking bool
 	Name   string
 	Keep   string
 }
 
-// newPlantFoot is the foot at rest, and nil for a reader who may neither edit
-// nor archive.
+// newPlantFoot builds the plantFoot with its buttons showing. It returns nil for a
+// reader who may neither edit nor archive.
 func newPlantFoot(principal auth.Principal, plant store.Plant) *plantFoot {
 	foot := &plantFoot{Name: plant.DisplayName(), Keep: plantPath(plant.ID)}
 	if principal.Can(auth.PlantEdit) {
@@ -217,8 +215,9 @@ func newPlantFoot(principal auth.Principal, plant store.Plant) *plantFoot {
 	return foot
 }
 
-// asking is the foot with the question up. Archiving asks first because the
-// press takes the plant off the Plants list and leaves no row to undo from.
+// asking returns the plantFoot with the archive confirmation showing. Archiving asks
+// first because it removes the plant from the Plants list and leaves no row to
+// undo from.
 func (f *plantFoot) asking() *plantFoot {
 	if f == nil {
 		return nil
@@ -239,20 +238,19 @@ func otherNames(plant store.Plant) []plantName {
 	return names
 }
 
-// scheduleRows is the plant's schedules and then the care types in the garden
-// it is not on. The absent ones are in the list rather than behind an Add
-// button because the reason to read this section is to change what the plant is
-// scheduled for, and they are the only way it acquires a schedule from here.
-// They are left out for a reader who cannot open one, since pressing is all
-// they are for.
+// scheduleRows returns the plant's schedules followed by the garden's care
+// types it has no schedule for. The unscheduled ones are listed rather than
+// hidden behind an Add button, because this section exists to change what the
+// plant is scheduled for and they are the only way to add a schedule here. They
+// are left out for a reader who cannot edit, since clicking is all they are
+// for.
 func scheduleRows(principal auth.Principal, d plantDetail) []scheduleRow {
 	edit := principal.Can(auth.ScheduleEdit) && d.plant.ArchivedAt == nil
 
 	rows := make([]scheduleRow, 0, len(d.cares))
 	scheduled := make(map[string]bool, len(d.lines))
 	for _, line := range d.lines {
-		// A one-off that has been done is over, so the plant is no longer
-		// scheduled for that care.
+		// A one-off that has been done no longer counts as a schedule.
 		if line.State == schedule.Spent {
 			continue
 		}
@@ -276,8 +274,8 @@ func scheduleRows(principal auth.Principal, d plantDetail) []scheduleRow {
 	return rows
 }
 
-// rowFor is the schedule row a care type has on the page, and nil for a care
-// type the page does not draw one for.
+// rowFor returns the schedule row for a care type, or nil if the page has none
+// for it.
 func (p *plantPage) rowFor(slug string) *scheduleRow {
 	for i := range p.Schedule {
 		if p.Schedule[i].Slug == slug {
@@ -309,8 +307,8 @@ func newScheduleRow(line schedule.Line, d plantDetail, edit bool) scheduleRow {
 	return row
 }
 
-// ruleWord is the left of a schedule row. It leaves the date to the
-// right-hand end.
+// ruleWord is the text on the left of a schedule row, such as "Every 7 days"
+// or "Just once".
 func ruleWord(s store.CareSchedule) string {
 	if s.IntervalCount == nil {
 		return "Just once"
@@ -318,39 +316,39 @@ func ruleWord(s store.CareSchedule) string {
 	return "Every " + everyWord(*s.IntervalCount, *s.IntervalUnit)
 }
 
-// dueWord is the right of a schedule row. A date carries "Due" in front of it
-// so the row does not read as a bare "Friday" beside "Every 7 days".
+// dueWord is the text on the right of a schedule row. A date is prefixed with
+// "Due" so the row does not read as a bare "Friday" beside "Every 7 days".
 func dueWord(line schedule.Line, now time.Time) string {
 	switch line.State {
 	case schedule.Dormant:
 		return "Out of season"
 	case schedule.Overdue:
-		// The row starts its own phrase, unlike the roster's "Repot overdue
-		// since March".
+		// Capitalised because the text stands alone here. On the Plants list
+		// the care name comes before it.
 		return capitalise(overdueWord(line, now))
 	case schedule.DueToday:
-		// A month-precise occurrence is due for the whole of its month, so it
-		// is named rather than being reported as today.
+		// A schedule precise only to a month is due for the whole month, so the
+		// month is named instead of "Due today".
 		if line.Precision != schedule.PrecisionMonth {
 			return "Due today"
 		}
 	}
-	// Past the coming week an anchored schedule names its date rather than
-	// counting to it, because "1 May 2027" is what was written down and "in
-	// 241 days" has to be converted.
+	// Beyond the coming week an anchored schedule shows its date rather than a
+	// count of days, because "1 May 2027" is what was entered and "in 241
+	// days" has to be converted back.
 	if line.Schedule.AnchorDate != nil && line.Days > comingWeek {
 		return "Due " + anchorWord(line.Due, line.Precision, now)
 	}
 	return "Due " + comingWord(line, now)
 }
 
-// comingWeek is how far ahead a schedule is counted towards rather than
-// named. It matches the week Today's Coming up runs to.
+// comingWeek is how many days ahead a due date is shown as a count rather than
+// a date. It matches the week Today's Coming up covers.
 const comingWeek = 7
 
-// newPlantReference draws the facts in one fixed order for every plant. Water
-// and Feed repeat the care types above them, because a schedule says how often
-// and a fact says what the care means for this plant.
+// newPlantReference builds the facts in a fixed order for every plant. Water
+// and Feed repeat the care types above, because a schedule says how often and a
+// fact says what this plant needs.
 func newPlantReference(plant store.Plant) *plantReference {
 	ref := &plantReference{Acquired: acquiredWord(plant.AcquiredYear, plant.AcquiredMonth)}
 	for _, f := range []struct {
@@ -387,7 +385,7 @@ func recentLines(principal auth.Principal, recent []store.ListPlantCareEventsRow
 	return lines
 }
 
-// plant answers GET /plants/{plant}.
+// plant handles GET /plants/{plant}.
 func (h *plants) plant(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	plantID, err := uuid.Parse(r.PathValue("plant"))
@@ -413,15 +411,14 @@ func (h *plants) plant(w http.ResponseWriter, r *http.Request) {
 	h.templates.render(w, r, view{page: "plant", fragment: fragment}, page)
 }
 
-// plantFootID is the id the foot keeps in both states, and it is the name of
-// the template that draws it, so the element a swap aims at and the fragment
-// answering it are one string.
+// plantFootID is both the HTML id of the bottom section and the name of the
+// template that renders it, so the swap target and the fragment are one string.
 const plantFootID = "plant-foot"
 
-// plantSwap is the fragment a swap aimed at the page is answered with, and it
-// narrows the page to what that fragment draws. A navigation and a swap aimed
-// at anything else get the whole page. It reports false for a schedule row the
-// page does not draw, because the swap asked for an element that is not on it.
+// plantSwap picks the fragment an htmx request gets and narrows the page to
+// what that fragment renders. A page navigation, or a swap targeting anything
+// else, gets the whole page. It returns false for a schedule row the page does
+// not have.
 func plantSwap(r *http.Request, page *plantPage) (string, bool) {
 	target := r.Header.Get("HX-Target")
 	if target == plantFootID {

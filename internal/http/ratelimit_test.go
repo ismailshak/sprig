@@ -28,8 +28,8 @@ func TestLimiter_ARefusedAttemptSpendsNothing(t *testing.T) {
 		t.Errorf("retry after %s, want the minute one token takes", retryAfter)
 	}
 
-	// A refusal left reserved rather than cancelled would have claimed the
-	// token that arrives at the minute.
+	// If a refusal reserved a token instead of cancelling, it would have taken
+	// the token that arrives at the minute.
 	if ok, _ := l.Allow("k", epoch.Add(time.Minute)); !ok {
 		t.Error("the token that refilled at the minute was not there to spend")
 	}
@@ -48,8 +48,8 @@ func TestLimiter_SweepsBucketsNobodyHasUsedForARefill(t *testing.T) {
 		t.Fatalf("held %d buckets after 1000 distinct keys", got)
 	}
 
-	// The call at 10 seconds triggers the sweep. The call at 9 keeps the
-	// display's bucket younger than a refill.
+	// The call at 10 seconds triggers the sweep. The call at 9 keeps that
+	// key's bucket younger than a refill.
 	l.Allow("display", epoch.Add(9*time.Second))
 	l.Allow("display", epoch.Add(10*time.Second))
 	if got := len(l.buckets); got != 1 {
@@ -83,7 +83,7 @@ func TestLimit_OverTheLimitIsA429WithRetryAfter(t *testing.T) {
 	}
 }
 
-func TestLimit_ByTokenGivesTwoDisplaysOnOneAddressTheirOwnBuckets(t *testing.T) {
+func TestLimit_ByTokenGivesTwoTokensOnOneAddressSeparateBuckets(t *testing.T) {
 	l := NewLimiter(rate.Every(time.Minute), 1)
 	handler := Limit(l, ByToken)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNoContent)

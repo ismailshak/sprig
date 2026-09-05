@@ -6,18 +6,19 @@ import (
 	"unicode"
 )
 
-// Four base32 characters is a million suffixes.
+// Four base32 characters gives about a million possible suffixes.
 const handleSuffixLength = 4
 
 const maxHandleLength = 32
 
-// handleFor returns the attempt-th candidate handle, tried in turn against the
-// unique index until one is free. The suffix is random rather than a count, so a
-// handle does not say how many people share a name.
+// handleFor returns the attempt-th candidate handle for displayName. The
+// caller tries candidates in turn until the unique index accepts one. The
+// suffix is random rather than a count, so a handle does not reveal how many
+// people share a name.
 func handleFor(displayName string, attempt int) string {
 	limit := maxHandleLength
 	if attempt > 1 {
-		// The suffix and its underscore have to fit too.
+		// Leave room for the underscore and suffix.
 		limit -= handleSuffixLength + 1
 	}
 	slug := slugify(displayName, limit)
@@ -30,8 +31,9 @@ func handleFor(displayName string, attempt int) string {
 	return slug + "_" + strings.ToLower(rand.Text()[:handleSuffixLength])
 }
 
-// slugify returns the empty string for a name holding neither a letter nor a
-// digit.
+// slugify lowercases name, replaces runs of other characters with one
+// underscore, and cuts it to limit runes. It returns the empty string for a
+// name with no letter or digit.
 func slugify(name string, limit int) string {
 	runes := make([]rune, 0, limit)
 	separated := false
@@ -49,6 +51,6 @@ func slugify(name string, limit int) string {
 	if len(runes) > limit {
 		runes = runes[:limit]
 	}
-	// The cut can land on an underscore the loop put there.
+	// The cut can leave a trailing underscore.
 	return strings.TrimRight(string(runes), "_")
 }

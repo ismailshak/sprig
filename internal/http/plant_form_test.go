@@ -20,9 +20,9 @@ type formFixture struct {
 	*plantFixture
 }
 
-// plantFormOn draws the two forms over the garden the plant page is tested on,
-// with a third care type so the schedule list runs past what any plant here is
-// scheduled for.
+// plantFormOn sets up the add and edit forms on the garden the plant page is
+// tested on, with a third care type so the schedule list includes a care no
+// plant here is scheduled for.
 func plantFormOn(t *testing.T) *formFixture {
 	t.Helper()
 
@@ -89,9 +89,9 @@ func (f *formFixture) archive(t *testing.T, plantID uuid.UUID) *httptest.Respons
 	return rec
 }
 
-// ask is GET on the archive route, which is the question rather than the
-// archiving. An empty target makes the request a navigation rather than a
-// swap.
+// ask GETs the archive route, which renders the confirmation rather than
+// archiving. An empty target makes the request a page navigation rather than an
+// htmx swap.
 func (f *formFixture) ask(t *testing.T, plantID uuid.UUID, target string) *httptest.ResponseRecorder {
 	t.Helper()
 
@@ -107,8 +107,8 @@ func (f *formFixture) ask(t *testing.T, plantID uuid.UUID, target string) *httpt
 	return rec
 }
 
-// keep is the plant's page as Keep it asks for it, which is the foot back at
-// rest.
+// keep requests the plant's page the way the Keep it link does, which renders
+// the buttons at the bottom closed again.
 func (f *formFixture) keep(t *testing.T, plantID uuid.UUID) *httptest.ResponseRecorder {
 	t.Helper()
 
@@ -122,7 +122,7 @@ func (f *formFixture) keep(t *testing.T, plantID uuid.UUID) *httptest.ResponseRe
 	return rec
 }
 
-// created is the plant a good post redirected to.
+// created returns the plant a successful post redirected to.
 func (f *formFixture) created(t *testing.T, rec *httptest.ResponseRecorder) store.Plant {
 	t.Helper()
 
@@ -140,7 +140,7 @@ func (f *formFixture) created(t *testing.T, rec *httptest.ResponseRecorder) stor
 	return plant
 }
 
-// scheduleFor is the plant's schedule for one care type.
+// scheduleFor returns the plant's schedule for one care type.
 func (f *formFixture) scheduleFor(t *testing.T, plantID uuid.UUID, slug string) store.CareSchedule {
 	t.Helper()
 
@@ -189,7 +189,7 @@ var (
 	formTitle  = regexp.MustCompile(`<h1 class="topbar__title">(.*?)</h1>`)
 )
 
-// filled reads back what a field holds, whichever kind of control it is.
+// filled returns a field's value, whichever kind of control it is.
 func filled(t *testing.T, page, id string) string {
 	t.Helper()
 
@@ -225,8 +225,7 @@ func hasField(page, id string) bool {
 	return false
 }
 
-// openRows is the care types the form has an editor open for, in the order the
-// list draws them.
+// openRows returns the care types whose schedule rows are open, in page order.
 func openRows(page string) []string {
 	var open []string
 	for _, m := range formRow.FindAllStringSubmatch(page, -1) {
@@ -256,9 +255,9 @@ func errorsOn(page string) []string {
 }
 
 // addValues is the add form as a browser posts it, with every field the page
-// draws and no schedule open. A missing group is what a shape changed without
-// JavaScript looks like, so a test that means to post one leaves it out on
-// purpose rather than by omission.
+// renders and no schedule row open. A shape changed without JavaScript posts
+// without that shape's field group, so a test that wants that leaves the group
+// out on purpose.
 func addValues() url.Values {
 	values := url.Values{
 		"nickname":       {""},
@@ -275,8 +274,8 @@ func addValues() url.Values {
 	return values
 }
 
-// openValues adds one care type's row to a post, under the names that row's
-// controls carry.
+// openValues adds one care type's open schedule row to a post, using the
+// names of that row's controls.
 func openValues(values url.Values, slug string, fields url.Values) url.Values {
 	values.Add("open", slug)
 	for name, held := range fields {
@@ -293,7 +292,7 @@ func onceValues(day, month, year string) url.Values {
 	return url.Values{"shape": {shapeOnce}, "day": {day}, "month": {month}, "year": {year}}
 }
 
-func TestPlantForm_TheAddFormOpensOnAWeeklyWatering(t *testing.T) {
+func TestPlantForm_TheAddFormOpensWithAWeeklyWateringRow(t *testing.T) {
 	f := plantFormOn(t)
 
 	rec := f.open(t, newPlantPath, false)
@@ -319,7 +318,7 @@ func TestPlantForm_TheAddFormOpensOnAWeeklyWatering(t *testing.T) {
 	}
 }
 
-func TestPlantForm_APlantArrivesWithACadenceAndADateInOnePost(t *testing.T) {
+func TestPlantForm_OnePostCreatesThePlantAndItsSchedules(t *testing.T) {
 	f := plantFormOn(t)
 	values := addValues()
 	values.Set("nickname", "Ada")
@@ -341,8 +340,8 @@ func TestPlantForm_APlantArrivesWithACadenceAndADateInOnePost(t *testing.T) {
 	if repot.IntervalCount != nil {
 		t.Errorf("the repot repeats every %v, and it was asked for once", repot.IntervalCount)
 	}
-	// Any day names a month rather than a date, and the anchor lands on the
-	// first of that month at month precision.
+	// Any day means a month rather than a date, so the anchor is stored on the
+	// 1st of that month at month precision.
 	want := time.Date(2028, time.March, 1, 0, 0, 0, 0, time.UTC)
 	if repot.AnchorDate == nil || !repot.AnchorDate.Equal(want) || *repot.AnchorPrecision != "month" {
 		t.Errorf("the repot is anchored to %v at %v precision, want %v at month", repot.AnchorDate, repot.AnchorPrecision, want)
@@ -352,7 +351,7 @@ func TestPlantForm_APlantArrivesWithACadenceAndADateInOnePost(t *testing.T) {
 	}
 }
 
-func TestPlantForm_APlantWithNoNameIsRefusedWithWhatWasTyped(t *testing.T) {
+func TestPlantForm_APlantWithNoNameIsRefusedAndTheFormKeepsItsValues(t *testing.T) {
 	f := plantFormOn(t)
 	before := f.countPlants(t)
 	values := addValues()
@@ -392,8 +391,8 @@ func TestPlantForm_AnAcquiredMonthNeedsItsYear(t *testing.T) {
 	if got := errorsOn(page); !slices.Contains(got, "Give the year as well as the month.") {
 		t.Errorf("the form says %v, want the line about the year", got)
 	}
-	// The line is inside the disclosure, which has to be open or nobody reads
-	// it.
+	// The message is inside the Reference disclosure, which has to be open
+	// for it to be seen.
 	if !strings.Contains(page, `<details class="disclosure" open>`) {
 		t.Error("the refusal is behind a closed disclosure")
 	}
@@ -402,7 +401,7 @@ func TestPlantForm_AnAcquiredMonthNeedsItsYear(t *testing.T) {
 	}
 }
 
-func TestPlantForm_ACountOfNoughtIsRefusedOnItsRow(t *testing.T) {
+func TestPlantForm_AnIntervalOfZeroIsRefusedWithTheMessageOnItsRow(t *testing.T) {
 	f := plantFormOn(t)
 	before := f.countPlants(t)
 	values := addValues()
@@ -426,9 +425,9 @@ func TestPlantForm_ACountOfNoughtIsRefusedOnItsRow(t *testing.T) {
 	}
 }
 
-// A shape changed with no script arrives without the date fields because they
-// are drawn only for the shape that needs them.
-func TestPlantForm_AShapeChosenWithNoScriptComesBackWithTheFieldsItNeeds(t *testing.T) {
+// A shape changed without JavaScript posts without the date fields, because
+// they are rendered only for the shape that needs them.
+func TestPlantForm_AShapeChosenWithoutJavaScriptReRendersWithTheFieldsItNeeds(t *testing.T) {
 	f := plantFormOn(t)
 	values := addValues()
 	values.Set("nickname", "Ada")
@@ -469,11 +468,11 @@ func TestPlantForm_ADayTheMonthDoesNotHaveIsRefused(t *testing.T) {
 	}
 }
 
-// A dated repeat is the one shape that carries an interval and an anchor
-// together, and the schema refuses a season beside an anchor. The box is
-// ticked here because a shape changed with no script leaves it on the row, and
-// the post has to drop the season rather than reach the constraint.
-func TestPlantForm_ADatedRepeatKeepsItsIntervalAndItsDateAndNoSeason(t *testing.T) {
+// A fixed date schedule is the one shape with both an interval and an anchor,
+// and the schema refuses a season on a row with an anchor. The box is ticked
+// here because a shape changed without JavaScript leaves it on the row, and the
+// post has to drop the season rather than hit the constraint.
+func TestPlantForm_AFixedDateScheduleStoresItsIntervalAndDateAndNoSeason(t *testing.T) {
 	f := plantFormOn(t)
 	values := addValues()
 	values.Set("nickname", "Ada")
@@ -498,7 +497,7 @@ func TestPlantForm_ADatedRepeatKeepsItsIntervalAndItsDateAndNoSeason(t *testing.
 	}
 }
 
-func TestPlantForm_ASeasonalCadenceKeepsTheWindowItWasGiven(t *testing.T) {
+func TestPlantForm_ASeasonalScheduleStoresItsMonths(t *testing.T) {
 	f := plantFormOn(t)
 	values := addValues()
 	values.Set("nickname", "Ada")
@@ -516,10 +515,10 @@ func TestPlantForm_ASeasonalCadenceKeepsTheWindowItWasGiven(t *testing.T) {
 	}
 }
 
-// A post can carry the tick and no window because ticking the box redraws the
-// months only with a script. It takes the window the editor would have offered
-// rather than refusing a field nobody saw.
-func TestPlantForm_ASeasonTickedWithNoMonthsTakesTheWindowTheEditorOffers(t *testing.T) {
+// A post can have the box ticked and no months, because ticking the box renders
+// the month selects only with JavaScript. The default months are used rather
+// than refusing a field nobody saw.
+func TestPlantForm_ASeasonTickedWithoutMonthsStoresTheDefaultMonths(t *testing.T) {
 	f := plantFormOn(t)
 	values := addValues()
 	values.Set("nickname", "Ada")
@@ -539,8 +538,7 @@ func TestPlantForm_AClosedRowWritesNoSchedule(t *testing.T) {
 	f := plantFormOn(t)
 	values := addValues()
 	values.Set("nickname", "Ada")
-	// The water row is the one the form opens with, closed here by the button
-	// that ends it.
+	// The water row is open by default. Here it is closed by its close button.
 	openValues(values, "water", cadenceValues("1", "week"))
 	values.Set("close", "water")
 
@@ -551,7 +549,7 @@ func TestPlantForm_AClosedRowWritesNoSchedule(t *testing.T) {
 	}
 }
 
-func TestPlantForm_OpeningARowKeepsWhatHasBeenTyped(t *testing.T) {
+func TestPlantForm_OpeningARowKeepsTheFormsValues(t *testing.T) {
 	f := plantFormOn(t)
 	values := addValues()
 	values.Set("nickname", "Ada")
@@ -576,7 +574,7 @@ func TestPlantForm_OpeningARowKeepsWhatHasBeenTyped(t *testing.T) {
 	}
 }
 
-func TestPlantForm_ASwapAnswersWithTheRowAlone(t *testing.T) {
+func TestPlantForm_AnHTMXRequestGetsTheRowAlone(t *testing.T) {
 	f := plantFormOn(t)
 
 	rec := f.open(t, newPlantPath+"?open=repot", true)
@@ -596,7 +594,7 @@ func TestPlantForm_ASwapAnswersWithTheRowAlone(t *testing.T) {
 	}
 }
 
-func TestPlantForm_TheEditFormIsFilledInAndOpensItsReference(t *testing.T) {
+func TestPlantForm_TheEditFormIsFilledInWithTheReferenceSectionOpen(t *testing.T) {
 	f := plantFormOn(t)
 	f.exec(t, "UPDATE plant SET sun = 'Bright indirect.', acquired_year = 2024, acquired_month = 3 WHERE id = $1", bigFellaID)
 
@@ -625,7 +623,8 @@ func TestPlantForm_TheEditFormIsFilledInAndOpensItsReference(t *testing.T) {
 	if !strings.Contains(page, `<details class="disclosure" open>`) {
 		t.Error("the reference is shut on a plant that has something in it")
 	}
-	// A schedule is changed on the plant's own page, beside the date it moves.
+	// Schedules are edited on the plant's page, beside the due date they
+	// change.
 	if len(openRows(page)) != 0 || len(closedRows(page)) != 0 {
 		t.Error("the edit form draws schedule rows")
 	}
@@ -634,7 +633,7 @@ func TestPlantForm_TheEditFormIsFilledInAndOpensItsReference(t *testing.T) {
 	}
 }
 
-func TestPlantForm_AReaderWhoMayNotArchiveIsOfferedNoArchive(t *testing.T) {
+func TestPlantForm_AReaderWhoMayNotArchiveSeesNoArchiveLink(t *testing.T) {
 	f := plantFormOn(t)
 	f.principal.Capabilities = auth.Capabilities{auth.PlantEdit: true}
 
@@ -648,8 +647,8 @@ func TestPlantForm_AReaderWhoMayNotArchiveIsOfferedNoArchive(t *testing.T) {
 	}
 }
 
-// Sprout carries a nickname and nothing else.
-func TestPlantForm_APlantWithNothingWrittenDownKeepsItsReferenceShut(t *testing.T) {
+// Sprout has a nickname and nothing else.
+func TestPlantForm_APlantWithNoReferenceFieldsHasTheReferenceSectionClosed(t *testing.T) {
 	f := plantFormOn(t)
 
 	page := f.editForm(t, sproutID).Body.String()
@@ -659,7 +658,7 @@ func TestPlantForm_APlantWithNothingWrittenDownKeepsItsReferenceShut(t *testing.
 	}
 }
 
-func TestPlantForm_SavingWritesTheFieldsThatWereEmptiedAsWellAsThoseFilledIn(t *testing.T) {
+func TestPlantForm_SavingClearsEmptiedFields(t *testing.T) {
 	f := plantFormOn(t)
 	values := addValues()
 	values.Set("nickname", "Big Fella")
@@ -701,7 +700,7 @@ func TestPlantForm_ASaveWithNoNameIsRefusedAndWritesNothing(t *testing.T) {
 	}
 }
 
-func TestPlantForm_AnArchivedPlantHasNoForm(t *testing.T) {
+func TestPlantForm_AnArchivedPlantsEditFormIs404(t *testing.T) {
 	f := plantFormOn(t)
 	f.exec(t, "UPDATE plant SET archived_at = now() WHERE id = $1", bigFellaID)
 
@@ -715,22 +714,22 @@ func TestPlantForm_AnArchivedPlantHasNoForm(t *testing.T) {
 	}
 }
 
-func TestPlantForm_ArchivingTakesThePlantOffTheRoster(t *testing.T) {
+func TestPlantForm_ArchivingRemovesThePlantFromThePlantsList(t *testing.T) {
 	f := plantFormOn(t)
 
 	rec := f.archive(t, bigFellaID)
 
 	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != plantsPath {
-		t.Fatalf("archiving answered %d to %q, want %d to the roster", rec.Code, rec.Header().Get("Location"), http.StatusSeeOther)
+		t.Fatalf("archiving answered %d to %q, want %d to the plant list", rec.Code, rec.Header().Get("Location"), http.StatusSeeOther)
 	}
 	list, err := store.New(f.tx).ListPlants(t.Context(), rosewoodID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if slices.ContainsFunc(list, func(p store.Plant) bool { return p.ID == bigFellaID }) {
-		t.Error("the archived plant is still on the roster")
+		t.Error("the archived plant is still on the plant list")
 	}
-	// Its history survives, which is why plants archive rather than delete.
+	// The history is kept. That is why plants are archived rather than deleted.
 	if _, err := store.New(f.tx).GetPlant(t.Context(), rosewoodID, bigFellaID); err != nil {
 		t.Errorf("the archived plant is gone: %v", err)
 	}
@@ -739,7 +738,7 @@ func TestPlantForm_ArchivingTakesThePlantOffTheRoster(t *testing.T) {
 	}
 }
 
-func TestPlantForm_ArchivingAsksBeforeItActs(t *testing.T) {
+func TestPlantForm_ArchiveShowsAConfirmationFirst(t *testing.T) {
 	f := plantFormOn(t)
 
 	rec := f.ask(t, bigFellaID, "")
@@ -751,14 +750,14 @@ func TestPlantForm_ArchivingAsksBeforeItActs(t *testing.T) {
 	if !strings.Contains(page, "Archive Big Fella?") {
 		t.Errorf("the foot does not ask about the plant:\n%s", text(page))
 	}
-	// The question names what stays rather than only what goes.
-	if !strings.Contains(page, "Its history stays") {
+	// The confirmation says the history is kept, not only that the plant goes.
+	if !strings.Contains(page, "Its history is kept") {
 		t.Errorf("the question does not say what archiving keeps:\n%s", text(page))
 	}
 	if !strings.Contains(page, "Keep it") {
 		t.Error("the question has no way out of it")
 	}
-	// The plant it is about is still on the screen above the answer.
+	// The plant's page is still shown above the confirmation.
 	if name := heroName.FindStringSubmatch(page); name == nil || text(name[2]) != "Big Fella" {
 		t.Errorf("the question was asked away from the plant:\n%v", name)
 	}
@@ -767,7 +766,7 @@ func TestPlantForm_ArchivingAsksBeforeItActs(t *testing.T) {
 	}
 }
 
-func TestPlantForm_TheQuestionIsSwappedIntoTheFootAlone(t *testing.T) {
+func TestPlantForm_AnHTMXRequestGetsTheConfirmationAlone(t *testing.T) {
 	f := plantFormOn(t)
 
 	rec := f.ask(t, bigFellaID, plantFootID)
@@ -782,13 +781,13 @@ func TestPlantForm_TheQuestionIsSwappedIntoTheFootAlone(t *testing.T) {
 	if !strings.Contains(page, "Archive Big Fella?") {
 		t.Errorf("the swap does not carry the question:\n%s", page)
 	}
-	// A target larger than the change rebuilds what did not change.
+	// Swapping a larger element than the change re-renders what did not change.
 	if strings.Contains(page, "hero__name") || strings.Contains(page, "Recent") {
 		t.Errorf("the swap answered with more of the page than the foot:\n%s", page)
 	}
 }
 
-func TestPlantForm_KeepItPutsTheFootBackAsItWas(t *testing.T) {
+func TestPlantForm_KeepItRestoresTheButtons(t *testing.T) {
 	f := plantFormOn(t)
 
 	rec := f.keep(t, bigFellaID)
@@ -807,7 +806,7 @@ func TestPlantForm_KeepItPutsTheFootBackAsItWas(t *testing.T) {
 	}
 }
 
-func TestPlantForm_AnArchivedPlantIsNotAskedAbout(t *testing.T) {
+func TestPlantForm_TheArchiveConfirmationIs404ForAnArchivedPlant(t *testing.T) {
 	f := plantFormOn(t)
 	f.exec(t, "UPDATE plant SET archived_at = now() WHERE id = $1", bigFellaID)
 
@@ -816,7 +815,7 @@ func TestPlantForm_AnArchivedPlantIsNotAskedAbout(t *testing.T) {
 	}
 }
 
-func TestPlantForm_APlantAnotherGardenHasCannotBeArchived(t *testing.T) {
+func TestPlantForm_AnotherGardensPlantCannotBeArchived(t *testing.T) {
 	f := plantFormOn(t)
 	fairview := uuid.MustParse("00000000-0000-7000-8000-0000000009f1")
 	stranger := uuid.MustParse("00000000-0000-7000-8000-0000000009f2")
@@ -835,7 +834,7 @@ func TestPlantForm_APlantAnotherGardenHasCannotBeArchived(t *testing.T) {
 	}
 }
 
-func TestPlant_ASitterIsOfferedNoWayToEditOrArchive(t *testing.T) {
+func TestPlant_ASitterSeesNoEditOrArchiveButtons(t *testing.T) {
 	f := rosewoodPlant(t)
 	f.principal.Capabilities = auth.Capabilities{}
 
@@ -846,7 +845,7 @@ func TestPlant_ASitterIsOfferedNoWayToEditOrArchive(t *testing.T) {
 	}
 }
 
-func TestPlant_TheFootLeadsToTheFormAndToArchiving(t *testing.T) {
+func TestPlant_TheBottomButtonsLinkToEditAndArchive(t *testing.T) {
 	f := rosewoodPlant(t)
 
 	page := f.page(t, bigFellaID)
@@ -859,7 +858,7 @@ func TestPlant_TheFootLeadsToTheFormAndToArchiving(t *testing.T) {
 	}
 }
 
-func TestPlant_AnArchivedPlantHasNoFoot(t *testing.T) {
+func TestPlant_AnArchivedPlantHasNoEditOrArchiveButtons(t *testing.T) {
 	f := rosewoodPlant(t)
 	f.exec(t, "UPDATE plant SET archived_at = now() WHERE id = $1", bigFellaID)
 

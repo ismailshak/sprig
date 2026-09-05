@@ -10,30 +10,29 @@ import (
 	"github.com/ismailshak/sprig/internal/auth"
 )
 
-// config is every setting sprig reads from the environment, gathered once
-// at startup.
+// config is every setting read from the environment, loaded once at startup.
 type config struct {
 	addr        string
 	databaseURL string
 	cookie      auth.CookieSettings
 	sessionTTL  time.Duration
-	// trustedIPHeader is the header a proxy writes the client address to.
-	// Empty means RemoteAddr is the client address.
+	// trustedIPHeader is the header a reverse proxy puts the client address
+	// in. Empty means RemoteAddr is the client address.
 	trustedIPHeader string
-	// templateDir is a directory of templates to read on every render.
-	// Empty means the tree compiled into the binary, parsed once.
+	// templateDir is a directory of templates to re-read on every render, for
+	// development. Empty means the embedded templates, parsed once.
 	templateDir string
 	logLevel    slog.Level
 	logFormat   string
 }
 
-// defaultSessionTTL is 30 days of disuse before a session ends. A shorter
-// window asks for a passkey more often than people tolerate.
+// defaultSessionTTL is 30 days without use before a session expires. Shorter
+// would prompt for a passkey more often than people tolerate.
 const defaultSessionTTL = 720 * time.Hour
 
-// loadConfig reads every SPRIG_* variable through getenv. It reports every
-// problem it finds at once, so a misconfigured deployment takes one restart
-// to diagnose rather than one per variable.
+// loadConfig reads every SPRIG_* variable through getenv. It collects every
+// problem before returning, so a misconfigured deployment is fixed in one
+// restart rather than one per variable.
 func loadConfig(getenv func(string) string) (config, error) {
 	var problems []string
 	require := func(name string) string {
@@ -68,8 +67,8 @@ func loadConfig(getenv func(string) string) (config, error) {
 		}
 	}
 
-	// Max-Age is an integer, so a TTL with a fraction of a second would give
-	// the cookie and the row different deadlines.
+	// The cookie's Max-Age is whole seconds, so a TTL with a fractional second
+	// would give the cookie and the session row different deadlines.
 	ttl, err := time.ParseDuration(withDefault(getenv("SPRIG_SESSION_TTL"), defaultSessionTTL.String()))
 	switch {
 	case err != nil:

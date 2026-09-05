@@ -10,56 +10,57 @@ import (
 	"github.com/ismailshak/sprig/internal/store"
 )
 
-// State is what a schedule is doing on the reader's day.
+// State classifies a schedule relative to the reader's day.
 type State int
 
-// The states are declared in the order a plant's cares are ranked when one
-// of them has to stand for the plant.
+// The states are declared in ranking order. When one care has to represent a
+// plant, the lowest State wins.
 const (
 	// Overdue is an occurrence whose day has passed.
 	Overdue State = iota
 	// DueToday is an occurrence on the reader's day. A month-precise
-	// occurrence is due for the whole of its month.
+	// occurrence is DueToday for the whole of its month.
 	DueToday
 	// Upcoming is an occurrence still to come.
 	Upcoming
-	// Dormant is a cadence whose season is shut.
+	// Dormant is a cadence outside its season.
 	Dormant
 	// Spent is a one-off that has been done.
 	Spent
 )
 
-// A week keeps Coming up short on a garden whose intervals run to a month.
+// comingUpDays is how far ahead the Coming up section looks. A week keeps the
+// section short in a garden whose intervals run to a month.
 const comingUpDays = 7
 
-// Line is one schedule resolved against the reader's day. It carries the rows
-// it was resolved from, so a template needs nothing else to draw it.
+// Line is one schedule resolved against the reader's day, together with the
+// rows it was resolved from, so a template can render it without another
+// lookup.
 type Line struct {
 	Schedule store.CareSchedule
 	Plant    store.Plant
 	CareType store.CareType
-	// Last is the most recent event of the care type on the plant, and nil
-	// where there has never been one.
+	// Last is the most recent event of this care type on the plant, or nil if
+	// there has never been one.
 	Last *store.CareEvent
 
 	State State
-	// Due is the occurrence's day at midnight in the reader's location, and
-	// zero for Dormant and Spent. A month-precise occurrence's Due is the
-	// first of its month.
+	// Due is midnight at the start of the due day in the reader's location.
+	// It is zero for Dormant and Spent. For a month-precise occurrence it is
+	// the first of the month.
 	Due       time.Time
 	Precision string
-	// Days is how many days after the reader's today Due falls, so a negative
-	// count is overdue. A month-precise occurrence counts to the first of its
-	// month, so inside the month Days is at or below zero while State is
-	// DueToday.
+	// Days is the number of days from the reader's today to Due. Negative
+	// means overdue. A month-precise occurrence counts to the first of its
+	// month, so inside that month Days is zero or negative while State is
+	// still DueToday.
 	Days int
 }
 
-// Resolve reads a garden's schedules against the day now falls on in its
-// location. A caller passes now in the reader's location, as for Next. latest
-// holds the most recent event per plant and care type, which
-// ListLatestCareEvents produces. The result keeps the order ListCareSchedules
-// gave the schedules.
+// Resolve computes a Line for each schedule against the day now falls on in
+// its location. Callers pass now in the reader's location, as for Next. latest
+// is the most recent event per plant and care type, as ListLatestCareEvents
+// returns it. The result is in the same order as schedules.
 func Resolve(schedules []store.ListCareSchedulesRow, latest []store.CareEvent, now time.Time) []Line {
 	type key struct{ plant, careType uuid.UUID }
 	last := make(map[key]*store.CareEvent, len(latest))
@@ -95,8 +96,9 @@ func Resolve(schedules []store.ListCareSchedulesRow, latest []store.CareEvent, n
 	return lines
 }
 
-// A month-precise occurrence is overdue only once its month has gone, because
-// a month names no day to be late against.
+// state classifies a due date against today. A month-precise occurrence is
+// overdue only once its month has ended, because a month names no day to be
+// late against.
 func state(today, due time.Time, precision string) State {
 	end := due.AddDate(0, 0, 1)
 	if precision == PrecisionMonth {
@@ -113,9 +115,9 @@ func state(today, due time.Time, precision string) State {
 }
 
 // DaysBetween counts calendar days from one instant to another, both read in
-// to's location. It re-expresses the two midnights in UTC before subtracting
-// because a day either side of a clock change is twenty-three or twenty-five
-// hours long in the reader's location.
+// to's location. The two midnights are converted to UTC before subtracting,
+// because in the reader's location a day either side of a clock change is 23
+// or 25 hours long.
 func DaysBetween(from, to time.Time) int {
 	f := midnightUTC(from.In(to.Location()))
 	t := midnightUTC(to)
@@ -127,31 +129,31 @@ func midnightUTC(t time.Time) time.Time {
 	return time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
 }
 
-// Day is the garden as the reader's day finds it, in the three sections
-// Today draws.
+// Day is the garden's schedules grouped into the three sections the Today
+// page shows.
 type Day struct {
 	Overdue  []Row
 	DueToday []Row
 	ComingUp []Row
-	// Next is the plant nearest to being due beyond ComingUp, which the empty
-	// state names. It is nil where nothing is scheduled beyond the week.
+	// Next is the plant due soonest after the ComingUp window. The empty
+	// state names it. It is nil when nothing is scheduled beyond the week.
 	Next *Row
 }
 
-// Row is a plant on Today and the care that put it there.
+// Row is a plant on the Today page and the care that put it there.
 type Row struct {
 	Plant store.Plant
-	// Care is the plant's most overdue care, failing that its soonest. A plant
-	// is one row however many of its cares are due, because the sheet the row
-	// opens offers the rest.
+	// Care is the plant's most overdue care, or failing that its soonest. A
+	// plant gets one row however many cares are due, because the sheet the
+	// row opens offers the rest.
 	Care Line
-	// Lines is every schedule the plant has, whatever its state, in the order
-	// Resolve gave them. The sheet lists its care types and their intervals.
+	// Lines is every schedule the plant has, in any state, in Resolve's order.
+	// The sheet lists these care types and their intervals.
 	Lines []Line
 }
 
-// Today groups resolved lines into the sections the screen draws. A plant
-// whose every schedule is dormant or spent is on no list.
+// Today groups resolved lines into the sections the Today page shows. A plant
+// whose schedules are all dormant or spent appears in none of them.
 func Today(lines []Line) Day {
 	var day Day
 	for _, row := range rows(lines) {
@@ -173,9 +175,9 @@ func Today(lines []Line) Day {
 	return day
 }
 
-// Nearest is the schedule a plant is closest to needing, the most overdue
-// ahead of the soonest, with a dormant or spent one behind both. It reports
-// false for a plant with no schedules.
+// Nearest returns the plant's most pressing schedule: the most overdue, then
+// the soonest, with dormant and spent ones ranked last. It returns false for a
+// plant with no schedules.
 func Nearest(lines []Line) (Line, bool) {
 	if len(lines) == 0 {
 		return Line{}, false
@@ -212,8 +214,8 @@ func compareLines(a, b Line) int {
 	return cmp.Or(cmp.Compare(a.State, b.State), cmp.Compare(soon(a), soon(b)))
 }
 
-// compareRows falls back to the plant's id, so two plants sharing a name keep
-// their order.
+// compareRows orders by due date, then name, then plant id, so two plants
+// sharing a name keep a stable order.
 func compareRows(a, b Row) int {
 	return cmp.Or(
 		cmp.Compare(soon(a.Care), soon(b.Care)),
@@ -222,9 +224,9 @@ func compareRows(a, b Row) int {
 	)
 }
 
-// soon is how far off a line is for ordering. A line due today is at zero, so
-// a month-precise occurrence weeks into its month does not outrank a care due
-// this morning.
+// soon is the sort key for how far off a line is. A line due today sorts at
+// zero, so a month-precise occurrence weeks into its month does not outrank a
+// care due this morning.
 func soon(l Line) int {
 	if l.State == DueToday {
 		return 0

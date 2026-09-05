@@ -16,22 +16,21 @@ export class PlantScreen {
     return this.page.getByRole('region', { name: title });
   }
 
-  // A schedule row is found by the care type it names, the only part of it
-  // that does not change when the plant is watered.
+  // A schedule row is found by its care type, the one part that does not change
+  // when the plant is watered.
   scheduleRow(care: string): Locator {
     return this.section('Schedule').getByRole('listitem').filter({ hasText: care });
   }
 
   // The whole row is the control, so opening the editor is a request either
-  // way: swapped in place by htmx and navigated to by a browser running no
-  // script.
+  // way. With JavaScript it is an htmx swap, without it a navigation.
   async editSchedule(care: string): Promise<void> {
     await this.scheduleRow(care).getByRole('link').click();
     await this.page.waitForLoadState();
   }
 
-  // Every control in the editor is named by its care type as well as by what
-  // it is. The add form's rows carry the same names.
+  // Every control's label includes its care type. The add form's rows use the
+  // same labels.
   shape(care: string): Locator {
     return this.page.getByLabel(`When ${care} happens`);
   }
@@ -58,8 +57,8 @@ export class PlantScreen {
     await this.page.waitForLoadState();
   }
 
-  // Remove asks before it acts. The first press swaps the editor's foot for the
-  // question and the second answers it.
+  // Remove asks for confirmation. The first click replaces the editor's buttons
+  // with the question and the second confirms.
   async removeSchedule(care: string): Promise<void> {
     await this.askToRemoveSchedule(care);
     await this.scheduleRow(care).getByRole('button', { name: 'Remove' }).click();
@@ -88,7 +87,7 @@ export class PlantScreen {
     return this.section('Recent').getByRole('listitem');
   }
 
-  // The link under Recent, which opens the activity log filtered to this plant.
+  // The link under Recent. It opens the activity log filtered to this plant.
   allActivity(): Locator {
     return this.section('Recent').getByRole('link');
   }
@@ -98,8 +97,8 @@ export class PlantScreen {
     await this.page.waitForLoadState();
   }
 
-  // Archive asks before it acts. The first press swaps the foot for the
-  // question and the second answers it.
+  // Archive asks for confirmation. The first click replaces the buttons with
+  // the question and the second confirms.
   async archive(): Promise<void> {
     await this.askToArchive();
     await this.foot().getByRole('button', { name: 'Archive' }).click();
@@ -116,8 +115,8 @@ export class PlantScreen {
     await this.page.waitForLoadState();
   }
 
-  // The question and the two controls share this id, which the server names as
-  // the target of the swap.
+  // The confirmation and the buttons share this id. The server names it as the
+  // swap target.
   foot(): Locator {
     return this.page.locator('#plant-foot');
   }

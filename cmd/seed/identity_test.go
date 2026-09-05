@@ -12,9 +12,9 @@ import (
 	"github.com/ismailshak/sprig/internal/auth"
 )
 
-// A row shows the prefix, so the token has to start with it to be matched
-// against a device.
-func TestSeed_ATokenStartsWithThePrefixItsRowShows(t *testing.T) {
+// The Tokens page shows the prefix, so the token must start with it for a
+// person to match one to a device.
+func TestSeed_EachTokenStartsWithItsStoredPrefix(t *testing.T) {
 	for _, g := range []garden{home(), upstairs()} {
 		for _, tok := range g.tokens {
 			if !strings.HasPrefix(tok.token, tok.prefix) {
@@ -24,9 +24,9 @@ func TestSeed_ATokenStartsWithThePrefixItsRowShows(t *testing.T) {
 	}
 }
 
-// The ninety-day cap is a constant in Go, and the fixture is the one place a
-// token could be written past it.
-func TestSeed_NoTokenLivesLongerThanTheCap(t *testing.T) {
+// The 90-day cap is a Go constant, so the fixture is the one place a token
+// could be written past it.
+func TestSeed_NoTokenExpiresLaterThanTheCap(t *testing.T) {
 	ceiling := int(auth.MaxTokenLifetime / (24 * time.Hour))
 	for _, g := range []garden{home(), upstairs()} {
 		for _, tok := range g.tokens {
@@ -37,8 +37,8 @@ func TestSeed_NoTokenLivesLongerThanTheCap(t *testing.T) {
 	}
 }
 
-// A developer presenting the constant beside a row has to reach that row.
-func TestSeed_EachWrittenDownSecretResolvesToItsRow(t *testing.T) {
+// A developer using one of the token constants must reach the row it belongs to.
+func TestSeed_EachSecretConstantHashesToItsRow(t *testing.T) {
 	pool := seeded(t)
 	ctx := t.Context()
 
@@ -98,7 +98,7 @@ func TestSeed_NoSecretIsStoredInTheClear(t *testing.T) {
 	}
 }
 
-func TestSeed_PasskeysHoldThePrototypesTwoDevices(t *testing.T) {
+func TestSeed_ThePasskeysAreThePrototypesTwoDevices(t *testing.T) {
 	pool := seeded(t)
 	ref := testReference(t)
 
@@ -158,7 +158,7 @@ func TestSeed_OneSitterInviteIsWaiting(t *testing.T) {
 	}
 }
 
-func TestSeed_TheKitchenDisplayIsLiveAndTheSpareHasRunOut(t *testing.T) {
+func TestSeed_TheKitchenDisplayTokenIsLiveAndTheSpareHasExpired(t *testing.T) {
 	pool := seeded(t)
 	ref := testReference(t)
 
@@ -229,7 +229,7 @@ func TestSeed_EightOfTenRecoveryCodesAreLeft(t *testing.T) {
 	}
 }
 
-func TestSeed_NotificationsHoldThePrototypesPreferencesAndBrowsers(t *testing.T) {
+func TestSeed_NotificationPreferencesAndSubscriptionsMatchThePrototype(t *testing.T) {
 	pool := seeded(t)
 	ref := testReference(t)
 	ctx := t.Context()
@@ -249,8 +249,8 @@ func TestSeed_NotificationsHoldThePrototypesPreferencesAndBrowsers(t *testing.T)
 		t.Errorf("digest=%v activity=%v hour=%d, want the digest on at eight and activity off", digest, activity, hour)
 	}
 
-	// Every membership carries both kinds, so the page reads a row rather than
-	// deciding what a missing one means.
+	// Every membership has a row for both kinds, so the page never has to
+	// decide what a missing row means.
 	var memberships, preferences int
 	if err := pool.QueryRow(ctx, "SELECT (SELECT count(*) FROM membership), (SELECT count(*) FROM notification_preference)").Scan(&memberships, &preferences); err != nil {
 		t.Fatalf("counting the preferences: %v", err)
@@ -283,8 +283,8 @@ func TestSeed_NotificationsHoldThePrototypesPreferencesAndBrowsers(t *testing.T)
 	}
 }
 
-// collect scans by column position into T, so a column of the wrong type fails
-// here rather than comparing as a zero value.
+// collect scans rows into T by column position, so a column of the wrong type
+// fails here instead of comparing as a zero value.
 func collect[T any](t *testing.T, pool *pgxpool.Pool, sql string, args ...any) []T {
 	t.Helper()
 
