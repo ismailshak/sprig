@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 # Prettier over whatever the commit touches under e2e/, which is the only
-# JavaScript in the repository. It checks rather than rewrites, because a hook
-# that edits staged files commits something the author has not read.
+# JavaScript in the repository. What it rewrites is staged, so formatting is
+# never a commit somebody has to make twice.
+#
+# The exception is a file staged in part: adding prettier's fix would carry the
+# unstaged rest of that file into the commit, so the hook stops instead.
 #
 # Git finds this through core.hooksPath, which mise run hooks sets.
 set -euo pipefail
@@ -24,8 +27,29 @@ if [ ! -x e2e/node_modules/.bin/prettier ]; then
   exit 1
 fi
 
-cd e2e
-if ! ./node_modules/.bin/prettier --check "${files[@]}"; then
-  echo "pre-commit: run mise run format and stage what it changes." >&2
+unformatted=()
+while IFS= read -r file; do
+  unformatted+=("$file")
+done < <(cd e2e && ./node_modules/.bin/prettier --list-different "${files[@]}")
+
+if [ ${#unformatted[@]} -eq 0 ]; then
+  exit 0
+fi
+
+held=()
+for file in "${unformatted[@]}"; do
+  if [ -n "$(git diff --name-only -- "e2e/$file")" ]; then
+    held+=("e2e/$file")
+  fi
+done
+
+if [ ${#held[@]} -ne 0 ]; then
+  echo "pre-commit: these are staged in part and want formatting, so staging the fix would commit the rest:" >&2
+  printf '  %s\n' "${held[@]}" >&2
+  echo "Run mise run format and stage what you mean to commit." >&2
   exit 1
 fi
+
+(cd e2e && ./node_modules/.bin/prettier --write "${unformatted[@]}")
+git add -- "${unformatted[@]/#/e2e/}"
+printf 'pre-commit: prettier formatted %s and staged the result.\n' "${unformatted[*]}"

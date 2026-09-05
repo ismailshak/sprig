@@ -23,10 +23,12 @@ mise run migrate:new <name>
 
 A command worth typing twice becomes a task in `mise.toml`.
 
-The pre-commit hook in `.githooks` refuses a commit whose staged files under
-`e2e/` are not formatted. Git finds it only after `mise run hooks`, because
-`core.hooksPath` is a setting on a clone rather than something the repository
-carries.
+The pre-commit hook in `.githooks` runs prettier over the staged files under
+`e2e/` and stages what it rewrites, so formatting is never a commit made twice.
+A file staged in part stops it instead, because adding the fix would carry the
+rest of that file into the commit. Git finds the hook only after
+`mise run hooks`, because `core.hooksPath` is a setting on a clone rather than
+something the repository carries.
 
 ## Invariants
 
