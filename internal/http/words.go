@@ -98,3 +98,22 @@ func feedWhen(at, now time.Time) string {
 	}
 	return at.Format("2 Jan")
 }
+
+// dayHeading names the day a marker on Activity stands for. Today and
+// yesterday are named rather than dated because a reader checks those two
+// against memory.
+func dayHeading(at, now time.Time) string {
+	at = at.In(now.Location())
+	switch days := schedule.DaysBetween(at, now); {
+	case days <= 0:
+		return "Today"
+	case days == 1:
+		return "Yesterday"
+	case days <= 6:
+		return at.Weekday().String()
+	}
+	if at.Year() == now.Year() {
+		return at.Format("2 January")
+	}
+	return at.Format("2 January 2006")
+}

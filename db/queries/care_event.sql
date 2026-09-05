@@ -34,3 +34,15 @@ JOIN app_user ON app_user.id = care_event.performed_by
 WHERE care_event.garden_id = @garden_id
 ORDER BY care_event.recorded_at DESC, care_event.id DESC
 LIMIT @count;
+
+-- ListCareEventLog orders by performed_at because Activity groups events under
+-- the day the care was done rather than the day it was written down.
+-- name: ListCareEventLog :many
+SELECT sqlc.embed(care_event), sqlc.embed(plant), sqlc.embed(care_type), app_user.display_name AS performed_by_name
+FROM care_event
+JOIN plant ON plant.id = care_event.plant_id AND plant.garden_id = care_event.garden_id
+JOIN care_type ON care_type.id = care_event.care_type_id AND care_type.garden_id = care_event.garden_id
+JOIN app_user ON app_user.id = care_event.performed_by
+WHERE care_event.garden_id = @garden_id
+ORDER BY care_event.performed_at DESC, care_event.id DESC
+LIMIT @count;

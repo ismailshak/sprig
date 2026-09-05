@@ -27,9 +27,7 @@ export function requireOwnStack(env: NodeJS.ProcessEnv): void {
   }
 
   if (!['localhost', '127.0.0.1', '[::1]', 'db'].includes(hostname)) {
-    throw new Error(
-      `refusing to run against ${hostname}: the suite only talks to loopback or the compose database`,
-    );
+    throw new Error(`refusing to run against ${hostname}: the suite only talks to loopback or the compose database`);
   }
 }
 

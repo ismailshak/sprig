@@ -15,11 +15,20 @@ mise run seed      # the prototype's garden into the dev database
 mise run test      # the Go tests, against a throwaway postgres
 mise run e2e       # the Playwright suite, against a seeded throwaway database
 mise run lint
+mise run format    # prettier over e2e, the only JavaScript here
+mise run hooks     # point git at .githooks, once per clone
 mise run migrate
 mise run migrate:new <name>
 ```
 
 A command worth typing twice becomes a task in `mise.toml`.
+
+The pre-commit hook in `.githooks` runs prettier over the staged files under
+`e2e/` and stages what it rewrites, so formatting is never a commit made twice.
+A file staged in part stops it instead, because adding the fix would carry the
+rest of that file into the commit. Git finds the hook only after
+`mise run hooks`, because `core.hooksPath` is a setting on a clone rather than
+something the repository carries.
 
 ## Invariants
 

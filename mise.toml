@@ -50,3 +50,12 @@ run = 'goose -dir db/migrations -s create "${usage_name?}" sql'
 [tasks."generate"]
 description = "Regenerate the sqlc queries in internal/store from db/queries"
 run = "sqlc generate"
+
+[tasks.format]
+description = "Format the e2e subproject with prettier"
+dir = "e2e"
+run = ["pnpm install --frozen-lockfile", "pnpm run format"]
+
+[tasks.hooks]
+description = "Point git at the hooks in .githooks, which is a per-clone setting"
+run = "git config core.hooksPath .githooks"
