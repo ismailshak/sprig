@@ -86,7 +86,10 @@ func parseLogQuery(r *http.Request) (logQuery, bool) {
 	return q, true
 }
 
-func (q logQuery) href() string {
+// values is the query string as parameters. The correcting sheet's URLs carry
+// the same ones, so that a save or a delete can render the page the sheet was
+// opened over.
+func (q logQuery) values() url.Values {
 	values := url.Values{}
 	if q.plant != nil {
 		values.Set(plantParam, q.plant.String())
@@ -94,6 +97,11 @@ func (q logQuery) href() string {
 	if q.before != nil {
 		values.Set(beforeParam, q.before.String())
 	}
+	return values
+}
+
+func (q logQuery) href() string {
+	values := q.values()
 	if len(values) == 0 {
 		return activityPath
 	}
@@ -162,7 +170,23 @@ func (h *activity) show(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, logQuery{plant: q.plant}.href(), http.StatusSeeOther)
 		return
 	}
-	h.templates.render(w, r, view{page: "activity"}, page)
+	h.templates.render(w, r, view{page: "activity", fragment: logFragment(r)}, page)
+}
+
+// logBodyID is the HTML id of the list, the pager and the empty state together.
+// A save and the end of a delete's undo window both swap it, because either can
+// change a day's count, the gap labels around a row, and whether there is
+// anything on the page at all.
+const logBodyID = "log-body"
+
+// logFragment picks the part of the page a swap returns. A swap aimed at the
+// log body gets that alone, and everything else, a page navigation included,
+// gets the whole page.
+func logFragment(r *http.Request) string {
+	if r.Header.Get("HX-Target") == logBodyID {
+		return logBodyID
+	}
+	return ""
 }
 
 func (h *activity) page(ctx context.Context, principal auth.Principal, q logQuery) (activityPage, error) {
@@ -212,6 +236,9 @@ type activityPage struct {
 	Pager *pager
 	// Empty is set only when Items is empty.
 	Empty *activityEmpty
+	// Sheet is the correcting sheet, open over one of the rows. It is nil when
+	// the page is rendered with no sheet on it.
+	Sheet *sheet
 }
 
 // pager holds the URLs of the links under the list. Older is empty on the last
@@ -243,6 +270,11 @@ type silence struct {
 }
 
 type eventRow struct {
+	// ID is the HTML id of the row. A delete swaps it.
+	ID string
+	// Href is the URL of the sheet that corrects this event. It is empty when
+	// the reader may not correct it, and the row is then not pressable.
+	Href string
 	// Act is the care as a headline, "Watered" or "Skipped". It is set only on
 	// the log filtered to one plant, where the plant's name would be the same on
 	// every row and the care is what differs. The template renders the plant's
@@ -266,6 +298,21 @@ type eventRow struct {
 	// Extra is the note and, on a skip, when it will be asked again. Empty on
 	// most rows.
 	Extra string
+
+	// Deleted is true for the row a delete leaves in place of the event while
+	// its undo window runs. The row keeps its lead and says "Deleted", with an
+	// Undo button where the event's own line was.
+	Deleted bool
+	// Restore is the URL the Undo button posts to, set only on a deleted row.
+	Restore string
+	// Fields is the deleted event, as hidden inputs on the Undo form.
+	Fields *restoreFields
+	// Settled is the log's own URL. The row fetches it when its window closes.
+	// The response replaces the whole log body, since a row leaving
+	// changes the count on its day and the gaps around it.
+	Settled string
+	// Grace is the length of the undo window in milliseconds.
+	Grace int
 }
 
 type activityEmpty struct {
@@ -293,9 +340,9 @@ func newActivityPage(principal auth.Principal, q logQuery, plant *store.Plant, e
 	}
 
 	if plant != nil {
-		page.Items = plantLogItems(principal, events, now)
+		page.Items = plantLogItems(principal, q, events, now)
 	} else {
-		page.Items = logItems(principal, events, now)
+		page.Items = logItems(principal, q, events, now)
 	}
 	page.Pager = newPager(q, events[len(events)-1].CareEvent, more)
 	return page
@@ -340,7 +387,7 @@ func newActivityEmpty(principal auth.Principal, plants int64) *activityEmpty {
 
 // logItems builds the log items from events ordered newest first. Each day
 // marker counts the run of events that follows it.
-func logItems(principal auth.Principal, events []store.ListCareEventLogRow, now time.Time) []logItem {
+func logItems(principal auth.Principal, q logQuery, events []store.ListCareEventLogRow, now time.Time) []logItem {
 	items := make([]logItem, 0, len(events))
 	day := func(i int) int { return schedule.DaysBetween(events[i].CareEvent.PerformedAt, now) }
 
@@ -356,7 +403,7 @@ func logItems(principal auth.Principal, events []store.ListCareEventLogRow, now 
 		}
 		items = append(items, logItem{Day: &dayMarker{Title: dayHeading(events[i].CareEvent.PerformedAt, now), Count: run}})
 		for _, e := range events[i : i+run] {
-			items = append(items, logItem{Event: newEventRow(principal, e, now)})
+			items = append(items, logItem{Event: newEventRow(principal, q, e, now)})
 		}
 		i += run
 	}
@@ -373,7 +420,7 @@ func logItems(principal auth.Principal, events []store.ListCareEventLogRow, now 
 //
 // A gap here is the number of days between two cares, where the whole garden's
 // log counts the days that held nothing at all.
-func plantLogItems(principal auth.Principal, events []store.ListCareEventLogRow, now time.Time) []logItem {
+func plantLogItems(principal auth.Principal, q logQuery, events []store.ListCareEventLogRow, now time.Time) []logItem {
 	floor := plantSilenceFloor(events, now)
 
 	items := make([]logItem, 0, len(events))
@@ -383,7 +430,7 @@ func plantLogItems(principal auth.Principal, events []store.ListCareEventLogRow,
 				items = append(items, logItem{Silence: &silence{Label: silenceLabel(gap)}})
 			}
 		}
-		items = append(items, logItem{Event: newPlantEventRow(principal, e, now)})
+		items = append(items, logItem{Event: newPlantEventRow(principal, q, e, now)})
 	}
 	return items
 }
@@ -412,8 +459,10 @@ func daysApart(newer, older store.ListCareEventLogRow, now time.Time) int {
 	return schedule.DaysBetween(older.CareEvent.PerformedAt, now) - schedule.DaysBetween(newer.CareEvent.PerformedAt, now)
 }
 
-func newEventRow(principal auth.Principal, e store.ListCareEventLogRow, now time.Time) *eventRow {
+func newEventRow(principal auth.Principal, q logQuery, e store.ListCareEventLogRow, now time.Time) *eventRow {
 	row := &eventRow{
+		ID:        eventRowID(e.CareEvent.ID),
+		Href:      correctHref(principal, q, e.CareEvent),
 		Name:      e.Plant.DisplayName(),
 		Botanical: e.Plant.BotanicalOnly(),
 		When:      clockWord(e.CareEvent.PerformedAt, now),
@@ -426,9 +475,11 @@ func newEventRow(principal auth.Principal, e store.ListCareEventLogRow, now time
 // newPlantEventRow builds a row for the log filtered to one plant: the care
 // instead of the plant's name, the care's icon instead of its photo, and the
 // date on the row because the filtered log has no day headings.
-func newPlantEventRow(principal auth.Principal, e store.ListCareEventLogRow, now time.Time) *eventRow {
+func newPlantEventRow(principal auth.Principal, q logQuery, e store.ListCareEventLogRow, now time.Time) *eventRow {
 	who, did := whoDid(principal, e.PerformedByName, e.CareEvent, e.CareType)
 	return &eventRow{
+		ID:      eventRowID(e.CareEvent.ID),
+		Href:    correctHref(principal, q, e.CareEvent),
 		Act:     capitalise(did),
 		Slug:    e.CareType.Slug,
 		Skipped: !e.CareEvent.Done,

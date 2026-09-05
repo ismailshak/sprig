@@ -11,6 +11,28 @@ import (
 	"uuid"
 )
 
+const getCareType = `-- name: GetCareType :one
+SELECT id, garden_id, name, slug, created_at, archived_at FROM care_type
+WHERE garden_id = $1 AND id = $2
+`
+
+// GetCareType reads one care type whether or not it is archived, so a restore
+// can check that the id it was sent is the garden's before inserting a row that
+// references it.
+func (q *Queries) GetCareType(ctx context.Context, gardenID uuid.UUID, careTypeID uuid.UUID) (CareType, error) {
+	row := q.db.QueryRow(ctx, getCareType, gardenID, careTypeID)
+	var i CareType
+	err := row.Scan(
+		&i.ID,
+		&i.GardenID,
+		&i.Name,
+		&i.Slug,
+		&i.CreatedAt,
+		&i.ArchivedAt,
+	)
+	return i, err
+}
+
 const listCareTypes = `-- name: ListCareTypes :many
 SELECT id, garden_id, name, slug, created_at, archived_at FROM care_type
 WHERE garden_id = $1 AND archived_at IS NULL

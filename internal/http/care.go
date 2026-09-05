@@ -2,6 +2,7 @@ package http
 
 import (
 	"errors"
+	"maps"
 	"net/http"
 	"net/url"
 	"slices"
@@ -182,6 +183,20 @@ type chip struct {
 	On    bool
 }
 
+// hidden is one hidden input on the sheet's form.
+type hidden struct {
+	Name  string
+	Value string
+}
+
+func hiddenValues(values url.Values) []hidden {
+	out := make([]hidden, 0, len(values))
+	for _, name := range slices.Sorted(maps.Keys(values)) {
+		out = append(out, hidden{Name: name, Value: values.Get(name)})
+	}
+	return out
+}
+
 func chipsHave(chips []chip, value string) bool {
 	for _, c := range chips {
 		if c.Value == value {
@@ -228,8 +243,9 @@ type sheet struct {
 	// Path is the URL the sheet's form posts to, and the URL a What chip
 	// fetches the sheet again from.
 	Path string
-	// Target is the HTML id of the care row the post replaces. It is empty on a
-	// plant's page, which has no such row.
+	// Target is the HTML id of the element the post replaces: the care row on
+	// Today, the log body on the activity page. It is empty on a plant's page,
+	// which renders the whole page again.
 	Target string
 	Over   string
 	Label  string
@@ -250,6 +266,26 @@ type sheet struct {
 	Note      string
 	// Noun is the care type as a noun, such as "watering".
 	Noun string
+	// Correcting is true for the sheet opened over an event already recorded.
+	// Its primary button reads Save changes rather than naming the care.
+	Correcting bool
+	// Recorded is the line above the buttons saying who recorded the event and
+	// when. Empty unless Correcting.
+	Recorded string
+	// Delete is the URL the Delete button posts to. Empty for a reader who may
+	// not delete the event, and the button is then not rendered.
+	Delete string
+	// DeleteTarget is the HTML id of the row the delete replaces.
+	DeleteTarget string
+	// Query is the activity log's own query string as hidden fields. They are
+	// in the form as well as in the URL because a What chip submits the form as
+	// a GET, and a GET form replaces the query string of the URL it submits to,
+	// so the filter and the paging cursor would be dropped. Empty unless
+	// Correcting.
+	Query []hidden
+	// careTypeID is the id of the care type Care names, so the post does not
+	// look it up again.
+	careTypeID uuid.UUID
 }
 
 type sheetPlant struct {
@@ -278,6 +314,8 @@ func newSheet(plant store.Plant, offers []offer, care offer, d draft, now time.T
 		At:      d.At,
 		Note:    d.Note,
 		Noun:    careNoun(care.CareType),
+
+		careTypeID: care.CareType.ID,
 	}
 	for _, o := range offers {
 		if o.CareType.Slug == d.Row {
@@ -306,6 +344,48 @@ func newSheet(plant store.Plant, offers []offer, care offer, d draft, now time.T
 func (s *sheet) forPlant() {
 	s.Target = ""
 	s.Plant.Href = ""
+}
+
+// forEvent adjusts the sheet for an event already recorded, opened over its row
+// on the activity log. The form posts to that event's own URL and swaps the log
+// body, because a correction that moves the time moves the row to the day it
+// now belongs under. Delete sits beside Save changes for a reader who may
+// delete the event.
+func (s *sheet) forEvent(principal auth.Principal, e event, d draft) {
+	s.Path = eventPath(e.care().PlantID, e.care().ID, "", e.q)
+	s.Target = logBodyID
+	// Row names a care row on Today, and this sheet is not open over one.
+	s.Row = ""
+	s.Query = hiddenValues(e.q.values())
+	s.Correcting = true
+	s.Recorded = recordedLine(principal, e)
+	if mayDelete(principal, e.care()) {
+		s.Delete = eventPath(e.care().PlantID, e.care().ID, "/delete", e.q)
+		s.DeleteTarget = eventRowID(e.care().ID)
+	}
+	s.offerSnooze(e.care().OverrideIntervalDays, d.Again)
+}
+
+// offerSnooze adds the interval a skip was recorded with, when it is not one of
+// the chips already. A schedule whose interval has changed since leaves an
+// event holding a number nothing offers, and the sheet would then show a skip
+// with no chip selected and refuse to save it again.
+func (s *sheet) offerSnooze(days *int32, selected int32) {
+	if days == nil {
+		return
+	}
+	value := strconv.Itoa(int(*days))
+	if chipsHave(s.Snoozes, value) {
+		return
+	}
+	at := len(s.Snoozes)
+	for i, c := range s.Snoozes {
+		if n, err := strconv.Atoi(c.Value); err == nil && n > int(*days) {
+			at = i
+			break
+		}
+	}
+	s.Snoozes = slices.Insert(s.Snoozes, at, chip{Value: value, Label: daysWord(int(*days)), On: *days == selected})
 }
 
 // accept returns the time a posted draft is recorded at. A skip whose interval
@@ -553,7 +633,7 @@ func (h *today) log(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	event, err := h.queries.CreateCareEvent(r.Context(), careEventParams(principal, plant.ID, care.CareType.ID, d, performedAt, g.now))
+	logged, err := h.queries.CreateCareEvent(r.Context(), careEventParams(principal, plant.ID, care.CareType.ID, d, performedAt, g.now))
 	if err != nil {
 		serverError(h.logger, w, r, "record the care", err)
 		return
@@ -572,7 +652,7 @@ func (h *today) log(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	swap := careSwap{
-		Row:  loggedRow(plant, lines, d, care.CareType, event, g.now),
+		Row:  loggedRow(plant, lines, d, care.CareType, logged, g.now),
 		Head: swapHead(principal, after),
 		Feed: swapFeed(principal, after),
 	}
@@ -756,13 +836,13 @@ func loggedRow(plant store.Plant, lines []schedule.Line, d draft, careType store
 // justNow comes from the draft rather than from comparing the event's time with
 // now, because Postgres stores microseconds and Go nanoseconds, so the two are
 // never equal.
-func said(careType store.CareType, event store.CareEvent, justNow bool, loc *time.Location) string {
-	if !event.Done {
-		return "Skipped · asking again in " + daysWord(int(*event.OverrideIntervalDays))
+func said(careType store.CareType, logged store.CareEvent, justNow bool, loc *time.Location) string {
+	if !logged.Done {
+		return "Skipped · asking again in " + daysWord(int(*logged.OverrideIntervalDays))
 	}
 	verb := capitalise(carePast(careType))
 	if justNow {
 		return verb + " just now"
 	}
-	return verb + " " + stamp(event.PerformedAt.In(loc))
+	return verb + " " + stamp(logged.PerformedAt.In(loc))
 }

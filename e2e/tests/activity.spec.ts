@@ -69,3 +69,79 @@ test('older activity opens the page below the newest, and latest activity return
   await expect(page).toHaveURL('/activity');
   await expect(activity.items().first()).toHaveText(newest);
 });
+
+test('a row on the activity log opens a sheet filled in from the event', async ({ page, activity, sheet }) => {
+  await page.goto(`/activity?plant=${seeded.bigFella.id}`);
+
+  await activity.openSheet(activity.rows().first());
+
+  await expect(sheet.dialog()).toContainText(seeded.bigFella.name);
+  await expect(sheet.dialog().getByRole('button', { name: 'Save changes' })).toBeVisible();
+  await expect(sheet.deleteButton()).toBeVisible();
+  await expect(sheet.recorded()).toBeVisible();
+});
+
+test('a correction files the event under the day it was saved with', async ({ activity, sheet }) => {
+  await activity.open();
+  await activity.openSheet(activity.rows().first());
+
+  await sheet.chip('Yesterday').check();
+  await sheet.time().fill('07:07');
+  await sheet.submit('Save changes');
+  await expect(sheet.dialog()).toHaveCount(0);
+
+  const items = await activity.items().allTextContents();
+  const corrected = items.findIndex((item) => item.includes('7:07am'));
+  expect(corrected).toBeGreaterThan(0);
+  const day = items
+    .slice(0, corrected)
+    .reverse()
+    .find((item) => dayMarker.test(item));
+  expect(day).toContain('Yesterday');
+});
+
+test('an event recorded as the wrong care is corrected to the right one', async ({ page, activity, sheet }) => {
+  await page.goto(`/activity?plant=${seeded.bigFella.id}`);
+  await activity.openSheet(activity.rows().first());
+
+  await sheet.what('Feed').click();
+  // The chip fetches the sheet again, and the Save button carries the care it
+  // will record, so the submit has to wait for the chip that came back.
+  await expect(sheet.what('Feed')).toHaveAttribute('aria-pressed', 'true');
+  await sheet.submit('Save changes');
+
+  // The log filtered to one plant heads each row with the care rather than the
+  // plant's name.
+  await expect(activity.rows().first()).toContainText('Fed');
+});
+
+test('a deleted event is not on the log', async ({ page, activity, sheet }) => {
+  await activity.open();
+  const row = activity.rows().first();
+  const id = await row.getAttribute('id');
+
+  await activity.openSheet(row);
+  await sheet.deleteButton().click();
+  // The delete closes the sheet either way: as an out-of-band swap with
+  // JavaScript, and as the redirect to the log without it.
+  await expect(sheet.dialog()).toHaveCount(0);
+
+  await activity.open();
+  await expect(page.locator(`#${id}`)).toHaveCount(0);
+});
+
+test('undoing a delete puts the event back on the log @js', async ({ page, activity, sheet }) => {
+  await activity.open();
+  const row = activity.rows().first();
+  const id = await row.getAttribute('id');
+
+  await activity.openSheet(row);
+  await sheet.deleteButton().click();
+  await expect(page.locator(`#${id}`)).toContainText('Deleted');
+
+  await activity.undo(page.locator(`#${id}`)).click();
+
+  await expect(page.locator(`#${id}`)).not.toContainText('Deleted');
+  await activity.open();
+  await expect(page.locator(`#${id}`)).toHaveCount(1);
+});
