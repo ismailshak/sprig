@@ -1,17 +1,30 @@
 #!/usr/bin/env bash
-#MISE description="Start Postgres and run the server on the host"
+#MISE description="Start Postgres and run the server on the host, rebuilding when a file changes"
+#USAGE flag "--once" help="Run the server once instead of rebuilding on a change"
 set -euo pipefail
 
 export SPRIG_LOG_FORMAT=text
+# The session cookie drops Secure because WebKit refuses one over plain http,
+# localhost included. The name loses its __Host- prefix, which is valid only on
+# a Secure cookie.
+export SPRIG_COOKIE_SECURE=false
+export SPRIG_COOKIE_NAME=sprig_session
 # Reading the templates from disk rather than from the copy embedded in the
 # binary means an edit shows up on the next request instead of the next restart.
 export SPRIG_TEMPLATE_DIR="${MISE_PROJECT_ROOT:?}/web/templates"
 
-# Makes Ctrl+C stop the db container.
+# Ctrl+C exits 0 so that mise does not report the task as failed.
 trap 'exit 0' INT
-trap 'docker compose stop db' EXIT
 
+# The container is left running so the next run only waits on the healthcheck.
 docker compose up -d --wait db
+
 # The dev tag adds the sign-in that stands in for passkeys. The image is built
 # without it.
-go run -tags dev ./cmd/sprig
+if [ "${usage_once:-false}" = "true" ]; then
+  go run -tags dev ./cmd/sprig
+else
+  # wgo rebuilds and restarts on a change, watching .go on its own. The -file
+  # flag adds .css because web/static is compiled into the binary.
+  wgo run -file='\.css$' -xdir='^(prototype|node_modules|e2e)$' -tags=dev ./cmd/sprig
+fi
