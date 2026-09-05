@@ -102,6 +102,81 @@ func (q *Queries) DeleteCareEvent(ctx context.Context, arg DeleteCareEventParams
 	return i, err
 }
 
+const listCareEventLog = `-- name: ListCareEventLog :many
+SELECT care_event.id, care_event.garden_id, care_event.plant_id, care_event.care_type_id, care_event.performed_by, care_event.performed_at, care_event.recorded_at, care_event.done, care_event.note, care_event.override_interval_days, plant.id, plant.garden_id, plant.nickname, plant.common_name, plant.botanical_name, plant.location, plant.sun, plant.water_needs, plant.feed_needs, plant.soil, plant.climate, plant.pot, plant.notes, plant.acquired_year, plant.acquired_month, plant.created_at, plant.archived_at, care_type.id, care_type.garden_id, care_type.name, care_type.slug, care_type.created_at, care_type.archived_at, app_user.display_name AS performed_by_name
+FROM care_event
+JOIN plant ON plant.id = care_event.plant_id AND plant.garden_id = care_event.garden_id
+JOIN care_type ON care_type.id = care_event.care_type_id AND care_type.garden_id = care_event.garden_id
+JOIN app_user ON app_user.id = care_event.performed_by
+WHERE care_event.garden_id = $1
+ORDER BY care_event.performed_at DESC, care_event.id DESC
+LIMIT $2
+`
+
+type ListCareEventLogRow struct {
+	CareEvent       CareEvent
+	Plant           Plant
+	CareType        CareType
+	PerformedByName string
+}
+
+// ListCareEventLog orders by performed_at because Activity groups events under
+// the day the care was done rather than the day it was written down.
+func (q *Queries) ListCareEventLog(ctx context.Context, gardenID uuid.UUID, count int32) ([]ListCareEventLogRow, error) {
+	rows, err := q.db.Query(ctx, listCareEventLog, gardenID, count)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListCareEventLogRow
+	for rows.Next() {
+		var i ListCareEventLogRow
+		if err := rows.Scan(
+			&i.CareEvent.ID,
+			&i.CareEvent.GardenID,
+			&i.CareEvent.PlantID,
+			&i.CareEvent.CareTypeID,
+			&i.CareEvent.PerformedBy,
+			&i.CareEvent.PerformedAt,
+			&i.CareEvent.RecordedAt,
+			&i.CareEvent.Done,
+			&i.CareEvent.Note,
+			&i.CareEvent.OverrideIntervalDays,
+			&i.Plant.ID,
+			&i.Plant.GardenID,
+			&i.Plant.Nickname,
+			&i.Plant.CommonName,
+			&i.Plant.BotanicalName,
+			&i.Plant.Location,
+			&i.Plant.Sun,
+			&i.Plant.WaterNeeds,
+			&i.Plant.FeedNeeds,
+			&i.Plant.Soil,
+			&i.Plant.Climate,
+			&i.Plant.Pot,
+			&i.Plant.Notes,
+			&i.Plant.AcquiredYear,
+			&i.Plant.AcquiredMonth,
+			&i.Plant.CreatedAt,
+			&i.Plant.ArchivedAt,
+			&i.CareType.ID,
+			&i.CareType.GardenID,
+			&i.CareType.Name,
+			&i.CareType.Slug,
+			&i.CareType.CreatedAt,
+			&i.CareType.ArchivedAt,
+			&i.PerformedByName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listLatestCareEvents = `-- name: ListLatestCareEvents :many
 SELECT DISTINCT ON (plant_id, care_type_id) id, garden_id, plant_id, care_type_id, performed_by, performed_at, recorded_at, done, note, override_interval_days
 FROM care_event
