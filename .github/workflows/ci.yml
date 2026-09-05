@@ -66,7 +66,7 @@ jobs:
           build-args: GO_TAGS=dev
           load: true
           tags: sprig-app:dev
-          # A scope per build because the two builds in a run write the same key otherwise and the last index wins
+          # A scope per build because without one the later of the e2e and image builds overwrites the other's cache index
           cache-from: type=gha,scope=e2e
           cache-to: type=gha,scope=e2e,mode=max
       - name: Run the suite
@@ -128,7 +128,6 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      # The image job's scope, which holds this run's layers for the untagged build
       - name: Build and push the image
         uses: docker/build-push-action@v7
         with:
@@ -137,4 +136,5 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          # cache-from alone, in the image job's scope, because that build already wrote this run's layers
           cache-from: type=gha,scope=image
