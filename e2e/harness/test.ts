@@ -1,5 +1,6 @@
 import { test as base } from '@playwright/test';
 import { ActivityScreen } from '../screens/activity';
+import { PlantScreen } from '../screens/plant';
 import { PlantsScreen } from '../screens/plants';
 import { SheetScreen } from '../screens/sheet';
 import { TodayScreen } from '../screens/today';
@@ -8,6 +9,7 @@ import { seed } from './database';
 type Screens = {
   activity: ActivityScreen;
   today: TodayScreen;
+  plant: PlantScreen;
   plants: PlantsScreen;
   sheet: SheetScreen;
 };
@@ -26,6 +28,9 @@ export const test = base.extend<{ garden: void } & Screens>({
   },
   today: async ({ page }, use) => {
     await use(new TodayScreen(page));
+  },
+  plant: async ({ page }, use) => {
+    await use(new PlantScreen(page));
   },
   plants: async ({ page }, use) => {
     await use(new PlantsScreen(page));

@@ -18,6 +18,8 @@ export const plants = {
   // nickname.
   goldenPothos: { id: '00000000-0000-7000-8000-050000000008', name: 'Golden pothos' },
   littleFella: { id: '00000000-0000-7000-8000-050000000009', name: 'Little Fella' },
+  // Opuntia microdasys has only a botanical name.
+  opuntia: { id: '00000000-0000-7000-8000-050000000011', name: 'Opuntia microdasys' },
   // The roster puts Sprout under No room because the seed gives it no
   // location.
   sprout: { id: '00000000-0000-7000-8000-050000000012', name: 'Sprout' },
