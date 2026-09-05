@@ -319,6 +319,22 @@ func TestActivity_AGardenWithNothingRecordedSaysSo(t *testing.T) {
 	}
 }
 
+func TestActivity_ASitterWithNoPlantsIsOfferedNothing(t *testing.T) {
+	f := rosewoodLog(t)
+	f.principal.Capabilities = auth.Capabilities{}
+	f.exec(t, "DELETE FROM care_event WHERE garden_id = $1", rosewoodID)
+	f.exec(t, "DELETE FROM plant WHERE garden_id = $1", rosewoodID)
+
+	got := f.show(t)
+
+	if !strings.Contains(got, "No plants yet") {
+		t.Errorf("the log reads %q, want the empty garden", text(got))
+	}
+	if strings.Contains(got, newPlantPath) {
+		t.Errorf("a sitter is offered the way to add a plant:\n%s", text(got))
+	}
+}
+
 func TestActivity_AGardenWithNoPlantsIsOfferedItsFirst(t *testing.T) {
 	f := rosewoodLog(t)
 	f.exec(t, "DELETE FROM care_event WHERE garden_id = $1", rosewoodID)

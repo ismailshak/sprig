@@ -1,0 +1,97 @@
+{{define "title"}}sprig — {{.Title}}{{end}}
+
+{{/* Cancel rather than a back arrow, because a chevron says only that the page
+     will be left and this form has typing to throw away.
+
+     One page and one post rather than a wizard, which the dependency budget
+     cannot afford. The required fields are at the top and the rest are behind
+     a disclosure.
+
+     novalidate, because the browser would otherwise refuse a count of nought
+     with a bubble of its own and the row's own line would never be read. */}}
+{{define "main"}}
+<header class="topbar topbar--form">
+<h1 class="topbar__title">{{.Title}}</h1>
+<a class="topbar__cancel" href="{{.Back}}">Cancel</a>
+</header>
+<form class="app__body app__body--form" method="post" action="{{.Action}}" novalidate>
+{{/* Enter in a text field presses the form's first submit button, which would
+     otherwise be a schedule row's own and would close the row rather than add
+     the plant. */}}
+<button type="submit" hidden></button>
+{{/* The line goes under the group because none of the three names is required
+     on its own and one of them is required together. The nickname is not the
+     required one because a person who does not name their plants would have to
+     invent one. */}}
+<div class="form__names">
+<div class="field">
+<label class="field__label" for="nickname">Nickname <span class="field__hint">what you call it</span></label>
+<input class="input" id="nickname" name="nickname" type="text" value="{{.Nickname}}">
+</div>
+<div class="field">
+<label class="field__label" for="common">Common name <span class="field__hint">what a shop calls it</span></label>
+<input class="input" id="common" name="common" type="text" value="{{.Common}}">
+</div>
+<div class="field">
+<label class="field__label" for="botanical">Botanical name <span class="field__hint">what is true</span></label>
+<input class="input" id="botanical" name="botanical" type="text" value="{{.Botanical}}">
+</div>
+{{with .NameError}}<p class="field__error">{{.}}</p>{{end}}
+</div>
+<div class="field">
+<label class="field__label" for="where">Location</label>
+<input class="input" id="where" name="where" type="text" placeholder="Pick a room, or name a new one" value="{{.Location}}">
+</div>
+{{/* Schedules are on the add form and not on the edit form. A plant can arrive
+     with a cadence already set, and changing one afterwards happens on the
+     plant's own page where the next date is. */}}
+{{if .Schedules}}
+<section class="section section--schedule" aria-labelledby="schedule">
+<div class="section__head">
+<h2 class="section__title" id="schedule">Schedule</h2>
+<span class="section__count">All optional</span>
+</div>
+<ul class="list">
+{{template "schedule-fields" .}}</ul>
+</section>
+{{end}}
+{{/* Behind a disclosure, because a form that opens with eight empty boxes reads
+     as work rather than as a plant being added. It opens itself when there is
+     something inside it. */}}
+<details class="disclosure"{{if .Reference}} open{{end}}>
+<summary class="disclosure__head">
+<span class="section__title">Reference</span>
+<span class="disclosure__hint">Sun, water, soil and the rest</span>
+</summary>
+<div class="disclosure__body">
+{{range .Facts}}<div class="field">
+<label class="field__label" for="{{.Name}}">{{.Label}}</label>
+<input class="input" id="{{.Name}}" name="{{.Name}}" type="text" value="{{.Value}}">
+</div>
+{{end}}<div class="field">
+<label class="field__label" for="notes">Notes</label>
+<textarea class="input input--tall" id="notes" name="notes" rows="3">{{.Notes}}</textarea>
+</div>
+<div class="field">
+<label class="field__label" for="acquired-year">Acquired</label>
+<span class="field__pair">
+<select class="input input--unit" id="acquired-month" name="acquired-month" aria-label="Acquired month">{{template "options" .Months}}</select>
+<select class="input input--unit" id="acquired-year" name="acquired-year" aria-label="Acquired year">{{template "options" .Years}}</select>
+</span>
+{{with .AcquiredError}}<p class="field__error">{{.}}</p>{{end}}
+</div>
+</div>
+</details>
+<button class="wide-action" type="submit">{{.Submit}}</button>
+{{/* A link rather than a button, because archiving asks first and the question
+     is asked on the plant's own page. It sits under the save rather than beside
+     it because they are not two options of the same weight. */}}
+{{with .Archive}}
+<div class="form__foot">
+<a class="plant__archive" href="{{.}}">Archive</a>
+</div>
+{{end}}
+</form>
+{{end}}
+
+{{define "nav"}}{{template "tabs" "Plants"}}{{end}}

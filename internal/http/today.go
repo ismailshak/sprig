@@ -186,7 +186,7 @@ type careSettled struct {
 
 func newCareSettled(principal auth.Principal, g gardenDay) careSettled {
 	if g.windows() {
-		return careSettled{Head: swapHead(g)}
+		return careSettled{Head: swapHead(principal, g)}
 	}
 	page := newTodayPage(principal, g)
 	page.OOB = true
@@ -250,22 +250,22 @@ func newTodayPage(principal auth.Principal, g gardenDay) todayPage {
 		page.Sections = append(page.Sections, todaySection{ID: "coming-up", Title: "Coming up", Rows: careRows(rows, now)})
 	}
 
-	page.Head = newTodayHead(day, latest, plants, now)
+	page.Head = newTodayHead(principal, day, latest, plants, now)
 	return page
 }
 
 // newTodayHead is the head as a page load draws it.
-func newTodayHead(day schedule.Day, latest []store.CareEvent, plants int64, now time.Time) todayHead {
+func newTodayHead(principal auth.Principal, day schedule.Day, latest []store.CareEvent, plants int64, now time.Time) todayHead {
 	if outstanding := len(day.Overdue) + len(day.DueToday); outstanding > 0 {
 		return todayHead{Summary: &todaySummary{Outstanding: outstanding, Overdue: len(day.Overdue)}}
 	}
-	return todayHead{Empty: newTodayEmpty(day, latest, plants, now)}
+	return todayHead{Empty: newTodayEmpty(principal, day, latest, plants, now)}
 }
 
 // swapHead is the head as an answer to a swap draws it. Clear is reachable
 // only here because a navigation draws no row inside a grace window.
-func swapHead(g gardenDay) todayHead {
-	head := newTodayHead(g.day, g.latest, g.plants, g.now)
+func swapHead(principal auth.Principal, g gardenDay) todayHead {
+	head := newTodayHead(principal, g.day, g.latest, g.plants, g.now)
 	if head.Empty != nil && g.windows() {
 		head = todayHead{Clear: true}
 	}
@@ -277,13 +277,18 @@ func swapHead(g gardenDay) todayHead {
 // claims something was finished, so a day where nothing was scheduled gets the
 // leaf. The next-up line and the link to the plant list wait on an empty
 // Coming up, which otherwise says the same thing below them.
-func newTodayEmpty(day schedule.Day, latest []store.CareEvent, plants int64, now time.Time) *todayEmpty {
+func newTodayEmpty(principal auth.Principal, day schedule.Day, latest []store.CareEvent, plants int64, now time.Time) *todayEmpty {
 	if plants == 0 {
-		return &todayEmpty{
-			Title:  "No plants yet",
-			Line:   "Add one and sprig will tell you when it needs water.",
-			Action: &link{Label: "Add a plant", Href: "/plants/new"},
+		// The action is offered only to a reader who may create a plant
+		// because newPlantPath refuses anyone else.
+		empty := &todayEmpty{
+			Title: "No plants yet",
+			Line:  "Add one and sprig will tell you when it needs water.",
 		}
+		if principal.Can(auth.PlantCreate) {
+			empty.Action = &link{Label: "Add a plant", Href: newPlantPath}
+		}
+		return empty
 	}
 
 	empty := &todayEmpty{Title: "Nothing needs you today", Line: "Nothing is due, and nothing is overdue."}

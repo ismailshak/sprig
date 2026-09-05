@@ -11,6 +11,39 @@ import (
 	"uuid"
 )
 
+const archivePlant = `-- name: ArchivePlant :one
+UPDATE plant SET archived_at = now()
+WHERE garden_id = $1 AND id = $2 AND archived_at IS NULL
+RETURNING id, garden_id, nickname, common_name, botanical_name, location, sun, water_needs, feed_needs, soil, climate, pot, notes, acquired_year, acquired_month, created_at, archived_at
+`
+
+// Archiving twice matches nothing, which is the answer for a plant the garden
+// does not have as well.
+func (q *Queries) ArchivePlant(ctx context.Context, gardenID uuid.UUID, plantID uuid.UUID) (Plant, error) {
+	row := q.db.QueryRow(ctx, archivePlant, gardenID, plantID)
+	var i Plant
+	err := row.Scan(
+		&i.ID,
+		&i.GardenID,
+		&i.Nickname,
+		&i.CommonName,
+		&i.BotanicalName,
+		&i.Location,
+		&i.Sun,
+		&i.WaterNeeds,
+		&i.FeedNeeds,
+		&i.Soil,
+		&i.Climate,
+		&i.Pot,
+		&i.Notes,
+		&i.AcquiredYear,
+		&i.AcquiredMonth,
+		&i.CreatedAt,
+		&i.ArchivedAt,
+	)
+	return i, err
+}
+
 const countPlants = `-- name: CountPlants :one
 SELECT count(*) FROM plant
 WHERE garden_id = $1 AND archived_at IS NULL
@@ -23,6 +56,75 @@ func (q *Queries) CountPlants(ctx context.Context, gardenID uuid.UUID) (int64, e
 	var count int64
 	err := row.Scan(&count)
 	return count, err
+}
+
+const createPlant = `-- name: CreatePlant :one
+INSERT INTO plant (garden_id, nickname, common_name, botanical_name, location,
+                   sun, water_needs, feed_needs, soil, climate, pot, notes,
+                   acquired_year, acquired_month)
+VALUES ($1, $2, $3, $4, $5,
+        $6, $7, $8, $9, $10, $11, $12,
+        $13, $14)
+RETURNING id, garden_id, nickname, common_name, botanical_name, location, sun, water_needs, feed_needs, soil, climate, pot, notes, acquired_year, acquired_month, created_at, archived_at
+`
+
+type CreatePlantParams struct {
+	GardenID      uuid.UUID
+	Nickname      *string
+	CommonName    *string
+	BotanicalName *string
+	Location      *string
+	Sun           *string
+	WaterNeeds    *string
+	FeedNeeds     *string
+	Soil          *string
+	Climate       *string
+	Pot           *string
+	Notes         *string
+	AcquiredYear  *int16
+	AcquiredMonth *int16
+}
+
+// The three names, the six reference fields and the acquired pair are all
+// nullable here because the form decides which of them are required.
+func (q *Queries) CreatePlant(ctx context.Context, arg CreatePlantParams) (Plant, error) {
+	row := q.db.QueryRow(ctx, createPlant,
+		arg.GardenID,
+		arg.Nickname,
+		arg.CommonName,
+		arg.BotanicalName,
+		arg.Location,
+		arg.Sun,
+		arg.WaterNeeds,
+		arg.FeedNeeds,
+		arg.Soil,
+		arg.Climate,
+		arg.Pot,
+		arg.Notes,
+		arg.AcquiredYear,
+		arg.AcquiredMonth,
+	)
+	var i Plant
+	err := row.Scan(
+		&i.ID,
+		&i.GardenID,
+		&i.Nickname,
+		&i.CommonName,
+		&i.BotanicalName,
+		&i.Location,
+		&i.Sun,
+		&i.WaterNeeds,
+		&i.FeedNeeds,
+		&i.Soil,
+		&i.Climate,
+		&i.Pot,
+		&i.Notes,
+		&i.AcquiredYear,
+		&i.AcquiredMonth,
+		&i.CreatedAt,
+		&i.ArchivedAt,
+	)
+	return i, err
 }
 
 const getPlant = `-- name: GetPlant :one
@@ -99,4 +201,76 @@ func (q *Queries) ListPlants(ctx context.Context, gardenID uuid.UUID) ([]Plant, 
 		return nil, err
 	}
 	return items, nil
+}
+
+const updatePlant = `-- name: UpdatePlant :one
+UPDATE plant
+SET nickname = $1, common_name = $2, botanical_name = $3,
+    location = $4, sun = $5, water_needs = $6, feed_needs = $7,
+    soil = $8, climate = $9, pot = $10, notes = $11,
+    acquired_year = $12, acquired_month = $13
+WHERE garden_id = $14 AND id = $15 AND archived_at IS NULL
+RETURNING id, garden_id, nickname, common_name, botanical_name, location, sun, water_needs, feed_needs, soil, climate, pot, notes, acquired_year, acquired_month, created_at, archived_at
+`
+
+type UpdatePlantParams struct {
+	Nickname      *string
+	CommonName    *string
+	BotanicalName *string
+	Location      *string
+	Sun           *string
+	WaterNeeds    *string
+	FeedNeeds     *string
+	Soil          *string
+	Climate       *string
+	Pot           *string
+	Notes         *string
+	AcquiredYear  *int16
+	AcquiredMonth *int16
+	GardenID      uuid.UUID
+	PlantID       uuid.UUID
+}
+
+// Every column the form carries is written because a field emptied on the form
+// is emptied on the row. An archived plant matches nothing here because it is
+// not editable.
+func (q *Queries) UpdatePlant(ctx context.Context, arg UpdatePlantParams) (Plant, error) {
+	row := q.db.QueryRow(ctx, updatePlant,
+		arg.Nickname,
+		arg.CommonName,
+		arg.BotanicalName,
+		arg.Location,
+		arg.Sun,
+		arg.WaterNeeds,
+		arg.FeedNeeds,
+		arg.Soil,
+		arg.Climate,
+		arg.Pot,
+		arg.Notes,
+		arg.AcquiredYear,
+		arg.AcquiredMonth,
+		arg.GardenID,
+		arg.PlantID,
+	)
+	var i Plant
+	err := row.Scan(
+		&i.ID,
+		&i.GardenID,
+		&i.Nickname,
+		&i.CommonName,
+		&i.BotanicalName,
+		&i.Location,
+		&i.Sun,
+		&i.WaterNeeds,
+		&i.FeedNeeds,
+		&i.Soil,
+		&i.Climate,
+		&i.Pot,
+		&i.Notes,
+		&i.AcquiredYear,
+		&i.AcquiredMonth,
+		&i.CreatedAt,
+		&i.ArchivedAt,
+	)
+	return i, err
 }

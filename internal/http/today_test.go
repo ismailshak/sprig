@@ -97,7 +97,7 @@ func rosewood(t *testing.T) *todayFixture {
 		User:         store.AppUser{ID: readerID, DisplayName: "Ellie", Handle: "ellie", Timezone: "Europe/London"},
 		Garden:       store.Garden{ID: rosewoodID, Name: "Rosewood"},
 		Membership:   store.Membership{Role: "owner"},
-		Capabilities: auth.Capabilities{auth.CareLog: true},
+		Capabilities: auth.Capabilities{auth.CareLog: true, auth.PlantCreate: true, auth.PlantEdit: true, auth.PlantArchive: true},
 	}
 	handler := &today{logger: testLogger, queries: queries, templates: testTemplates(), now: func() time.Time { return thursday }}
 	return &todayFixture{handler: handler, tx: tx, principal: principal}
@@ -371,6 +371,21 @@ func TestToday_AnEmptyListIsThreeDifferentPiecesOfNews(t *testing.T) {
 			if !strings.Contains(page, want) {
 				t.Errorf("the page lacks %s:\n%s", want, text(page))
 			}
+		}
+	})
+
+	// The link leads to a route a sitter may not open.
+	t.Run("a sitter is told the garden is empty and offered nothing", func(t *testing.T) {
+		f := rosewood(t)
+		f.principal.Capabilities = auth.Capabilities{}
+		f.exec(t, "DELETE FROM plant WHERE garden_id = $1", rosewoodID)
+
+		page := f.show(t)
+		if !strings.Contains(page, "No plants yet") {
+			t.Errorf("the page does not say the garden is empty:\n%s", text(page))
+		}
+		if strings.Contains(page, newPlantPath) {
+			t.Errorf("a sitter is offered the way to add a plant:\n%s", text(page))
 		}
 	})
 

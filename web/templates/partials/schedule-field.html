@@ -1,0 +1,63 @@
+{{/* The schedule rows of the add form, and the fragment one row's own request
+     is answered with. Both states of a row carry the same id, and settle:0ms
+     keeps htmx from painting a frame at the outgoing element's classes. */}}
+{{define "schedule-fields"}}{{range .Schedules}}{{template "schedule-field" .}}
+{{end}}{{end}}
+
+{{/* Every control is named by its care type as well as by what it is, because
+     more than one row can be open at once and one shared "shape" would be read
+     as whichever row rendered last.
+
+     The two controls that decide which other controls exist re-render the row
+     they are in. With no script they do not, and the post comes back drawn with
+     the fields the shape needs and a line saying what is missing. */}}
+{{define "schedule-field"}}{{if .Open}}<li class="sched sched--editing" id="{{.ID}}">
+<span class="sched__icon">{{template "care-icon" .Slug}}</span>
+<div class="sched__text">
+<span class="sched__type">{{.Care}}</span>
+{{/* The hidden field says the row is open, which is how the post and the
+     re-render agree without the button being pressed again. */}}
+<input type="hidden" name="open" value="{{.Slug}}">
+<span class="sched__field">When
+<select class="input input--unit" id="{{.Slug}}-shape" name="{{.Slug}}-shape" aria-label="When {{.Care}} happens"
+ hx-get="{{.Path}}" hx-trigger="change" hx-include="#{{.ID}}" hx-target="#{{.ID}}" hx-swap="outerHTML settle:0ms">{{template "options" .Shapes}}</select>
+</span>
+<p class="sched__hint">{{.Hint}}</p>
+{{if .Repeats}}<span class="sched__field">Every
+<input class="input input--tiny" id="{{.Slug}}-every" name="{{.Slug}}-every" type="number" min="1" max="{{.Max}}" value="{{.Every}}" aria-label="How often {{.Care}} repeats">
+<select class="input input--unit" id="{{.Slug}}-unit" name="{{.Slug}}-unit" aria-label="{{.Care}} interval">{{template "options" .Units}}</select>
+</span>{{end}}
+{{if .Dated}}<span class="sched__field">Next one
+<select class="input input--unit" id="{{.Slug}}-day" name="{{.Slug}}-day" aria-label="{{.Care}} day">{{template "options" .Days}}</select>
+<select class="input input--unit" id="{{.Slug}}-month" name="{{.Slug}}-month" aria-label="{{.Care}} month">{{template "options" .Months}}</select>
+<select class="input input--unit" id="{{.Slug}}-year" name="{{.Slug}}-year" aria-label="{{.Care}} year">{{template "options" .Years}}</select>
+</span>{{else}}
+<label class="sched__season">
+<input type="checkbox" id="{{.Slug}}-seasonal" name="{{.Slug}}-seasonal"{{if .Seasonal}} checked{{end}}
+ hx-get="{{.Path}}" hx-trigger="change" hx-include="#{{.ID}}" hx-target="#{{.ID}}" hx-swap="outerHTML settle:0ms">
+Only part of the year
+</label>
+{{if .Seasonal}}<span class="sched__months">
+<select class="input input--unit" id="{{.Slug}}-from" name="{{.Slug}}-from" aria-label="{{.Care}} season from">{{template "options" .From}}</select>
+to
+<select class="input input--unit" id="{{.Slug}}-to" name="{{.Slug}}-to" aria-label="{{.Care}} season to">{{template "options" .To}}</select>
+</span>{{end}}
+{{end}}
+{{with .Error}}<p class="field__error">{{.}}</p>{{end}}
+</div>
+<div class="sched__buttons">
+{{/* Don't schedule is the way out of a row on this form, because there is no
+     plant yet to save a row against. */}}
+<button class="sched__cancel" type="submit" name="close" value="{{.Slug}}" formmethod="get" formaction="{{.Path}}"
+ hx-get="{{.Path}}?close={{.Slug}}" hx-target="#{{.ID}}" hx-swap="outerHTML settle:0ms">Don't schedule</button>
+</div>
+</li>{{else}}<li class="sched sched--add" id="{{.ID}}">
+<span class="sched__icon">{{template "care-icon" .Slug}}</span>
+<div class="sched__text">
+<span class="sched__type">{{.Care}}</span>
+</div>
+<button class="sched__when" type="submit" name="open" value="{{.Slug}}" formmethod="get" formaction="{{.Path}}"
+ hx-get="{{.Path}}?open={{.Slug}}" hx-target="#{{.ID}}" hx-swap="outerHTML settle:0ms">Not scheduled</button>
+</li>{{end}}{{end}}
+
+{{define "options"}}{{range .}}<option value="{{.Value}}"{{if .On}} selected{{end}}>{{.Label}}</option>{{end}}{{end}}

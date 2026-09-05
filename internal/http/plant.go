@@ -102,6 +102,9 @@ type plantPage struct {
 	// Log is where the Log care button opens the sheet. It is empty for a
 	// reader who may not record care and for an archived plant.
 	Log string
+	// Foot is nil for an archived plant, and the page then ends at its
+	// history.
+	Foot *plantFoot
 	// Reference is nil for a plant with nothing written down. The page draws
 	// no section rather than an empty one.
 	Reference *plantReference
@@ -158,10 +161,54 @@ func newPlantPage(principal auth.Principal, d plantDetail) plantPage {
 	if plant.Location != nil {
 		page.Room = *plant.Location
 	}
-	if principal.Can(auth.CareLog) && plant.ArchivedAt == nil {
+	if plant.ArchivedAt != nil {
+		return page
+	}
+	if principal.Can(auth.CareLog) {
 		page.Log = plantSheetPath(plant.ID)
 	}
+	page.Foot = newPlantFoot(principal, plant)
 	return page
+}
+
+// plantFoot is the end of a plant's page: Edit plant and Archive, or the
+// question Archive swaps them for.
+type plantFoot struct {
+	// One URL answers both halves of archiving, a GET asking the question and a
+	// POST doing it.
+	Edit    string
+	Archive string
+	// Asking draws the question in place of the two controls. Keep is the way
+	// back to them.
+	Asking bool
+	Name   string
+	Keep   string
+}
+
+// newPlantFoot is the foot at rest, and nil for a reader who may neither edit
+// nor archive.
+func newPlantFoot(principal auth.Principal, plant store.Plant) *plantFoot {
+	foot := &plantFoot{Name: plant.DisplayName(), Keep: plantPath(plant.ID)}
+	if principal.Can(auth.PlantEdit) {
+		foot.Edit = editPlantPath(plant.ID)
+	}
+	if principal.Can(auth.PlantArchive) {
+		foot.Archive = archivePlantPath(plant.ID)
+	}
+	if foot.Edit == "" && foot.Archive == "" {
+		return nil
+	}
+	return foot
+}
+
+// asking is the foot with the question up. Archiving asks first because the
+// press takes the plant off the Plants list and leaves no row to undo from.
+func (f *plantFoot) asking() *plantFoot {
+	if f == nil {
+		return nil
+	}
+	f.Asking = true
+	return f
 }
 
 func otherNames(plant store.Plant) []plantName {
@@ -303,5 +350,19 @@ func (h *plants) plant(w http.ResponseWriter, r *http.Request) {
 		serverError(h.logger, w, r, "load the plant", err)
 		return
 	}
-	h.templates.render(w, r, view{page: "plant"}, newPlantPage(principal, detail))
+	h.templates.render(w, r, view{page: "plant", fragment: plantFootFragment(r)}, newPlantPage(principal, detail))
+}
+
+// plantFootID is the id the foot keeps in both states, and it is the name of
+// the template that draws it, so the element a swap aims at and the fragment
+// answering it are one string.
+const plantFootID = "plant-foot"
+
+// plantFootFragment answers the foot alone to a swap aimed at it. A navigation
+// and every other swap get the whole page.
+func plantFootFragment(r *http.Request) string {
+	if r.Header.Get("HX-Target") == plantFootID {
+		return plantFootID
+	}
+	return ""
 }

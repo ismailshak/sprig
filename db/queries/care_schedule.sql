@@ -10,3 +10,12 @@ WHERE care_schedule.garden_id = @garden_id
   AND plant.archived_at IS NULL
   AND care_type.archived_at IS NULL
 ORDER BY plant.location NULLS LAST, coalesce(plant.nickname, plant.common_name, plant.botanical_name), plant.id, care_type.created_at, care_type.id;
+
+-- set_at defaults to now, so a plant added today with a ten-day cadence is due
+-- in ten days rather than overdue on arrival.
+-- name: CreateCareSchedule :one
+INSERT INTO care_schedule (garden_id, plant_id, care_type_id, interval_count, interval_unit,
+                           anchor_date, anchor_precision, season_start_month, season_end_month)
+VALUES (@garden_id, @plant_id, @care_type_id, @interval_count, @interval_unit,
+        @anchor_date, @anchor_precision, @season_start_month, @season_end_month)
+RETURNING *;
