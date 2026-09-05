@@ -1,20 +1,20 @@
-{{/* The schedule rows of the add form, and the fragment one row's own request
-     is answered with. Both states of a row carry the same id, and settle:0ms
-     keeps htmx from painting a frame at the outgoing element's classes. */}}
+{{/* The schedule rows of the add form. Also the fragment returned when one row
+     re-renders itself. Both states of a row share an id, and settle:0ms stops
+     htmx painting a frame with the old element's classes. */}}
 {{define "schedule-fields"}}{{range .Schedules}}{{template "schedule-field" .}}
 {{end}}{{end}}
 
-{{/* On this form a row is open or the plant is not scheduled for that care,
-     because there is no plant yet to save one row against. The hidden field
-     says the row is open, which is how the post and the re-render agree without
-     the button being pressed again. */}}
+{{/* On this form a row is either open or unscheduled. There is no saved state,
+     because the plant does not exist yet. The hidden "open" field records that
+     the row is open, so a post or a re-render keeps it open without the button
+     being pressed again. */}}
 {{define "schedule-field"}}{{if .Open}}<li class="sched sched--editing" id="{{.ID}}">
 <span class="sched__icon">{{template "care-icon" .Slug}}</span>
 <input type="hidden" name="open" value="{{.Slug}}">
 {{template "schedule-controls" .}}
 <div class="sched__buttons">
-{{/* Don't schedule is the way out of a row on this form, because there is no
-     plant yet to save a row against. */}}
+{{/* Don't schedule closes the row. There is no Cancel, because nothing has
+     been saved to go back to. */}}
 <button class="sched__cancel" type="submit" name="close" value="{{.Slug}}" formmethod="get" formaction="{{.Path}}"
  hx-get="{{.Path}}?close={{.Slug}}" hx-target="#{{.ID}}" hx-swap="outerHTML settle:0ms">Don't schedule</button>
 </div>
@@ -27,19 +27,20 @@
  hx-get="{{.Path}}?open={{.Slug}}" hx-target="#{{.ID}}" hx-swap="outerHTML settle:0ms">Not scheduled</button>
 </li>{{end}}{{end}}
 
-{{/* The two questions the editor asks, shared by the add form and the in-place
-     editor on a plant's page so that the two cannot come to disagree about what
-     "every year" means. The foot is the caller's, because a row here is one
-     field of a form that has its own button and a row there is saved on its
+{{/* The When select and the fields it reveals, shared by the add form and the
+     in-place editor on a plant's page so the two cannot disagree about what
+     "every year" means. The buttons are the caller's, because on the add form a
+     row is one field of a larger form and on the plant's page it saves on its
      own.
 
-     Every control is named by its care type as well as by what it is, because
-     more than one row can be open at once and one shared "shape" would be read
-     as whichever row rendered last.
+     Every control's name includes its care type, because more than one row can
+     be open at once and a shared name would be read as whichever row rendered
+     last.
 
-     The two controls that decide which other controls exist re-render the row
-     they are in. With no script they do not, and the post comes back drawn with
-     the fields the shape needs and a line saying what is missing. */}}
+     The When select and the seasonal checkbox decide which other controls
+     exist, so they re-render their row on change. Without JavaScript they do
+     not, and the response to the post renders the row with the fields that
+     choice needs and an error saying what is missing. */}}
 {{define "schedule-controls"}}<div class="sched__text">
 <span class="sched__type">{{.Care}}</span>
 <span class="sched__field">When

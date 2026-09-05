@@ -37,10 +37,10 @@ func TestNew_HealthzOK(t *testing.T) {
 	}
 }
 
-// The id reaches the request line only because New orders RequestID outermost
-// and the caller wrapped its handler with NewContextHandler. Neither is visible
-// from the other's package, so nothing else fails if one of them is undone.
-func TestNew_RequestLineCarriesTheHeaderID(t *testing.T) {
+// The id reaches the log line only because New puts RequestID outermost and the
+// caller wrapped its handler with NewContextHandler. Neither is visible from
+// the other's package, so nothing else fails if one of them is undone.
+func TestNew_TheRequestLogLineIncludesTheRequestID(t *testing.T) {
 	var buf bytes.Buffer
 	logger := slog.New(NewContextHandler(slog.NewJSONHandler(&buf, nil)))
 	handler := New(logger, testSessions(), rejectEveryToken, nil, testTemplates(), testAssets())
@@ -88,13 +88,13 @@ func TestNew_UnknownRouteIsSignInForAStrangerAndNotFoundForAMember(t *testing.T)
 	}
 }
 
-// GET is left alone because nothing state-changing answers to one.
+// GET is not checked because no GET route changes state.
 func TestNew_RefusesAnUnsafeMethodFromAnotherOrigin(t *testing.T) {
 	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
 	handler := New(logger, testSessions(), rejectEveryToken, nil, testTemplates(), testAssets())
 
-	// The requests carry no cookie, so an accepted one reaches the session
-	// check and is sent to sign in, and a refused one is a 403 before that.
+	// The requests have no cookie, so an accepted one reaches the session
+	// check and is redirected to sign in. A refused one is a 403 before that.
 	cases := []struct {
 		name   string
 		method string

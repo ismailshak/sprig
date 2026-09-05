@@ -1,6 +1,6 @@
--- Both reads exist for the development sign-in, which offers every user and
--- takes a handle as the whole credential. Nothing in a production build calls
--- them, and they go when the development sign-in does.
+-- Both queries exist for the development sign-in, which lists every user and
+-- signs one in by handle alone. Nothing in a production build calls them, and
+-- they will be removed with the development sign-in.
 -- name: ListUsers :many
 SELECT * FROM app_user
 ORDER BY created_at, id;

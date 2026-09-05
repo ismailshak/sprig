@@ -19,8 +19,8 @@ import (
 type Limiter struct {
 	limit rate.Limit
 	burst int
-	// refill is how long an empty bucket takes to fill, which is both how
-	// often the map is swept and how long a bucket has to sit idle to go.
+	// refill is how long an empty bucket takes to fill. It is also how often
+	// the map is swept and how long a bucket sits idle before it is deleted.
 	refill time.Duration
 
 	mu        sync.Mutex
@@ -74,8 +74,9 @@ func (l *Limiter) Allow(key string, now time.Time) (bool, time.Duration) {
 	return true, 0
 }
 
-// A bucket idle for a refill is full again and indistinguishable from one that
-// does not exist, so deleting it changes no later answer.
+// sweep deletes buckets idle for a refill. Such a bucket is full again and
+// indistinguishable from one that does not exist, so deleting it changes no
+// later result.
 func (l *Limiter) sweep(now time.Time) {
 	l.lastSweep = now
 	for key, b := range l.buckets {
@@ -85,10 +86,10 @@ func (l *Limiter) sweep(now time.Time) {
 	}
 }
 
-// Limit answers a request whose key has spent its budget with a 429 and a
-// Retry-After. A route with both a per-source budget and a shared one wraps
-// the shared limiter inside the per-source limiter, so a source already
-// refused spends nothing from the budget the other sources draw on.
+// Limit refuses a request whose key has spent its budget with a 429 and a
+// Retry-After. A route with both a per-source budget and a shared one wraps the
+// shared limiter inside the per-source limiter, so a source already refused
+// spends nothing from the shared budget.
 func Limit(l *Limiter, key func(*http.Request) string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -106,13 +107,13 @@ func Limit(l *Limiter, key func(*http.Request) string) func(http.Handler) http.H
 	}
 }
 
-// ClientAddress returns the key for a per-address limiter, the value of header
-// where a request carries one and the host part of RemoteAddr otherwise. The
-// value is used as sent. A client can write header itself, so the operator
-// names one only where every request reaches sprig through the proxy that
-// sets it, and it has to be a header the proxy overwrites, such as
-// CF-Connecting-IP. X-Forwarded-For is appended to rather than replaced, so a
-// client keeps whatever it put first and the key is its to choose.
+// ClientAddress returns a key function for a per-address limiter: the value of
+// header when the request has one, otherwise the host part of RemoteAddr. The
+// value is used as sent. A client can set header itself, so the operator names
+// one only where every request reaches sprig through the proxy that sets it,
+// and it has to be a header the proxy overwrites, such as CF-Connecting-IP.
+// X-Forwarded-For is appended to rather than replaced, so a client could choose
+// its own key.
 func ClientAddress(header string) func(*http.Request) string {
 	return func(r *http.Request) string {
 		if header != "" {

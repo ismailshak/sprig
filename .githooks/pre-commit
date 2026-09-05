@@ -1,12 +1,11 @@
 #!/usr/bin/env bash
-# Prettier over whatever the commit touches under e2e/, which is the only
-# JavaScript in the repository. What it rewrites is staged, so formatting is
-# never a commit somebody has to make twice.
+# Runs prettier over the staged files under e2e/ and stages what it rewrites,
+# so a formatting fix never needs a second commit.
 #
-# The exception is a file staged in part: adding prettier's fix would carry the
-# unstaged rest of that file into the commit, so the hook stops instead.
+# A file that is only partly staged stops the hook instead, because staging
+# prettier's fix would pull the unstaged rest of that file into the commit.
 #
-# Git finds this through core.hooksPath, which mise run hooks sets.
+# Git finds this hook through core.hooksPath, which mise run hooks sets.
 set -euo pipefail
 
 cd "$(git rev-parse --show-toplevel)"

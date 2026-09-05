@@ -8,8 +8,8 @@ export class ActivityScreen {
     await this.page.goto('/activity');
   }
 
-  // The log filtered to one plant is headed by a link back to that plant, and
-  // the whole garden's log has no link of its own.
+  // The log filtered to one plant has a link back to that plant at the top.
+  // The whole garden's log has no such link.
   backTo(plant: Plant): Locator {
     return this.page.getByRole('link', { name: plant.name });
   }
@@ -22,13 +22,13 @@ export class ActivityScreen {
     return this.page.getByRole('link', { name: 'Latest activity' });
   }
 
-  // Activity draws one list, with day markers, silences and events all items
-  // on it.
-  strand(): Locator {
+  // Activity renders one list. Day markers, gaps and events are all items in
+  // it.
+  list(): Locator {
     return this.page.getByRole('list');
   }
 
   items(): Locator {
-    return this.strand().getByRole('listitem');
+    return this.list().getByRole('listitem');
   }
 }

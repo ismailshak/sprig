@@ -9,29 +9,31 @@ import (
 	engine "github.com/ismailshak/sprig/internal/schedule"
 )
 
-// historyDays bounds the log by a date rather than by a count of events, so
-// every cadence stops on the same day however often it repeats.
+// historyDays is how far back the generated event history goes. Bounding by
+// days rather than by event count means every cadence stops on the same day
+// however often it repeats.
 const historyDays = 200
 
-// logEntry is one care_event before it has an identifier.
+// logEntry is one care_event row before it is assigned an id.
 type logEntry struct {
 	plant    *plant
 	careSlug string
-	// The next occurrence counts from performedAt rather than from recordedAt,
-	// which separates a backdated entry from one written as it happened.
+	// performedAt is when the care happened and recordedAt when it was
+	// entered. Due dates count from performedAt, so a backdated entry behaves
+	// differently from one entered at the time.
 	performedAt time.Time
 	recordedAt  time.Time
 	performedBy *person
-	// False is a skip, which resets the schedule without recording that the care
-	// was given.
+	// done is false for a skip, which pushes the schedule back without
+	// recording that care was given.
 	done     bool
 	note     string
 	override int
 }
 
-// advance moves t by n intervals, and n may be negative. A month and a year
-// move by the calendar rather than by a fixed number of days, because that is
-// what a count and a unit mean to the due-date engine.
+// advance moves t by n intervals of count units. n may be negative. Months and
+// years move by the calendar rather than by a fixed number of days, matching
+// the due-date engine.
 func advance(t time.Time, count int, unit string, n int) time.Time {
 	switch unit {
 	case engine.UnitDay:
@@ -47,16 +49,16 @@ func advance(t time.Time, count int, unit string, n int) time.Time {
 	}
 }
 
-// daysBetween counts whole days over the calendar, so the hour a clock change
-// adds or removes does not turn thirty days into twenty-nine and a fraction.
+// daysBetween counts whole calendar days, rounding away the hour a clock change
+// adds or removes so that 30 days does not become 29 and a fraction.
 func daysBetween(earlier, later time.Time) int {
 	return int(later.Sub(earlier).Round(24*time.Hour) / (24 * time.Hour))
 }
 
 func (s *schedule) repeats() bool { return s.count > 0 }
 
-// anchor is the day the series starts, placed in the reference's own year so
-// the fixture keeps its position in the calendar whenever the seed runs.
+// anchor returns the anchor date, placed relative to the reference year so the
+// fixture keeps its place in the calendar whichever year the seed runs.
 func (s *schedule) anchor(ref time.Time) time.Time {
 	day := s.anchorDay
 	if day == 0 {
@@ -67,10 +69,10 @@ func (s *schedule) anchor(ref time.Time) time.Time {
 
 func (s *schedule) anchored() bool { return s.anchorMonth != 0 }
 
-// next is when the schedule falls due. A cadence is written as a number of days
-// from the reference, which puts the seeded garden in the same three sections of
-// Today whatever day it is seeded on. An anchored schedule names a place in the
-// calendar instead.
+// next returns when the schedule next falls due. A cadence is written as a
+// number of days from the reference, so the seeded garden lands in the same
+// three sections of Today whatever day it is seeded. An anchored schedule
+// names a calendar date instead.
 func (s *schedule) next(ref time.Time) time.Time {
 	if !s.anchored() {
 		return ref.AddDate(0, 0, s.dueIn)
@@ -98,9 +100,8 @@ type occurrence struct {
 	at   time.Time
 }
 
-// history is every care event behind one plant. It works each cadence backwards
-// from the day that cadence next falls due, and adds the events no cadence
-// produced.
+// history generates every care event for one plant. It works each cadence
+// backwards from its next due date and adds the plant's extraEvents.
 func history(g *garden, p *plant, ref time.Time) []logEntry {
 	var occs []occurrence
 	for i := range p.schedules {
@@ -110,8 +111,8 @@ func history(g *garden, p *plant, ref time.Time) []logEntry {
 		occs = append(occs, occurrence{slug: e.slug, at: ref.AddDate(0, 0, -e.daysAgo)})
 	}
 
-	// Newest first within a care type, so the first of each group is the one
-	// every due date in the app counts from.
+	// Sort newest first within each care type. The first of each group is the
+	// event the app's due dates count from.
 	slices.SortStableFunc(occs, func(a, b occurrence) int {
 		if a.slug != b.slug {
 			return cmp.Compare(a.slug, b.slug)
@@ -127,8 +128,9 @@ func history(g *garden, p *plant, ref time.Time) []logEntry {
 	return entries
 }
 
-// occurrences steps back through a schedule an interval at a time. A one-off
-// has no interval, so it leaves no history.
+// occurrences returns the past occurrences of a schedule, stepping back one
+// interval at a time from the next due date. A one-off has no interval and so
+// no history.
 func occurrences(s *schedule, ref time.Time) []occurrence {
 	if !s.repeats() {
 		return nil
@@ -145,8 +147,8 @@ func occurrences(s *schedule, ref time.Time) []occurrence {
 		if ago <= 0 {
 			continue
 		}
-		// A schedule produced nothing while its season was shut, so a seasonal
-		// feed leaves a gap in the log for every winter.
+		// A seasonal schedule produces nothing out of season, so a seasonal
+		// feed has a gap in the log every winter.
 		if !s.inSeason(at.Month()) {
 			continue
 		}
@@ -154,15 +156,15 @@ func occurrences(s *schedule, ref time.Time) []occurrence {
 	}
 }
 
-// entryFor reads who performed the care, the hour of the day and the note out
-// of a hash of the event rather than out of a random source, so the log varies
-// and is still the same log the next time the seed runs.
+// entryFor builds the event for one occurrence. Who performed it, the time of
+// day and the note come from a hash of the event rather than a random source,
+// so the log varies but is identical on every run.
 //
-// newest marks the most recent event of its care type on this plant, and that
-// event may not be a skip. A skip resets the schedule by its own override rather
-// than by the interval, so a skip in that position would make the log disagree
-// with the roster. Older events are free to be skips, because nothing reads past
-// the last one.
+// newest is true for the most recent event of its care type on this plant.
+// That event is never a skip, because a skip pushes the schedule back by its
+// own override rather than the interval, and the due date would then disagree
+// with the plant list. Older events may be skips, since nothing reads past the
+// newest one.
 func entryFor(g *garden, p *plant, o occurrence, ago int, newest bool) logEntry {
 	key := fmt.Sprintf("%s|%s|%d", p.displayName(), o.slug, ago)
 	skipped := !newest && hash(key+"s")%13 == 0
@@ -174,22 +176,21 @@ func entryFor(g *garden, p *plant, o occurrence, ago int, newest bool) logEntry 
 		performedBy: g.members[0].person,
 		done:        !skipped,
 	}
-	// The second member now and then, so a page showing somebody else's care has
-	// rows to show.
+	// Attribute some events to the second member, so pages showing someone
+	// else's care have rows.
 	if hash(key+"y")%3 == 1 {
 		e.performedBy = g.members[1].person
 	}
 
-	// Usually recorded as it was performed, and now and again hours later, which
-	// is what the schema keeps two columns for.
+	// Usually recorded when performed, occasionally hours later, so both
+	// columns get exercised.
 	e.recordedAt = e.performedAt
 	if hash(key+"l")%9 == 0 {
 		e.recordedAt = clockOn(o.at, 23, 0)
 	}
 
-	// Two salts rather than one, because picking the note out of the number that
-	// decided whether there is a note correlates the two and prints the same
-	// sentence every time.
+	// Two different salts, because choosing the note with the same number that
+	// decided whether there is a note would always pick the same sentence.
 	switch {
 	case skipped:
 		e.note = pick(skipNotes, hash(key+"q"))
@@ -211,8 +212,7 @@ func pick(from []string, n uint32) string {
 	return from[int(n)%len(from)]
 }
 
-// hash is FNV-1a, which a fixture can use because it needs a stable answer
-// rather than a strong one.
+// hash is FNV-1a. The fixture needs a stable hash, not a strong one.
 func hash(s string) uint32 {
 	h := uint32(2166136261)
 	for i := range len(s) {
@@ -222,7 +222,8 @@ func hash(s string) uint32 {
 	return h
 }
 
-// One pool of notes put "half strength" under a watering.
+// doneNotes is keyed by care type slug, so a feeding note never lands on a
+// watering.
 var doneNotes = map[string][]string{
 	"water": {
 		"Ran it until it came out of the bottom.",

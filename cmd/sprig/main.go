@@ -14,8 +14,8 @@ import (
 	"syscall"
 	"time"
 
-	// Every page reads a user's timezone from the zone database this embeds,
-	// so a base image without one still serves the right day.
+	// Embeds the timezone database, so the binary resolves users' timezones
+	// in a base image that has none.
 	_ "time/tzdata"
 
 	"github.com/ismailshak/sprig/db"
@@ -35,12 +35,12 @@ func main() {
 	}
 }
 
-// shutdownGrace is how long an in-flight request has to finish once the
-// process has been asked to stop.
+// shutdownGrace is how long in-flight requests get to finish after the process
+// is told to stop.
 const shutdownGrace = 10 * time.Second
 
-// run wires config, logging, the database and the server together, and blocks
-// until ctx is cancelled or the server fails.
+// run loads config, connects to the database, migrates, and serves until ctx
+// is cancelled or the server fails.
 func run(ctx context.Context, getenv func(string) string, stdout io.Writer) error {
 	cfg, err := loadConfig(getenv)
 	if err != nil {
@@ -55,8 +55,8 @@ func run(ctx context.Context, getenv func(string) string, stdout io.Writer) erro
 	}
 	defer pool.Close()
 
-	// Before the listener, so nothing is served against a schema that is behind
-	// the binary.
+	// Migrate before listening, so no request is served against a schema older
+	// than the binary.
 	if err := store.Migrate(ctx, pool, db.Migrations, logger); err != nil {
 		return err
 	}
@@ -66,8 +66,8 @@ func run(ctx context.Context, getenv func(string) string, stdout io.Writer) erro
 		return err
 	}
 
-	// Before the listener too, so a template that does not parse stops the
-	// process rather than answering the first request for its page with a 500.
+	// Parse before listening too, so a template that does not parse stops the
+	// process instead of returning a 500 on the first request for its page.
 	templates, err := sprighttp.ParseTemplates(logger, cfg.templateDir, assets)
 	if err != nil {
 		return err

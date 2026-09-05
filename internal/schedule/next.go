@@ -20,21 +20,21 @@ const (
 	PrecisionMonth = "month"
 )
 
-// Occurrence is when a schedule falls due.
+// Occurrence is a date a schedule falls due on.
 type Occurrence struct {
-	// At is in now's location.
+	// At is in the location Next was given.
 	At time.Time
-	// PrecisionMonth means the whole of At's month is the occurrence and At is
-	// the first of it.
+	// Precision is PrecisionDay or PrecisionMonth. With PrecisionMonth the
+	// schedule is due some time in At's month and At is the first of that month.
 	Precision string
 }
 
-// Next is when a schedule falls due, given the most recent event of its care
-// type on its plant, or nil where there is none. The second result is false for
-// a schedule with nothing to produce.
+// Next returns when a schedule next falls due, given the most recent event of
+// its care type on the plant, or nil if there is none. The second result is
+// false when the schedule has nothing more to produce.
 //
-// The three shapes are told apart the way the schema tells them apart, by which
-// of the nullable groups are set:
+// The schedule's shape is decided by which nullable columns are set, the same
+// way the schema constrains them:
 //
 //	cadence   an interval and no anchor   the last event plus the interval
 //	anchored  an interval and an anchor   the earliest anchor plus k intervals later than the last event
@@ -43,19 +43,18 @@ type Occurrence struct {
 // A cadence counts from the event and an anchor from the calendar, so care
 // given late moves a cadence and leaves an anchored series where it is.
 //
-// An override_interval_days on the last event replaces the answer the shape
-// gives. A season on a cadence is a window of months, inclusive at both ends
-// and wrapping at the year. While it is shut the schedule produces nothing,
-// and while it is open an occurrence before the opening moves to the opening.
-// The season applies to the override as well.
+// An override_interval_days on the last event replaces the shape's result. A
+// season on a cadence is a window of months, inclusive at both ends and
+// wrapping at the year end. While the season is closed the schedule produces
+// nothing. While it is open, an occurrence dated before the opening moves to
+// the opening. The season applies to the override as well.
 //
-// now's location is the calendar the answer is read in. It decides how long a
-// day or a month is when one is added, which day an event fell on, and which
-// day an anchor names. A caller passes now in the reader's location, because
-// the answer has to agree with the reader's day.
+// now's location decides how long a day or a month is when one is added, which
+// day an event fell on, and which day an anchor names. Callers pass now in the
+// reader's location so the result agrees with the reader's calendar day.
 //
-// now's instant decides the season and nothing else. An anchored series last
-// done a year ago comes back as the occurrence that was missed, and the caller
+// now's instant decides only whether the season is open. An anchored series
+// last done a year ago returns the occurrence that was missed. The caller
 // decides what counts as overdue.
 func Next(s store.CareSchedule, last *store.CareEvent, now time.Time) (Occurrence, bool) {
 	loc := now.Location()
@@ -69,9 +68,9 @@ func Next(s store.CareSchedule, last *store.CareEvent, now time.Time) (Occurrenc
 		return Occurrence{}, false
 	}
 
-	// An occurrence left behind in a closed window would otherwise read as
-	// months overdue. One past the close waits for the next opening, because
-	// nobody is asked on a date the season is shut.
+	// An occurrence dated in the closed months would otherwise show as months
+	// overdue, so it moves to the current season's opening. One dated after
+	// the season closes moves to the next opening.
 	if opening := lastOpening(now, start); o.At.Before(opening) {
 		o.At = opening
 	} else if !inSeason(o.At.In(loc).Month(), start, end) {
@@ -80,9 +79,9 @@ func Next(s store.CareSchedule, last *store.CareEvent, now time.Time) (Occurrenc
 	return o, true
 }
 
-// shape is the occurrence before Next applies the season. It adds intervals to
-// wall clocks in loc, so a day added across a clock change is a calendar day
-// rather than twenty-four hours.
+// shape computes the occurrence before the season is applied. Intervals are
+// added to wall-clock times in loc, so a day added across a clock change is a
+// calendar day and not 24 hours.
 func shape(s store.CareSchedule, last *store.CareEvent, loc *time.Location) (Occurrence, bool) {
 	if last != nil && last.OverrideIntervalDays != nil {
 		// PerformedAt rather than RecordedAt, so a backdated skip counts from
@@ -105,10 +104,10 @@ func shape(s store.CareSchedule, last *store.CareEvent, loc *time.Location) (Occ
 		return Occurrence{At: at, Precision: PrecisionDay}, true
 
 	case s.IntervalCount == nil:
-		// A skip asks to be reminded rather than recording the care, so it
-		// leaves the one-off due. The comparison reads PerformedAt rather
-		// than RecordedAt, so care given before the schedule was set does
-		// not complete it however late somebody logged it.
+		// A skip is a reminder, not a record of care, so it does not complete
+		// a one-off. The comparison uses PerformedAt rather than RecordedAt so
+		// that care given before the schedule was set does not complete it,
+		// however late it was logged.
 		if last != nil && last.Done && last.PerformedAt.After(s.SetAt) {
 			return Occurrence{}, false
 		}
@@ -175,9 +174,9 @@ func nextOpening(t time.Time, start time.Month) time.Time {
 	return o
 }
 
-// An unknown unit panics because care_schedule's check constraint makes one
-// unreachable. Returning a zero time instead would drop the plant off Today and
-// log nothing.
+// advance adds n intervals of count units to t. An unknown unit panics, because
+// the check constraint on care_schedule makes one unreachable, and a zero time
+// returned instead would silently drop the plant from Today.
 func advance(t time.Time, count int32, unit string, n int) time.Time {
 	steps := int(count) * n
 	switch unit {

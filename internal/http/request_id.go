@@ -36,7 +36,7 @@ func RequestIDFromContext(ctx context.Context) string {
 	return id
 }
 
-// NewContextHandler wraps h so every record it handles carries the request
+// NewContextHandler wraps h so every record it handles includes the request
 // id of whichever request produced it. Callers log through a *slog.Logger's
 // *Context methods and never pass the id by hand.
 func NewContextHandler(h slog.Handler) slog.Handler {

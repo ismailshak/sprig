@@ -15,8 +15,8 @@ WHERE role = $1
 ORDER BY capability
 `
 
-// Read on every request rather than cached, so a row added to the table is a
-// capability the next request already has.
+// Read on every request rather than cached, so a row added to the table takes
+// effect on the next request.
 func (q *Queries) ListRoleCapabilities(ctx context.Context, role string) ([]string, error) {
 	rows, err := q.db.Query(ctx, listRoleCapabilities, role)
 	if err != nil {

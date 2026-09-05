@@ -9,8 +9,8 @@ import (
 	"github.com/ismailshak/sprig/internal/store"
 )
 
-// route is one pattern the server answers. An empty capability admits every
-// member, and New wraps a route carrying one in require, so a handler never
+// route is one pattern the server handles. An empty capability admits every
+// member. New wraps a route with a capability in require, so a handler never
 // checks its own.
 type route struct {
 	pattern    string
@@ -51,18 +51,18 @@ func routes(logger *slog.Logger, sessions *auth.Sessions, queries *store.Queries
 	return append(base, devRoutes(sessions, queries, templates)...)
 }
 
-// publicRoutes is every route that answers without a session. Authenticate
-// covers the rest, so a route in routes is protected until it is listed here.
+// publicRoutes is every route served without a session. Authenticate covers
+// the rest, so a route in routes is protected until it is listed here.
 var publicRoutes = map[string]bool{
 	"GET /healthz": true,
 	assetPattern:   true,
 }
 
-// New builds sprig's handler. Request id runs outermost so it is set before
-// anything logs, logging wraps recovery so a recovered panic's 500 still
-// produces one request line, the cross-origin check sits inside both so a
-// refused request is logged like any other, and authentication sits inside
-// that so a cross-site post is refused before it costs a session lookup.
+// New builds sprig's handler. The middleware order matters. RequestID runs
+// outermost so the id is set before anything logs. Logging wraps Recover so a
+// recovered panic's 500 still gets a request line. The cross-origin check is
+// inside both so a refused request is logged like any other. Authentication is
+// inside that so a cross-site post is refused before it costs a session lookup.
 func New(logger *slog.Logger, sessions *auth.Sessions, resolver Resolver, queries *store.Queries, templates *Templates, assets *Assets) http.Handler {
 	mux := http.NewServeMux()
 	for _, r := range routes(logger, sessions, queries, templates, assets) {

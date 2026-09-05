@@ -35,8 +35,7 @@ func (f *plantFixture) editorRequest(t *testing.T, method, path string, plantID 
 	return req
 }
 
-// open is the editor as a GET leaves it, with query carrying whatever the row's
-// controls sent back.
+// open GETs the editor, with query holding whatever the row's controls sent.
 func (f *plantFixture) open(t *testing.T, plantID uuid.UUID, slug string, query url.Values) *httptest.ResponseRecorder {
 	t.Helper()
 
@@ -73,8 +72,8 @@ func (f *plantFixture) remove(t *testing.T, plantID uuid.UUID, slug string, htmx
 	return rec
 }
 
-// cadence is the form a browser posts from a row set to repeat, which draws the
-// interval and the season and not the date.
+// cadence is the form a browser posts from a row set to Repeats, which has the
+// interval and season fields and not the date fields.
 func cadence(slug, every, unit string) url.Values {
 	return url.Values{
 		slug + "-shape": {shapeCadence},
@@ -91,15 +90,15 @@ var (
 	pickedOpt  = regexp.MustCompile(`<option value="([^"]*)" selected>`)
 )
 
-// testEditor is the editor as the page draws it, read back through the values
-// its controls carry rather than through the markup around them.
+// testEditor is the editor's state read back from its control values rather
+// than the surrounding markup.
 type testEditor struct {
 	id string
-	// picked is what each select is on, by the part of the control's name that
-	// follows the care type.
+	// picked is each select's value, keyed by the part of the control's name
+	// after the care type.
 	picked map[string]string
-	// every is what the number field holds, which is what was typed rather than
-	// a number, because a count the row refuses comes back in its own field.
+	// every is the number field's value as a string, since a rejected value is
+	// shown back as typed.
 	every   string
 	hint    string
 	message string
@@ -142,8 +141,8 @@ func editorOf(t *testing.T, page, slug string) testEditor {
 	return e
 }
 
-// storedSchedule is the row care_schedule holds for a plant and care type, and
-// false where the plant is not scheduled for that care.
+// storedSchedule returns the care_schedule row for a plant and care type, or
+// false if there is none.
 func (f *plantFixture) storedSchedule(t *testing.T, plantID, careTypeID uuid.UUID) (store.CareSchedule, bool) {
 	t.Helper()
 
@@ -159,9 +158,9 @@ func (f *plantFixture) storedSchedule(t *testing.T, plantID, careTypeID uuid.UUI
 	return store.CareSchedule{}, false
 }
 
-// Big Fella is watered every ten days and was last watered on 22 August, which
-// leaves the row two days late on the fixture's Thursday.
-func TestScheduleEditor_ARowOpensOnTheScheduleItReplaces(t *testing.T) {
+// Big Fella is watered every ten days and was last watered on 22 August, so
+// the row is two days late on the fixture's Thursday.
+func TestScheduleEditor_TheEditorOpensOnTheCurrentSchedule(t *testing.T) {
 	f := rosewoodPlant(t)
 
 	rec := f.open(t, bigFellaID, "water", nil)
@@ -170,7 +169,8 @@ func TestScheduleEditor_ARowOpensOnTheScheduleItReplaces(t *testing.T) {
 		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusOK, rec.Body.String())
 	}
 	editor := editorOf(t, rec.Body.String(), "water")
-	// The row keeps its id in every state, which is what a swap aims at.
+	// The row's id is the same open or closed, since that is what a swap
+	// targets.
 	if editor.id != scheduleRowPrefix+"water" {
 		t.Errorf("the editor carries the id %q, want the row's own", editor.id)
 	}
@@ -185,8 +185,8 @@ func TestScheduleEditor_ARowOpensOnTheScheduleItReplaces(t *testing.T) {
 	}
 }
 
-// Big Fella is not scheduled for feeding, so the row is the one that says so.
-func TestScheduleEditor_ACareThePlantIsNotOnOpensOnAWeeklyCadenceWithNothingToRemove(t *testing.T) {
+// Big Fella has no feeding schedule, so its feeding row reads Not scheduled.
+func TestScheduleEditor_AnUnscheduledCareOpensOnWeeklyWithNoRemoveLink(t *testing.T) {
 	f := rosewoodPlant(t)
 
 	editor := editorOf(t, f.open(t, bigFellaID, "feed", nil).Body.String(), "feed")
@@ -199,7 +199,7 @@ func TestScheduleEditor_ACareThePlantIsNotOnOpensOnAWeeklyCadenceWithNothingToRe
 	}
 }
 
-func TestScheduleEditor_APickedShapeRedrawsTheRowWithTheFieldsThatShapeNeeds(t *testing.T) {
+func TestScheduleEditor_ChoosingAShapeReRendersTheRowWithThatShapesFields(t *testing.T) {
 	f := rosewoodPlant(t)
 
 	query := cadence("water", "10", "day")
@@ -217,7 +217,7 @@ func TestScheduleEditor_APickedShapeRedrawsTheRowWithTheFieldsThatShapeNeeds(t *
 	}
 }
 
-func TestScheduleEditor_ASavedCadenceMovesTheDueDateOnTheRowItSwapsBackTo(t *testing.T) {
+func TestScheduleEditor_SavingAnIntervalUpdatesTheDueDateOnTheReturnedRow(t *testing.T) {
 	f := rosewoodPlant(t)
 
 	rec := f.save(t, bigFellaID, "water", cadence("water", "20", "day"), true)
@@ -225,15 +225,15 @@ func TestScheduleEditor_ASavedCadenceMovesTheDueDateOnTheRowItSwapsBackTo(t *tes
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusOK, rec.Body.String())
 	}
-	// The last watering has not moved, so a ten-day cadence made twenty days
-	// pushes the next one ten days out rather than being recomputed from today.
+	// The last watering is unchanged, so changing ten days to twenty pushes
+	// the next one ten days out. It is not recomputed from today.
 	row := rowFor(t, rec.Body.String(), "Water")
 	if row.rule != "Every 20 days" || row.when != "Due in 8 days" {
 		t.Errorf("the watering row reads %+v, want every 20 days and due in 8 days", row)
 	}
 }
 
-func TestScheduleEditor_ASavedScheduleForACareThePlantWasNotOnLeavesTheRowScheduled(t *testing.T) {
+func TestScheduleEditor_SavingAnUnscheduledCareMakesItScheduled(t *testing.T) {
 	f := rosewoodPlant(t)
 
 	rec := f.save(t, bigFellaID, "feed", cadence("feed", "3", "week"), true)
@@ -242,16 +242,16 @@ func TestScheduleEditor_ASavedScheduleForACareThePlantWasNotOnLeavesTheRowSchedu
 	if row.rule != "Every 3 weeks" {
 		t.Errorf("the feeding row reads %+v, want every 3 weeks", row)
 	}
-	// A schedule with no care behind it counts from the moment it was set, so
-	// the first feeding falls an interval ahead rather than overdue on arrival.
-	// The count itself is left alone because set_at is the database's clock and
+	// A schedule with no events counts from when it was set, so the first
+	// feeding is due one interval ahead rather than overdue immediately. The
+	// exact count is not asserted because set_at is the database's clock and
 	// the row is read against the fixture's.
 	if row.late || !strings.HasPrefix(row.when, "Due in") {
 		t.Errorf("the feeding row is due %q and late = %v, want a day still to come", row.when, row.late)
 	}
 }
 
-func TestScheduleEditor_ASeasonIsSavedOnlyWhereTheBoxWasTicked(t *testing.T) {
+func TestScheduleEditor_ASeasonIsSavedOnlyWhenTheBoxIsTicked(t *testing.T) {
 	f := rosewoodPlant(t)
 
 	form := cadence("feed", "3", "week")
@@ -269,8 +269,8 @@ func TestScheduleEditor_ASeasonIsSavedOnlyWhereTheBoxWasTicked(t *testing.T) {
 	}
 }
 
-// The day select's first option is Any day, and the schema has no way of
-// holding a month without one, so the anchor is stored on the first.
+// The day select's first option is Any day. The schema cannot store a month
+// without a day, so the anchor is stored on the 1st.
 func TestScheduleEditor_AnAnchorWithNoDayIsStoredOnTheFirstOfItsMonth(t *testing.T) {
 	f := rosewoodPlant(t)
 
@@ -297,9 +297,9 @@ func TestScheduleEditor_AnAnchorWithNoDayIsStoredOnTheFirstOfItsMonth(t *testing
 	}
 }
 
-// interval_count > 0 is in the schema as a backstop. A zero typed into the
-// field is the editor's to refuse, in the field it was typed into.
-func TestScheduleEditor_AnIntervalOfZeroComesBackInTheFieldItWasTypedInto(t *testing.T) {
+// The schema's interval_count > 0 check is a backstop. The editor refuses a
+// zero itself and shows it back in the field.
+func TestScheduleEditor_AnIntervalOfZeroIsRefusedAndShownBackInTheField(t *testing.T) {
 	f := rosewoodPlant(t)
 
 	rec := f.save(t, bigFellaID, "water", cadence("water", "0", "day"), true)
@@ -320,11 +320,11 @@ func TestScheduleEditor_AnIntervalOfZeroComesBackInTheFieldItWasTypedInto(t *tes
 	}
 }
 
-func TestScheduleEditor_AShapeWithNoDateIsRefusedWithTheDateFieldsDrawn(t *testing.T) {
+func TestScheduleEditor_AShapeWithNoDateIsRefusedWithTheDateFieldsShown(t *testing.T) {
 	f := rosewoodPlant(t)
 
-	// A browser posts only the controls it drew, so a shape picked with no
-	// script arrives without the fields that shape needs.
+	// A browser posts only the controls it rendered, so a shape picked without
+	// JavaScript arrives without the fields that shape needs.
 	rec := f.save(t, bigFellaID, "water", url.Values{"water-shape": {shapeOnce}}, true)
 
 	editor := editorOf(t, rec.Body.String(), "water")
@@ -336,7 +336,7 @@ func TestScheduleEditor_AShapeWithNoDateIsRefusedWithTheDateFieldsDrawn(t *testi
 	}
 }
 
-func TestScheduleEditor_TheQuestionAsksInPlaceAndLeavesTheScheduleWhereItIs(t *testing.T) {
+func TestScheduleEditor_TheRemoveConfirmationRendersInTheRowWithTheScheduleStillShown(t *testing.T) {
 	f := rosewoodPlant(t)
 
 	editor := editorOf(t, f.ask(t, bigFellaID, "water").Body.String(), "water")
@@ -352,7 +352,7 @@ func TestScheduleEditor_TheQuestionAsksInPlaceAndLeavesTheScheduleWhereItIs(t *t
 	}
 }
 
-func TestScheduleEditor_ARemovedScheduleLeavesTheCareTypeInTheNotScheduledList(t *testing.T) {
+func TestScheduleEditor_RemovingAScheduleMovesTheCareTypeToNotScheduled(t *testing.T) {
 	f := rosewoodPlant(t)
 
 	rec := f.remove(t, bigFellaID, "water", true)
@@ -363,14 +363,13 @@ func TestScheduleEditor_ARemovedScheduleLeavesTheCareTypeInTheNotScheduledList(t
 	if _, ok := f.storedSchedule(t, bigFellaID, waterID); ok {
 		t.Error("the schedule is still stored")
 	}
-	// The events the schedule produced are the record of what happened, so
-	// they stay where they are.
+	// The events the schedule produced are kept.
 	if recent := recentOf(f.page(t, bigFellaID)); len(recent) == 0 {
 		t.Error("removing the schedule took the plant's history with it")
 	}
 }
 
-func TestScheduleEditor_ARemovalOfAScheduleThatIsNotThereIsNotFound(t *testing.T) {
+func TestScheduleEditor_RemovingAScheduleThatDoesNotExistIs404(t *testing.T) {
 	f := rosewoodPlant(t)
 
 	if rec := f.remove(t, bigFellaID, "feed", true); rec.Code != http.StatusNotFound {
@@ -378,7 +377,7 @@ func TestScheduleEditor_ARemovalOfAScheduleThatIsNotThereIsNotFound(t *testing.T
 	}
 }
 
-func TestScheduleEditor_ASwapIsAnsweredWithTheRowAlone(t *testing.T) {
+func TestScheduleEditor_AnHTMXRequestGetsTheRowAlone(t *testing.T) {
 	f := rosewoodPlant(t)
 
 	body := f.save(t, bigFellaID, "water", cadence("water", "20", "day"), true).Body.String()
@@ -391,7 +390,7 @@ func TestScheduleEditor_ASwapIsAnsweredWithTheRowAlone(t *testing.T) {
 	}
 }
 
-func TestScheduleEditor_ASaveFromABrowserWithNoScriptLandsBackOnThePlant(t *testing.T) {
+func TestScheduleEditor_ASaveWithoutJavaScriptRedirectsToThePlant(t *testing.T) {
 	f := rosewoodPlant(t)
 
 	rec := f.save(t, bigFellaID, "water", cadence("water", "20", "day"), false)
@@ -401,7 +400,7 @@ func TestScheduleEditor_ASaveFromABrowserWithNoScriptLandsBackOnThePlant(t *test
 	}
 }
 
-func TestScheduleEditor_ARemovalFromABrowserWithNoScriptLandsBackOnThePlant(t *testing.T) {
+func TestScheduleEditor_ARemovalWithoutJavaScriptRedirectsToThePlant(t *testing.T) {
 	f := rosewoodPlant(t)
 
 	rec := f.remove(t, bigFellaID, "water", false)
@@ -411,8 +410,8 @@ func TestScheduleEditor_ARemovalFromABrowserWithNoScriptLandsBackOnThePlant(t *t
 	}
 }
 
-// A schedule set before this year has no option of its own on a select that
-// starts at this one, and the row would come back under a year nobody gave.
+// The year select starts at this year, so a schedule anchored earlier would
+// otherwise re-render under a year nobody chose.
 func TestScheduleEditor_AnAnchorSetBeforeThisYearKeepsItsYear(t *testing.T) {
 	f := rosewoodPlant(t)
 	f.exec(t, "INSERT INTO care_schedule (garden_id, plant_id, care_type_id, anchor_date, anchor_precision) VALUES ($1, $2, $3, '2024-05-01', 'month')",
@@ -425,7 +424,7 @@ func TestScheduleEditor_AnAnchorSetBeforeThisYearKeepsItsYear(t *testing.T) {
 	}
 }
 
-func TestScheduleEditor_ARowOpensOnAFixedDateWithItsIntervalAndItsDate(t *testing.T) {
+func TestScheduleEditor_AFixedDateScheduleOpensWithItsIntervalAndDate(t *testing.T) {
 	f := rosewoodPlant(t)
 	f.exec(t, "INSERT INTO care_schedule (garden_id, plant_id, care_type_id, interval_count, interval_unit, anchor_date, anchor_precision) VALUES ($1, $2, $3, 1, 'year', '2027-05-01', 'day')",
 		rosewoodID, bigFellaID, feedID)
@@ -440,7 +439,7 @@ func TestScheduleEditor_ARowOpensOnAFixedDateWithItsIntervalAndItsDate(t *testin
 	}
 }
 
-func TestScheduleEditor_ARowOpensOnASeasonalCadenceWithItsWindow(t *testing.T) {
+func TestScheduleEditor_ASeasonalScheduleOpensWithItsMonths(t *testing.T) {
 	f := rosewoodPlant(t)
 	f.exec(t, "INSERT INTO care_schedule (garden_id, plant_id, care_type_id, interval_count, interval_unit, season_start_month, season_end_month) VALUES ($1, $2, $3, 3, 'week', 3, 9)",
 		rosewoodID, bigFellaID, feedID)
@@ -450,16 +449,16 @@ func TestScheduleEditor_ARowOpensOnASeasonalCadenceWithItsWindow(t *testing.T) {
 	if editor.picked["shape"] != shapeCadence || editor.every != "3" || editor.picked["unit"] != "week" {
 		t.Errorf("the editor opened on %v every %q, want a cadence of 3 weeks", editor.picked, editor.every)
 	}
-	// The month selects are drawn only where the box is ticked, so a window
-	// picked on them is the box ticked as well.
+	// The month selects are rendered only when the box is ticked, so months in
+	// the post imply the box is ticked too.
 	if editor.picked["from"] != "3" || editor.picked["to"] != "9" {
 		t.Errorf("the editor opened on %v, want March to September", editor.picked)
 	}
 }
 
-// A one-off that has been done reads "Not scheduled", and the editor opens on
-// that rather than on the date already done.
-func TestScheduleEditor_ASpentOneOffOpensAsACareThePlantIsNotOn(t *testing.T) {
+// A one-off that has been done reads "Not scheduled", and the editor opens as
+// for an unscheduled care rather than on the completed date.
+func TestScheduleEditor_ACompletedOneOffOpensAsUnscheduled(t *testing.T) {
 	f := rosewoodPlant(t)
 	f.exec(t, "INSERT INTO care_schedule (garden_id, plant_id, care_type_id, anchor_date, anchor_precision, set_at) VALUES ($1, $2, $3, '2026-08-20', 'day', $4)",
 		rosewoodID, bigFellaID, feedID, day(time.August, 1))
@@ -476,9 +475,9 @@ func TestScheduleEditor_ASpentOneOffOpensAsACareThePlantIsNotOn(t *testing.T) {
 	}
 }
 
-// A one-off that has been done reads "Not scheduled", and set_at moves with the
-// save, so the date given to it is the one that brings it back.
-func TestScheduleEditor_ADateGivenToASpentOneOffBringsItBack(t *testing.T) {
+// A one-off that has been done reads "Not scheduled". Saving updates set_at,
+// so the new date makes it scheduled again.
+func TestScheduleEditor_SavingADateOnACompletedOneOffReschedulesIt(t *testing.T) {
 	f := rosewoodPlant(t)
 	f.exec(t, "INSERT INTO care_schedule (garden_id, plant_id, care_type_id, anchor_date, anchor_precision, set_at) VALUES ($1, $2, $3, '2026-08-20', 'day', $4)",
 		rosewoodID, bigFellaID, feedID, day(time.August, 1))
@@ -498,7 +497,7 @@ func TestScheduleEditor_ADateGivenToASpentOneOffBringsItBack(t *testing.T) {
 	}
 }
 
-func TestScheduleEditor_AnArchivedPlantHasNoScheduleToEdit(t *testing.T) {
+func TestScheduleEditor_AnArchivedPlantsScheduleEditorIs404(t *testing.T) {
 	f := rosewoodPlant(t)
 	f.exec(t, "UPDATE plant SET archived_at = now() WHERE id = $1", bigFellaID)
 
@@ -510,7 +509,7 @@ func TestScheduleEditor_AnArchivedPlantHasNoScheduleToEdit(t *testing.T) {
 	}
 }
 
-func TestScheduleEditor_ACareTypeTheGardenDoesNotHaveIsNotFound(t *testing.T) {
+func TestScheduleEditor_ACareTypeTheGardenDoesNotHaveIs404(t *testing.T) {
 	f := rosewoodPlant(t)
 
 	if rec := f.open(t, bigFellaID, "prune", nil); rec.Code != http.StatusNotFound {
@@ -518,9 +517,9 @@ func TestScheduleEditor_ACareTypeTheGardenDoesNotHaveIsNotFound(t *testing.T) {
 	}
 }
 
-// The rows a plant is not scheduled for exist to be pressed, so a reader who
-// cannot press one is not shown them, and the rows they can read are not links.
-func TestPlant_AReaderWhoMayNotChangeAScheduleIsOfferedNoEditor(t *testing.T) {
+// Unscheduled rows exist only to be clicked, so a reader who cannot edit does
+// not see them, and the scheduled rows they do see are not links.
+func TestPlant_AReaderWhoMayNotEditSchedulesSeesNoEditLinks(t *testing.T) {
 	f := rosewoodPlant(t)
 	f.principal.Capabilities = auth.Capabilities{auth.CareLog: true}
 
@@ -536,9 +535,9 @@ func TestPlant_AReaderWhoMayNotChangeAScheduleIsOfferedNoEditor(t *testing.T) {
 	}
 }
 
-// Cancel is a link to the plant with no script running and a swap aimed at the
-// row with one, and the page answers both.
-func TestPlant_ASwapAimedAtAScheduleRowIsAnsweredWithThatRowAlone(t *testing.T) {
+// Cancel is a link to the plant's page without JavaScript and an htmx swap
+// targeting the row with it. The plant route handles both.
+func TestPlant_AnHTMXRequestTargetingAScheduleRowGetsThatRowAlone(t *testing.T) {
 	f := rosewoodPlant(t)
 
 	ctx := context.WithValue(t.Context(), principalKey, f.principal)
@@ -559,7 +558,7 @@ func TestPlant_ASwapAimedAtAScheduleRowIsAnsweredWithThatRowAlone(t *testing.T) 
 	}
 }
 
-func TestPlant_ASwapAimedAtARowThePageDoesNotDrawIsNotFound(t *testing.T) {
+func TestPlant_AnHTMXRequestTargetingARowThePageDoesNotHaveIs404(t *testing.T) {
 	f := rosewoodPlant(t)
 
 	ctx := context.WithValue(t.Context(), principalKey, f.principal)

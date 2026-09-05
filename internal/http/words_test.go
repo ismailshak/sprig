@@ -41,8 +41,8 @@ func TestLateWord(t *testing.T) {
 	}
 }
 
-// A month-precise occurrence was never precise to a day, so neither direction
-// counts days towards or away from it.
+// A month-only schedule has no day, so neither the overdue nor the upcoming
+// text counts days.
 func TestOverdueWord(t *testing.T) {
 	today := time.Date(2026, time.September, 3, 0, 0, 0, 0, time.UTC)
 	day := schedule.Line{Due: today.AddDate(0, 0, -2), Precision: schedule.PrecisionDay, Days: -2}
@@ -76,14 +76,14 @@ func TestFeedWhen(t *testing.T) {
 		at   time.Time
 		want string
 	}{
-		{"earlier today carries the clock", now.Add(-2 * time.Hour), "today, 7:00am"},
-		{"yesterday carries it too", now.AddDate(0, 0, -1).Add(9 * time.Hour), "yesterday, 6:00pm"},
+		{"earlier today includes the time", now.Add(-2 * time.Hour), "today, 7:00am"},
+		{"yesterday includes the time", now.AddDate(0, 0, -1).Add(9 * time.Hour), "yesterday, 6:00pm"},
 		{"two days back is named as a day", now.AddDate(0, 0, -2), "Tuesday"},
 		{"six days back is the last day named", now.AddDate(0, 0, -6), "Friday"},
 		{"a week back is dated", now.AddDate(0, 0, -7), "27 Aug"},
 		{"a year back is dated without the year", now.AddDate(-1, 0, 0), "3 Sep"},
-		// A care's performed_at and the page's now are two reads of one clock.
-		// The first can be the later by microseconds.
+		// An event's performed_at and the page's now are two reads of one
+		// clock, so the event can be later by microseconds.
 		{"an instant a shade after now is still today", now.Add(time.Millisecond), "today, 9:00am"},
 	}
 	for _, c := range cases {
@@ -160,7 +160,7 @@ func TestAnchorWord(t *testing.T) {
 		precision string
 		want      string
 	}{
-		{"a date in another year carries it", date(2027, time.May, 1), "day", "1 May 2027"},
+		{"a date in another year includes the year", date(2027, time.May, 1), "day", "1 May 2027"},
 		{"a date this year does not", date(2026, time.December, 1), "day", "1 December"},
 		{"a month-precise anchor keeps its vagueness", date(2028, time.March, 1), "month", "in March 2028"},
 		{"a month this year is named alone", date(2026, time.November, 1), "month", "in November"},
@@ -195,8 +195,8 @@ func TestAgoWord(t *testing.T) {
 		want string
 	}{
 		{"this morning is today", now.Add(-2 * time.Hour), "today"},
-		// Recent is drawn against one clock, so an event recorded a moment
-		// before the page was built can carry a later instant than now.
+		// An event recorded a moment before the page was rendered can have a
+		// later time than now.
 		{"an instant a shade after now is still today", now.Add(time.Millisecond), "today"},
 		{"last night is yesterday", now.AddDate(0, 0, -1).Add(9 * time.Hour), "yesterday"},
 		{"two days back is named as a day", now.AddDate(0, 0, -2), "Tuesday"},

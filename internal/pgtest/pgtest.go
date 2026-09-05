@@ -1,10 +1,10 @@
 // Package pgtest creates and drops the Postgres databases the tests run
-// against. The rule about which server a test may write to is stated here
-// rather than in every package that needs a database.
+// against. The rule about which server a test may write to lives here rather
+// than in every package that needs a database.
 //
-// A test binary passes the function that builds its schema, because the
-// package owning the migrations imports pgtest from its own tests and cannot
-// be imported back.
+// Each test binary passes in the function that builds its schema, because the
+// package that owns the migrations imports pgtest from its tests, so pgtest
+// cannot import it back.
 package pgtest
 
 import (
@@ -21,16 +21,15 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// ApplySchema builds the schema in a database Fresh and Shared then copy. It
-// runs once per test binary, so a binary passes one function.
+// ApplySchema builds the schema in the template database that Fresh and
+// Shared copy from. It runs once per test binary.
 //
-// CREATE DATABASE refuses a template another session is connected to, so
-// ApplySchema closes every connection it opened before it returns.
+// CREATE DATABASE refuses a template another session is connected to, so an
+// ApplySchema must close every connection it opened before returning.
 type ApplySchema func(ctx context.Context, databaseURL string) error
 
-// ServerURL is the server every database in this package is created on. A test
-// skips when SPRIG_DATABASE_URL is unset, because there is nowhere to create
-// one.
+// ServerURL returns the Postgres server every test database is created on,
+// from SPRIG_DATABASE_URL. The test is skipped when the variable is unset.
 func ServerURL(t *testing.T) *url.URL {
 	t.Helper()
 
@@ -42,8 +41,8 @@ func ServerURL(t *testing.T) *url.URL {
 	if err != nil {
 		t.Fatalf("SPRIG_DATABASE_URL is not a URL: %v", err)
 	}
-	// These tests create and drop databases, so they only ever talk to one on
-	// this machine or in the compose stack.
+	// The tests create and drop databases, so they are only allowed to talk
+	// to a server on this machine or in the compose stack.
 	switch parsed.Hostname() {
 	case "localhost", "127.0.0.1", "::1", "db":
 	default:
@@ -52,23 +51,23 @@ func ServerURL(t *testing.T) *url.URL {
 	return parsed
 }
 
-// Empty is a database with no schema in it, dropped when the test ends.
+// Empty creates a database with no schema and drops it when the test ends.
 func Empty(t *testing.T) string {
 	t.Helper()
 	return createForTest(t, "")
 }
 
-// Fresh is a database carrying the schema, dropped when the test ends. It
-// copies a template rather than running ApplySchema again, which costs one
-// CREATE DATABASE instead of that and a set of migrations.
+// Fresh creates a database with the schema applied and drops it when the test
+// ends. It copies a template rather than running schema again, so each call
+// costs one CREATE DATABASE instead of a full migration run.
 func Fresh(t *testing.T, schema ApplySchema) string {
 	t.Helper()
 	return createForTest(t, templateDatabase(t, schema))
 }
 
-// Shared is one database carrying the schema, created on the first call and
-// returned to every caller in the binary afterwards. Cleanup drops it, because
-// no single test owns it. A test that commits takes Fresh instead.
+// Shared returns one database with the schema applied, created on the first
+// call and reused by every later caller in the binary. Main drops it, because
+// no single test owns it. A test that commits should use Fresh instead.
 func Shared(t *testing.T, schema ApplySchema) string {
 	t.Helper()
 
@@ -83,7 +82,8 @@ func Shared(t *testing.T, schema ApplySchema) string {
 	return databaseURL(base, sharedName)
 }
 
-// SharedPool is a pool on Shared. Main closes it before dropping the database.
+// SharedPool returns a pool on the Shared database. Main closes it before
+// dropping the database.
 func SharedPool(t *testing.T, schema ApplySchema) *pgxpool.Pool {
 	t.Helper()
 
@@ -95,8 +95,8 @@ func SharedPool(t *testing.T, schema ApplySchema) *pgxpool.Pool {
 	return sharedPool
 }
 
-// Tx is a transaction on SharedPool that is rolled back when the test ends, so
-// the tests in a binary share one database without seeing each other's rows.
+// Tx begins a transaction on SharedPool and rolls it back when the test ends,
+// so tests in a binary share one database without seeing each other's rows.
 func Tx(t *testing.T, schema ApplySchema) pgx.Tx {
 	t.Helper()
 
@@ -104,13 +104,13 @@ func Tx(t *testing.T, schema ApplySchema) pgx.Tx {
 	if err != nil {
 		t.Fatalf("beginning the transaction: %v", err)
 	}
-	// The test's own context is cancelled by the time a cleanup runs.
+	// The test's context is already cancelled when cleanup runs.
 	t.Cleanup(func() { _ = tx.Rollback(context.WithoutCancel(t.Context())) })
 	return tx
 }
 
-// Main is a test binary's TestMain. It drops the template and the database
-// Shared returns, which no single test owns, after closing the pool on them.
+// Main runs the tests, then closes the shared pool and drops the template and
+// shared databases, which no single test owns.
 func Main(m *testing.M) {
 	code := m.Run()
 	if sharedPool != nil {
@@ -189,8 +189,8 @@ func prepareTemplate(base *url.URL, schema ApplySchema) error {
 	if err != nil {
 		return err
 	}
-	// Recorded before the schema is built, so Cleanup still drops the database
-	// when ApplySchema fails.
+	// Recorded before the schema is built, so cleanup still drops the database
+	// if schema fails.
 	templateName = name
 
 	if err := schema(ctx, databaseURL(base, name)); err != nil {
@@ -208,7 +208,7 @@ func createForTest(t *testing.T, template string) string {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		// The test's own context is cancelled by the time a cleanup runs.
+		// The test's context is already cancelled when cleanup runs.
 		if err := drop(context.WithoutCancel(t.Context()), base, name); err != nil {
 			t.Error(err)
 		}
@@ -243,7 +243,7 @@ func drop(ctx context.Context, base *url.URL, name string) error {
 	}
 	defer func() { _ = server.Close(ctx) }()
 
-	// FORCE, because a pool that failed mid-test may still hold a connection.
+	// FORCE disconnects any pool that failed mid-test and still holds a connection.
 	if _, err := server.Exec(ctx, "DROP DATABASE "+pgx.Identifier{name}.Sanitize()+" WITH (FORCE)"); err != nil {
 		return fmt.Errorf("dropping %s: %w", name, err)
 	}

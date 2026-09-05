@@ -32,9 +32,9 @@ SELECT id, display_name, handle, timezone, created_at FROM app_user
 ORDER BY created_at, id
 `
 
-// Both reads exist for the development sign-in, which offers every user and
-// takes a handle as the whole credential. Nothing in a production build calls
-// them, and they go when the development sign-in does.
+// Both queries exist for the development sign-in, which lists every user and
+// signs one in by handle alone. Nothing in a production build calls them, and
+// they will be removed with the development sign-in.
 func (q *Queries) ListUsers(ctx context.Context) ([]AppUser, error) {
 	rows, err := q.db.Query(ctx, listUsers)
 	if err != nil {

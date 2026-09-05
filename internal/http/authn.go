@@ -29,8 +29,9 @@ func (f ResolverFunc) Resolve(ctx context.Context, now time.Time, token string) 
 
 // Authenticate requires a principal on every request isPublic does not exempt,
 // and puts it on the context for PrincipalFrom. A request with no session, or
-// with a token that resolves to none, is sent to sign in. A resolved session
-// has its cookie reissued, so the browser's deadline slides with the row's.
+// with a token that resolves to none, is redirected to sign in. A resolved
+// session has its cookie reissued, so the cookie's expiry extends along with
+// the session row's.
 func Authenticate(logger *slog.Logger, sessions *auth.Sessions, resolver Resolver, isPublic func(*http.Request) bool) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -69,9 +70,9 @@ func Authenticate(logger *slog.Logger, sessions *auth.Sessions, resolver Resolve
 	}
 }
 
-// writeAccessEnded answers a signed-in user whose membership has ended. The
-// 404 rule covers an object a request named, and this request named none, so
-// the status is 403.
+// writeAccessEnded responds to a signed-in user whose membership has ended.
+// The status is 403 rather than 404 because the 404 rule is for an object a
+// request named, and this request named none.
 func writeAccessEnded(w http.ResponseWriter, ended *auth.MembershipEndedError) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(http.StatusForbidden)
@@ -79,9 +80,10 @@ func writeAccessEnded(w http.ResponseWriter, ended *auth.MembershipEndedError) {
 	_, _ = fmt.Fprintf(w, "Your access to %s ended on %s.\n", ended.Garden.Name, ended.EndedAt.In(locationFor(ended.User)).Format("2 January 2006"))
 }
 
-// locationFor is the zone a user reads their dates in. The account form holds
-// the column to a name the zone database knows, so an unknown name is a row
-// written some other way and gets UTC rather than an error.
+// locationFor returns the timezone a user's dates are shown in. The account
+// form restricts the column to names the zone database knows, so an unknown
+// name means the row was written some other way. It gets UTC rather than an
+// error.
 func locationFor(user store.AppUser) *time.Location {
 	location, err := time.LoadLocation(user.Timezone)
 	if err != nil {

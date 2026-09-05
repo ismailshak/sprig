@@ -23,7 +23,7 @@ services:
   # This service is mainly for the e2e suite.
   app:
     profiles: [app]
-    # Fixes the tag because up without --build starts whatever image carries this name
+    # Fixed tag, so up without --build starts this image rather than whatever has the default name
     image: sprig-app:dev
     build:
       context: .
@@ -33,9 +33,9 @@ services:
     environment:
       SPRIG_DATABASE_URL: postgres://sprig:sprig@db:5432/sprig?sslmode=disable
       SPRIG_LOG_FORMAT: text
-      # The session cookie drops Secure because WebKit refuses one over plain
-      # http and the suite has no TLS. The name loses its __Host- prefix, which
-      # is valid only on a Secure cookie.
+      # Secure is off because WebKit refuses a Secure cookie over plain http
+      # and the suite has no TLS. The __Host- prefix is dropped because it is
+      # only valid on a Secure cookie.
       SPRIG_COOKIE_SECURE: "false"
       SPRIG_COOKIE_NAME: sprig_session
     ports:

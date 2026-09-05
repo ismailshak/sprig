@@ -2,21 +2,21 @@
 SELECT * FROM plant
 WHERE garden_id = @garden_id AND id = @plant_id;
 
--- The order is the roster's, which groups by room and puts a plant with no
--- room last. Two plants can agree on room and name, so id ends the ordering.
+-- Ordered by room, then display name, with plants that have no room last. id
+-- comes last so two plants with the same room and name keep a stable order.
 -- name: ListPlants :many
 SELECT * FROM plant
 WHERE garden_id = @garden_id AND archived_at IS NULL
 ORDER BY location NULLS LAST, coalesce(nickname, common_name, botanical_name), id;
 
--- Today needs the number rather than the rows, so it can tell a garden with no
--- plants from one with nothing due.
+-- The Today page needs only the count, to tell a garden with no plants from one
+-- with nothing due.
 -- name: CountPlants :one
 SELECT count(*) FROM plant
 WHERE garden_id = @garden_id AND archived_at IS NULL;
 
--- The three names, the six reference fields and the acquired pair are all
--- nullable here because the form decides which of them are required.
+-- Every column except garden_id is nullable. The plant form decides which are
+-- required.
 -- name: CreatePlant :one
 INSERT INTO plant (garden_id, nickname, common_name, botanical_name, location,
                    sun, water_needs, feed_needs, soil, climate, pot, notes,
@@ -26,9 +26,8 @@ VALUES (@garden_id, @nickname, @common_name, @botanical_name, @location,
         @acquired_year, @acquired_month)
 RETURNING *;
 
--- Every column the form carries is written because a field emptied on the form
--- is emptied on the row. An archived plant matches nothing here because it is
--- not editable.
+-- Every form field is written, so a field cleared on the form is cleared on the
+-- row. An archived plant matches nothing because it cannot be edited.
 -- name: UpdatePlant :one
 UPDATE plant
 SET nickname = @nickname, common_name = @common_name, botanical_name = @botanical_name,
@@ -38,8 +37,8 @@ SET nickname = @nickname, common_name = @common_name, botanical_name = @botanica
 WHERE garden_id = @garden_id AND id = @plant_id AND archived_at IS NULL
 RETURNING *;
 
--- Archiving twice matches nothing, which is the answer for a plant the garden
--- does not have as well.
+-- Archiving an already archived plant matches nothing, the same result as for
+-- a plant the garden does not have.
 -- name: ArchivePlant :one
 UPDATE plant SET archived_at = now()
 WHERE garden_id = @garden_id AND id = @plant_id AND archived_at IS NULL

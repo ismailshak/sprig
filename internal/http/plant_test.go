@@ -22,9 +22,9 @@ type plantFixture struct {
 	handler *plants
 }
 
-// rosewoodPlant draws a plant's page over the garden Today and Plants are
-// tested on. The embedded fixture carries the sheet and the post behind it,
-// because the sheet this page opens is the one Today opens.
+// rosewoodPlant sets up a plant's page on the garden Today and Plants are
+// tested on. The embedded fixture provides the sheet and its post, since the
+// sheet this page opens is the same one Today opens.
 func rosewoodPlant(t *testing.T) *plantFixture {
 	t.Helper()
 
@@ -61,9 +61,9 @@ func (f *plantFixture) request(t *testing.T, plantID uuid.UUID) *httptest.Respon
 	return rec
 }
 
-// The garden Today is tested on holds one person and two care types. A second
-// person and a third care type are named here because Recent attributes a line
-// and the sheet offers a care nothing is scheduled for.
+// The garden Today is tested on has one person and two care types. A second
+// person and a third care type are added here because Recent names who did
+// each care and the sheet offers a care no plant is scheduled for.
 var (
 	raviID  = uuid.MustParse("00000000-0000-7000-8000-000000000105")
 	repotID = uuid.MustParse("00000000-0000-7000-8000-000000000106")
@@ -95,9 +95,8 @@ type testScheduleRow struct {
 	off  bool
 }
 
-// scheduleOf is the rows of the Schedule section that are at rest. A row open
-// as the editor carries controls rather than a rule and a due date, so it is
-// not one of them.
+// scheduleOf returns the closed rows of the Schedule section. A row open as
+// the editor has controls rather than a rule and due date, so it is left out.
 func scheduleOf(t *testing.T, page string) []testScheduleRow {
 	t.Helper()
 
@@ -142,7 +141,7 @@ func recentOf(page string) []string {
 	return lines
 }
 
-func TestPlant_TheHeadingLeadsWithTheNameThePlantGoesBy(t *testing.T) {
+func TestPlant_TheHeadingIsTheNicknameWithTheOtherNamesBelow(t *testing.T) {
 	page := rosewoodPlant(t).page(t, bigFellaID)
 
 	name := heroName.FindStringSubmatch(page)
@@ -165,7 +164,7 @@ func TestPlant_TheHeadingLeadsWithTheNameThePlantGoesBy(t *testing.T) {
 }
 
 // Opuntia microdasys has only a botanical name.
-func TestPlant_ABotanicalOnlyNameLeadsInItalic(t *testing.T) {
+func TestPlant_ABotanicalOnlyNameIsTheHeadingInItalics(t *testing.T) {
 	page := rosewoodPlant(t).page(t, opuntiaID)
 
 	name := heroName.FindStringSubmatch(page)
@@ -180,9 +179,9 @@ func TestPlant_ABotanicalOnlyNameLeadsInItalic(t *testing.T) {
 	}
 }
 
-// Sprout is a nickname and nothing else: no second name, no room, and nothing
-// written down about it.
-func TestPlant_APlantWithOneNameAndNoReferenceRendersWithoutAHole(t *testing.T) {
+// Sprout has a nickname and nothing else: no second name, no room, no
+// reference fields.
+func TestPlant_APlantWithOneNameAndNoReferenceHasNoEmptySections(t *testing.T) {
 	page := rosewoodPlant(t).page(t, sproutID)
 
 	if name := heroName.FindStringSubmatch(page); name == nil || text(name[2]) != "Sprout" {
@@ -199,7 +198,7 @@ func TestPlant_APlantWithOneNameAndNoReferenceRendersWithoutAHole(t *testing.T) 
 	}
 }
 
-func TestPlant_ReferenceIsOnlyWhatHasBeenSetAndKeepsItsOrder(t *testing.T) {
+func TestPlant_ReferenceShowsOnlySetFieldsInAFixedOrder(t *testing.T) {
 	f := rosewoodPlant(t)
 	f.exec(t, `UPDATE plant SET sun = 'Bright indirect.', feed_needs = 'Half strength.', pot = '30cm terracotta.',
 		notes = 'Wipe the leaves.', acquired_year = 2024, acquired_month = 3 WHERE id = $1`, bigFellaID)
@@ -225,7 +224,7 @@ func TestPlant_ReferenceIsOnlyWhatHasBeenSetAndKeepsItsOrder(t *testing.T) {
 	}
 }
 
-func TestPlant_AnAcquiredYearWithNoMonthIsTheYearAlone(t *testing.T) {
+func TestPlant_AnAcquiredYearWithNoMonthShowsTheYearAlone(t *testing.T) {
 	f := rosewoodPlant(t)
 	f.exec(t, "UPDATE plant SET acquired_year = 2019 WHERE id = $1", bigFellaID)
 
@@ -234,48 +233,49 @@ func TestPlant_AnAcquiredYearWithNoMonthIsTheYearAlone(t *testing.T) {
 	}
 }
 
-func TestPlant_EachScheduleShapeStatesItsRuleAndItsConsequence(t *testing.T) {
+func TestPlant_EachScheduleShapeShowsItsRuleAndDueDate(t *testing.T) {
 	cases := []struct {
 		name string
-		// insert completes the INSERT that gives Big Fella a feeding.
+		// insert is the rest of the INSERT that gives Big Fella a feeding
+		// schedule.
 		insert string
 		args   []any
 		want   testScheduleRow
 	}{
 		{
-			name:   "a cadence counts the days it is late",
+			name:   "an overdue interval schedule shows how many days late",
 			insert: "interval_count, interval_unit, set_at) VALUES ($1, $2, $3, 10, 'day', $4",
 			args:   []any{day(time.August, 14)},
 			want:   testScheduleRow{care: "Feed", rule: "Every 10 days", when: "10 days late", late: true},
 		},
 		{
-			name:   "a cadence in season carries its window and counts towards its day",
+			name:   "an in-season schedule shows its months and days until due",
 			insert: "interval_count, interval_unit, season_start_month, season_end_month, set_at) VALUES ($1, $2, $3, 3, 'week', 3, 9, $4",
 			args:   []any{day(time.September, 1)},
 			want:   testScheduleRow{care: "Feed", rule: "Every 3 weeks · Mar–Sep", when: "Due in 19 days"},
 		},
 		{
-			name:   "a cadence whose season is shut says so and counts nothing",
+			name:   "an out-of-season schedule says so with no count",
 			insert: "interval_count, interval_unit, season_start_month, season_end_month, set_at) VALUES ($1, $2, $3, 3, 'week', 11, 2, $4",
 			args:   []any{day(time.August, 1)},
 			want:   testScheduleRow{care: "Feed", rule: "Every 3 weeks · Nov–Feb", when: "Out of season", off: true},
 		},
 		{
-			name:   "an anchored series names the date it was given rather than counting to it",
+			name:   "a fixed date schedule shows its date rather than a count",
 			insert: "interval_count, interval_unit, anchor_date, anchor_precision, set_at) VALUES ($1, $2, $3, 1, 'year', '2027-05-01', 'day', $4",
 			args:   []any{day(time.August, 1)},
 			want:   testScheduleRow{care: "Feed", rule: "Every year", when: "Due 1 May 2027"},
 		},
 		{
-			name:   "a one-off says it happens once and names its month",
+			name:   "a one-off reads Just once and names its month",
 			insert: "anchor_date, anchor_precision, set_at) VALUES ($1, $2, $3, '2028-03-01', 'month', $4",
 			args:   []any{day(time.August, 1)},
 			want:   testScheduleRow{care: "Feed", rule: "Just once", when: "Due in March 2028"},
 		},
 		{
-			// A month names no day to be late against, so it is overdue only
-			// once the month has gone.
-			name:   "a month-precise anchor that has passed names the month rather than a count",
+			// A month-only date has no day to be late against, so it is
+			// overdue only once the month has passed.
+			name:   "a passed month-only date reads overdue since that month",
 			insert: "anchor_date, anchor_precision, set_at) VALUES ($1, $2, $3, '2026-03-01', 'month', $4",
 			args:   []any{day(time.January, 5)},
 			want:   testScheduleRow{care: "Feed", rule: "Just once", when: "Overdue since March", late: true},
@@ -306,7 +306,7 @@ func TestPlant_EachScheduleShapeStatesItsRuleAndItsConsequence(t *testing.T) {
 	}
 }
 
-func TestPlant_ASpentOneOffDropsBackToNotScheduled(t *testing.T) {
+func TestPlant_ACompletedOneOffShowsAsNotScheduled(t *testing.T) {
 	f := rosewoodPlant(t)
 	f.exec(t, "INSERT INTO care_schedule (garden_id, plant_id, care_type_id, anchor_date, anchor_precision, set_at) VALUES ($1, $2, $3, '2026-08-20', 'day', $4)",
 		rosewoodID, bigFellaID, feedID, day(time.August, 1))
@@ -333,8 +333,8 @@ func TestPlant_RecentNamesThePersonAndTheActionAndNotThePlant(t *testing.T) {
 	}
 }
 
-// Recent is a history of the plant rather than of what was typed, so a care
-// remembered a week late sits where it happened.
+// Recent is ordered by when the care happened, not when it was recorded, so a
+// care logged a week late appears where it happened.
 func TestPlant_RecentIsOrderedByWhenTheCareHappened(t *testing.T) {
 	f := rosewoodPlant(t)
 	f.exec(t, "INSERT INTO care_event (garden_id, plant_id, care_type_id, performed_by, performed_at, recorded_at, done) VALUES ($1, $2, $3, $4, $5, $5, true)",
@@ -388,11 +388,11 @@ func TestPlant_APlantWithNoCareEventsHasNoActivityLink(t *testing.T) {
 	f.exec(t, "DELETE FROM care_event WHERE plant_id = $1", sproutID)
 
 	if label, _ := allActivity(f.page(t, sproutID)); label != "" {
-		t.Errorf("Recent carries a %q link, and the plant has no care events to show", label)
+		t.Errorf("Recent has a %q link, but the plant has no care events", label)
 	}
 }
 
-func TestPlant_APlantNothingHasBeenRecordedForSaysSo(t *testing.T) {
+func TestPlant_APlantWithNoEventsSaysNothingRecorded(t *testing.T) {
 	f := rosewoodPlant(t)
 	f.exec(t, "DELETE FROM care_event WHERE plant_id = $1", sproutID)
 
@@ -401,7 +401,7 @@ func TestPlant_APlantNothingHasBeenRecordedForSaysSo(t *testing.T) {
 	}
 }
 
-func TestPlant_AReaderWhoMayNotLogCareIsOfferedNoWayTo(t *testing.T) {
+func TestPlant_AReaderWhoMayNotLogCareSeesNoLogButton(t *testing.T) {
 	f := rosewoodPlant(t)
 	f.principal.Capabilities = auth.Capabilities{}
 
@@ -410,7 +410,7 @@ func TestPlant_AReaderWhoMayNotLogCareIsOfferedNoWayTo(t *testing.T) {
 	}
 }
 
-func TestPlant_LogCareOpensTheSheetOverThePage(t *testing.T) {
+func TestPlant_LogCareOpensTheSheetOnThePlantsPage(t *testing.T) {
 	page := rosewoodPlant(t).page(t, bigFellaID)
 
 	button := logCare.FindString(page)
@@ -427,9 +427,9 @@ func TestPlant_LogCareOpensTheSheetOverThePage(t *testing.T) {
 	}
 }
 
-// An archived plant keeps its page, because its history surviving is the
-// reason plants archive rather than delete.
-func TestPlant_AnArchivedPlantKeepsItsPageAndOffersNoLogCare(t *testing.T) {
+// An archived plant keeps its page. Keeping the history is why plants are
+// archived rather than deleted.
+func TestPlant_AnArchivedPlantHasAPageButNoLogButton(t *testing.T) {
 	f := rosewoodPlant(t)
 	f.exec(t, "UPDATE plant SET archived_at = now() WHERE id = $1", bigFellaID)
 
@@ -445,7 +445,7 @@ func TestPlant_AnArchivedPlantKeepsItsPageAndOffersNoLogCare(t *testing.T) {
 	}
 }
 
-func TestPlantSheet_IsNotFoundForAnArchivedPlant(t *testing.T) {
+func TestPlantSheet_Is404ForAnArchivedPlant(t *testing.T) {
 	f := rosewoodPlant(t)
 	f.exec(t, "UPDATE plant SET archived_at = now() WHERE id = $1", bigFellaID)
 
@@ -467,7 +467,7 @@ func TestPlantSheet_RecordsNothingAgainstAnArchivedPlant(t *testing.T) {
 	}
 }
 
-// A repot nothing is scheduled for is still a repot that happened.
+// A repot can be logged even though the plant has no repot schedule.
 func TestPlantSheet_OffersEveryCareTypeTheGardenHas(t *testing.T) {
 	f := rosewoodPlant(t)
 	f.exec(t, "INSERT INTO care_type (garden_id, name, slug) VALUES ($1, 'Repot', 'repot')", rosewoodID)
@@ -485,7 +485,7 @@ func TestPlantSheet_OffersEveryCareTypeTheGardenHas(t *testing.T) {
 	}
 }
 
-func TestPlantSheet_ItsHeadingDoesNotLeadBackToThePageItIsOn(t *testing.T) {
+func TestPlantSheet_ThePlantHeadingIsNotALink(t *testing.T) {
 	f := rosewoodPlant(t)
 
 	body := f.sheet(t, plantSheetPath(bigFellaID), false).Body.String()
@@ -497,9 +497,9 @@ func TestPlantSheet_ItsHeadingDoesNotLeadBackToThePageItIsOn(t *testing.T) {
 	}
 }
 
-// The sheet over a plant swaps no row, so its form is an ordinary post and the
-// flow is the same with a script running and without.
-func TestPlantSheet_ItsFormPostsRatherThanSwapping(t *testing.T) {
+// The sheet on a plant's page has no row to swap, so its form is an ordinary
+// post and the flow is the same with and without JavaScript.
+func TestPlantSheet_TheFormPostsWithoutAnHTMXSwap(t *testing.T) {
 	f := rosewoodPlant(t)
 
 	form := sheetForm.FindString(f.sheet(t, plantSheetPath(bigFellaID), true).Body.String())
@@ -514,9 +514,9 @@ func TestPlantSheet_ItsFormPostsRatherThanSwapping(t *testing.T) {
 	}
 }
 
-// Big Fella is two days late for water, and the feeding inserted here is 19
-// days out.
-func TestPlantSheet_OpensOnTheCareThePlantIsNearestToNeeding(t *testing.T) {
+// Big Fella is two days late for water. The feeding inserted here is due in
+// 19 days.
+func TestPlantSheet_OpensOnTheCareDueSoonest(t *testing.T) {
 	f := rosewoodPlant(t)
 	f.exec(t, "INSERT INTO care_schedule (garden_id, plant_id, care_type_id, interval_count, interval_unit, set_at) VALUES ($1, $2, $3, 3, 'week', $4)",
 		rosewoodID, bigFellaID, feedID, day(time.September, 1))
@@ -527,7 +527,7 @@ func TestPlantSheet_OpensOnTheCareThePlantIsNearestToNeeding(t *testing.T) {
 	}
 }
 
-func TestPlantSheet_RecordsTheCareAndSendsTheReaderBackToThePlant(t *testing.T) {
+func TestPlantSheet_RecordsTheCareAndRedirectsToThePlant(t *testing.T) {
 	f := rosewoodPlant(t)
 
 	rec := f.post(t, bigFellaID.String(), url.Values{"over": {overPlant}, "care": {"water"}, "when": {whenNow}}, false)
@@ -541,15 +541,15 @@ func TestPlantSheet_RecordsTheCareAndSendsTheReaderBackToThePlant(t *testing.T) 
 	if latest := events[len(events)-1]; latest.CareTypeID != waterID || !latest.Done {
 		t.Errorf("the event recorded is %+v, want a watering that was done", latest)
 	}
-	// The watering resets the cadence, so the row that read two days late now
-	// counts forward from today.
+	// The watering resets the interval, so the row that read two days late
+	// now counts from today.
 	if got := rowFor(t, f.page(t, bigFellaID), "Water"); got.when != "Due in 10 days" || got.late {
 		t.Errorf("the schedule row reads %+v, want the watering ten days out", got)
 	}
 }
 
-// The sheet lists every care type in the garden, so the post behind it has to
-// take a care the plant is not scheduled for.
+// The sheet lists every care type in the garden, so the post has to accept a
+// care the plant is not scheduled for.
 func TestPlantSheet_RecordsACareThePlantIsNotScheduledFor(t *testing.T) {
 	f := rosewoodPlant(t)
 	f.exec(t, "INSERT INTO care_type (id, garden_id, name, slug) VALUES ($1, $2, 'Repot', 'repot')", repotID, rosewoodID)
@@ -567,7 +567,7 @@ func TestPlantSheet_RecordsACareThePlantIsNotScheduledFor(t *testing.T) {
 	}
 }
 
-func TestPlantSheet_ARefusedTimeComesBackOnThePlantsOwnPage(t *testing.T) {
+func TestPlantSheet_ARefusedTimeReRendersThePlantsPage(t *testing.T) {
 	f := rosewoodPlant(t)
 
 	rec := f.post(t, bigFellaID.String(), url.Values{"over": {overPlant}, "care": {"water"}, "when": {whenOther}, "at": {"2026-09-04T09:00"}}, false)
@@ -587,8 +587,8 @@ func TestPlantSheet_ARefusedTimeComesBackOnThePlantsOwnPage(t *testing.T) {
 }
 
 // A plant Rosewood does not have is 404 whether it exists in another garden or
-// nowhere at all. The sheet over it answers the same.
-func TestPlant_APlantTheGardenDoesNotHaveIsNotFound(t *testing.T) {
+// nowhere. The sheet for it is 404 too.
+func TestPlant_APlantTheGardenDoesNotHaveIs404(t *testing.T) {
 	f := rosewoodPlant(t)
 	stranger := uuid.MustParse("00000000-0000-7000-8000-0000000009ff")
 

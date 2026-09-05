@@ -16,7 +16,7 @@ type Screens = {
   sheet: SheetScreen;
 };
 
-// Every test starts from the seed's garden, whatever the test before it wrote.
+// Every test starts from a fresh seed, whatever the previous test wrote.
 export const test = base.extend<{ garden: void } & Screens>({
   garden: [
     async ({}, use) => {

@@ -1,7 +1,7 @@
 package auth
 
-// Capability is the name of one thing a role may do, as the capability table
-// spells it.
+// Capability is the name of one action a role may take, spelled as the
+// capability table stores it.
 type Capability string
 
 // The capability table holds one row per constant below.
@@ -34,10 +34,10 @@ var allCapabilities = []Capability{
 	GardenEdit, CareTypeManage, MemberInvite, MemberManage, TokenManage,
 }
 
-// Capabilities is the set a membership's role grants. A nil set grants nothing.
+// Capabilities is the set of capabilities a role grants. A nil set grants nothing.
 type Capabilities map[Capability]bool
 
-// NewCapabilities returns the set holding names.
+// NewCapabilities builds a set from capability names.
 func NewCapabilities(names []string) Capabilities {
 	set := make(Capabilities, len(names))
 	for _, name := range names {

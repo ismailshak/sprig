@@ -41,7 +41,7 @@ export class TodayScreen {
     return this.feed().locator('> div');
   }
 
-  // The stylesheet shows the feed's Undo only with scripting off. With
+  // The stylesheet shows the feed's Undo only when JavaScript is off. With
   // JavaScript on this matches nothing.
   feedUndo(): Locator {
     return this.feed().getByRole('button', { name: 'Undo' });

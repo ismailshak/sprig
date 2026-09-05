@@ -3,14 +3,14 @@ import { signIn } from '../harness/signin';
 import { expect, test } from '../harness/test';
 
 // Big Fella is watered every ten days and was last watered twelve days ago, so
-// the seed fixes what the row says before and after a change to the interval.
-// Doris is scheduled for watering alone.
+// the seed fixes what the row says before and after the interval changes. Doris
+// has only a watering schedule.
 
 test.beforeEach(async ({ page }) => {
   await signIn(page, people.ellie.handle);
 });
 
-test('a schedule row opens as an editor where it is read', async ({ plant }) => {
+test('clicking a schedule row opens the editor in place', async ({ plant }) => {
   await plant.open(seeded.bigFella);
 
   await plant.editSchedule('Water');
@@ -20,20 +20,20 @@ test('a schedule row opens as an editor where it is read', async ({ plant }) => 
   await expect(plant.scheduleRow('Water')).toContainText('Counted from the last time it was done');
 });
 
-test('a changed interval moves the due date on the row it was changed on', async ({ plant }) => {
+test('changing the interval updates the due date on the row', async ({ plant }) => {
   await plant.open(seeded.bigFella);
   await plant.editSchedule('Water');
 
   await plant.every('Water').fill('20');
   await plant.saveSchedule('Water');
 
-  // The last watering has not moved, so ten days made twenty pushes the next
-  // one ten days out rather than starting the count again from today.
+  // The last watering date is unchanged, so changing ten days to twenty moves
+  // the due date ten days later rather than restarting the count from today.
   await expect(plant.scheduleRow('Water')).toContainText('Every 20 days');
   await expect(plant.scheduleRow('Water')).toContainText('Due in 8 days');
 });
 
-test('an editor left by Cancel leaves the schedule as it was', async ({ plant }) => {
+test('Cancel leaves the schedule unchanged', async ({ plant }) => {
   await plant.open(seeded.bigFella);
   await plant.editSchedule('Water');
   await plant.every('Water').fill('20');
@@ -44,14 +44,14 @@ test('an editor left by Cancel leaves the schedule as it was', async ({ plant })
   await expect(plant.shape('Water')).toHaveCount(0);
 });
 
-test('a care type the plant is not on is listed as not scheduled', async ({ plant }) => {
+test('a care type with no schedule is listed as Not scheduled', async ({ plant }) => {
   await plant.open(seeded.doris);
 
   await expect(plant.scheduleRow('Feed')).toContainText('Not scheduled');
   await expect(plant.scheduleRow('Repot')).toContainText('Not scheduled');
 });
 
-test('a care type the plant is not on acquires a schedule from its own row', async ({ plant }) => {
+test('a care type with no schedule can be given one from its row', async ({ plant }) => {
   await plant.open(seeded.doris);
 
   await plant.editSchedule('Feed');
@@ -63,7 +63,7 @@ test('a care type the plant is not on acquires a schedule from its own row', asy
   await expect(plant.scheduleRow('Feed')).not.toContainText('Not scheduled');
 });
 
-test('a removed schedule leaves the care type in the not scheduled list', async ({ plant }) => {
+test('a removed schedule leaves the care type listed as Not scheduled', async ({ plant }) => {
   await plant.open(seeded.bigFella);
 
   await plant.editSchedule('Water');
@@ -73,7 +73,7 @@ test('a removed schedule leaves the care type in the not scheduled list', async 
   await expect(plant.scheduleRow('Water')).not.toContainText('Every 10 days');
 });
 
-test('a removal that is not confirmed leaves the schedule where it is', async ({ plant }) => {
+test('Keep it after Remove leaves the schedule unchanged', async ({ plant }) => {
   await plant.open(seeded.bigFella);
   await plant.editSchedule('Water');
 
@@ -85,7 +85,7 @@ test('a removal that is not confirmed leaves the schedule where it is', async ({
   await expect(plant.scheduleRow('Water')).toContainText('Every 10 days');
 });
 
-test('the events a removed schedule produced stay on the plant', async ({ plant }) => {
+test("removing a schedule keeps its past events on the plant's page", async ({ plant }) => {
   await plant.open(seeded.bigFella);
   const recorded = await plant.recentLines().count();
 
@@ -95,10 +95,10 @@ test('the events a removed schedule produced stay on the plant', async ({ plant 
   await expect(plant.recentLines()).toHaveCount(recorded);
 });
 
-// Picking a shape redraws the row with the fields that shape needs, which only
-// happens as it is picked where a script is running. A browser without one is
-// redrawn by the post, which the handler tests cover.
-test('a one-off replaces the interval with a date @js', async ({ plant }) => {
+// Changing the When select re-renders the row with the fields that option
+// needs. That only happens on change with JavaScript. Without it the post
+// re-renders the row, and the handler tests cover that.
+test('choosing a one-off replaces the interval fields with a date @js', async ({ plant }) => {
   await plant.open(seeded.doris);
   await plant.editSchedule('Repot');
 
@@ -109,7 +109,7 @@ test('a one-off replaces the interval with a date @js', async ({ plant }) => {
   await expect(plant.scheduleRow('Repot')).toContainText('One date, and then nothing');
 });
 
-test('a one-off given a month is due for the whole of it @js', async ({ plant }) => {
+test('a one-off with a month and no day is due for the whole month @js', async ({ plant }) => {
   await plant.open(seeded.doris);
   await plant.editSchedule('Repot');
   await plant.shape('Repot').selectOption('once');

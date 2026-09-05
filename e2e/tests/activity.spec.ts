@@ -2,17 +2,17 @@ import { people, plants as seeded } from '../harness/garden';
 import { signIn } from '../harness/signin';
 import { expect, test } from '../harness/test';
 
-// Which plants are on the newest page moves with the day the suite runs because
-// the seed derives its history from the schedules.
+// Which plants appear on the first page depends on the day the suite runs,
+// because the seed derives its history from the schedules.
 
-// A day marker reads as the day, a dot, and how many events it holds.
+// A day marker is the day, a dot, and the number of events that day.
 const dayMarker = /^\s*(Today|Yesterday|\w+day|\d{1,2} \w+( \d{4})?)\s*·\s*\d+\s*$/;
 
 test.beforeEach(async ({ page }) => {
   await signIn(page, people.ellie.handle);
 });
 
-test('the activity tab opens the log', async ({ page }) => {
+test('the Activity tab opens the activity page', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('link', { name: 'Activity' }).click();
 
@@ -20,13 +20,13 @@ test('the activity tab opens the log', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Activity' })).toBeVisible();
 });
 
-test('the log opens on the day of its newest event', async ({ activity }) => {
+test('the activity page starts with the day of the newest event', async ({ activity }) => {
   await activity.open();
 
   await expect(activity.items().first()).toHaveText(dayMarker);
 });
 
-test('an event says which plant it was, who did it and when', async ({ activity }) => {
+test('an event shows the plant, who did it and when', async ({ activity }) => {
   await activity.open();
 
   await expect(activity.items().nth(1)).toHaveText(
@@ -41,8 +41,8 @@ test('a plant links to its own activity, and the log links back to the plant', a
 
   await expect(page).toHaveURL(`/activity?plant=${seeded.bigFella.id}`);
   await expect(page.getByRole('heading', { name: 'Activity' })).toBeVisible();
-  // Filtered to one plant a row is headed by the care rather than by the
-  // plant's name, which would be the same on every row.
+  // On a log filtered to one plant, a row is headed by the care, since the
+  // plant's name would be the same on every row.
   await expect(activity.items().first()).toHaveText(/^\s*(Watered|Fed|Repotted|Misted|Pruned|Skipped)\s+\w+\s*·/);
 
   await activity.backTo(seeded.bigFella).click();

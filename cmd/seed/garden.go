@@ -8,11 +8,10 @@ import (
 	engine "github.com/ismailshak/sprig/internal/schedule"
 )
 
-// The tables the seed writes identifiers into. A seeded identifier is written
-// rather than generated, so that two runs produce the same rows and a test can
-// name one. The shape stays a well-formed version 7 UUID, with the timestamp
-// replaced by a table number and a counter that sorts in the order it was
-// written.
+// Table numbers for seedID. Seeded ids are fixed rather than generated, so two
+// runs produce the same rows and a test can refer to one by id. Each id is a
+// well-formed version 7 UUID whose timestamp bits hold the table number and a
+// counter, so ids sort in the order they were written.
 const (
 	tableGarden = iota + 1
 	tableUser
@@ -37,12 +36,12 @@ type person struct {
 	name     string
 	handle   string
 	timezone string
-	// Days before the reference the account was created.
+	// daysOld is how many days before the reference date the account was created.
 	daysOld int
 }
 
-// Robin is on a different timezone from the other two, so a query or a digest
-// that applied one zone to everybody has somewhere to be wrong.
+// Robin is in a different timezone from the other two, so a query or digest
+// that applied one zone to everybody would give a wrong answer for Robin.
 var (
 	ellie = person{id: seedID(tableUser, 1), name: "Ellie", handle: "ellie", timezone: "Europe/London", daysOld: 731}
 	sam   = person{id: seedID(tableUser, 2), name: "Sam", handle: "sam", timezone: "Europe/London", daysOld: 700}
@@ -53,16 +52,16 @@ type membership struct {
 	id     uuid.UUID
 	person *person
 	role   string
-	// Nobody invited the person who set the garden up.
+	// invitedBy is nil for the person who created the garden.
 	invitedBy *person
 	daysOld   int
-	// Days after the reference the arrangement runs out. Zero is the ordinary
-	// permanent membership.
+	// expiresInDays is how many days after the reference date the membership
+	// ends. Zero means it is permanent.
 	expiresInDays int
 
-	// Off is the zero value, so nothing prompts for permission until a person
-	// turns a kind on. The handler that creates a membership holds the same
-	// default, and the seed does not read it from there.
+	// Both notification kinds default to off, so nothing asks for browser
+	// permission until a person turns one on. The handler that creates a
+	// membership uses the same default.
 	digest   bool
 	activity bool
 }
@@ -71,14 +70,14 @@ type careType struct {
 	id   uuid.UUID
 	name string
 	slug string
-	// Set on a type that was tried and turned off. A type with events against it
-	// can only be archived, which takes it out of the scheduler and leaves its
-	// history readable.
+	// archivedDaysAgo is set on a care type that was tried and turned off. A
+	// type with events cannot be deleted, only archived, which removes it from
+	// scheduling and keeps its history readable.
 	archivedDaysAgo int
 }
 
-// A schedule is one of the three shapes the schema allows, told apart here the
-// same way the schema tells them apart: by which fields are set.
+// schedule is one of the three shapes the schema allows, distinguished the same
+// way the schema distinguishes them, by which fields are set:
 //
 //	cadence   an interval and no anchor      every ten days, counted from the last one
 //	anchored  an interval and an anchor      every year, on the first of May
@@ -87,34 +86,36 @@ type schedule struct {
 	id   uuid.UUID
 	slug string
 
-	// A cadence and an anchored schedule repeat, and a one-off leaves these zero.
+	// count and unit are the interval. A one-off leaves both zero.
 	count int
 	unit  string
 
-	// Days from the reference at which a cadence next falls due, and what the
-	// history is worked back from. Negative is overdue.
+	// dueIn is how many days after the reference date a cadence next falls
+	// due. The event history is worked backwards from it. Negative means
+	// overdue.
 	dueIn int
 
-	// Inclusive, and it wraps: March to September is 3 and 9, and November to
-	// February would be 11 and 2. Zero is a schedule that runs all year.
+	// seasonStart and seasonEnd are inclusive months and may wrap the year:
+	// March to September is 3 and 9, November to February is 11 and 2. Zero
+	// means the schedule runs all year.
 	seasonStart, seasonEnd int
 
-	// Where an anchored series starts, placed relative to the reference year so
-	// the fixture keeps its position in the calendar whenever the seed runs. A
-	// zero day is the month precision the schema allows, because writing
-	// "sometime in March" as the first would invent an accuracy nobody gave.
+	// The anchor date of an anchored or one-off schedule. anchorYear is
+	// relative to the reference year, so the fixture keeps its place in the
+	// calendar whichever year the seed runs. A zero anchorDay means month
+	// precision, because storing "sometime in March" as the 1st would invent
+	// a precision nobody gave.
 	anchorMonth time.Month
 	anchorDay   int
 	anchorYear  int
 
-	// Days before the reference at which the schedule was set. Zero places it a
-	// day after the plant arrived. A one-off sets a value, because care
-	// performed after set_at completes it.
+	// setDaysAgo is how many days before the reference date the schedule was
+	// set. Zero means the day after the plant was created. A one-off sets it
+	// explicitly, because care performed after set_at completes the one-off.
 	setDaysAgo int
 }
 
-// An event no cadence produced, because the care it records repeats on no
-// schedule.
+// extraEvent is a care event with no schedule behind it.
 type extraEvent struct {
 	slug    string
 	daysAgo int
@@ -137,16 +138,16 @@ type plant struct {
 	pot        string
 	notes      string
 
-	// Set on a plant that is no longer in the garden. A dead plant's history is
-	// the record of what happened to it, so a plant is archived and never
-	// deleted.
+	// archivedDaysAgo is set on a plant no longer in the garden. Plants are
+	// archived rather than deleted, so their history stays readable.
 	archivedDaysAgo int
 
 	schedules   []schedule
 	extraEvents []extraEvent
 }
 
-// The interface leads with whichever of the three names is present first.
+// displayName is the first of nickname, common name and botanical name that is
+// set, matching store.Plant.DisplayName.
 func (p *plant) displayName() string {
 	switch {
 	case p.nickname != "":
@@ -163,8 +164,8 @@ type garden struct {
 	name    string
 	daysOld int
 
-	// The owner first. The log attributes an event to one of the first two, so a
-	// garden's history is not entirely its owner's.
+	// The owner comes first. history attributes events to the first two
+	// members, so a garden's history is not all the owner's.
 	members   []membership
 	careTypes []careType
 	plants    []plant
@@ -172,13 +173,13 @@ type garden struct {
 	tokens    []apiToken
 }
 
-// home is the garden the prototype draws, carrying its plants, rooms, names,
-// people, grades and schedules.
+// home is the garden the prototype shows, with its plants, rooms, names,
+// people and schedules.
 //
-// A plant's schedules are the whole of its state. The history behind them is
-// derived rather than written out here, because the app computes a next
-// occurrence as the last event plus the interval, and a log written by hand
-// would let Activity show a watering the roster's due dates disagreed with.
+// Only the schedules are written here. The event history is derived from them
+// by history, because the app computes the next occurrence as the last event
+// plus the interval, and a hand-written log could show a watering on Activity
+// that disagreed with the due dates on the plant list.
 func home() garden {
 	return garden{
 		id:      seedID(tableGarden, 1),
@@ -192,15 +193,15 @@ func home() garden {
 			{id: seedID(tableCareType, 1), name: "Water", slug: "water"},
 			{id: seedID(tableCareType, 2), name: "Feed", slug: "feed"},
 			{id: seedID(tableCareType, 3), name: "Repot", slug: "repot"},
-			// Tried, turned off, and still carrying the events that make it
-			// impossible to delete.
+			// Tried and turned off. It still has events, so it cannot be
+			// deleted, only archived.
 			{id: seedID(tableCareType, 4), name: "Mist", slug: "mist", archivedDaysAgo: 10},
 		},
 		plants: append(livingPlants(), archivedPlants()...),
 		invites: []invite{
 			{id: seedID(tableInvite, 1), token: sitterInviteToken, role: "sitter", createdBy: &ellie, daysOld: 2, expiresInDays: 5},
 		},
-		// Both tokens live the full ninety days auth.MaxTokenLifetime allows.
+		// Both tokens have the full 90-day lifetime auth.MaxTokenLifetime allows.
 		tokens: []apiToken{
 			{id: seedID(tableAPIToken, 1), name: "The kitchen display", token: kitchenDisplayToken, prefix: "sprg_7c1f", createdBy: &ellie, daysOld: 40, usedDaysAgo: 0, expiresInDays: 50},
 			{id: seedID(tableAPIToken, 2), name: "The spare display", token: spareDisplayToken, prefix: "sprg_2ea8", createdBy: &ellie, daysOld: 96, usedDaysAgo: 74, expiresInDays: -6},
@@ -208,10 +209,11 @@ func home() garden {
 	}
 }
 
-// The interval a schedule is written with is the one a person would have
-// entered rather than the number of days it comes to, because the schedule
-// editor shows the count and the unit back. Three weeks and twenty-one days are
-// the same length, and "every 21 days" is not what somebody chose.
+// livingPlants returns the plants in the Home garden that are not archived.
+// Each interval is written as a person would have entered it, not as a number
+// of days, because the schedule editor shows the count and unit back. Three
+// weeks and 21 days are the same length, but "every 21 days" is not what
+// somebody chose.
 func livingPlants() []plant {
 	return []plant{
 		{
@@ -232,16 +234,14 @@ func livingPlants() []plant {
 			schedules: []schedule{
 				{id: seedID(tableCareSchedule, 1), slug: "water", count: 10, unit: engine.UnitDay, dueIn: -2},
 				{id: seedID(tableCareSchedule, 2), slug: "feed", count: 3, unit: engine.UnitWeek, dueIn: 14, seasonStart: 3, seasonEnd: 9},
-				// Nobody knows how often this plant wants repotting. The last
-				// one was recent and the next is a job for the spring after
-				// next, which is why an interval is not required. The schedule
-				// was set the day after that repot, so the repot leaves it
-				// standing.
+				// A one-off with no interval: nobody knows how often this plant
+				// wants repotting, and the next is planned for the spring after
+				// next. The schedule was set the day after the last repot, so
+				// that repot does not complete it.
 				{id: seedID(tableCareSchedule, 3), slug: "repot", anchorMonth: time.March, anchorYear: 2, setDaysAgo: 2},
 			},
-			// The repot that was done rather than the one pencilled in. A care
-			// type whose only schedule is a one-off still has history behind it,
-			// and Activity has to show it.
+			// The repot that was actually done. A care type whose only schedule
+			// is a one-off still has history, and Activity has to show it.
 			extraEvents: []extraEvent{{slug: "repot", daysAgo: 3}},
 		},
 		{
@@ -291,9 +291,8 @@ func livingPlants() []plant {
 				{id: seedID(tableCareSchedule, 8), slug: "water", count: 4, unit: engine.UnitDay, dueIn: 0},
 				{id: seedID(tableCareSchedule, 9), slug: "feed", count: 3, unit: engine.UnitWeek, dueIn: 11, seasonStart: 3, seasonEnd: 9},
 			},
-			// The misting somebody tried for a month and gave up on. The type
-			// was archived afterwards, so these are events with no schedule
-			// above them.
+			// Misting was tried for a month and given up. The care type was
+			// archived afterwards, so these events have no schedule.
 			extraEvents: repeatedEvent("mist", 12, 5, 8),
 		},
 		{
@@ -318,7 +317,7 @@ func livingPlants() []plant {
 			},
 		},
 		{
-			// No nickname, so the common name leads the interface.
+			// No nickname, so the common name is the display name.
 			id:            seedID(tablePlant, 8),
 			commonName:    "Golden pothos",
 			botanicalName: "Epipremnum aureum",
@@ -353,14 +352,14 @@ func livingPlants() []plant {
 			schedules: []schedule{
 				{id: seedID(tableCareSchedule, 16), slug: "water", count: 1, unit: engine.UnitMonth, dueIn: 2},
 				// Anchored to the calendar rather than to the last feeding. A
-				// cactus is fed once, in May, and feeding it late in June should
-				// not drag next year to June.
+				// cactus is fed once a year in May, and feeding it late in June
+				// should not move next year's feed to June.
 				{id: seedID(tableCareSchedule, 17), slug: "feed", count: 1, unit: engine.UnitYear, anchorMonth: time.May, anchorDay: 1},
 			},
 		},
 		{
-			// Only a botanical name, which leads the interface and is set in
-			// italic wherever it does.
+			// Only a botanical name. It becomes the display name and is shown
+			// in italics.
 			id:            seedID(tablePlant, 11),
 			botanicalName: "Opuntia microdasys",
 			location:      "Windowsill",
@@ -369,8 +368,8 @@ func livingPlants() []plant {
 			},
 		},
 		{
-			// A nickname and nothing else. Every other field is optional, and a
-			// plant missing all of them still has to render as a page.
+			// A nickname and nothing else. Every other field is optional, and
+			// a plant with none of them still has to render as a page.
 			id:       seedID(tablePlant, 12),
 			nickname: "Sprout",
 			schedules: []schedule{
@@ -380,10 +379,10 @@ func livingPlants() []plant {
 	}
 }
 
-// The three plants the roster counts as archived. They carry no schedules and
-// no history, because an archived plant is here to be a row every list leaves
-// out, and care invented for a plant the prototype never described is fixture
-// nobody can check.
+// archivedPlants returns the three archived plants in the Home garden. They
+// have no schedules and no history. Their job is to be rows every list must
+// leave out, and care invented for plants the prototype never described would
+// be fixture nobody can check.
 func archivedPlants() []plant {
 	return []plant{
 		{
@@ -412,11 +411,10 @@ func archivedPlants() []plant {
 	}
 }
 
-// upstairs is the second garden, and it is not there to be looked at. With one
-// garden in the database a query that lost its WHERE returns the right answer
-// anyway, so this is the cheap way to make that failure show up in a test. Sam
-// holds a membership in both, so an account with more than one is the ordinary
-// case rather than one nothing exercises.
+// upstairs is the second garden. It exists so that a query missing its garden
+// WHERE clause returns visibly wrong rows, which it would not with one garden
+// in the database. Sam is a member of both gardens, so an account with more
+// than one membership is exercised by default.
 func upstairs() garden {
 	return garden{
 		id:      seedID(tableGarden, 2),
@@ -424,8 +422,7 @@ func upstairs() garden {
 		daysOld: 365,
 		members: []membership{
 			{id: seedID(tableMembership, 3), person: &robin, role: "owner", daysOld: 365},
-			// The sitter who came for a fortnight, which is what a nullable
-			// expires_at is for.
+			// A sitter for a fortnight, exercising the nullable expires_at.
 			{id: seedID(tableMembership, 4), person: &sam, role: "sitter", invitedBy: &robin, daysOld: 60, expiresInDays: 12},
 		},
 		careTypes: []careType{

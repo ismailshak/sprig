@@ -7,17 +7,17 @@ import (
 	"strings"
 )
 
-// Info describes the running binary. go build embeds this automatically
-// inside a git working tree.
+// Info is the running binary's version, revision and toolchain. go build
+// embeds these automatically when building inside a git working tree.
 type Info struct {
 	Version   string
 	Revision  string
 	GoVersion string
 }
 
-// Read extracts Info from the binary's embedded build metadata. Revision is
-// empty when the binary wasn't built with VCS stamping, such as under `go run`
-// or `go test`.
+// Read returns Info from the binary's embedded build metadata. Revision is
+// empty when the binary was built without VCS stamping, as under go run or go
+// test.
 func Read() Info {
 	info := Info{Version: "(unknown)"}
 
@@ -26,9 +26,9 @@ func Read() Info {
 		return info
 	}
 
-	// The image's build context is an allowlist, so git in the build stage sees
-	// the tracked files it left out as deletions and calls every build dirty.
-	// The suffix would be on every released version and says nothing.
+	// The image's build context is an allowlist, so git in the build stage
+	// sees the tracked files left out as deletions and marks every build
+	// dirty. The suffix would be on every release and means nothing.
 	info.Version = strings.TrimSuffix(buildInfo.Main.Version, "+dirty")
 	info.GoVersion = buildInfo.GoVersion
 

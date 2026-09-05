@@ -1,17 +1,17 @@
 // Command seed writes the prototype's garden into the development database.
 //
-// Every timestamp it writes is an offset from one reference instant, the start
-// of today in the garden's own timezone, computed once per run. Two runs on the
-// same day write identical rows, and the plants fall into the same three
-// sections of Today whatever day the seed runs on, which the e2e suite needs
-// because it seeds from empty every time.
+// Every timestamp is an offset from one reference instant, midnight today in
+// the garden's timezone, computed once per run. Two runs on the same day write
+// identical rows, and the plants land in the same three sections of Today
+// whatever day the seed runs. The e2e suite depends on that, because it seeds
+// from empty before every test.
 //
-// A seasonal schedule moves with the calendar instead. Feeding is shut between
-// October and February, so a garden seeded in winter has fewer plants due than
+// Seasonal schedules follow the real calendar. Feeding is out of season from
+// October to February, so a garden seeded in winter has fewer plants due than
 // the prototype shows.
 //
-// Running it again replaces what it wrote last time and leaves everything else
-// in the database alone.
+// Running the seed again replaces what it wrote last time and leaves everything
+// else in the database alone.
 package main
 
 import (
@@ -25,8 +25,8 @@ import (
 	"time"
 	"uuid"
 
-	// The reference instant is a local midnight, so zone lookup has to work on
-	// a machine carrying no zoneinfo database.
+	// Embeds the timezone database, because the reference instant is a local
+	// midnight and the machine may have no zoneinfo.
 	_ "time/tzdata"
 
 	"github.com/jackc/pgx/v5"
@@ -64,8 +64,8 @@ func run(ctx context.Context, getenv func(string) string, stdout io.Writer) erro
 	defer pool.Close()
 
 	logger := slog.New(slog.NewTextHandler(stdout, &slog.HandlerOptions{Level: slog.LevelWarn}))
-	// The seed runs against a database the server may never have opened, so it
-	// migrates the schema itself.
+	// The database may never have been opened by the server, so the seed
+	// migrates it.
 	if err := store.Migrate(ctx, pool, db.Migrations, logger); err != nil {
 		return err
 	}
@@ -80,8 +80,8 @@ func run(ctx context.Context, getenv func(string) string, stdout io.Writer) erro
 	return err
 }
 
-// checkIsLocal refuses a database that is neither on this machine nor in the
-// compose stack, because the seed deletes rows before it writes them.
+// checkIsLocal returns an error for a database that is not on this machine or
+// in the compose stack, because the seed deletes rows before writing.
 func checkIsLocal(databaseURL string) error {
 	parsed, err := url.Parse(databaseURL)
 	if err != nil {
@@ -95,9 +95,9 @@ func checkIsLocal(databaseURL string) error {
 	}
 }
 
-// reference is the instant every seeded timestamp is an offset from. The
-// owner's zone stands for the garden's, because a household reads its due dates
-// in one zone.
+// reference returns midnight today in the owner's timezone, the instant every
+// seeded timestamp is an offset from. The owner's timezone is used as the
+// garden's, since a household reads its due dates in one zone.
 func reference(now time.Time) (time.Time, error) {
 	loc, err := time.LoadLocation(ellie.timezone)
 	if err != nil {
@@ -131,8 +131,8 @@ func seed(ctx context.Context, pool *pgxpool.Pool, ref time.Time) (counts, error
 	}
 
 	written := counts{gardens: len(gardens)}
-	// One counter across both gardens, so an event's identifier is the position
-	// it was written at and two runs agree on it.
+	// One counter across both gardens, so each event's id is derived from its
+	// write position and two runs produce the same ids.
 	events := 0
 	for i := range gardens {
 		n, err := writeGarden(ctx, tx, &gardens[i], ref, &events)
@@ -153,9 +153,9 @@ func seed(ctx context.Context, pool *pgxpool.Pool, ref time.Time) (counts, error
 	return written, nil
 }
 
-// clear removes what a previous run wrote. care_event references care_type with
-// ON DELETE RESTRICT, so cascading from the garden would depend on which of the
-// two foreign keys on an event fired first.
+// clear deletes what a previous run wrote, table by table. care_event
+// references care_type with ON DELETE RESTRICT, so a cascade from garden would
+// fail or succeed depending on which of an event's foreign keys fired first.
 func clear(ctx context.Context, tx pgx.Tx, gardens []garden, people []*person) error {
 	gardenIDs := make([]uuid.UUID, 0, len(gardens))
 	for i := range gardens {
@@ -171,8 +171,8 @@ func clear(ctx context.Context, tx pgx.Tx, gardens []garden, people []*person) e
 		"DELETE FROM care_schedule WHERE garden_id = ANY($1)",
 		"DELETE FROM plant WHERE garden_id = ANY($1)",
 		"DELETE FROM care_type WHERE garden_id = ANY($1)",
-		// The cascade from garden takes the memberships, sessions, preferences,
-		// invites and tokens, and the one from app_user takes the passkeys,
+		// The cascade from garden deletes memberships, sessions, preferences,
+		// invites and tokens. The cascade from app_user below deletes passkeys,
 		// recovery codes and subscriptions.
 		"DELETE FROM garden WHERE id = ANY($1)",
 	}
@@ -198,8 +198,9 @@ func writePeople(ctx context.Context, tx pgx.Tx, people []*person, ref time.Time
 	return nil
 }
 
-// writeGarden returns how many plants the garden holds. events is the running
-// count of care events, which is where the next event identifier comes from.
+// writeGarden writes the garden and everything in it and returns the number of
+// plants. events is the running count of care events across gardens, used to
+// derive the next event id.
 func writeGarden(ctx context.Context, tx pgx.Tx, g *garden, ref time.Time, events *int) (int, error) {
 	created := ref.AddDate(0, 0, -g.daysOld)
 
@@ -240,8 +241,8 @@ func writeGarden(ctx context.Context, tx pgx.Tx, g *garden, ref time.Time, event
 		return 0, err
 	}
 
-	// A garden's care types are shown in the order it created them, so they are
-	// written a second apart rather than all on the same instant.
+	// Care types are listed in creation order, so each is written a second
+	// after the last rather than all at the same instant.
 	careTypeID := map[string]uuid.UUID{}
 	for i, ct := range g.careTypes {
 		careTypeID[ct.slug] = ct.id
@@ -313,8 +314,8 @@ func writePlant(ctx context.Context, tx pgx.Tx, g *garden, p *plant, careTypeID 
 			anchorPrecision = &precision
 		}
 
-		// A day after the plant arrived puts set_at before every event the
-		// seed writes.
+		// set_at defaults to the day after the plant was created, which is
+		// before every event the seed writes.
 		setAt := created.AddDate(0, 0, 1)
 		if s.setDaysAgo != 0 {
 			setAt = ref.AddDate(0, 0, -s.setDaysAgo)
@@ -360,8 +361,8 @@ func writeEvents(ctx context.Context, tx pgx.Tx, g *garden, log []logEntry, care
 	return nil
 }
 
-// A column holding NULL and one holding the empty string are different answers,
-// and the fixture only means the first.
+// text converts an empty string to NULL. The fixtures use "" to mean unset,
+// never to mean an empty value.
 func text(s string) *string {
 	if s == "" {
 		return nil

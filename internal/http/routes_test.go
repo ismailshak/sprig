@@ -16,18 +16,18 @@ import (
 	"github.com/ismailshak/sprig/internal/store"
 )
 
-// access is the second statement of what a route requires, kept apart from
-// routes in mux.go so that adding a route means deciding its access twice and
-// the test compares the two.
+// access is a second statement of what a route requires, kept separate from
+// routes in mux.go so adding a route means deciding its access twice, and the
+// test compares the two.
 type access struct {
 	public     bool
 	capability auth.Capability
-	// anyMember marks a mutating route that carries no capability on purpose.
+	// anyMember marks a mutating route that has no capability on purpose.
 	anyMember bool
-	// path is a request path the pattern matches, carrying Rosewood's ids.
+	// path is a request path the pattern matches, using Rosewood's ids.
 	path string
 	// foreign is path with one of Fairview's ids in place of Rosewood's. The
-	// route answers 404 to it, because the store has no read that finds another
+	// route returns 404 for it, because no store query can find another
 	// garden's row from a session on Rosewood.
 	foreign string
 }
@@ -53,8 +53,8 @@ var routeAccess = map[string]access{
 		path:       editPlantPath(rosewoodPlantID),
 		foreign:    editPlantPath(fairviewPlantID),
 	},
-	// This route shares the plant the edit routes use because asking the
-	// question changes nothing.
+	// This route uses the same plant as the edit routes, since rendering the
+	// confirmation changes nothing.
 	"GET /plants/{plant}/archive": {
 		capability: auth.PlantArchive,
 		path:       archivePlantPath(rosewoodPlantID),
@@ -65,8 +65,8 @@ var routeAccess = map[string]access{
 		path:       archivePlantPath(rosewoodArchivedID),
 		foreign:    archivePlantPath(fairviewArchivedID),
 	},
-	// The editor's own two routes take the watering schedule, because opening
-	// the editor and saving it leave the row where they found it.
+	// The editor's two routes use the watering schedule, since opening the
+	// editor and saving leave the schedule in place.
 	"GET /plants/{plant}/schedule/{care}": {
 		capability: auth.ScheduleEdit,
 		path:       schedulePath(rosewoodPlantID, "water"),
@@ -77,9 +77,8 @@ var routeAccess = map[string]access{
 		path:       schedulePath(rosewoodPlantID, "water"),
 		foreign:    schedulePath(fairviewPlantID, "water"),
 	},
-	// Removing takes the feeding schedule, because the request it answers
-	// leaves that schedule gone and the two routes above would then have
-	// nothing to open.
+	// Removing uses the feeding schedule, since the request deletes it and the
+	// two routes above would then have nothing to open.
 	"GET /plants/{plant}/schedule/{care}/remove": {
 		capability: auth.ScheduleEdit,
 		path:       removeSchedulePath(rosewoodPlantID, "feed"),
@@ -110,13 +109,12 @@ var (
 	fairviewPlantID = uuid.MustParse("00000000-0000-7000-8000-000000000212")
 	rosewoodEventID = uuid.MustParse("00000000-0000-7000-8000-000000000221")
 	fairviewEventID = uuid.MustParse("00000000-0000-7000-8000-000000000222")
-	// The two routes that delete an event take one each because the first to
-	// run would leave the second a 404.
+	// The two routes that delete an event use one each, since the first to run
+	// would leave the second a 404.
 	rosewoodUndoEventID = uuid.MustParse("00000000-0000-7000-8000-000000000223")
 	fairviewUndoEventID = uuid.MustParse("00000000-0000-7000-8000-000000000224")
-	// The archive route takes a plant each because the request it answers
-	// leaves that plant archived, and the edit routes would then find nothing
-	// to edit.
+	// The archive route uses its own plant, since the request archives it and
+	// the edit routes would then find nothing to edit.
 	rosewoodArchivedID = uuid.MustParse("00000000-0000-7000-8000-000000000231")
 	fairviewArchivedID = uuid.MustParse("00000000-0000-7000-8000-000000000232")
 )
@@ -124,8 +122,9 @@ var (
 // routeQueries seeds two gardens, each with a plant scheduled for both its care
 // types and two care events, because a route naming an object needs one in
 // sitterPrincipal's garden and one outside it. The events are the principal's
-// own because the route that deletes one answers a caller who may delete only
-// their own. The second care type is the schedule the remove route takes away.
+// own because the delete route is tested with a caller who may delete only
+// their own. The second care type's schedule is the one the remove route
+// deletes.
 func routeQueries(t *testing.T) *store.Queries {
 	t.Helper()
 
@@ -163,7 +162,7 @@ func routeQueries(t *testing.T) *store.Queries {
 	return store.New(tx)
 }
 
-func TestRoutes_EveryRouteHasOneEntryAndTheTwoAgree(t *testing.T) {
+func TestRoutes_EveryRouteHasOneRouteAccessEntryThatMatchesIt(t *testing.T) {
 	table := routes(testLogger, testSessions(), nil, testTemplates(), testAssets())
 	patterns := map[string]bool{}
 	for _, r := range table {
@@ -187,7 +186,7 @@ func TestRoutes_EveryRouteHasOneEntryAndTheTwoAgree(t *testing.T) {
 		if mutates(method) && a.capability == "" && !a.anyMember && !a.public {
 			t.Errorf("%s mutates and names no capability; give it one, or say anyMember if every member may call it", r.pattern)
 		}
-		// {$} pins the pattern to the path itself and names nothing.
+		// {$} anchors the pattern to the exact path and is not a wildcard.
 		if strings.Contains(strings.TrimSuffix(path, "{$}"), "{") {
 			if a.path == "" {
 				t.Errorf("%s has a wildcard and routeAccess gives no path to request it by", r.pattern)
@@ -210,7 +209,7 @@ func TestRoutes_EveryRouteHasOneEntryAndTheTwoAgree(t *testing.T) {
 	}
 }
 
-func TestRoutes_EachRouteRefusesWhatItsEntrySays(t *testing.T) {
+func TestRoutes_EachRouteRefusesStrangersAndRolesAsItsEntrySays(t *testing.T) {
 	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
 	every := everyCapability()
 	queries := routeQueries(t)
@@ -218,7 +217,7 @@ func TestRoutes_EachRouteRefusesWhatItsEntrySays(t *testing.T) {
 	for _, r := range routes(testLogger, testSessions(), nil, testTemplates(), testAssets()) {
 		a, ok := routeAccess[r.pattern]
 		if !ok {
-			// The agreement test names the missing entry.
+			// The test above reports the missing entry.
 			continue
 		}
 		method, path := splitPattern(r.pattern)
@@ -287,9 +286,9 @@ func mutates(method string) bool {
 	return method != http.MethodGet && method != http.MethodHead
 }
 
-// everyCapability is drawn from the route table rather than the capability
-// rows because this test runs without a database. A route's gate is proven by
-// removing one capability from a principal holding all the others.
+// everyCapability is collected from the route table rather than the database,
+// because this test runs without one. A route's check is proven by removing one
+// capability from a principal holding all the others.
 func everyCapability() auth.Capabilities {
 	set := auth.Capabilities{}
 	for _, r := range routes(testLogger, testSessions(), nil, testTemplates(), testAssets()) {

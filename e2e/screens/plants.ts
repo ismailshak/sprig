@@ -8,8 +8,8 @@ export class PlantsScreen {
     await this.page.goto('/plants');
   }
 
-  // A room is a region whose accessible name is its heading because the id the
-  // server puts on the section is a position rather than the room.
+  // A room section is found by its heading, because the id the server gives the
+  // section is positional, not the room name.
   room(name: string): Locator {
     return this.page.getByRole('region', { name });
   }

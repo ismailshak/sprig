@@ -32,8 +32,8 @@ type CreateCareScheduleParams struct {
 	SeasonEndMonth   *int16
 }
 
-// set_at defaults to now, so a plant added today with a ten-day cadence is due
-// in ten days rather than overdue on arrival.
+// set_at defaults to now(), so a plant added today with a ten-day cadence is
+// due in ten days rather than overdue immediately.
 func (q *Queries) CreateCareSchedule(ctx context.Context, arg CreateCareScheduleParams) (CareSchedule, error) {
 	row := q.db.QueryRow(ctx, createCareSchedule,
 		arg.GardenID,
@@ -75,8 +75,8 @@ type DeleteCareScheduleParams struct {
 	CareTypeID uuid.UUID
 }
 
-// The events the schedule produced stay where they are, so the care type drops
-// back to being one the plant is not on rather than losing its history.
+// The schedule's events are kept. The plant simply has no schedule for the
+// care type any more, and its history stays readable.
 func (q *Queries) DeleteCareSchedule(ctx context.Context, arg DeleteCareScheduleParams) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, deleteCareSchedule, arg.GardenID, arg.PlantID, arg.CareTypeID)
 	var id uuid.UUID
@@ -101,9 +101,9 @@ type ListCareSchedulesRow struct {
 	CareType     CareType
 }
 
-// Every caller hands these rows to the due-date engine in Go, so no due date
-// is computed here. The ordering is the roster's, and id ends it so two
-// plants agreeing on room and name keep their order.
+// Due dates are computed in Go from these rows, never here. The order matches
+// the plant list: by room, then display name, with id last so two plants with
+// the same room and name keep a stable order.
 func (q *Queries) ListCareSchedules(ctx context.Context, gardenID uuid.UUID) ([]ListCareSchedulesRow, error) {
 	rows, err := q.db.Query(ctx, listCareSchedules, gardenID)
 	if err != nil {
@@ -187,10 +187,9 @@ type UpsertCareScheduleParams struct {
 	SeasonEndMonth   *int16
 }
 
-// A plant is scheduled for a care type at most once, so saving the editor
-// either writes the row or replaces it. set_at moves with the save, which is
-// what leaves a schedule newly set with no history due a full interval from
-// now and what brings a spent one-off back.
+// A plant has at most one schedule per care type, so saving the editor inserts
+// or replaces. set_at is reset on every save, so a schedule with no history is
+// due a full interval from now, and a completed one-off becomes due again.
 func (q *Queries) UpsertCareSchedule(ctx context.Context, arg UpsertCareScheduleParams) (CareSchedule, error) {
 	row := q.db.QueryRow(ctx, upsertCareSchedule,
 		arg.GardenID,

@@ -21,7 +21,7 @@ const layoutTemplate = "layout.html"
 // page, so a fragment and a page load execute the same definition.
 //
 // The layout declares the blocks "main" and "title" and every page redefines
-// them, so two pages cannot share a set. The last one parsed would answer for
+// them, so two pages cannot share a set. The last one parsed would be used for
 // both.
 type Templates struct {
 	logger *slog.Logger
@@ -84,9 +84,9 @@ func parsePages(fsys fs.FS, funcs template.FuncMap) (map[string]*template.Templa
 	return pages, nil
 }
 
-// view is what a route renders, the page for a navigation and the fragment
-// for an htmx request. A view with no fragment answers both with the page. A
-// status of zero is 200.
+// view is what a route renders: the page for a navigation and the fragment
+// for an htmx request. With no fragment, both get the page. A status of zero
+// means 200.
 type view struct {
 	page     string
 	fragment string
@@ -140,8 +140,8 @@ func (t *Templates) fail(w http.ResponseWriter, r *http.Request, err error) {
 	serverError(t.logger, w, r, "render", err)
 }
 
-// htmx sets HX-Request on every request it sends, and a navigation carries no
-// such header.
+// isHTMX reports whether htmx sent the request. htmx sets HX-Request on every
+// request, and a page navigation has no such header.
 func isHTMX(r *http.Request) bool {
 	return r.Header.Get("HX-Request") == "true"
 }

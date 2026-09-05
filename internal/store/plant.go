@@ -1,8 +1,8 @@
 package store
 
-// DisplayName is the first of the plant's nickname, common name and botanical
-// name that is set. The plant form holds the rule that one of the three is set,
-// so an empty result is a row written some other way.
+// DisplayName returns the first of nickname, common name and botanical name
+// that is set. The plant form requires one of the three, so an empty result
+// means the row was written some other way.
 func (p Plant) DisplayName() string {
 	for _, name := range []*string{p.Nickname, p.CommonName, p.BotanicalName} {
 		if isSet(name) {
@@ -12,8 +12,8 @@ func (p Plant) DisplayName() string {
 	return ""
 }
 
-// BotanicalOnly reports whether the botanical name is the only one the plant
-// has, which is when it leads the interface and is set in italic.
+// BotanicalOnly reports whether the botanical name is the only name the plant
+// has. Pages show a botanical name in italics when it is the heading.
 func (p Plant) BotanicalOnly() bool {
 	return !isSet(p.Nickname) && !isSet(p.CommonName) && isSet(p.BotanicalName)
 }
@@ -22,9 +22,10 @@ func isSet(name *string) bool {
 	return name != nil && *name != ""
 }
 
-// OtherName is whichever of the plant's names DisplayName did not use, the
-// common one ahead of the botanical one, and empty on a plant down to a single
-// name.
+// OtherName returns the plant's second name, the one DisplayName did not use.
+// The common name is preferred over the botanical name. It is empty for a
+// plant with only one name. botanical is true when the returned name is the
+// botanical one.
 func (p Plant) OtherName() (name string, botanical bool) {
 	display := p.DisplayName()
 	if isSet(p.CommonName) && *p.CommonName != display {

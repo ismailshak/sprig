@@ -1,8 +1,8 @@
 name: CI
-# A push to main or a version tag runs the same four jobs and then publishes, so
-# an image ships only from a commit they passed. The push run also writes the
-# caches a pull request reads, because a cache written on a pull request branch is
-# readable from that branch alone.
+# A push to main or a version tag runs the same four jobs as a pull request and
+# then publishes, so an image ships only from a commit that passed them. The
+# push run also writes the caches pull requests read, because a cache written
+# on a pull request branch is only readable from that branch.
 on:
   pull_request:
   push:
@@ -106,7 +106,7 @@ jobs:
       - name: Check out code
         uses: actions/checkout@v7
         with:
-          # go build takes the version off the tag, which a shallow clone leaves behind.
+          # go build reads the version from the tag, which a shallow clone does not fetch.
           fetch-depth: 0
       - name: Work out the tags
         id: meta

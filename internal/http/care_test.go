@@ -77,7 +77,8 @@ func (f *todayFixture) undo(t *testing.T, plantID, eventID uuid.UUID, slug strin
 	return rec
 }
 
-// settled is Today asked for by a row whose undo window has closed.
+// settled requests Today the way a row whose grace window has closed does:
+// an htmx GET targeting that row.
 func (f *todayFixture) settled(t *testing.T, target string) *httptest.ResponseRecorder {
 	t.Helper()
 
@@ -151,7 +152,7 @@ func checked(fieldset string) string {
 	return ""
 }
 
-func TestSheet_OpensFilledInForTheRowItWasOpenedFrom(t *testing.T) {
+func TestSheet_OpensOnTheCareOfTheRowItWasOpenedFrom(t *testing.T) {
 	f := rosewood(t)
 	rec := f.sheet(t, sheetPath(nigelID, "water"), false)
 	if rec.Code != http.StatusOK {
@@ -208,7 +209,7 @@ func TestSheet_OpensFilledInForTheRowItWasOpenedFrom(t *testing.T) {
 	}
 }
 
-func TestSheet_APlantWithOneCareIsNotAskedWhat(t *testing.T) {
+func TestSheet_APlantWithOneCareHasNoCareTypeChoice(t *testing.T) {
 	f := rosewood(t)
 	dialog := dialogElement.FindString(f.sheet(t, sheetPath(dorisID, "water"), false).Body.String())
 	if _, ok := fields(dialog)["What"]; ok {
@@ -219,7 +220,7 @@ func TestSheet_APlantWithOneCareIsNotAskedWhat(t *testing.T) {
 	}
 }
 
-func TestSheet_SwitchingWhatKeepsTheDraftAndNamesThatCaresUsual(t *testing.T) {
+func TestSheet_SwitchingCareTypeKeepsTheDraftAndShowsThatTypesUsualInterval(t *testing.T) {
 	f := rosewood(t)
 	query := url.Values{
 		"row": {"water"}, "care": {"feed"}, "outcome": {"skipped"}, "again": {"3"}, "note": {"Soil still damp"},
@@ -250,7 +251,7 @@ func TestSheet_SwitchingWhatKeepsTheDraftAndNamesThatCaresUsual(t *testing.T) {
 	}
 }
 
-func TestSheet_ACareWithNoUsualOffersAWeek(t *testing.T) {
+func TestSheet_ACareWithNoIntervalInDaysOffersSevenDays(t *testing.T) {
 	f := rosewood(t)
 	f.exec(t, "UPDATE care_schedule SET interval_count = 1, interval_unit = 'month' WHERE plant_id = $1", spikeID)
 	dialog := dialogElement.FindString(f.sheet(t, sheetPath(spikeID, "water"), false).Body.String())
@@ -265,7 +266,7 @@ func TestSheet_ACareWithNoUsualOffersAWeek(t *testing.T) {
 	}
 }
 
-func TestSheet_ASwapGetsTheSheetAloneAndANavigationThePage(t *testing.T) {
+func TestSheet_AnHTMXRequestGetsTheSheetAloneAndANavigationTheWholePage(t *testing.T) {
 	f := rosewood(t)
 
 	swap := f.sheet(t, sheetPath(dorisID, "water"), true).Body.String()
@@ -278,7 +279,7 @@ func TestSheet_ASwapGetsTheSheetAloneAndANavigationThePage(t *testing.T) {
 	}
 }
 
-func TestSheet_ASwapThatNamesTheFormGetsTheFormAlone(t *testing.T) {
+func TestSheet_AnHTMXRequestTargetingTheFormGetsTheFormAlone(t *testing.T) {
 	f := rosewood(t)
 
 	swap := f.sheetTargeting(t, sheetPath(nigelID, "water"), sheetFormID).Body.String()
@@ -290,7 +291,7 @@ func TestSheet_ASwapThatNamesTheFormGetsTheFormAlone(t *testing.T) {
 	}
 }
 
-func TestSheet_RefusesWhatItCouldNotHaveSent(t *testing.T) {
+func TestSheet_AValueTheSheetDoesNotOfferIs400(t *testing.T) {
 	f := rosewood(t)
 	cases := []struct {
 		name string
@@ -311,7 +312,7 @@ func TestSheet_RefusesWhatItCouldNotHaveSent(t *testing.T) {
 		})
 	}
 
-	t.Run("an archived plant is no plant", func(t *testing.T) {
+	t.Run("an archived plant is 404", func(t *testing.T) {
 		f.exec(t, "UPDATE plant SET archived_at = now() WHERE id = $1", dorisID)
 		if rec := f.sheet(t, sheetPath(dorisID, "water"), false); rec.Code != http.StatusNotFound {
 			t.Errorf("status = %d, want %d", rec.Code, http.StatusNotFound)
@@ -319,7 +320,7 @@ func TestSheet_RefusesWhatItCouldNotHaveSent(t *testing.T) {
 	})
 }
 
-func TestLog_JustNowRecordsBothInstantsAsNow(t *testing.T) {
+func TestLog_JustNowRecordsPerformedAtAndRecordedAtAsNow(t *testing.T) {
 	f := rosewood(t)
 	rec := f.post(t, dorisID.String(), url.Values{"row": {"water"}, "care": {"water"}, "when": {"now"}}, true)
 	if rec.Code != http.StatusOK {
@@ -350,9 +351,9 @@ func TestLog_JustNowRecordsBothInstantsAsNow(t *testing.T) {
 	}
 }
 
-// The stored instant never equals a clock with nanoseconds on it because
-// Postgres keeps microseconds.
-func TestLog_JustNowIsSaidWhateverTheClocksPrecision(t *testing.T) {
+// The stored time never equals a Go time with nanoseconds, because Postgres
+// keeps microseconds.
+func TestLog_JustNowIsShownWhateverThePrecisionOfTheStoredTime(t *testing.T) {
 	f := rosewood(t)
 	f.handler.now = func() time.Time { return thursday.Add(123456789 * time.Nanosecond) }
 	rec := f.post(t, dorisID.String(), url.Values{"row": {"water"}, "care": {"water"}, "when": {"now"}}, true)
@@ -361,7 +362,7 @@ func TestLog_JustNowIsSaidWhateverTheClocksPrecision(t *testing.T) {
 	}
 }
 
-func TestLog_AFormPostIsSentBackToToday(t *testing.T) {
+func TestLog_AFormPostRedirectsToToday(t *testing.T) {
 	f := rosewood(t)
 	rec := f.post(t, dorisID.String(), url.Values{"care": {"water"}}, false)
 	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/" {
@@ -370,7 +371,7 @@ func TestLog_AFormPostIsSentBackToToday(t *testing.T) {
 	f.latest(t, dorisID)
 }
 
-func TestLog_ABackdatedTimeIsReadInTheReadersDay(t *testing.T) {
+func TestLog_ABackdatedTimeIsReadInTheReadersTimezone(t *testing.T) {
 	cases := []struct {
 		name     string
 		timezone string
@@ -419,7 +420,7 @@ func TestLog_ABackdatedTimeIsReadInTheReadersDay(t *testing.T) {
 	}
 }
 
-func TestLog_ATimeThatHasNotHappenedIsRefused(t *testing.T) {
+func TestLog_ATimeInTheFutureIsRefused(t *testing.T) {
 	cases := []struct {
 		name string
 		form url.Values
@@ -457,7 +458,7 @@ func TestLog_ATimeThatHasNotHappenedIsRefused(t *testing.T) {
 		})
 	}
 
-	t.Run("a form post gets the page back", func(t *testing.T) {
+	t.Run("a form post gets the whole page", func(t *testing.T) {
 		f := rosewood(t)
 		rec := f.post(t, dorisID.String(), url.Values{"care": {"water"}, "when": {"today"}, "time": {"23:00"}}, false)
 		if rec.Code != http.StatusUnprocessableEntity || !strings.HasPrefix(rec.Body.String(), "<!doctype html>") {
@@ -466,8 +467,8 @@ func TestLog_ATimeThatHasNotHappenedIsRefused(t *testing.T) {
 	})
 }
 
-func TestLog_ASkipStoresTheDaysToAskAgainIn(t *testing.T) {
-	t.Run("a short re-check", func(t *testing.T) {
+func TestLog_ASkipStoresTheOverrideIntervalInDays(t *testing.T) {
+	t.Run("a one to three day interval", func(t *testing.T) {
 		f := rosewood(t)
 		rec := f.post(t, nigelID.String(), url.Values{"row": {"water"}, "care": {"water"}, "outcome": {"skipped"}, "again": {"2"}, "note": {"  Soil still damp "}}, true)
 		if rec.Code != http.StatusOK {
@@ -493,7 +494,7 @@ func TestLog_ASkipStoresTheDaysToAskAgainIn(t *testing.T) {
 		}
 	})
 
-	t.Run("the usual of the care selected, not the row's", func(t *testing.T) {
+	t.Run("the usual interval of the selected care, not the row's", func(t *testing.T) {
 		f := rosewood(t)
 		f.post(t, nigelID.String(), url.Values{"row": {"water"}, "care": {"feed"}, "outcome": {"skipped"}, "again": {"21"}}, true)
 		if e := f.latest(t, nigelID); *e.OverrideIntervalDays != 21 || e.CareTypeID != feedID {
@@ -504,7 +505,7 @@ func TestLog_ASkipStoresTheDaysToAskAgainIn(t *testing.T) {
 	// One fixture per test because a second transaction inserting the same
 	// garden waits on the first to finish.
 	for _, again := range []string{"0", "-1", "5", "4.5", "usual"} {
-		t.Run("a duration the chips did not offer, "+again, func(t *testing.T) {
+		t.Run("an interval the chips did not offer, "+again, func(t *testing.T) {
 			f := rosewood(t)
 			rec := f.post(t, nigelID.String(), url.Values{"care": {"water"}, "outcome": {"skipped"}, "again": {again}}, true)
 			if rec.Code != http.StatusBadRequest {
@@ -516,7 +517,7 @@ func TestLog_ASkipStoresTheDaysToAskAgainIn(t *testing.T) {
 		})
 	}
 
-	t.Run("a done care carries no override however the chips were left", func(t *testing.T) {
+	t.Run("a done care stores no override whatever chip was selected", func(t *testing.T) {
 		f := rosewood(t)
 		f.post(t, nigelID.String(), url.Values{"care": {"water"}, "outcome": {"done"}, "again": {"3"}}, true)
 		if e := f.latest(t, nigelID); !e.Done || e.OverrideIntervalDays != nil {
@@ -525,7 +526,7 @@ func TestLog_ASkipStoresTheDaysToAskAgainIn(t *testing.T) {
 	})
 }
 
-func TestLog_ASheetOpenedOverOneRowCanLogAnotherCare(t *testing.T) {
+func TestLog_ASheetOpenedFromOneRowCanLogADifferentCare(t *testing.T) {
 	f := rosewood(t)
 	rec := f.post(t, nigelID.String(), url.Values{"row": {"water"}, "care": {"feed"}}, true)
 	if rec.Code != http.StatusOK {
@@ -543,7 +544,7 @@ func TestLog_ASheetOpenedOverOneRowCanLogAnotherCare(t *testing.T) {
 	}
 }
 
-func TestLog_RefusesWhatTheSheetCouldNotHaveSent(t *testing.T) {
+func TestLog_AValueTheSheetDoesNotOfferIs400(t *testing.T) {
 	cases := []struct {
 		name  string
 		plant string
@@ -571,7 +572,7 @@ func TestLog_RefusesWhatTheSheetCouldNotHaveSent(t *testing.T) {
 	}
 }
 
-func TestToday_ARowOffersItsTwoTargets(t *testing.T) {
+func TestToday_ARowHasASheetLinkAndACareButtonThatSwapsTheRow(t *testing.T) {
 	page := rosewood(t).show(t)
 	byID, _ := sections(page)
 	row := rowElement.FindString(byID["due-today"][strings.Index(byID["due-today"], `id="`+rowID(dorisID)+`"`)-20:])
@@ -592,7 +593,7 @@ func TestToday_ARowOffersItsTwoTargets(t *testing.T) {
 	}
 }
 
-func TestLog_TheLoggedRowCarriesItsUndoWindow(t *testing.T) {
+func TestLog_TheLoggedRowHasAnUndoButtonAndAGraceTimer(t *testing.T) {
 	f := rosewood(t)
 	rec := f.post(t, dorisID.String(), url.Values{"row": {"water"}, "care": {"water"}}, true)
 	if rec.Code != http.StatusOK {
@@ -618,7 +619,7 @@ func TestLog_TheLoggedRowCarriesItsUndoWindow(t *testing.T) {
 	}
 }
 
-func TestUndo_TakesTheEventBackOutAndTheRowWithIt(t *testing.T) {
+func TestUndo_DeletesTheEventAndReturnsTheRowUnlogged(t *testing.T) {
 	f := rosewood(t)
 	f.post(t, dorisID.String(), url.Values{"row": {"water"}, "care": {"water"}}, true)
 	event := f.latest(t, dorisID)
@@ -640,9 +641,9 @@ func TestUndo_TakesTheEventBackOutAndTheRowWithIt(t *testing.T) {
 	}
 }
 
-// The row on the page has to come back even where the sheet logged a care it
-// was not opened for.
-func TestUndo_GivesBackTheRowTheSheetWasOpenedFrom(t *testing.T) {
+// The row on the page is returned even when the sheet logged a different care
+// from the one it was opened for.
+func TestUndo_ReturnsTheRowNamedInTheQuery(t *testing.T) {
 	f := rosewood(t)
 	f.post(t, nigelID.String(), url.Values{"row": {"water"}, "care": {"feed"}}, true)
 	event := f.latest(t, nigelID)
@@ -656,7 +657,7 @@ func TestUndo_GivesBackTheRowTheSheetWasOpenedFrom(t *testing.T) {
 	}
 }
 
-func TestUndo_RefusesAnEventItCannotFind(t *testing.T) {
+func TestUndo_AnEventTheReaderMayNotDeleteIs404(t *testing.T) {
 	f := rosewood(t)
 	f.post(t, dorisID.String(), url.Values{"row": {"water"}, "care": {"water"}}, true)
 	event := f.latest(t, dorisID)
@@ -690,7 +691,7 @@ func TestUndo_RefusesAnEventItCannotFind(t *testing.T) {
 	}
 }
 
-func TestUndo_AnOwnerMayTakeBackWhatAnybodyLogged(t *testing.T) {
+func TestUndo_AnOwnerMayDeleteAnybodysEvent(t *testing.T) {
 	f := rosewood(t)
 	f.post(t, dorisID.String(), url.Values{"row": {"water"}, "care": {"water"}}, true)
 	event := f.latest(t, dorisID)
@@ -707,7 +708,7 @@ func TestUndo_AnOwnerMayTakeBackWhatAnybodyLogged(t *testing.T) {
 	}
 }
 
-func TestUndo_AFormPostIsSentBackToToday(t *testing.T) {
+func TestUndo_AFormPostRedirectsToToday(t *testing.T) {
 	f := rosewood(t)
 	f.post(t, dorisID.String(), url.Values{"row": {"water"}, "care": {"water"}}, true)
 	event := f.latest(t, dorisID)
@@ -721,8 +722,8 @@ func TestUndo_AFormPostIsSentBackToToday(t *testing.T) {
 	}
 }
 
-func TestWindow_TheHeadComesBackWithTheRowItLeavesAbove(t *testing.T) {
-	t.Run("a day with work left counts what is left", func(t *testing.T) {
+func TestWindow_TheHeadingIsReturnedWithTheRow(t *testing.T) {
+	t.Run("a day with cares outstanding shows the count", func(t *testing.T) {
 		f := rosewood(t)
 		head := headElement.FindString(f.post(t, dorisID.String(), url.Values{"care": {"water"}}, true).Body.String())
 		if got := text(head); got != "2 plants need you today, 1 of them overdue." {
@@ -733,7 +734,7 @@ func TestWindow_TheHeadComesBackWithTheRowItLeavesAbove(t *testing.T) {
 		}
 	})
 
-	t.Run("a day whose rows are all logged says so rather than emptying", func(t *testing.T) {
+	t.Run("a day whose rows are all logged shows the done heading rather than the empty state", func(t *testing.T) {
 		f := rosewood(t)
 		f.water(t, bigFellaID)
 		f.water(t, nigelID)
@@ -746,7 +747,7 @@ func TestWindow_TheHeadComesBackWithTheRowItLeavesAbove(t *testing.T) {
 		}
 	})
 
-	t.Run("an undo puts back what it took away", func(t *testing.T) {
+	t.Run("an undo restores the count", func(t *testing.T) {
 		f := rosewood(t)
 		f.post(t, dorisID.String(), url.Values{"row": {"water"}, "care": {"water"}}, true)
 		event := f.latest(t, dorisID)
@@ -757,8 +758,8 @@ func TestWindow_TheHeadComesBackWithTheRowItLeavesAbove(t *testing.T) {
 	})
 }
 
-func TestWindow_AClosedWindowAsksTodayForWhatTheRowsLeavingChanged(t *testing.T) {
-	t.Run("the head alone while another row is still inside its window", func(t *testing.T) {
+func TestWindow_AClosedGraceWindowRefreshesWhatTheRowsRemovalChanged(t *testing.T) {
+	t.Run("only the heading while another row is still inside its window", func(t *testing.T) {
 		f := rosewood(t)
 		f.water(t, bigFellaID)
 		f.water(t, dorisID)
@@ -773,7 +774,7 @@ func TestWindow_AClosedWindowAsksTodayForWhatTheRowsLeavingChanged(t *testing.T)
 		}
 	})
 
-	t.Run("the whole feed once no window is open", func(t *testing.T) {
+	t.Run("the whole body once no window is open", func(t *testing.T) {
 		f := rosewood(t)
 		f.water(t, bigFellaID)
 		f.water(t, dorisID)
@@ -787,7 +788,7 @@ func TestWindow_AClosedWindowAsksTodayForWhatTheRowsLeavingChanged(t *testing.T)
 		if !strings.Contains(body, "All done for today") || !strings.Contains(body, "Nothing else is due.") {
 			t.Errorf("the empty screen is not in the feed:\n%s", text(body))
 		}
-		// Watering Nigel puts his row under Coming up rather than off the feed
+		// Watering Nigel moves his row to Coming up rather than off the page,
 		// because his watering is every four days.
 		for _, plant := range []uuid.UUID{bigFellaID, dorisID} {
 			if strings.Contains(body, rowID(plant)) {
@@ -803,9 +804,9 @@ func TestWindow_AClosedWindowAsksTodayForWhatTheRowsLeavingChanged(t *testing.T)
 	})
 }
 
-// A reload is a fresh read because the undo window lives only in the page the
-// swap left behind.
-func TestWindow_ANavigationDrawsNoRowInsideAWindow(t *testing.T) {
+// A page load never shows a row inside its grace window. The window exists
+// only in the page the swap rendered into.
+func TestWindow_APageLoadShowsNoRowInsideAGraceWindow(t *testing.T) {
 	f := rosewood(t)
 	f.post(t, dorisID.String(), url.Values{"care": {"water"}}, true)
 
@@ -820,7 +821,7 @@ func TestWindow_ANavigationDrawsNoRowInsideAWindow(t *testing.T) {
 	}
 }
 
-func TestLog_TheFeedGainsTheCareThatWasJustLogged(t *testing.T) {
+func TestLog_TheFeedShowsTheCareJustLogged(t *testing.T) {
 	f := rosewood(t)
 	f.principal.Capabilities[auth.CareDeleteOwn] = true
 
@@ -837,7 +838,7 @@ func TestLog_TheFeedGainsTheCareThatWasJustLogged(t *testing.T) {
 	}
 }
 
-func TestUndo_TheFeedLosesTheCareThatWasTakenBack(t *testing.T) {
+func TestUndo_TheFeedNoLongerShowsTheDeletedCare(t *testing.T) {
 	f := rosewood(t)
 	f.principal.Capabilities[auth.CareDeleteOwn] = true
 	f.post(t, dorisID.String(), url.Values{"row": {"water"}, "care": {"water"}}, true)

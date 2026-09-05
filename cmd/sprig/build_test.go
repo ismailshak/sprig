@@ -8,9 +8,9 @@ import (
 	"testing"
 )
 
-// The Dockerfile and mise run build pass no tag, so a plain go build is the
-// binary that ships. Reading the artifact is the check that survives whatever
-// the route table does under a tag.
+// The Dockerfile and mise run build pass no build tag, so a plain go build
+// produces the shipped binary. Checking the binary itself catches the route
+// leaking regardless of how the route table is assembled.
 func TestBuild_ProductionBinaryHasNoDevelopmentSignIn(t *testing.T) {
 	const route = "/dev/signin"
 
@@ -19,8 +19,8 @@ func TestBuild_ProductionBinaryHasNoDevelopmentSignIn(t *testing.T) {
 		t.Errorf("the production binary contains %s", route)
 	}
 
-	// The development build is the control, so a renamed route fails here
-	// rather than making the assertion above vacuous.
+	// The development build is the control. If the route is renamed, this
+	// fails instead of the assertion above passing vacuously.
 	development := buildBinary(t, "-tags", "dev")
 	if !bytes.Contains(development, []byte(route)) {
 		t.Fatalf("the development binary does not contain %s, so the route this test looks for is stale", route)

@@ -32,12 +32,12 @@ func TestMembershipEnded(t *testing.T) {
 	}
 }
 
-func TestPrincipal_CanAsksTheSetAndNothingElse(t *testing.T) {
+func TestPrincipal_CanReadsOnlyTheCapabilitySet(t *testing.T) {
 	sitter := Principal{Membership: store.Membership{Role: "owner"}, Capabilities: NewCapabilities([]string{"care.log"})}
 	if !sitter.Can(CareLog) {
 		t.Error("a principal holding care.log cannot log care")
 	}
-	// The row says owner and the set lacks plant.create, and the set wins.
+	// The role is owner but the set lacks plant.create. The set decides.
 	if sitter.Can(PlantCreate) {
 		t.Error("a principal whose set lacks plant.create can create a plant")
 	}

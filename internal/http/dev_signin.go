@@ -35,7 +35,8 @@ func init() {
 	publicRoutes["GET "+signInPath] = true
 }
 
-// The development sign-in renders its own page, so it ignores the tree.
+// devRoutes returns the development sign-in routes. The page is rendered from
+// its own template rather than the template tree.
 func devRoutes(sessions *auth.Sessions, queries *store.Queries, _ *Templates) []route {
 	d := &devSignIn{sessions: sessions, queries: queries, resolver: auth.NewResolver(sessions, queries)}
 	return []route{
@@ -66,9 +67,8 @@ func (d *devSignIn) show(w http.ResponseWriter, r *http.Request) {
 }
 
 // start creates a session for the user whose handle the form names, on their
-// oldest live membership. A user with no live membership gets a 409, because
-// the screen that answers that case belongs to the passkey sign-in and this
-// route does not design it.
+// oldest live membership. A user with no live membership gets a 409, since the
+// screen for that case belongs to the passkey sign-in.
 func (d *devSignIn) start(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	handle := r.FormValue("handle")
@@ -112,7 +112,8 @@ func (d *devSignIn) start(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
-// This page is deleted before it would earn a place in the template tree.
+// devSignInPage is inline rather than in the template tree because it is
+// deleted once passkeys exist.
 var devSignInPage = template.Must(template.New("dev-signin").Parse(`<!doctype html>
 <html lang="en">
 <meta charset="utf-8">

@@ -17,8 +17,8 @@ WHERE garden_id = $1 AND id = $2 AND archived_at IS NULL
 RETURNING id, garden_id, nickname, common_name, botanical_name, location, sun, water_needs, feed_needs, soil, climate, pot, notes, acquired_year, acquired_month, created_at, archived_at
 `
 
-// Archiving twice matches nothing, which is the answer for a plant the garden
-// does not have as well.
+// Archiving an already archived plant matches nothing, the same result as for
+// a plant the garden does not have.
 func (q *Queries) ArchivePlant(ctx context.Context, gardenID uuid.UUID, plantID uuid.UUID) (Plant, error) {
 	row := q.db.QueryRow(ctx, archivePlant, gardenID, plantID)
 	var i Plant
@@ -49,8 +49,8 @@ SELECT count(*) FROM plant
 WHERE garden_id = $1 AND archived_at IS NULL
 `
 
-// Today needs the number rather than the rows, so it can tell a garden with no
-// plants from one with nothing due.
+// The Today page needs only the count, to tell a garden with no plants from one
+// with nothing due.
 func (q *Queries) CountPlants(ctx context.Context, gardenID uuid.UUID) (int64, error) {
 	row := q.db.QueryRow(ctx, countPlants, gardenID)
 	var count int64
@@ -85,8 +85,8 @@ type CreatePlantParams struct {
 	AcquiredMonth *int16
 }
 
-// The three names, the six reference fields and the acquired pair are all
-// nullable here because the form decides which of them are required.
+// Every column except garden_id is nullable. The plant form decides which are
+// required.
 func (q *Queries) CreatePlant(ctx context.Context, arg CreatePlantParams) (Plant, error) {
 	row := q.db.QueryRow(ctx, createPlant,
 		arg.GardenID,
@@ -163,8 +163,8 @@ WHERE garden_id = $1 AND archived_at IS NULL
 ORDER BY location NULLS LAST, coalesce(nickname, common_name, botanical_name), id
 `
 
-// The order is the roster's, which groups by room and puts a plant with no
-// room last. Two plants can agree on room and name, so id ends the ordering.
+// Ordered by room, then display name, with plants that have no room last. id
+// comes last so two plants with the same room and name keep a stable order.
 func (q *Queries) ListPlants(ctx context.Context, gardenID uuid.UUID) ([]Plant, error) {
 	rows, err := q.db.Query(ctx, listPlants, gardenID)
 	if err != nil {
@@ -231,9 +231,8 @@ type UpdatePlantParams struct {
 	PlantID       uuid.UUID
 }
 
-// Every column the form carries is written because a field emptied on the form
-// is emptied on the row. An archived plant matches nothing here because it is
-// not editable.
+// Every form field is written, so a field cleared on the form is cleared on the
+// row. An archived plant matches nothing because it cannot be edited.
 func (q *Queries) UpdatePlant(ctx context.Context, arg UpdatePlantParams) (Plant, error) {
 	row := q.db.QueryRow(ctx, updatePlant,
 		arg.Nickname,

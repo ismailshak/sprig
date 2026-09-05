@@ -21,8 +21,8 @@ const (
 	// immutable is safe to claim.
 	hashedCacheControl = "public, max-age=31536000, immutable"
 
-	// A plain name can serve different bytes later, so it promises an hour and
-	// revalidates against the ETag after that.
+	// A URL without a hash can serve different bytes later, so it is cached for
+	// an hour and revalidated against the ETag after that.
 	plainCacheControl = "public, max-age=3600"
 
 	// Twelve hex characters are six bytes of the hash, which will not collide
@@ -42,10 +42,10 @@ func init() {
 // Assets is web/static, read into memory at startup and served at two URLs
 // per file. No build step writes a manifest, so the hash is computed here.
 //
-// The plain name is served as well, because a stylesheet reaches its
-// neighbours by a relative url() and nothing rewrites CSS. tokens.css asks for
+// The plain name is served too, because stylesheets reference fonts by a
+// relative url() and nothing rewrites CSS. tokens.css requests
 // fonts/fraunces-v38-latin-600.woff2 and gets it whichever URL the stylesheet
-// itself arrived at.
+// was loaded from.
 type Assets struct {
 	// paths maps a name in the tree to its hashed URL, and files maps both of
 	// a file's URLs back to it.
@@ -95,9 +95,9 @@ func insertHash(name, digest string) string {
 	return strings.TrimSuffix(name, ext) + "." + digest[:hashLength] + ext
 }
 
-// Path is the asset function a template calls. It returns an error for a name
-// the tree does not hold, because the other answer is an empty href on a page
-// that arrives with no styles.
+// Path returns the hashed URL of a file in the static tree. Templates call it
+// to write an href. An unknown name is an error rather than an empty string,
+// because an empty href renders a page with no styles and nothing to say why.
 func (a *Assets) Path(name string) (string, error) {
 	url, ok := a.paths[name]
 	if !ok {
@@ -106,9 +106,9 @@ func (a *Assets) Path(name string) (string, error) {
 	return url, nil
 }
 
-// handler answers the two URLs each file has and nothing else. A misspelt
-// name misses the map and gets a 404 rather than a directory listing or a file
-// from somewhere else in the tree.
+// handler serves the two URLs each file has and nothing else. A name that is
+// not in the map is a 404, so there is no directory listing and no path that
+// reaches a file outside the tree.
 func (a *Assets) handler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		f, ok := a.files[r.URL.Path]
@@ -121,10 +121,10 @@ func (a *Assets) handler() http.Handler {
 			cacheControl = hashedCacheControl
 		}
 		w.Header().Set("Cache-Control", cacheControl)
-		// ServeContent answers a 304 from this header.
+		// ServeContent compares this with If-None-Match and returns 304 on a match.
 		w.Header().Set("ETag", f.etag)
-		// The zero time leaves out Last-Modified, and the ETag already carries
-		// the revalidation.
+		// A zero modification time leaves Last-Modified off the response.
+		// Revalidation here goes through the ETag.
 		http.ServeContent(w, r, f.name, time.Time{}, bytes.NewReader(f.content))
 	})
 }

@@ -23,11 +23,11 @@ export default defineConfig({
   use: {
     baseURL,
     trace: 'retain-on-failure',
-    // reducedMotion turns off the sheet's entrance animation, which the
-    // stylesheet drops under prefers-reduced-motion. The animation otherwise
-    // moves the buttons for 260ms and Playwright retries the unstable check on
-    // a page timer that never fires with JavaScript off. It sits in
-    // contextOptions because the runner takes no test option of that name.
+    // reducedMotion turns off the sheet's entrance animation, because the
+    // stylesheet disables it under prefers-reduced-motion. Otherwise the
+    // animation moves the buttons for 260ms and, with JavaScript off,
+    // Playwright retries against a page timer that never fires. It goes in
+    // contextOptions because there is no test option of that name.
     contextOptions: { reducedMotion: 'reduce' },
   },
   // @js marks behaviour that exists only with JavaScript on, and @nojs

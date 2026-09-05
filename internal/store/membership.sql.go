@@ -25,8 +25,8 @@ type GetMembershipWithUserAndGardenRow struct {
 	Garden     Garden
 }
 
-// Runs on every authenticated request, so the join reads all three rows in one
-// round trip.
+// Runs on every authenticated request, so one join fetches all three rows in a
+// single round trip.
 func (q *Queries) GetMembershipWithUserAndGarden(ctx context.Context, gardenID uuid.UUID, userID uuid.UUID) (GetMembershipWithUserAndGardenRow, error) {
 	row := q.db.QueryRow(ctx, getMembershipWithUserAndGarden, gardenID, userID)
 	var i GetMembershipWithUserAndGardenRow
@@ -57,8 +57,9 @@ WHERE user_id = $1
 ORDER BY created_at, id
 `
 
-// A new session starts on the oldest row. The read takes no garden_id because
-// it is how a garden is found, and every row it returns belongs to @user_id.
+// A new session starts on the oldest membership. This takes no garden_id
+// because it is how the garden is found. Every row returned belongs to
+// @user_id.
 func (q *Queries) ListMembershipsForUser(ctx context.Context, userID uuid.UUID) ([]Membership, error) {
 	rows, err := q.db.Query(ctx, listMembershipsForUser, userID)
 	if err != nil {

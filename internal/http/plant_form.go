@@ -15,8 +15,8 @@ import (
 	"github.com/ismailshak/sprig/internal/store"
 )
 
-// plantFormPageName is the one page behind both routes, because adding a plant
-// and editing one are the same fields in the same order.
+// plantFormPageName is the template for both the add and edit routes, since
+// they are the same fields in the same order.
 const plantFormPageName = "plant-form"
 
 const newPlantPath = plantsPath + "/new"
@@ -29,17 +29,18 @@ func archivePlantPath(plantID uuid.UUID) string {
 	return plantPath(plantID) + "/archive"
 }
 
-// waterSlug names the row the add form opens filled in, because every plant in
-// the garden is watered and no other care is the common case.
+// waterSlug is the schedule row the add form opens with, since every plant is
+// watered and no other care is that common.
 const waterSlug = "water"
 
-// acquiredSpan is how far back the acquired year reaches, this year included.
+// acquiredSpan is how many years the acquired-year select offers, this year
+// included.
 const acquiredSpan = 21
 
-// referenceFields is the Reference fields in the order a plant's page reads
-// them, each named by the input it is typed into. Water and Feed repeat the
-// care types above them because a schedule says how often and a reference field
-// says what the care means for this plant.
+// referenceFields is the Reference fields in the order the plant's page shows
+// them, each with its input name. Water and Feed repeat the care types above
+// because a schedule says how often and a reference field says what this plant
+// needs.
 var referenceFields = [...]struct{ name, label string }{
 	{"sun", "Sun"},
 	{"water", "Water"},
@@ -49,7 +50,7 @@ var referenceFields = [...]struct{ name, label string }{
 	{"pot", "Pot"},
 }
 
-// plantFields is the plant half of the form as far as it has been filled in.
+// plantFields is the plant half of the form's values.
 type plantFields struct {
 	nickname  string
 	common    string
@@ -62,19 +63,19 @@ type plantFields struct {
 	climate   string
 	pot       string
 	notes     string
-	// month and year are zero where the select is on its first option.
+	// month and year are zero when the select is on its placeholder option.
 	month int
 	year  int
 }
 
-// facts pairs each of referenceFields with the field holding it because reading
-// the form and drawing it walk one order.
+// facts returns a pointer to the field for each of referenceFields, in the same
+// order, so reading and rendering the form iterate one list.
 func (f *plantFields) facts() [len(referenceFields)]*string {
 	return [...]*string{&f.sun, &f.water, &f.feed, &f.soil, &f.climate, &f.pot}
 }
 
-// readPlantFields reads the plant half from a query or a form body. It returns
-// false for an acquired month or year no option offers.
+// readPlantFields reads the plant half from a query string or a form body. It
+// returns false for an acquired month or year that is not one of the options.
 func readPlantFields(values url.Values, now time.Time) (plantFields, bool) {
 	f := plantFields{
 		nickname:  strings.TrimSpace(values.Get("nickname")),
@@ -87,8 +88,8 @@ func readPlantFields(values url.Values, now time.Time) (plantFields, bool) {
 		*held = strings.TrimSpace(values.Get(referenceFields[i].name))
 	}
 
-	// An absent select is left at zero because a schedule row's own request
-	// carries that row and none of these fields.
+	// A missing select stays at zero, because a schedule row's own request
+	// sends that row and none of these fields.
 	var ok bool
 	if values.Has("acquired-month") {
 		if f.month, ok = numberIn(values.Get("acquired-month"), append([]int{0}, months()...)); !ok {
@@ -124,15 +125,14 @@ func plantFieldsOf(plant store.Plant) plantFields {
 	return f
 }
 
-// refuse is what the form says back when a post cannot be taken from it: a
-// sentence under the three names and one under Acquired. Both are empty for a
-// post the form takes.
+// refuse returns the form's error messages: one under the three names and one
+// under Acquired. Both are empty when the post is valid.
 func (f plantFields) refuse() (name, acquired string) {
 	if f.nickname == "" && f.common == "" && f.botanical == "" {
 		name = "Give it at least one name. Any of the three will do."
 	}
-	// A month with no year is asked about rather than dropped because the
-	// plant's page shows nothing for one.
+	// A month with no year is an error rather than dropped silently, since the
+	// plant's page shows nothing for it.
 	if f.month != 0 && f.year == 0 {
 		acquired = "Give the year as well as the month."
 	}
@@ -158,8 +158,8 @@ func (f plantFields) create(gardenID uuid.UUID) store.CreatePlantParams {
 	}
 }
 
-// update writes the same columns as create, because a field emptied on the
-// form is a field emptied on the row.
+// update writes the same columns as create, so a field emptied on the form is
+// emptied on the row.
 func (f plantFields) update(gardenID, plantID uuid.UUID) store.UpdatePlantParams {
 	c := f.create(gardenID)
 	return store.UpdatePlantParams{
@@ -181,8 +181,8 @@ func (f plantFields) update(gardenID, plantID uuid.UUID) store.UpdatePlantParams
 	}
 }
 
-// set is a text field as the column holds it. An empty field is null because an
-// empty string in the column would read as an answer.
+// set converts a text field to its column value. An empty field is null, since
+// an empty string in the column would count as a value.
 func set(s string) *string {
 	if s == "" {
 		return nil
@@ -190,8 +190,8 @@ func set(s string) *string {
 	return &s
 }
 
-// acquiredPart is an acquired month or year as the column holds it, and null
-// on the select's first option.
+// acquiredPart converts an acquired month or year to its column value, null
+// for the placeholder option.
 func acquiredPart(n int) *int16 {
 	if n == 0 {
 		return nil
@@ -199,8 +199,7 @@ func acquiredPart(n int) *int16 {
 	return smallint(n)
 }
 
-// smallint is n as a smallint column holds it, and null for a number no such
-// column can carry.
+// smallint converts n for a smallint column, null if it is out of range.
 func smallint(n int) *int16 {
 	if n < math.MinInt16 || n > math.MaxInt16 {
 		return nil
@@ -217,31 +216,31 @@ func value(s *string) string {
 
 type plantFormPage struct {
 	Title string
-	// Action is where the form posts and where a schedule row re-renders from.
+	// Action is the URL the form posts to and a schedule row re-renders from.
 	Action string
-	// Back is where Cancel leads.
+	// Back is the URL the Cancel link points at.
 	Back   string
 	Submit string
-	// Archive is where the edit form's foot links, and is empty on the add form
-	// and for a reader who may not archive.
+	// Archive is the URL of the Archive link at the bottom of the edit form.
+	// Empty on the add form and for a reader who may not archive.
 	Archive   string
 	Nickname  string
 	Common    string
 	Botanical string
-	// NameError sits under the three names together, because no one of them is
-	// the required one.
+	// NameError is shown under all three name fields, since any one of them
+	// satisfies the requirement.
 	NameError string
 	Location  string
-	// Schedules is empty on the edit form, where changing a schedule happens
-	// on the plant's own page beside the date it moves.
+	// Schedules is empty on the edit form. Schedules are edited on the plant's
+	// page, beside the due date they change.
 	Schedules []scheduleField
 	Facts     []factField
 	Notes     string
 	Months    []option
 	Years     []option
-	// AcquiredError sits under the month and the year together.
+	// AcquiredError is shown under the month and year selects.
 	AcquiredError string
-	// Reference opens the disclosure.
+	// Reference is true when the Reference disclosure starts open.
 	Reference bool
 }
 
@@ -293,7 +292,7 @@ func editPlantPage(principal auth.Principal, f plantFields, plantID uuid.UUID, n
 	return page
 }
 
-// acquiredYears is this year and the twenty before it, newest first.
+// acquiredYears is this year and the 20 before it, newest first.
 func acquiredYears(now time.Time) []int {
 	out := make([]int, 0, acquiredSpan)
 	for i := range acquiredSpan {
@@ -302,8 +301,8 @@ func acquiredYears(now time.Time) []int {
 	return out
 }
 
-// readScheduleRows reads a row for every care type because a re-render draws
-// the rows nobody opened as well as the open ones.
+// readScheduleRows reads a row for every care type, since a re-render shows
+// the closed rows as well as the open ones.
 func readScheduleRows(values url.Values, cares []store.CareType, now time.Time) ([]scheduleDraft, bool) {
 	rows := make([]scheduleDraft, 0, len(cares))
 	for _, care := range cares {
@@ -316,7 +315,7 @@ func readScheduleRows(values url.Values, cares []store.CareType, now time.Time) 
 	return rows, true
 }
 
-// openingRows is the schedule list a form opened for the first time draws.
+// openingRows returns the schedule rows for a freshly opened add form.
 func openingRows(cares []store.CareType, now time.Time) []scheduleDraft {
 	rows := make([]scheduleDraft, 0, len(cares))
 	for _, care := range cares {
@@ -327,8 +326,8 @@ func openingRows(cares []store.CareType, now time.Time) []scheduleDraft {
 	return rows
 }
 
-// swappedRow is the row a re-render started from: the one a button has just
-// closed, or the one whose fields came back with the request.
+// swappedRow returns the row the re-render was triggered from: the one a
+// button just closed, or the one whose fields were sent with the request.
 func swappedRow(rows []scheduleField, values url.Values) (scheduleField, bool) {
 	slug := values.Get("close")
 	if slug == "" {
@@ -342,8 +341,8 @@ func swappedRow(rows []scheduleField, values url.Values) (scheduleField, bool) {
 	return scheduleField{}, false
 }
 
-// newPlant answers GET /plants/new with the form: empty when it is opened, and
-// as far as it has been filled in when a schedule row brings it back.
+// newPlant handles GET /plants/new. The form is empty when first opened, and
+// keeps its values when a schedule row re-renders it.
 func (h *plants) newPlant(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	cares, err := h.queries.ListCareTypes(r.Context(), principal.Garden.ID)
@@ -353,8 +352,8 @@ func (h *plants) newPlant(w http.ResponseWriter, r *http.Request) {
 	}
 	now := h.now().In(locationFor(principal.User))
 
-	// A request carrying no query is the form being opened because a browser
-	// coming back to it sends every field the form drew.
+	// A request with no query string is the form being opened. A re-render
+	// sends every field the form rendered.
 	query := r.URL.Query()
 	if len(query) == 0 {
 		h.templates.render(w, r, view{page: plantFormPageName}, addPlantPage(plantFields{}, openingRows(cares, now), now))
@@ -369,8 +368,8 @@ func (h *plants) newPlant(w http.ResponseWriter, r *http.Request) {
 	}
 	page := addPlantPage(fields, rows, now)
 
-	// A swap started from one row is answered with that row, which is the
-	// element that differs between the two states.
+	// An htmx request from one row gets that row back, since it is the only
+	// element that changes.
 	if isHTMX(r) {
 		row, ok := swappedRow(page.Schedules, query)
 		if !ok {
@@ -384,8 +383,8 @@ func (h *plants) newPlant(w http.ResponseWriter, r *http.Request) {
 	h.templates.render(w, r, view{page: plantFormPageName}, page)
 }
 
-// create answers POST /plants/new by writing the plant and the schedules it
-// arrives with.
+// create handles POST /plants/new. It writes the plant and its schedules in one
+// transaction.
 func (h *plants) create(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	if err := r.ParseForm(); err != nil {
@@ -438,8 +437,8 @@ func (h *plants) create(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, plantPath(plant.ID), http.StatusSeeOther)
 }
 
-// checkSchedules is the open rows as care_schedule holds them, and the
-// sentences the rows that cannot be taken show instead, keyed by care type.
+// checkSchedules converts the open rows to care_schedule params. Invalid rows
+// get an error message instead, keyed by care type slug.
 func checkSchedules(rows []scheduleDraft, gardenID uuid.UUID) (schedules []store.CreateCareScheduleParams, messages map[string]string, refused bool) {
 	messages = map[string]string{}
 	for _, row := range rows {
@@ -457,7 +456,7 @@ func checkSchedules(rows []scheduleDraft, gardenID uuid.UUID) (schedules []store
 	return schedules, messages, refused
 }
 
-// edit answers GET /plants/{plant}/edit with the same form, filled in.
+// edit handles GET /plants/{plant}/edit with the same form, filled in.
 func (h *plants) edit(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	plant, ok := h.editable(w, r, principal)
@@ -468,12 +467,11 @@ func (h *plants) edit(w http.ResponseWriter, r *http.Request) {
 	h.templates.render(w, r, view{page: plantFormPageName}, editPlantPage(principal, plantFieldsOf(plant), plant.ID, now))
 }
 
-// update answers POST /plants/{plant}/edit and sends the reader back to the
-// plant.
+// update handles POST /plants/{plant}/edit and redirects to the plant's page.
 func (h *plants) update(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
-	// The plant resolves before the form is read, because a plant the garden
-	// does not have is a 404 whatever was posted at it.
+	// The plant is resolved before the form is read, because a plant the
+	// garden does not have is a 404 whatever was posted.
 	plant, ok := h.editable(w, r, principal)
 	if !ok {
 		return
@@ -507,9 +505,9 @@ func (h *plants) update(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, plantPath(plant.ID), http.StatusSeeOther)
 }
 
-// confirmArchive answers GET /plants/{plant}/archive with the plant's page,
-// its foot carrying the question. A swap gets the foot alone, because that is
-// the element that differs between the two states.
+// confirmArchive handles GET /plants/{plant}/archive. It renders the plant's
+// page with the archive confirmation at the bottom. An htmx request gets the
+// bottom section alone, since that is the only element that changes.
 func (h *plants) confirmArchive(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	plantID, err := uuid.Parse(r.PathValue("plant"))
@@ -526,8 +524,8 @@ func (h *plants) confirmArchive(w http.ResponseWriter, r *http.Request) {
 		serverError(h.logger, w, r, "load the plant", err)
 		return
 	}
-	// The question is refused for an archived plant because its page draws no
-	// foot to ask it in.
+	// An archived plant has no buttons at the bottom of its page, so there is
+	// nothing to confirm.
 	if detail.plant.ArchivedAt != nil {
 		http.NotFound(w, r)
 		return
@@ -543,8 +541,8 @@ func (h *plants) confirmArchive(w http.ResponseWriter, r *http.Request) {
 	h.templates.render(w, r, view{page: "plant", fragment: fragment}, page)
 }
 
-// archive answers POST /plants/{plant}/archive. A plant is archived rather
-// than deleted, because its history is the record of what happened to it.
+// archive handles POST /plants/{plant}/archive. A plant is archived rather
+// than deleted so its history is kept.
 func (h *plants) archive(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	plantID, err := uuid.Parse(r.PathValue("plant"))
@@ -563,10 +561,10 @@ func (h *plants) archive(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, plantsPath, http.StatusSeeOther)
 }
 
-// editable is the plant the two edit routes act on. It answers the request
-// itself and reports false where there is nothing to edit. An archived plant is
-// as far out of reach as one the garden does not have because the form would
-// otherwise save a plant that has left the Plants list.
+// editable resolves the plant for the two edit routes. It writes the response
+// itself and returns false when there is nothing to edit. An archived plant is
+// a 404 like a plant the garden does not have, since the form would otherwise
+// save a plant that is no longer on the Plants list.
 func (h *plants) editable(w http.ResponseWriter, r *http.Request, principal auth.Principal) (store.Plant, bool) {
 	plantID, err := uuid.Parse(r.PathValue("plant"))
 	if err != nil {

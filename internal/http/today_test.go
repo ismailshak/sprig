@@ -34,8 +34,8 @@ var (
 	spikeID    = uuid.MustParse("00000000-0000-7000-8000-000000000117")
 )
 
-// A Thursday morning in London. The garden below is written against it, so
-// every plant lands in the same section on every run.
+// A Thursday morning in London. The fixture is written against it, so every
+// plant lands in the same section on every run.
 var thursday = time.Date(2026, time.September, 3, 8, 0, 0, 0, time.UTC)
 
 type todayFixture struct {
@@ -44,9 +44,9 @@ type todayFixture struct {
 	principal auth.Principal
 }
 
-// rosewood seeds a garden that fills every section, one plant overdue, two
-// due today, three coming up, and one beyond the week for the empty state to
-// name. Every cadence is a watering last performed at noon in London.
+// rosewood seeds a garden that fills every section: one plant overdue, two due
+// today, three coming up, and one beyond the week for the empty state to name.
+// Every schedule is a watering last performed at noon in London.
 func rosewood(t *testing.T) *todayFixture {
 	t.Helper()
 
@@ -86,9 +86,9 @@ func rosewood(t *testing.T) *todayFixture {
 		exec("INSERT INTO care_event (garden_id, plant_id, care_type_id, performed_by, performed_at, recorded_at, done) VALUES ($1, $2, $3, $4, $5, $5, true)",
 			rosewoodID, p.id, waterID, readerID, p.lastWatered)
 	}
-	// Nigel gets a second care because the sheet draws What only for a plant
-	// with more than one. The set_at puts the feed a week out so his row stays
-	// a watering.
+	// Nigel gets a second care because the sheet shows the What field only for
+	// a plant with more than one. set_at puts the feed a week out so his row
+	// stays a watering.
 	exec("INSERT INTO care_schedule (garden_id, plant_id, care_type_id, interval_count, interval_unit, set_at) VALUES ($1, $2, $3, 3, 'week', $4)",
 		rosewoodID, nigelID, feedID, day(time.August, 20))
 
@@ -103,8 +103,8 @@ func rosewood(t *testing.T) *todayFixture {
 	return &todayFixture{handler: handler, tx: tx, principal: principal}
 }
 
-// day is noon in London, so a watering and the day it counts towards share a
-// date in London and in UTC alike.
+// day returns noon in London, so a watering and its due day share a date in
+// London and in UTC.
 func day(month time.Month, d int) time.Time {
 	return time.Date(2026, month, d, 12, 0, 0, 0, london())
 }
@@ -147,8 +147,8 @@ var (
 	sectionElement = regexp.MustCompile(`(?s)<section[^>]*aria-labelledby="([a-z0-9-]+)"[^>]*>.*?</section>`)
 	rowElement     = regexp.MustCompile(`(?s)<li[^>]*id="(care-[^"]+)"[^>]*>.*?</li>`)
 	headElement    = regexp.MustCompile(`(?s)<div[^>]*id="day-head"[^>]*>.*?</div>`)
-	// The feed's close is the one </div> after a newline because a line opens
-	// and closes on one line.
+	// The feed's closing </div> is the one after a newline, since each line
+	// opens and closes on one line.
 	feedElement     = regexp.MustCompile(`(?s)<div[^>]*id="activity"[^>]*>(.*?)\n</div>`)
 	feedLineElement = regexp.MustCompile(`(?s)<div>.*?</div>`)
 	sectionHead     = regexp.MustCompile(`^(?:Overdue|Due today|Coming up) (\d+)\b`)
@@ -156,16 +156,15 @@ var (
 	spaces          = regexp.MustCompile(`\s+`)
 )
 
-// text is what a reader sees in a piece of markup, with the tags gone and
-// the whitespace collapsed, so a test asserts the words and not the spans
-// around them.
+// text returns the visible text of some markup, tags removed and whitespace
+// collapsed, so a test asserts the words rather than the spans around them.
 func text(markup string) string {
 	s := html.UnescapeString(tag.ReplaceAllString(markup, " "))
 	return strings.TrimSpace(spaces.ReplaceAllString(s, " "))
 }
 
-// sections returns each section's markup by the id of its heading, and the
-// order the page draws them in.
+// sections returns each section's markup by its heading id, and the order they
+// appear in.
 func sections(page string) (map[string]string, []string) {
 	byID := map[string]string{}
 	var order []string
@@ -176,7 +175,7 @@ func sections(page string) (map[string]string, []string) {
 	return byID, order
 }
 
-// rows returns what each row of a section says, by the row's id.
+// rows returns each row's text in a section, by row id.
 func rows(section string) map[string]string {
 	byID := map[string]string{}
 	for _, m := range rowElement.FindAllStringSubmatch(section, -1) {
@@ -234,7 +233,7 @@ func TestToday_PlacesEachPlantInTheSectionItsCareFallsIn(t *testing.T) {
 	}
 }
 
-func TestToday_ARowSaysOnlyWhatIsUsefulInTheMoment(t *testing.T) {
+func TestToday_ARowShowsLatenessOrTheDueDayButNotBoth(t *testing.T) {
 	page := rosewood(t).show(t)
 	byID, _ := sections(page)
 	all := map[string]string{}
@@ -249,9 +248,9 @@ func TestToday_ARowSaysOnlyWhatIsUsefulInTheMoment(t *testing.T) {
 		plant uuid.UUID
 		want  string
 	}{
-		{"an overdue row gives how late it is", bigFellaID, "Big Fella Living room · 2 days late Water"},
-		{"a row due today gives the location and nothing else", dorisID, "Doris Bedroom Water"},
-		{"a coming-up row gives the day and offers Log", trailMixID, "Trail Mix Kitchen · Water tomorrow Log"},
+		{"an overdue row shows how late it is", bigFellaID, "Big Fella Living room · 2 days late Water"},
+		{"a row due today shows the location and nothing else", dorisID, "Doris Bedroom Water"},
+		{"a coming-up row shows the day and a Log button", trailMixID, "Trail Mix Kitchen · Water tomorrow Log"},
 		{"a row inside the week names the weekday", opuntiaID, "Opuntia microdasys Windowsill · Water Monday Log"},
 		{"a row with no location has no dot before the day", sproutID, "Sprout Water Tuesday Log"},
 	}
@@ -268,7 +267,7 @@ func TestToday_ARowSaysOnlyWhatIsUsefulInTheMoment(t *testing.T) {
 	}
 }
 
-func TestToday_TheCountsFallAsRowsAreDealtWith(t *testing.T) {
+func TestToday_TheCountsDropAsCaresAreLogged(t *testing.T) {
 	f := rosewood(t)
 
 	f.water(t, dorisID)
@@ -305,24 +304,24 @@ func TestToday_TheCountsFallAsRowsAreDealtWith(t *testing.T) {
 	if _, order := sections(page); strings.Join(order, " ") != "coming-up" {
 		t.Errorf("sections = %v, want Coming up alone under the empty state", order)
 	}
-	// Coming up already says what is next.
+	// The Coming up section already says what is next.
 	if strings.Contains(page, "is next") || strings.Contains(page, "See all plants") {
 		t.Error("the empty state names what is next over a Coming up list that names it too")
 	}
 }
 
-func TestToday_AnEmptyListIsThreeDifferentPiecesOfNews(t *testing.T) {
+func TestToday_TheEmptyStateDependsOnWhyTheListIsEmpty(t *testing.T) {
 	clearTheWeek := func(t *testing.T, f *todayFixture) {
 		t.Helper()
 		f.exec(t, "DELETE FROM care_schedule WHERE plant_id = ANY($1)", []uuid.UUID{bigFellaID, dorisID, nigelID, trailMixID, opuntiaID, sproutID})
 	}
 
-	t.Run("a day finished with nothing coming up is done, and names what is next", func(t *testing.T) {
+	t.Run("a finished day with nothing coming up shows done and names the next care", func(t *testing.T) {
 		f := rosewood(t)
 		for _, plant := range []uuid.UUID{bigFellaID, dorisID, nigelID} {
 			f.water(t, plant)
 		}
-		// Watering Nigel would put his four-day cadence back into Coming up.
+		// Watering Nigel would put his four-day schedule back into Coming up.
 		clearTheWeek(t, f)
 
 		page := f.show(t)
@@ -333,7 +332,7 @@ func TestToday_AnEmptyListIsThreeDifferentPiecesOfNews(t *testing.T) {
 		}
 	})
 
-	t.Run("a day with nothing scheduled is not congratulated", func(t *testing.T) {
+	t.Run("a day with nothing scheduled shows the leaf rather than the tick", func(t *testing.T) {
 		f := rosewood(t)
 		clearTheWeek(t, f)
 
@@ -362,20 +361,20 @@ func TestToday_AnEmptyListIsThreeDifferentPiecesOfNews(t *testing.T) {
 		}
 	})
 
-	t.Run("a garden with no plants offers the one action that starts the app", func(t *testing.T) {
+	t.Run("a garden with no plants shows an add plant link", func(t *testing.T) {
 		f := rosewood(t)
 		f.exec(t, "DELETE FROM plant WHERE garden_id = $1", rosewoodID)
 
 		page := f.show(t)
-		for _, want := range []string{"No plants yet", "Add one and sprig will tell you when it needs water.", `href="/plants/new"`, "Add a plant"} {
+		for _, want := range []string{"No plants yet", "Add a plant and sprig will remind you when to water it.", `href="/plants/new"`, "Add a plant"} {
 			if !strings.Contains(page, want) {
 				t.Errorf("the page lacks %s:\n%s", want, text(page))
 			}
 		}
 	})
 
-	// The link leads to a route a sitter may not open.
-	t.Run("a sitter is told the garden is empty and offered nothing", func(t *testing.T) {
+	// The link points at a route a sitter may not open.
+	t.Run("a sitter in an empty garden gets no add plant link", func(t *testing.T) {
 		f := rosewood(t)
 		f.principal.Capabilities = auth.Capabilities{}
 		f.exec(t, "DELETE FROM plant WHERE garden_id = $1", rosewoodID)
@@ -389,7 +388,7 @@ func TestToday_AnEmptyListIsThreeDifferentPiecesOfNews(t *testing.T) {
 		}
 	})
 
-	t.Run("an archived plant is no plant", func(t *testing.T) {
+	t.Run("an archived plant is 404", func(t *testing.T) {
 		f := rosewood(t)
 		f.exec(t, "UPDATE plant SET archived_at = now() WHERE garden_id = $1", rosewoodID)
 
@@ -426,7 +425,7 @@ func TestToday_ReadsTheDayInTheReadersTimezone(t *testing.T) {
 	}
 }
 
-func TestToday_TheDateAndTheGardenHeadThePage(t *testing.T) {
+func TestToday_ThePageHeadingShowsTheDateAndTheGardenName(t *testing.T) {
 	page := rosewood(t).show(t)
 	for _, want := range []string{`<title>sprig — today</title>`, "Thursday 3 September", `aria-current="page"`} {
 		if !strings.Contains(page, want) {
@@ -438,7 +437,7 @@ func TestToday_TheDateAndTheGardenHeadThePage(t *testing.T) {
 	}
 }
 
-// feed is each line of the feed as markup, in drawn order.
+// feed returns each line of the feed as markup, in page order.
 func feed(t *testing.T, page string) []string {
 	t.Helper()
 	m := feedElement.FindStringSubmatch(page)
@@ -448,7 +447,7 @@ func feed(t *testing.T, page string) []string {
 	return feedLineElement.FindAllString(m[1], -1)
 }
 
-// says is what each line of the feed reads as.
+// says returns each feed line's text.
 func says(lines []string) []string {
 	out := make([]string, 0, len(lines))
 	for _, line := range lines {
@@ -457,7 +456,7 @@ func says(lines []string) []string {
 	return out
 }
 
-func TestFeed_NamesWhatWasRecordedNewestFirst(t *testing.T) {
+func TestFeed_ListsEventsNewestFirst(t *testing.T) {
 	got := says(feed(t, rosewood(t).show(t)))
 	want := []string{
 		"You watered Nigel · Sunday",
@@ -471,7 +470,7 @@ func TestFeed_NamesWhatWasRecordedNewestFirst(t *testing.T) {
 	}
 }
 
-func TestFeed_NamesThePersonWhoIsNotTheReader(t *testing.T) {
+func TestFeed_NamesAnotherPersonByTheirDisplayName(t *testing.T) {
 	f := rosewood(t)
 	sam := uuid.MustParse("00000000-0000-7000-8000-000000000198")
 	f.exec(t, "INSERT INTO app_user (id, display_name, handle, timezone) VALUES ($1, 'Sam', 'sam', 'Europe/London')", sam)
@@ -483,7 +482,7 @@ func TestFeed_NamesThePersonWhoIsNotTheReader(t *testing.T) {
 	}
 }
 
-func TestFeed_SaysASkipWasASkip(t *testing.T) {
+func TestFeed_ShowsASkipAsSkipped(t *testing.T) {
 	f := rosewood(t)
 	f.exec(t, "INSERT INTO care_event (garden_id, plant_id, care_type_id, performed_by, performed_at, recorded_at, done, override_interval_days) VALUES ($1, $2, $3, $4, $5, $5, false, 2)",
 		rosewoodID, dorisID, waterID, readerID, thursday)
@@ -493,11 +492,10 @@ func TestFeed_SaysASkipWasASkip(t *testing.T) {
 	}
 }
 
-func TestFeed_OffersUndoOnlyOnTheReadersOwnCareInsideItsWindow(t *testing.T) {
+func TestFeed_ShowsUndoOnlyOnTheReadersOwnCareInsideTheWindow(t *testing.T) {
 	sam := uuid.MustParse("00000000-0000-7000-8000-000000000198")
-	// Sam's watering of Doris is lines[0] and the reader's of Nigel is
-	// lines[1], both recorded a moment ago. Every seeded event behind them is
-	// days old.
+	// Sam's watering of Doris is lines[0] and the reader's watering of Nigel is
+	// lines[1], both recorded a moment ago. Every seeded event is days old.
 	setup := func(t *testing.T) *todayFixture {
 		f := rosewood(t)
 		f.exec(t, "INSERT INTO app_user (id, display_name, handle, timezone) VALUES ($1, 'Sam', 'sam', 'Europe/London')", sam)
@@ -507,7 +505,7 @@ func TestFeed_OffersUndoOnlyOnTheReadersOwnCareInsideItsWindow(t *testing.T) {
 		return f
 	}
 
-	t.Run("a sitter who may delete nothing is offered no button", func(t *testing.T) {
+	t.Run("a sitter who may delete nothing sees no undo button", func(t *testing.T) {
 		f := setup(t)
 		for _, line := range feed(t, f.show(t)) {
 			if strings.Contains(line, "<form") {
@@ -516,7 +514,7 @@ func TestFeed_OffersUndoOnlyOnTheReadersOwnCareInsideItsWindow(t *testing.T) {
 		}
 	})
 
-	t.Run("a member is offered it on their own", func(t *testing.T) {
+	t.Run("a member sees undo on their own care", func(t *testing.T) {
 		f := setup(t)
 		f.principal.Capabilities[auth.CareDeleteOwn] = true
 		line := feed(t, f.show(t))[1]
@@ -525,7 +523,7 @@ func TestFeed_OffersUndoOnlyOnTheReadersOwnCareInsideItsWindow(t *testing.T) {
 		}
 	})
 
-	t.Run("nobody is offered it on somebody else's", func(t *testing.T) {
+	t.Run("nobody sees undo on somebody else's care", func(t *testing.T) {
 		f := setup(t)
 		f.principal.Capabilities[auth.CareDeleteOwn] = true
 		f.principal.Capabilities[auth.CareDeleteAny] = true
@@ -534,7 +532,7 @@ func TestFeed_OffersUndoOnlyOnTheReadersOwnCareInsideItsWindow(t *testing.T) {
 		}
 	})
 
-	t.Run("nobody is offered it on a care recorded before the window", func(t *testing.T) {
+	t.Run("nobody sees undo on a care recorded before the window", func(t *testing.T) {
 		f := setup(t)
 		f.principal.Capabilities[auth.CareDeleteOwn] = true
 		f.exec(t, "UPDATE care_event SET recorded_at = $1 WHERE plant_id = $2 AND performed_by = $3",
@@ -548,10 +546,9 @@ func TestFeed_OffersUndoOnlyOnTheReadersOwnCareInsideItsWindow(t *testing.T) {
 	})
 }
 
-// A swap needs the element on the page before there is anything to put in it.
-// The assertion allows no whitespace inside the div because the stylesheet
-// hides the feed on :empty.
-func TestFeed_IsDrawnEmptyInAGardenWithNothingRecorded(t *testing.T) {
+// The feed element has to be on the page for a swap to fill it. No whitespace
+// is allowed inside the div because the stylesheet hides the feed with :empty.
+func TestFeed_IsEmptyInAGardenWithNothingRecorded(t *testing.T) {
 	f := rosewood(t)
 	f.exec(t, "DELETE FROM care_event WHERE garden_id = $1", rosewoodID)
 

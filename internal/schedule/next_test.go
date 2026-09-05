@@ -30,7 +30,7 @@ func TestNext(t *testing.T) {
 		sched store.CareSchedule
 		last  *store.CareEvent
 		now   time.Time
-		// The zero time is a schedule with nothing left to produce.
+		// A zero want means the schedule produces nothing.
 		want  time.Time
 		month bool
 	}{
@@ -46,7 +46,7 @@ func TestNext(t *testing.T) {
 			want:  time.Date(2026, time.September, 9, 8, 0, 0, 0, time.UTC),
 		},
 		{
-			name:  "watering late moves everything after it",
+			name:  "a late watering moves every later occurrence",
 			sched: cadence(set, 10, UnitDay),
 			last:  event(day(time.September, 5)),
 			want:  time.Date(2026, time.September, 15, 8, 0, 0, 0, time.UTC),
@@ -58,7 +58,7 @@ func TestNext(t *testing.T) {
 			want:  time.Date(2026, time.September, 7, 8, 0, 0, 0, time.UTC),
 		},
 		{
-			name:  "a skip is still the latest event and resets the clock",
+			name:  "a skip counts as the latest event and restarts the interval",
 			sched: cadence(set, 10, UnitDay),
 			last:  skip(day(time.September, 1)),
 			want:  time.Date(2026, time.September, 11, 8, 0, 0, 0, time.UTC),
@@ -99,7 +99,7 @@ func TestNext(t *testing.T) {
 			want:  time.Date(2027, time.August, 1, 0, 0, 0, 0, time.UTC),
 		},
 		{
-			name:  "an anchored schedule not done since last year comes back overdue rather than skipped forward",
+			name:  "an anchored schedule not done since last year is overdue, not skipped forward",
 			sched: anchoredOn(time.Date(2025, time.January, 1, 9, 0, 0, 0, time.UTC), 1, UnitYear, time.Date(2025, time.August, 1, 0, 0, 0, 0, time.UTC)),
 			last:  event(time.Date(2025, time.August, 12, 8, 0, 0, 0, time.UTC)),
 			want:  time.Date(2026, time.August, 1, 0, 0, 0, 0, time.UTC),
@@ -173,7 +173,7 @@ func TestNext(t *testing.T) {
 			last:  event(time.Date(2026, time.March, 2, 8, 0, 0, 0, time.UTC)),
 		},
 		{
-			name:  "a skip asks again rather than completing a one-off",
+			name:  "a skip does not complete a one-off",
 			sched: oneOff(time.Date(2026, time.January, 1, 9, 0, 0, 0, time.UTC), time.Date(2026, time.March, 1, 0, 0, 0, 0, time.UTC)),
 			last:  skip(time.Date(2026, time.March, 2, 8, 0, 0, 0, time.UTC)),
 			want:  time.Date(2026, time.March, 1, 0, 0, 0, 0, time.UTC),
@@ -215,7 +215,7 @@ func TestNext(t *testing.T) {
 			want:  time.Date(2026, time.September, 4, 8, 0, 0, 0, time.UTC),
 		},
 		{
-			name:  "an override on a one-off's done event asks again rather than completing it",
+			name:  "an override on a completed one-off's event makes it due again",
 			sched: oneOff(time.Date(2026, time.January, 1, 9, 0, 0, 0, time.UTC), time.Date(2026, time.March, 1, 0, 0, 0, 0, time.UTC)),
 			last:  override(event(time.Date(2026, time.March, 2, 8, 0, 0, 0, time.UTC)), 10),
 			want:  time.Date(2026, time.March, 12, 8, 0, 0, 0, time.UTC),
@@ -240,7 +240,7 @@ func TestNext(t *testing.T) {
 			month: true,
 		},
 		{
-			name:  "a month-precise series not done since last year comes back as its month",
+			name:  "a month-precise series not done since last year is due in its month",
 			sched: monthPrecise(anchoredOn(time.Date(2025, time.January, 1, 9, 0, 0, 0, time.UTC), 1, UnitYear, time.Date(2025, time.March, 1, 0, 0, 0, 0, time.UTC))),
 			last:  event(time.Date(2025, time.March, 20, 8, 0, 0, 0, time.UTC)),
 			want:  time.Date(2026, time.March, 1, 0, 0, 0, 0, time.UTC),
@@ -299,14 +299,14 @@ func TestNext(t *testing.T) {
 			want:  time.Date(2026, time.September, 10, 8, 0, 0, 0, time.UTC),
 		},
 		{
-			name:  "a seasonal cadence overdue inside its window stays where it fell",
+			name:  "a seasonal cadence overdue inside its season keeps its overdue date",
 			sched: seasonal(cadence(set, 3, UnitWeek), time.March, time.September),
 			last:  event(day(time.August, 20)),
 			now:   day(time.September, 20),
 			want:  time.Date(2026, time.September, 10, 8, 0, 0, 0, time.UTC),
 		},
 		{
-			name:  "the season shuts the day after its last month",
+			name:  "the season closes the day after its last month",
 			sched: seasonal(cadence(set, 3, UnitWeek), time.March, time.September),
 			last:  event(day(time.August, 20)),
 			now:   time.Date(2026, time.October, 1, 0, 0, 0, 0, time.UTC),
@@ -333,7 +333,7 @@ func TestNext(t *testing.T) {
 			want:  time.Date(2027, time.March, 1, 0, 0, 0, 0, time.UTC),
 		},
 		{
-			name:  "a feed that would fall after the close waits for the next opening",
+			name:  "a feed that would fall after the season closes is due at the next opening",
 			sched: seasonal(cadence(set, 3, UnitWeek), time.March, time.September),
 			last:  event(day(time.September, 25)),
 			now:   day(time.September, 26),
@@ -346,7 +346,7 @@ func TestNext(t *testing.T) {
 			want:  time.Date(2027, time.March, 1, 0, 0, 0, 0, time.UTC),
 		},
 		{
-			name:  "a skip that asks to be reminded past the close is not due until the window opens",
+			name:  "a skip reaching past the season close is due when the season opens",
 			sched: seasonal(cadence(set, 3, UnitWeek), time.March, time.September),
 			last:  override(skip(day(time.September, 28)), 5),
 			now:   day(time.October, 3),
@@ -366,20 +366,20 @@ func TestNext(t *testing.T) {
 			want:  time.Date(2027, time.January, 10, 8, 0, 0, 0, time.UTC),
 		},
 		{
-			name:  "a wrapped season is shut in the middle of the year",
+			name:  "a wrapped season is closed in the middle of the year",
 			sched: seasonal(cadence(set, 3, UnitWeek), time.November, time.February),
 			last:  event(day(time.February, 10)),
 			now:   day(time.June, 15),
 		},
 		{
-			name:  "a wrapped season asked about in January opened the previous November",
+			name:  "a wrapped season checked in January opened the previous November",
 			sched: seasonal(cadence(set, 3, UnitWeek), time.November, time.February),
 			last:  event(day(time.February, 10)),
 			now:   time.Date(2027, time.January, 15, 8, 0, 0, 0, time.UTC),
 			want:  time.Date(2026, time.November, 1, 0, 0, 0, 0, time.UTC),
 		},
 		{
-			name:  "a wrapped season's feed that would fall in spring waits for November",
+			name:  "a wrapped season's feed that would fall in spring is due in November",
 			sched: seasonal(cadence(set, 3, UnitWeek), time.November, time.February),
 			last:  event(day(time.February, 20)),
 			now:   day(time.February, 21),

@@ -20,7 +20,7 @@ type today struct {
 	logger    *slog.Logger
 	queries   *store.Queries
 	templates *Templates
-	// now is the clock the day is read from, so a test can pin the day.
+	// now supplies the current time, so a test can fix the day.
 	now func() time.Time
 }
 
@@ -38,33 +38,35 @@ func (h *today) show(w http.ResponseWriter, r *http.Request) {
 	h.templates.render(w, r, view{page: "today"}, newTodayPage(principal, g))
 }
 
-// graceWindow is how long a logged row keeps its place on Today with an Undo
-// beside it. It is short because it runs as a timer in the page.
+// graceWindow is how long a logged row stays on Today with an Undo button
+// beside it. It is short because the page runs it as a timer.
 const graceWindow = 4 * time.Second
 
-// undoWindow is how long after an event was recorded the feed offers it back.
-// It is longer than graceWindow because the feed's Undo sits on a page that
-// stays as it was drawn, reached by a redirect with no script running. The
-// stylesheet hides that button whenever a script is running.
+// undoWindow is how long after logging a care the feed still shows an Undo
+// button for it. It is longer than graceWindow because without JavaScript the
+// page is not refreshed, so the button has to stay valid for as long as someone
+// might still be looking at it. The stylesheet hides the feed's Undo when
+// JavaScript is running.
 //
-// It decides what a render draws and nothing else. A button already on the
-// page goes on working however long it has been there because refusing a
-// press the page invited is worse than deleting an event a minute late.
+// The window only decides whether to render the button. A button already on
+// the page still works after the window closes, because rejecting a click the
+// page offered is worse than undoing a minute late.
 const undoWindow = 30 * time.Second
 
-// collapseMS is the duration of the stylesheet's transition on a leaving row.
+// collapseMS is the duration in milliseconds of the stylesheet's transition on
+// a row being removed.
 const collapseMS = 320
 
-// gardenDay is one read of the garden against the reader's clock. The page
-// and the sheet over it draw from the same one because the two have to agree
-// about the schedule.
+// gardenDay is the garden's schedules and recent care as of the reader's
+// current time. The page and the sheet render from the same one so they agree
+// on the schedule.
 type gardenDay struct {
 	lines  []schedule.Line
 	day    schedule.Day
 	latest []store.CareEvent
 	recent []store.ListRecentCareEventsRow
 	plants int64
-	// now is in the reader's location.
+	// now is in the reader's timezone.
 	now time.Time
 }
 
@@ -103,9 +105,9 @@ func (g gardenDay) windows() bool {
 	return false
 }
 
-// plantLines is every schedule the plant has, in Resolve's order. An empty
-// result is a plant the garden does not have because ListCareSchedules leaves
-// out an archived plant.
+// plantLines returns one plant's schedules, in Resolve's order. An empty result
+// means the garden does not have the plant, since ListCareSchedules leaves out
+// archived plants.
 func plantLines(lines []schedule.Line, plantID uuid.UUID) []schedule.Line {
 	var out []schedule.Line
 	for _, line := range lines {
@@ -123,15 +125,15 @@ type todayPage struct {
 	Head     todayHead
 	Sections []todaySection
 	Feed     todayFeed
-	// OOB marks the body as an out-of-band swap, which is how an answer aimed
-	// at one row reaches the rest of the day.
+	// OOB is true when the body is rendered as an out-of-band swap, so a
+	// response to one row can also replace the rest of the page.
 	OOB bool
 }
 
 type todayHead struct {
-	// Exactly one of the three stands. Clear holds Empty's place while logged
-	// rows are still inside their windows because the empty screen would claim
-	// they had gone.
+	// Exactly one of Summary, Clear and Empty is set. Clear stands in for
+	// Empty while logged rows are still inside their grace windows, because
+	// the empty state would say they had gone.
 	Summary *todaySummary
 	Clear   bool
 	Empty   *todayEmpty
@@ -144,11 +146,11 @@ type todaySummary struct {
 }
 
 type todaySection struct {
-	// ID names the heading the section points at, so the section is a region
-	// reached by its title.
+	// ID is the HTML id of the section heading, so the section is a labelled
+	// region.
 	ID    string
 	Title string
-	// Alert colours the title, which Overdue alone gets.
+	// Alert colours the title. Only Overdue has it.
 	Alert bool
 	Rows  []careRow
 }
@@ -156,7 +158,7 @@ type todaySection struct {
 type todayEmpty struct {
 	Title string
 	Line  string
-	// Done draws the tick rather than the leaf.
+	// Done shows the tick icon instead of the leaf.
 	Done   bool
 	Action *link
 }
@@ -166,19 +168,19 @@ type link struct {
 	Href  string
 }
 
-// careSwap is what a swap of one row answers with. The head comes back beside
-// the row because logging the last thing outstanding changes what it says. The
-// feed comes back because every log and undo adds or removes one of its lines.
+// careSwap is the response to a swap of one row. The heading is included
+// because logging the last outstanding care changes what it says. The feed is
+// included because every log and undo adds or removes a line.
 type careSwap struct {
 	Row  careRow
 	Head todayHead
 	Feed todayFeed
 }
 
-// careSettled is what a row whose grace window has closed answers with. The
-// head comes back alone while other rows are still inside their windows
-// because replacing the body under them would take them with it. The feed is
-// not in it because a closing window records and reverses nothing.
+// careSettled is the response when a row's grace window has closed. Only the
+// heading is sent while other rows are still inside their windows, because
+// replacing the body would remove them too. The feed is left out because a
+// closing window records nothing.
 type careSettled struct {
 	Head todayHead
 	Body *todayPage
@@ -193,31 +195,31 @@ func newCareSettled(principal auth.Principal, g gardenDay) careSettled {
 	return careSettled{Body: &page}
 }
 
-// careRow is what the care-row fragment takes, so a page load and a swap draw
-// the same row.
+// careRow is the data the care-row fragment renders from, on a page load and
+// on a swap.
 type careRow struct {
-	// ID is the id a swap targets. It carries the care type's slug rather
-	// than its name, because renaming a type leaves the slug alone.
+	// ID is the id a swap targets. It uses the care type's slug rather than
+	// its name, so renaming a type does not change it.
 	ID string
-	// Href opens the sheet for the row. Path is where the care button posts.
+	// Href opens the sheet for the row. Path is the URL the care button posts
+	// to.
 	Href string
 	Path string
 	Name string
-	// Botanical marks a name that is the botanical one, which is set in
-	// italic.
+	// Botanical is true when Name is the botanical name, shown in italics.
 	Botanical bool
 	Location  string
-	// Late is empty on a row that is not overdue.
+	// Late is the overdue text, empty on a row that is not overdue.
 	Late string
-	// When is empty on a row that is not coming up. It also puts the quiet
-	// Log button on the row in place of the care button, since logging
-	// before the day is not what the screen asks for.
+	// When is the due text on a row that is coming up, empty otherwise. When
+	// it is set the row shows the quiet Log button instead of the care
+	// button, since the care is not due yet.
 	When string
 	Care string
 	Slug string
-	// Done marks a row whose care was just logged. Said is what its meta line
-	// says instead. Grace and Collapse are in milliseconds because the style
-	// attribute and the trigger delay are written in them.
+	// Done marks a row whose care was just logged, and Said is its meta line.
+	// Grace and Collapse are in milliseconds because the style attribute and
+	// the trigger delay are written in them.
 	Done     bool
 	Said     string
 	Undo     string
@@ -225,8 +227,8 @@ type careRow struct {
 	Collapse int
 }
 
-// careRowPrefix opens every row id, which is how a swap aimed at a row is
-// told from one aimed at anything else.
+// careRowPrefix starts every care row id, so a swap targeting a row can be
+// told from any other.
 const careRowPrefix = "care-"
 
 func careRowID(plant store.Plant, careType store.CareType) string {
@@ -254,7 +256,7 @@ func newTodayPage(principal auth.Principal, g gardenDay) todayPage {
 	return page
 }
 
-// newTodayHead is the head as a page load draws it.
+// newTodayHead builds the heading for a page load.
 func newTodayHead(principal auth.Principal, day schedule.Day, latest []store.CareEvent, plants int64, now time.Time) todayHead {
 	if outstanding := len(day.Overdue) + len(day.DueToday); outstanding > 0 {
 		return todayHead{Summary: &todaySummary{Outstanding: outstanding, Overdue: len(day.Overdue)}}
@@ -262,8 +264,8 @@ func newTodayHead(principal auth.Principal, day schedule.Day, latest []store.Car
 	return todayHead{Empty: newTodayEmpty(principal, day, latest, plants, now)}
 }
 
-// swapHead is the head as an answer to a swap draws it. Clear is reachable
-// only here because a navigation draws no row inside a grace window.
+// swapHead builds the heading for a swap response. Clear is only set here,
+// because a page load never renders a row inside a grace window.
 func swapHead(principal auth.Principal, g gardenDay) todayHead {
 	head := newTodayHead(principal, g.day, g.latest, g.plants, g.now)
 	if head.Empty != nil && g.windows() {
@@ -273,17 +275,17 @@ func swapHead(principal auth.Principal, g gardenDay) todayHead {
 	return head
 }
 
-// newTodayEmpty picks which of three pieces of news an empty list is. A tick
-// claims something was finished, so a day where nothing was scheduled gets the
-// leaf. The next-up line and the link to the plant list wait on an empty
-// Coming up, which otherwise says the same thing below them.
+// newTodayEmpty picks which empty state to show. The tick means something was
+// finished, so a day with nothing scheduled gets the leaf. The next-up line and
+// the link to the plant list are shown only when Coming up is empty, since
+// otherwise that section says the same thing.
 func newTodayEmpty(principal auth.Principal, day schedule.Day, latest []store.CareEvent, plants int64, now time.Time) *todayEmpty {
 	if plants == 0 {
-		// The action is offered only to a reader who may create a plant
-		// because newPlantPath refuses anyone else.
+		// The link is shown only to a reader who may create a plant, since the
+		// route refuses anyone else.
 		empty := &todayEmpty{
 			Title: "No plants yet",
-			Line:  "Add one and sprig will tell you when it needs water.",
+			Line:  "Add a plant and sprig will remind you when to water it.",
 		}
 		if principal.Can(auth.PlantCreate) {
 			empty.Action = &link{Label: "Add a plant", Href: newPlantPath}
@@ -307,9 +309,9 @@ func newTodayEmpty(principal auth.Principal, day schedule.Day, latest []store.Ca
 	return empty
 }
 
-// caredForOn reports whether any care was performed on now's date, read in
-// now's location. A skip counts, because it dealt with the row as much as a
-// watering did.
+// caredForOn reports whether any care was performed on now's date in now's
+// timezone. A skip counts, since it dealt with the row as much as a watering
+// did.
 func caredForOn(latest []store.CareEvent, now time.Time) bool {
 	y, m, d := now.Date()
 	for _, e := range latest {
@@ -350,13 +352,13 @@ func newCareRow(row schedule.Row, now time.Time) careRow {
 	return r
 }
 
-// feedLength is how many events the feed at the foot of Today carries. A
-// household of two or three logs about five cares in a day, and the whole log
-// is on Activity.
+// feedLength is how many events the feed at the bottom of Today shows. A
+// household of two or three logs about five cares a day, and the whole log is
+// on Activity.
 const feedLength = 5
 
-// todayFeed is the feed as its own element because an answer aimed at one row
-// swaps it in beside the row.
+// todayFeed is its own element so a swap response to one row can replace it
+// alongside the row.
 type todayFeed struct {
 	Lines []feedLine
 	OOB   bool
@@ -367,8 +369,8 @@ type feedLine struct {
 	Did   string
 	Plant string
 	When  string
-	// Undo is where the line's form posts to delete the event. It is empty on
-	// a line the reader may not take back.
+	// Undo is the URL the line's form posts to delete the event. Empty when
+	// the reader may not undo it.
 	Undo string
 }
 
@@ -392,10 +394,10 @@ func newFeedLine(principal auth.Principal, e store.ListRecentCareEventsRow, now 
 	return line
 }
 
-// mayUndo reports whether the feed draws a line's Undo. The line has to be
-// the reader's own and inside undoWindow because an undo is the way back from
-// a care just recorded. The delete behind the button is bounded by the
-// capability alone. A button drawn inside the window still works after it.
+// mayUndo reports whether a feed line shows Undo. The event has to be the
+// reader's own and inside undoWindow, since undo is for a care just recorded.
+// The delete itself is limited only by capability, so a button rendered inside
+// the window still works after it closes.
 func mayUndo(principal auth.Principal, e store.CareEvent, now time.Time) bool {
 	if e.PerformedBy != principal.User.ID || now.Sub(e.RecordedAt) >= undoWindow {
 		return false
@@ -403,8 +405,8 @@ func mayUndo(principal auth.Principal, e store.CareEvent, now time.Time) bool {
 	return principal.Can(auth.CareDeleteOwn) || principal.Can(auth.CareDeleteAny)
 }
 
-// swapFeed is the feed as an answer to a swap draws it, out of band because
-// the swap that asked for it is aimed at a row.
+// swapFeed builds the feed for a swap response. It is out of band because the
+// swap targets a row.
 func swapFeed(principal auth.Principal, g gardenDay) todayFeed {
 	feed := newTodayFeed(principal, g)
 	feed.OOB = true

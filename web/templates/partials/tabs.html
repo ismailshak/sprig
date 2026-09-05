@@ -1,5 +1,5 @@
-{{/* The dot is the label of the page being rendered. That tab is a button
-     with nowhere to go, and the other three are links that need no script. */}}
+{{/* The argument is the name of the current page. That page's tab is a button
+     that goes nowhere. The other three are plain links. */}}
 {{define "tabs"}}
 <nav class="nav">
 {{if eq . "Today"}}<button class="nav__item" aria-current="page">{{template "icon-today"}}Today</button>

@@ -7,15 +7,14 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// InTx runs fn against a Queries bound to a transaction, committing when fn
-// returns nil and rolling back otherwise. It is for a write that is one act to
-// the person who asked for it, such as a plant and the schedules it arrives
-// with.
+// InTx runs fn with a Queries bound to a transaction. It commits when fn
+// returns nil and rolls back otherwise. Use it for writes that must land
+// together, such as a new plant and its schedules.
 //
-// The transaction is begun on whatever the Queries was built over, which is the
-// pool in the running server and the test's own transaction under a handler
-// test, where pgx makes it a savepoint. Anything else cannot begin one, and
-// that is a wiring mistake rather than a request that failed.
+// The transaction begins on whatever the Queries was built over: the pool in
+// the running server, or the test's own transaction in a handler test, where
+// pgx makes it a savepoint. Anything else cannot begin one, and the error for
+// that is a wiring mistake rather than a failed request.
 func (q *Queries) InTx(ctx context.Context, fn func(*Queries) error) error {
 	beginner, ok := q.db.(interface {
 		Begin(context.Context) (pgx.Tx, error)
@@ -28,7 +27,7 @@ func (q *Queries) InTx(ctx context.Context, fn func(*Queries) error) error {
 	if err != nil {
 		return fmt.Errorf("begin: %w", err)
 	}
-	// A rollback after the commit answers ErrTxClosed, which is not a failure.
+	// Rollback after a commit returns ErrTxClosed, which is harmless.
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	if err := fn(q.WithTx(tx)); err != nil {

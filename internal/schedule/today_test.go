@@ -114,7 +114,7 @@ func TestResolve_State(t *testing.T) {
 			days:  -31,
 		},
 		{
-			name:  "a shut season is dormant",
+			name:  "a closed season is dormant",
 			sched: seasonal(cadence(set, 3, UnitWeek), time.March, time.September),
 			last:  event(day(time.August, 20)),
 			now:   time.Date(2026, time.November, 3, 8, 0, 0, 0, time.UTC),
@@ -206,7 +206,7 @@ func TestToday_GroupsPlantsBySection(t *testing.T) {
 	}
 }
 
-func TestToday_OnePlantIsOneRowCarryingItsMostPressingCare(t *testing.T) {
+func TestToday_APlantGetsOneRowShowingItsMostPressingCare(t *testing.T) {
 	now := day(time.September, 3)
 	monty := plantNamed("Monty")
 	rows := []store.ListCareSchedulesRow{
@@ -250,8 +250,8 @@ func TestToday_OverdueBeatsDueTodayBeatsUpcoming(t *testing.T) {
 	if len(got.DueToday) != 1 {
 		t.Fatalf("Monty is on %d due-today rows, want 1", len(got.DueToday))
 	}
-	// soon ranks the repot level with the watering despite its negative Days,
-	// so the watering keeps the row by arriving first.
+	// soon ranks the repot level with the watering despite its negative Days.
+	// The watering comes first in the input, so it keeps the row.
 	if slug := got.DueToday[0].Care.CareType.Slug; slug != "water" {
 		t.Errorf("the row's care is %s, want water", slug)
 	}
@@ -318,8 +318,8 @@ func TestNearest_IsTheMostOverdueThenTheSoonest(t *testing.T) {
 	rows := []store.ListCareSchedulesRow{
 		scheduleRow(monty, water, cadence(set, 10, UnitDay)), // due 8 September
 		scheduleRow(monty, feed, cadence(set, 10, UnitDay)),  // due 1 September
-		// A schedule whose season is shut ranks behind both, however far past
-		// its date it is.
+		// A schedule outside its season ranks behind both, however far past
+		// its date.
 		scheduleRow(monty, repot, seasonal(cadence(set, 10, UnitDay), time.March, time.May)),
 	}
 	events := []store.CareEvent{

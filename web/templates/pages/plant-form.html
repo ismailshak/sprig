@@ -1,27 +1,26 @@
 {{define "title"}}sprig — {{.Title}}{{end}}
 
-{{/* Cancel rather than a back arrow, because a chevron says only that the page
-     will be left and this form has typing to throw away.
+{{/* Cancel rather than a back arrow, because a chevron only says the page will
+     be left, and this form has typed input to discard.
 
-     One page and one post rather than a wizard, which the dependency budget
-     cannot afford. The required fields are at the top and the rest are behind
-     a disclosure.
+     One page and one post rather than a multi-step wizard. The required fields
+     are at the top and the rest are behind a disclosure.
 
-     novalidate, because the browser would otherwise refuse a count of nought
-     with a bubble of its own and the row's own line would never be read. */}}
+     novalidate, because otherwise the browser would reject a count of 0 with
+     its own bubble and the row's error message would never be shown. */}}
 {{define "main"}}
 <header class="topbar topbar--form">
 <h1 class="topbar__title">{{.Title}}</h1>
 <a class="topbar__cancel" href="{{.Back}}">Cancel</a>
 </header>
 <form class="app__body app__body--form" method="post" action="{{.Action}}" novalidate>
-{{/* Enter in a text field presses the form's first submit button, which would
-     otherwise be a schedule row's own and would close the row rather than add
-     the plant. */}}
+{{/* Enter in a text field submits through the form's first submit button.
+     Without this hidden one, that would be a schedule row's button, and Enter
+     would close the row instead of saving the plant. */}}
 <button type="submit" hidden></button>
-{{/* The line goes under the group because none of the three names is required
-     on its own and one of them is required together. The nickname is not the
-     required one because a person who does not name their plants would have to
+{{/* The error goes under the group, because none of the three names is
+     required on its own but at least one is required. Nickname is not the
+     required one because someone who does not name their plants would have to
      invent one. */}}
 <div class="form__names">
 <div class="field">
@@ -33,7 +32,7 @@
 <input class="input" id="common" name="common" type="text" value="{{.Common}}">
 </div>
 <div class="field">
-<label class="field__label" for="botanical">Botanical name <span class="field__hint">what is true</span></label>
+<label class="field__label" for="botanical">Botanical name <span class="field__hint">the Latin name</span></label>
 <input class="input" id="botanical" name="botanical" type="text" value="{{.Botanical}}">
 </div>
 {{with .NameError}}<p class="field__error">{{.}}</p>{{end}}
@@ -42,9 +41,9 @@
 <label class="field__label" for="where">Location</label>
 <input class="input" id="where" name="where" type="text" placeholder="Pick a room, or name a new one" value="{{.Location}}">
 </div>
-{{/* Schedules are on the add form and not on the edit form. A plant can arrive
-     with a cadence already set, and changing one afterwards happens on the
-     plant's own page where the next date is. */}}
+{{/* Schedules are on the add form but not on the edit form. A new plant can be
+     created with a schedule already set. Changing one later happens on the
+     plant's own page, next to its due date. */}}
 {{if .Schedules}}
 <section class="section section--schedule" aria-labelledby="schedule">
 <div class="section__head">
@@ -55,13 +54,12 @@
 {{template "schedule-fields" .}}</ul>
 </section>
 {{end}}
-{{/* Behind a disclosure, because a form that opens with eight empty boxes reads
-     as work rather than as a plant being added. It opens itself when there is
-     something inside it. */}}
+{{/* Behind a disclosure, because a form opening with eight empty boxes looks
+     like work. It starts open when any of the fields has a value. */}}
 <details class="disclosure"{{if .Reference}} open{{end}}>
 <summary class="disclosure__head">
 <span class="section__title">Reference</span>
-<span class="disclosure__hint">Sun, water, soil and the rest</span>
+<span class="disclosure__hint">Care notes</span>
 </summary>
 <div class="disclosure__body">
 {{range .Facts}}<div class="field">
@@ -83,9 +81,9 @@
 </div>
 </details>
 <button class="wide-action" type="submit">{{.Submit}}</button>
-{{/* A link rather than a button, because archiving asks first and the question
-     is asked on the plant's own page. It sits under the save rather than beside
-     it because they are not two options of the same weight. */}}
+{{/* A link rather than a button, because archiving asks for confirmation on
+     the plant's own page. It sits below Save rather than beside it because the
+     two are not equal choices. */}}
 {{with .Archive}}
 <div class="form__foot">
 <a class="plant__archive" href="{{.}}">Archive</a>

@@ -14,20 +14,19 @@ export class PlantFormScreen {
     await this.page.goto(`/plants/${plant.id}/edit`);
   }
 
-  // The label carries a hint after the field's name, which is why the match is
-  // on part of it.
+  // The label has a hint after the field name, so this matches on part of it.
   field(name: string): Locator {
     return this.page.getByLabel(name);
   }
 
-  // A schedule row is found by the care type it names, which is the one part of
-  // it that does not change when it opens.
+  // A schedule row is found by its care type, the one part that does not change
+  // when the row opens.
   row(care: string): Locator {
     return this.page.getByRole('listitem').filter({ hasText: care });
   }
 
-  // Opening a row is a request either way, swapped in place by htmx and
-  // navigated to by a browser running no script.
+  // Opening a row is a request either way. With JavaScript it is an htmx swap,
+  // without it a navigation.
   async schedule(care: string): Promise<void> {
     await this.row(care).getByRole('button', { name: 'Not scheduled' }).click();
     await this.page.waitForLoadState();
@@ -38,8 +37,8 @@ export class PlantFormScreen {
     await this.page.waitForLoadState();
   }
 
-  // Every control in a row is named by its care type as well as by what it is,
-  // because more than one row can be open at once.
+  // Every control's label includes its care type, because more than one row can
+  // be open at once.
   shape(care: string): Locator {
     return this.page.getByLabel(`When ${care} happens`);
   }

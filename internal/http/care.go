@@ -17,7 +17,8 @@ import (
 	"github.com/ismailshak/sprig/internal/store"
 )
 
-// sheetFormID is the id a What chip names as the target of its swap.
+// sheetFormID is the HTML id of the sheet's form. A What chip swaps this
+// element, not the whole dialog.
 const sheetFormID = "sheet-form"
 
 const (
@@ -34,11 +35,13 @@ var whens = []chip{
 	{Value: whenOther, Label: "Another day"},
 }
 
-// overPlant marks the sheet a plant's own page carries, which every fetch from
-// it and its post send back. The sheet over Today sends nothing.
+// overPlant is the value of the sheet's "over" field when the sheet was opened
+// from a plant's page. Every fetch and post sends it back, so the handler knows
+// which page to render. Opened from Today, the field is empty.
 const overPlant = "plant"
 
-// The browser's time and datetime-local inputs send these two formats.
+// clockLayout is the format an <input type="time"> submits, and atLayout the
+// format an <input type="datetime-local"> submits.
 const (
 	clockLayout = "15:04"
 	atLayout    = "2006-01-02T15:04"
@@ -48,15 +51,16 @@ func logPath(plantID uuid.UUID) string {
 	return "/plants/" + plantID.String() + "/log"
 }
 
-// undoPath is where a logged row's Undo deletes the event. The slug names the
-// row to give back because a sheet opened over a watering can log a feed.
+// undoPath is the URL the Undo button on a logged row sends its DELETE to. The
+// row parameter names the care type whose row the response renders, since a
+// sheet opened from the watering row can log a feed instead.
 func undoPath(plantID, eventID uuid.UUID, slug string) string {
 	return logPath(plantID) + "/" + eventID.String() + "?row=" + url.QueryEscape(slug)
 }
 
-// undoFormPath is undoPath's delete reached by POST because a form has no
-// DELETE method. It carries no row because a form post is answered with a
-// redirect to the whole day.
+// undoFormPath is the URL the Undo button posts to without JavaScript, since an
+// HTML form cannot send DELETE. There is no row parameter because a form post
+// gets a redirect to Today rather than a row.
 func undoFormPath(plantID, eventID uuid.UUID) string {
 	return logPath(plantID) + "/" + eventID.String() + "/undo"
 }
@@ -65,12 +69,15 @@ func sheetPath(plantID uuid.UUID, slug string) string {
 	return logPath(plantID) + "?row=" + url.QueryEscape(slug)
 }
 
-// draft is the sheet as far as it has been filled in.
+// draft holds the sheet's field values, read from the query string on a fetch
+// and from the body on a post.
 type draft struct {
-	// Row is the slug of the care the row was opened for and names the row the
-	// post replaces. Care is the slug selected under What.
-	Row     string
-	Over    string
+	// Row is the slug of the care type whose Today row the sheet was opened
+	// from. The post replaces that row.
+	Row  string
+	Over string
+	// Care is the slug of the care type selected under What, the one the post
+	// records.
 	Care    string
 	Skipped bool
 	When    string
@@ -80,8 +87,9 @@ type draft struct {
 	Note    string
 }
 
-// readDraft reads a draft from a query or a form body. It returns false for a
-// value the sheet's chips do not offer.
+// readDraft fills a draft from a query string or a posted form. It returns
+// false for a value the sheet never offers: an unknown "over", an unknown
+// outcome, a When not in the chips, or an "again" that is not a number.
 func readDraft(values url.Values) (draft, bool) {
 	d := draft{
 		Row:   values.Get("row"),
@@ -126,18 +134,19 @@ func readDraft(values url.Values) (draft, bool) {
 	return d, true
 }
 
-// whenRefused is the sentence the sheet shows under When for a time it will
-// not record.
+// whenRefused is an error whose text is shown under the When chips when the
+// time cannot be recorded.
 type whenRefused string
 
 func (r whenRefused) Error() string { return string(r) }
 
-// errNotOffered is the error for a post naming a chip the sheet did not draw.
+// errNotOffered is returned when a post names a skip interval that was not one
+// of the chips the sheet rendered.
 var errNotOffered = errors.New("the sheet did not offer that")
 
-// performedAt is the instant the draft says the care happened, or a
-// whenRefused. A time after now is refused because the log records what has
-// happened.
+// performedAt returns the time the draft says the care happened. A time that
+// does not parse, or one later than now, returns a whenRefused, because the
+// log records care already given.
 func (d draft) performedAt(now time.Time) (time.Time, error) {
 	loc := now.Location()
 	var at time.Time
@@ -182,9 +191,9 @@ func chipsHave(chips []chip, value string) bool {
 	return false
 }
 
-// offer is one care type the sheet lists, with the schedule behind it so the
-// skip chips can name the usual interval. The schedule is zero for a care type
-// the plant is not scheduled for.
+// offer is one care type listed under What, with the plant's schedule for it.
+// The skip chips read the usual interval from the schedule. It is the zero
+// value for a care type the plant has no schedule for.
 type offer struct {
 	CareType store.CareType
 	Schedule store.CareSchedule
@@ -194,8 +203,8 @@ func offerOf(line schedule.Line) offer {
 	return offer{CareType: line.CareType, Schedule: line.Schedule}
 }
 
-// offersOf is the sheet's list as Today draws it, the plant's schedules and
-// nothing else.
+// offersOf makes one offer per schedule line. The sheet opened from Today uses
+// it, so it lists only the care types the plant is scheduled for.
 func offersOf(lines []schedule.Line) []offer {
 	out := make([]offer, 0, len(lines))
 	for _, line := range lines {
@@ -213,17 +222,20 @@ func offerFor(offers []offer, slug string) (offer, bool) {
 	return offer{}, false
 }
 
-// sheet is the logging sheet, over a Today row or a plant's own page.
+// sheet is the data the log-care sheet renders from, on Today and on a plant's
+// page.
 type sheet struct {
-	// Path is where the sheet posts and where switching What fetches it
-	// from. Target is the id of the row the post replaces.
-	Path   string
+	// Path is the URL the sheet's form posts to, and the URL a What chip
+	// fetches the sheet again from.
+	Path string
+	// Target is the HTML id of the care row the post replaces. It is empty on a
+	// plant's page, which has no such row.
 	Target string
 	Over   string
 	Label  string
 	Plant  sheetPlant
-	// Cares is the What chips. The sheet draws them only when the plant has
-	// more than one care.
+	// Cares is one chip per care type the sheet offers. The template renders
+	// the What field only when there is more than one.
 	Cares   []chip
 	Row     string
 	Care    string
@@ -231,11 +243,12 @@ type sheet struct {
 	Whens   []chip
 	Clock   string
 	At      string
-	// WhenError is the sentence under When after a refused post.
+	// WhenError is the message shown under the When chips after a refused post,
+	// and is empty otherwise.
 	WhenError string
 	Snoozes   []chip
 	Note      string
-	// Noun is the care worded as a noun, "watering".
+	// Noun is the care type as a noun, such as "watering".
 	Noun string
 }
 
@@ -243,8 +256,9 @@ type sheetPlant struct {
 	Href      string
 	Name      string
 	Botanical bool
-	// Sub is the plant's next name after the one it goes by. Italic marks the
-	// botanical one.
+	// Sub is the second name shown under the plant's name: the common name when
+	// the plant goes by a nickname, otherwise the botanical name. Italic is
+	// true when Sub is the botanical name.
 	Sub      string
 	Italic   bool
 	Location string
@@ -275,7 +289,6 @@ func newSheet(plant store.Plant, offers []offer, care offer, d draft, now time.T
 		w.On = w.Value == d.When
 		s.Whens = append(s.Whens, w)
 	}
-	// The pickers start at now. performedAt refuses anything later.
 	if s.Clock == "" {
 		s.Clock = now.Format(clockLayout)
 	}
@@ -286,18 +299,19 @@ func newSheet(plant store.Plant, offers []offer, care offer, d draft, now time.T
 	return s
 }
 
-// forPlant is the sheet as a plant's own page carries it. The heading stops
-// being a link because it would lead to the page it is on. There is no row
-// under it to swap, so the form posts and the page is drawn again.
+// forPlant adjusts the sheet for a plant's page. The plant heading is no longer
+// a link, since it would point at the page already open. The swap target is
+// cleared because that page has no care row to replace, so the post renders the
+// whole page again.
 func (s *sheet) forPlant() {
 	s.Target = ""
 	s.Plant.Href = ""
 }
 
-// accept is the instant a posted draft records. A skip the chips did not
-// offer is refused, because a zero would make the skip due the instant it is
-// recorded. A time the draft cannot place, or one after now, comes back as a
-// whenRefused for the sheet to show.
+// accept returns the time a posted draft is recorded at. A skip whose interval
+// was not one of the chips is refused, because a posted zero would make the
+// skip due again the moment it is stored. A time that does not parse, or one
+// after now, returns a whenRefused for the sheet to show.
 func (s *sheet) accept(d draft, now time.Time) (time.Time, error) {
 	if d.Skipped && !chipsHave(s.Snoozes, strconv.Itoa(int(d.Again))) {
 		return time.Time{}, errNotOffered
@@ -328,9 +342,9 @@ func isSet(s *string) bool {
 	return s != nil && *s != ""
 }
 
-// usualDays is the schedule's interval in days, which is what a skip's
-// override is stored as. A monthly or yearly cadence has no usual because a
-// month is not a number of days.
+// usualDays converts a schedule's interval to whole days, since a skip stores
+// its override in days. It returns 0 for a schedule with no interval and for a
+// monthly or yearly one, which is not a fixed number of days.
 func usualDays(s store.CareSchedule) int32 {
 	if s.IntervalCount == nil {
 		return 0
@@ -344,17 +358,18 @@ func usualDays(s store.CareSchedule) int32 {
 	return 0
 }
 
-// snoozes is the skip durations, three short re-checks and the usual
-// interval. The usual chip carries the number as well as the word because a
-// reader does not otherwise know the interval.
+// snoozes builds the chips for how long a skip puts a care off: one, two and
+// three days, plus the plant's usual interval, or seven days when the schedule
+// has no interval in days. The usual chip says "The usual" followed by the
+// number of days, since nothing else on the sheet says what the interval is.
 func snoozes(usual, selected int32) []chip {
 	days := []int32{1, 2, 3}
 	fourth := usual
 	if fourth == 0 {
 		fourth = 7
 	}
-	// A usual of one, two or three days is already a chip and takes the
-	// wording.
+	// A usual of one, two or three days is relabelled below rather than added
+	// twice.
 	if !slices.Contains(days, fourth) {
 		days = append(days, fourth)
 	}
@@ -370,9 +385,10 @@ func snoozes(usual, selected int32) []chip {
 	return out
 }
 
-// sheet answers GET /plants/{plant}/log with the sheet, as the page for a
-// navigation, the dialog for a swap that opens it, and the form for a swap
-// that switches What. The draft's over says which page it is drawn on.
+// sheet handles GET /plants/{plant}/log. A page navigation gets the whole page,
+// the swap that opens the sheet gets the dialog, and the swap that switches
+// What gets the form alone. The "over" value decides which page the sheet is
+// rendered on.
 func (h *today) sheet(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	plantID, err := uuid.Parse(r.PathValue("plant"))
@@ -400,7 +416,6 @@ func (h *today) sheet(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	// A bare path opens the sheet on the plant's first care.
 	if d.Care == "" {
 		d.Care = lines[0].CareType.Slug
 		d.Row = d.Care
@@ -416,9 +431,9 @@ func (h *today) sheet(w http.ResponseWriter, r *http.Request) {
 	h.templates.render(w, r, view{page: "today", fragment: sheetFragment(r)}, page)
 }
 
-// plantSheet is the same sheet over a plant's own page. It lists every care
-// type in the garden rather than the plant's schedules, because a repot
-// nothing is scheduled for still has to be recordable somewhere.
+// plantSheet renders the same sheet on a plant's own page. It offers every care
+// type in the garden rather than only the plant's schedules, so a repot the
+// plant has no schedule for can still be logged.
 func (h *today) plantSheet(w http.ResponseWriter, r *http.Request, principal auth.Principal, plantID uuid.UUID, d draft) {
 	detail, err := loadPlant(r.Context(), h.queries, principal, plantID, h.now())
 	switch {
@@ -429,7 +444,7 @@ func (h *today) plantSheet(w http.ResponseWriter, r *http.Request, principal aut
 		serverError(h.logger, w, r, "load the plant", err)
 		return
 	}
-	// An archived plant keeps its page, and nothing may be logged against it.
+	// Nothing can be logged against an archived plant.
 	if detail.plant.ArchivedAt != nil {
 		http.NotFound(w, r)
 		return
@@ -446,8 +461,9 @@ func (h *today) plantSheet(w http.ResponseWriter, r *http.Request, principal aut
 	h.templates.render(w, r, view{page: "plant", fragment: sheetFragment(r)}, page)
 }
 
-// chosenCare is the care the sheet over a plant is filled in for. A sheet
-// opened with none named starts on the care the plant is nearest to needing.
+// chosenCare picks the care type the sheet on a plant's page opens on. With
+// none named in the URL it takes the one due soonest, and failing that the
+// garden's first care type.
 func chosenCare(detail plantDetail, d draft) (offer, bool) {
 	offers := detail.offers()
 	if d.Care != "" {
@@ -462,9 +478,9 @@ func chosenCare(detail plantDetail, d draft) (offer, bool) {
 	return offers[0], true
 }
 
-// sheetFragment answers the form alone to a swap aimed at it, because
-// replacing the dialog replays its entrance animation and drops the panel's
-// scroll.
+// sheetFragment picks which part of the page a swap returns. A swap targeting
+// the form gets the form alone, because replacing the whole dialog would replay
+// its entrance animation and lose its scroll position.
 func sheetFragment(r *http.Request) string {
 	if r.Header.Get("HX-Target") == sheetFormID {
 		return "sheet-form"
@@ -472,9 +488,10 @@ func sheetFragment(r *http.Request) string {
 	return "sheet"
 }
 
-// log answers POST /plants/{plant}/log by recording the event the draft
-// describes. A swap gets the row in its logged state, and a form post is sent
-// back to the page the sheet stood on.
+// log handles POST /plants/{plant}/log and records the care the draft
+// describes. An htmx post returns the care row in its logged state, with the
+// day's heading and the feed. An ordinary form post gets a redirect to the page
+// the sheet was opened on.
 func (h *today) log(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	plantID, err := uuid.Parse(r.PathValue("plant"))
@@ -486,15 +503,15 @@ func (h *today) log(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "the form did not parse", http.StatusBadRequest)
 		return
 	}
-	// The page the sheet stood on is read before the rest of the draft,
-	// because it decides which page the post is answered with.
+	// "over" is read before the rest of the form because it decides which page
+	// renders the result.
 	if r.PostForm.Get("over") == overPlant {
 		h.logOnPlant(w, r, principal, plantID)
 		return
 	}
 
-	// The plant resolves before the draft because a plant the garden does not
-	// have is 404 whatever was posted at it.
+	// The plant is resolved before the draft is read, because a plant the
+	// garden does not have is a 404 whatever the form says.
 	g, err := h.load(r.Context(), principal)
 	if err != nil {
 		serverError(h.logger, w, r, "load the day", err)
@@ -525,7 +542,8 @@ func (h *today) log(w http.ResponseWriter, r *http.Request) {
 		s.WhenError = string(refused)
 		page := newTodayPage(principal, g)
 		page.Sheet = s
-		// The refusal goes back to the sheet rather than the row the form targeted.
+		// The form targets the care row, so a refusal retargets the response
+		// at the sheet so the message is shown.
 		w.Header().Set("HX-Retarget", "#sheet")
 		w.Header().Set("HX-Reswap", "outerHTML")
 		h.templates.render(w, r, view{page: "today", fragment: "sheet", status: http.StatusUnprocessableEntity}, page)
@@ -545,9 +563,9 @@ func (h *today) log(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, todayPath, http.StatusSeeOther)
 		return
 	}
-	// The day is read again because the event has just changed what the head
-	// says. The row is drawn from the first read, which is the day the sheet
-	// was filled in against.
+	// Today is loaded again because the new event changes the heading and the
+	// feed. The row is built from the first load, the state the sheet was
+	// filled in against.
 	after, err := h.load(r.Context(), principal)
 	if err != nil {
 		serverError(h.logger, w, r, "load the day", err)
@@ -561,9 +579,9 @@ func (h *today) log(w http.ResponseWriter, r *http.Request) {
 	h.templates.render(w, r, view{page: "today", fragment: "care-logged"}, swap)
 }
 
-// logOnPlant records the same event from the sheet a plant's own page opens
-// and sends the reader back to that page. The post is an ordinary one because
-// the sheet there swaps no row.
+// logOnPlant records the care posted from the sheet on a plant's page and
+// redirects back to that page. The page has no care row to replace, so the post
+// never returns a fragment.
 func (h *today) logOnPlant(w http.ResponseWriter, r *http.Request, principal auth.Principal, plantID uuid.UUID) {
 	detail, err := loadPlant(r.Context(), h.queries, principal, plantID, h.now())
 	switch {
@@ -614,8 +632,9 @@ func (h *today) logOnPlant(w http.ResponseWriter, r *http.Request, principal aut
 	http.Redirect(w, r, plantPath(detail.plant.ID), http.StatusSeeOther)
 }
 
-// careEventParams is the row a draft describes. recordedAt is the handler's
-// clock, so the event and the page it was logged from agree about now.
+// careEventParams builds the care event a draft describes. recordedAt is the
+// time the page was rendered at, so the stored event and the page agree on when
+// now was.
 func careEventParams(principal auth.Principal, plantID, careTypeID uuid.UUID, d draft, performedAt, recordedAt time.Time) store.CreateCareEventParams {
 	params := store.CreateCareEventParams{
 		GardenID:    principal.Garden.ID,
@@ -635,10 +654,10 @@ func careEventParams(principal auth.Principal, plantID, careTypeID uuid.UUID, d 
 	return params
 }
 
-// undo answers DELETE /plants/{plant}/log/{event} and POST
-// /plants/{plant}/log/{event}/undo by deleting the event the button was drawn
-// beside. A swap gets back the row as the day now has it, and a form post a
-// redirect to the day.
+// undo handles DELETE /plants/{plant}/log/{event} and POST
+// /plants/{plant}/log/{event}/undo. It deletes the event the Undo button was
+// rendered beside. An htmx request returns the care row in its current state,
+// with the day's heading and the feed. A form post gets a redirect to Today.
 func (h *today) undo(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	plantID, err := uuid.Parse(r.PathValue("plant"))
@@ -661,7 +680,8 @@ func (h *today) undo(w http.ResponseWriter, r *http.Request) {
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		// An event of somebody else's is as hidden as one that is not there.
+		// Someone else's event is a 404, the same as an event that does not
+		// exist.
 		http.NotFound(w, r)
 		return
 	case err != nil:
@@ -673,8 +693,8 @@ func (h *today) undo(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, todayPath, http.StatusSeeOther)
 		return
 	}
-	// The day is read after the delete because the row is drawn against a
-	// schedule that no longer counts the event.
+	// Today is loaded after the delete so the row is built against a schedule
+	// that no longer counts the deleted event.
 	g, err := h.load(r.Context(), principal)
 	if err != nil {
 		serverError(h.logger, w, r, "load the day", err)
@@ -703,9 +723,10 @@ func lineFor(lines []schedule.Line, slug string) (schedule.Line, bool) {
 	return schedule.Line{}, false
 }
 
-// loggedRow is the row the swap replaces, in its logged state. It keeps the
-// id of the row the sheet was opened from because that row is the element on
-// the page, whichever care was logged.
+// loggedRow builds the care row in its logged state for the swap. Its id, name
+// and care come from the row the sheet was opened from, because that is the row
+// on the page whichever care was logged. The line under it names the care that
+// was recorded.
 func loggedRow(plant store.Plant, lines []schedule.Line, d draft, careType store.CareType, event store.CareEvent, now time.Time) careRow {
 	rowType := careType
 	if line, ok := lineFor(lines, d.Row); ok {
@@ -731,8 +752,10 @@ func loggedRow(plant store.Plant, lines []schedule.Line, d draft, careType store
 	return r
 }
 
-// said takes justNow from the draft rather than comparing the row's instant
-// with the clock because Postgres keeps microseconds and the clock nanoseconds.
+// said builds the line under a logged row saying what was done and when.
+// justNow comes from the draft rather than from comparing the event's time with
+// now, because Postgres stores microseconds and Go nanoseconds, so the two are
+// never equal.
 func said(careType store.CareType, event store.CareEvent, justNow bool, loc *time.Location) string {
 	if !event.Done {
 		return "Skipped · asking again in " + daysWord(int(*event.OverrideIntervalDays))

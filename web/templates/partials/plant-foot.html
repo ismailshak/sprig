@@ -1,18 +1,18 @@
-{{/* The end of a plant's page, and the question Archive swaps it for. Both
-     states carry the same id, and settle:0ms keeps htmx from painting a frame
-     at the outgoing element's classes.
+{{/* The buttons at the bottom of a plant's page, and the confirmation that
+     replaces them when Archive is pressed. Both states share the id plant-foot,
+     and settle:0ms stops htmx painting a frame with the old element's classes.
 
      Archive is not styled as a warning, because rose means overdue in this app
-     and spending it here would make an ordinary tidy-up look like a mistake.
-     Archiving asks first because the press takes the plant off the Plants list
-     and leaves no row to undo from. The question replaces the foot rather than
-     opening a dialog, which keeps the plant on the screen above the answer. */}}
+     and using it here would make an ordinary tidy-up look like a mistake.
+     Archiving asks for confirmation because it removes the plant from the
+     Plants list and leaves no row to undo from. The confirmation replaces the
+     buttons instead of opening a dialog, so the plant stays visible above it. */}}
 {{define "plant-foot"}}{{with .Foot}}<div class="plant__foot{{if .Asking}} plant__foot--asking{{end}}" id="plant-foot">
 {{if .Asking}}
 <span class="plant__ask">Archive {{.Name}}?</span>
-<span class="plant__note">Its history stays, and the archive brings it back.</span>
-{{/* Keep it swaps the foot back as it was. Archiving navigates instead because
-     the plant leaves the Plants list and its page has to be left with it. */}}
+<span class="plant__note">Its history is kept. You can restore it from the archive.</span>
+{{/* Keep it swaps the buttons back. Archive is a full navigation, because the
+     plant leaves the Plants list and its page has to be left too. */}}
 <form method="get" action="{{.Keep}}"><button class="plant__keep" hx-get="{{.Keep}}" hx-target="#plant-foot" hx-swap="outerHTML settle:0ms">Keep it</button></form>
 <form method="post" action="{{.Archive}}"><button class="care care--small">Archive</button></form>
 {{else}}
