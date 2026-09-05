@@ -86,6 +86,11 @@ func rosewood(t *testing.T) *todayFixture {
 		exec("INSERT INTO care_event (garden_id, plant_id, care_type_id, performed_by, performed_at, recorded_at, done) VALUES ($1, $2, $3, $4, $5, $5, true)",
 			rosewoodID, p.id, waterID, readerID, p.lastWatered)
 	}
+	// Nigel gets a second care because the sheet draws What only for a plant
+	// with more than one. The set_at puts the feed a week out so his row stays
+	// a watering.
+	exec("INSERT INTO care_schedule (garden_id, plant_id, care_type_id, interval_count, interval_unit, set_at) VALUES ($1, $2, $3, 3, 'week', $4)",
+		rosewoodID, nigelID, feedID, day(time.August, 20))
 
 	queries := store.New(tx)
 	principal := auth.Principal{

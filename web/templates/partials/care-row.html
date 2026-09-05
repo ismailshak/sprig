@@ -1,13 +1,24 @@
 {{/* The row is one element under one id, so a swap replacing it lands on a
-     target the server named. A row due today gives the location alone, since
+     target the server named. The form is beside the link because a link
+     can't contain a button. A row due today gives the location alone, since
      the interval is a setting rather than something wanted while holding the
-     watering can. Neither the button nor the row has anything behind it yet,
-     and the avatar is empty until photos arrive. */}}
-{{define "care-row"}}<li class="row" id="{{.ID}}">
+     watering can. The avatar is empty until photos arrive. */}}
+{{define "care-row"}}<li class="row{{if .Done}} row--done{{end}}" id="{{.ID}}">
+{{if .Done}}<span class="row__open">{{else}}<a class="row__open" href="{{.Href}}" hx-get="{{.Href}}" hx-target="#sheet" hx-swap="outerHTML">{{end}}
 <span class="row__avatar"></span>
 <span class="row__text">
 <span class="row__name{{if .Botanical}} row__name--sp{{end}}">{{.Name}}</span>
-<span class="row__meta">{{if .Location}}<span class="row__part">{{.Location}}</span>{{end}}{{if and .Location (or .Late .When)}}<span class="dot">&middot;</span>{{end}}{{if .Late}}<span class="row__part"><span class="late">{{.Late}}</span></span>{{else if .When}}<span class="row__part">{{.Care}} {{.When}}</span>{{end}}</span>
+<span class="row__meta">{{if .Done}}<span class="row__part row__said">{{.Said}}</span>{{else}}{{if .Location}}<span class="row__part">{{.Location}}</span>{{end}}{{if and .Location (or .Late .When)}}<span class="dot">&middot;</span>{{end}}{{if .Late}}<span class="row__part"><span class="late">{{.Late}}</span></span>{{else if .When}}<span class="row__part">{{.Care}} {{.When}}</span>{{end}}{{end}}</span>
 </span>
-{{if .When}}<button class="care care--quiet">Log</button>{{else}}<button class="care">{{template "care-icon" .Slug}}{{.Care}}</button>{{end}}
+{{if .Done}}</span>{{else}}</a>
+<form method="post" action="{{.Path}}" hx-post="{{.Path}}" hx-target="#{{.ID}}" hx-swap="outerHTML">
+<input type="hidden" name="row" value="{{.Slug}}">
+<input type="hidden" name="when" value="now">
+{{if .When}}<button class="care care--quiet" name="care" value="{{.Slug}}">Log</button>{{else}}<button class="care" name="care" value="{{.Slug}}">{{template "care-icon" .Slug}}{{.Care}}</button>{{end}}
+</form>{{end}}
 </li>{{end}}
+
+{{/* The empty slot is swapped out of band to close a sheet the post came
+     from. */}}
+{{define "care-logged"}}{{template "care-row" .}}
+<div id="sheet" hx-swap-oob="true"></div>{{end}}

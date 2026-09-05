@@ -1,11 +1,14 @@
 package http
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"time"
+	"uuid"
 
+	"github.com/ismailshak/sprig/internal/auth"
 	"github.com/ismailshak/sprig/internal/schedule"
 	"github.com/ismailshak/sprig/internal/store"
 )
@@ -19,33 +22,65 @@ type today struct {
 }
 
 func (h *today) show(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
 	principal := PrincipalFrom(r)
-	now := h.now().In(locationFor(principal.User))
+	g, err := h.load(r.Context(), principal)
+	if err != nil {
+		serverError(h.logger, w, r, "load the day", err)
+		return
+	}
+	h.templates.render(w, r, view{page: "today"}, newTodayPage(principal.Garden, g))
+}
+
+// gardenDay is one read of the garden against the reader's clock. The page
+// and the sheet over it draw from the same one because the two have to agree
+// about the schedule.
+type gardenDay struct {
+	lines  []schedule.Line
+	day    schedule.Day
+	latest []store.CareEvent
+	plants int64
+	// now is in the reader's location.
+	now time.Time
+}
+
+func (h *today) load(ctx context.Context, principal auth.Principal) (gardenDay, error) {
+	g := gardenDay{now: h.now().In(locationFor(principal.User))}
 
 	schedules, err := h.queries.ListCareSchedules(ctx, principal.Garden.ID)
 	if err != nil {
-		serverError(h.logger, w, r, "list the schedules", err)
-		return
+		return g, fmt.Errorf("list the schedules: %w", err)
 	}
-	latest, err := h.queries.ListLatestCareEvents(ctx, principal.Garden.ID)
+	g.latest, err = h.queries.ListLatestCareEvents(ctx, principal.Garden.ID)
 	if err != nil {
-		serverError(h.logger, w, r, "list the latest care", err)
-		return
+		return g, fmt.Errorf("list the latest care: %w", err)
 	}
-	plants, err := h.queries.CountPlants(ctx, principal.Garden.ID)
+	g.plants, err = h.queries.CountPlants(ctx, principal.Garden.ID)
 	if err != nil {
-		serverError(h.logger, w, r, "count the plants", err)
-		return
+		return g, fmt.Errorf("count the plants: %w", err)
 	}
 
-	day := schedule.Today(schedule.Resolve(schedules, latest, now))
-	h.templates.render(w, r, view{page: "today"}, newTodayPage(principal.Garden, day, latest, plants, now))
+	g.lines = schedule.Resolve(schedules, g.latest, g.now)
+	g.day = schedule.Today(g.lines)
+	return g, nil
+}
+
+// plantLines is every schedule the plant has, in Resolve's order. An empty
+// result is a plant the garden does not have because ListCareSchedules leaves
+// out an archived plant.
+func plantLines(lines []schedule.Line, plantID uuid.UUID) []schedule.Line {
+	var out []schedule.Line
+	for _, line := range lines {
+		if line.Plant.ID == plantID {
+			out = append(out, line)
+		}
+	}
+	return out
 }
 
 type todayPage struct {
 	Date   string
 	Garden string
+	Sheet  *sheet
 	// Summary is nil when nothing is outstanding, and Empty carries the news
 	// in its place.
 	Summary  *todaySummary
@@ -86,7 +121,10 @@ type link struct {
 type careRow struct {
 	// ID is the id a swap targets. It carries the care type's slug rather
 	// than its name, because renaming a type leaves the slug alone.
-	ID   string
+	ID string
+	// Href opens the sheet for the row. Path is where the care button posts.
+	Href string
+	Path string
 	Name string
 	// Botanical marks a name that is the botanical one, which is set in
 	// italic.
@@ -100,13 +138,18 @@ type careRow struct {
 	When string
 	Care string
 	Slug string
+	// Done marks a row whose care was just logged. Said is what its meta line
+	// says instead.
+	Done bool
+	Said string
 }
 
 func careRowID(plant store.Plant, careType store.CareType) string {
 	return fmt.Sprintf("care-%s-%s", plant.ID, careType.Slug)
 }
 
-func newTodayPage(garden store.Garden, day schedule.Day, latest []store.CareEvent, plants int64, now time.Time) todayPage {
+func newTodayPage(garden store.Garden, g gardenDay) todayPage {
+	day, latest, plants, now := g.day, g.latest, g.plants, g.now
 	page := todayPage{
 		Date:   now.Format("Monday 2 January"),
 		Garden: garden.Name,
@@ -182,6 +225,8 @@ func careRows(rows []schedule.Row, now time.Time) []careRow {
 func newCareRow(row schedule.Row, now time.Time) careRow {
 	r := careRow{
 		ID:        careRowID(row.Plant, row.Care.CareType),
+		Href:      sheetPath(row.Plant.ID, row.Care.CareType.Slug),
+		Path:      logPath(row.Plant.ID),
 		Name:      row.Plant.DisplayName(),
 		Botanical: row.Plant.BotanicalOnly(),
 		Care:      row.Care.CareType.Name,

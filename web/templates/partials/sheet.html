@@ -1,0 +1,64 @@
+{{/* This template draws the sheet over Today and the empty slot when no
+     sheet is open. The two are one definition under one id so a swap in
+     either direction lands on the other.
+
+     Cancel and the scrim close the dialog through method="dialog", which
+     needs no script. Nothing traps focus or returns it.
+
+     The chips are radios, so the outcome and the day settle without a round
+     trip and the stylesheet shows the picker each one leaves undecided. A
+     What chip submits the form back as a query instead, because the usual
+     interval on the skip chip belongs to the care type selected and only the
+     server knows it. Without script that submission is a navigation, and
+     with it a swap of the sheet. */}}
+{{define "sheet"}}{{with .Sheet}}{{$s := .}}<dialog open class="sheet" id="sheet" aria-label="{{.Label}}">
+<form method="dialog"><button class="sheet__scrim" aria-label="Close"></button></form>
+<div class="sheet__panel">
+<div class="sheet__grip"></div>
+<a class="sheet__plant" href="{{.Plant.Href}}">
+<span class="row__avatar"></span>
+<span class="row__text">
+<span class="row__name{{if .Plant.Botanical}} row__name--sp{{end}}">{{.Plant.Name}}</span>
+<span class="row__meta"><span class="row__part">{{with .Plant.Sub}}{{if $s.Plant.Italic}}<i>{{.}}</i>{{else}}{{.}}{{end}}{{end}}{{if and .Plant.Sub .Plant.Location}} &middot; {{end}}{{.Plant.Location}}</span></span>
+</span>
+<span class="sheet__chevron">{{template "icon-chevron"}}</span>
+</a>
+<form class="sheet__form" method="post" action="{{.Path}}" hx-post="{{.Path}}" hx-target="#{{.Target}}" hx-swap="outerHTML">
+{{/* Enter in the note field presses the form's first submit button, which
+     would otherwise be a What chip. */}}
+<button class="sheet__default" name="care" value="{{.Care}}" tabindex="-1" aria-hidden="true"></button>
+<input type="hidden" name="row" value="{{.Row}}">
+{{if gt (len .Cares) 1}}<fieldset class="field">
+<legend class="field__label">What</legend>
+<div class="chips">{{range .Cares}}<button class="chip" name="care" value="{{.Value}}" formmethod="get" formaction="{{$s.Path}}" aria-pressed="{{.On}}" hx-get="{{$s.Path}}" hx-include="closest form" hx-target="#sheet" hx-swap="outerHTML">{{.Label}}</button>{{end}}</div>
+</fieldset>{{end}}
+<fieldset class="field">
+<legend class="field__label">Outcome</legend>
+<div class="chips">
+<label class="chip"><input type="radio" name="outcome" value="done"{{if not .Skipped}} checked{{end}}>Done</label>
+<label class="chip"><input type="radio" name="outcome" value="skipped"{{if .Skipped}} checked{{end}}>Skipped</label>
+</div>
+</fieldset>
+<fieldset class="field sheet__done">
+<legend class="field__label">When it happened</legend>
+<div class="chips">{{range .Whens}}<label class="chip"><input type="radio" name="when" value="{{.Value}}"{{if .On}} checked{{end}}>{{.Label}}</label>{{end}}</div>
+<input class="input input--narrow sheet__clock" type="time" name="time" value="{{.Clock}}" aria-label="Time">
+<input class="input input--narrow sheet__at" type="datetime-local" name="at" value="{{.At}}" aria-label="Day and time">
+{{with .WhenError}}<p class="field__error">{{.}}</p>{{end}}
+</fieldset>
+<fieldset class="field sheet__skipped">
+<legend class="field__label">Ask again in</legend>
+<div class="chips">{{range .Snoozes}}<label class="chip"><input type="radio" name="again" value="{{.Value}}"{{if .On}} checked{{end}}>{{.Label}}</label>{{end}}</div>
+</fieldset>
+<div class="field">
+<label class="field__label" for="sheet-note">Note <span class="field__hint">optional</span></label>
+<input class="input" id="sheet-note" name="note" type="text" placeholder="{{if .Skipped}}Soil still damp{{else}}Anything worth remembering{{end}}" value="{{.Note}}">
+</div>
+{{/* The sheet draws both wordings. The stylesheet shows the one the outcome
+     chips call for. */}}
+<button class="sheet__go sheet__done" name="care" value="{{.Care}}">Log {{.Noun}}</button>
+<button class="sheet__go sheet__skipped" name="care" value="{{.Care}}">Record a skip</button>
+</form>
+<form method="dialog"><button class="sheet__cancel">Cancel</button></form>
+</div>
+</dialog>{{else}}<div id="sheet"></div>{{end}}{{end}}
