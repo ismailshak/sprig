@@ -65,6 +65,31 @@ var routeAccess = map[string]access{
 		path:       archivePlantPath(rosewoodArchivedID),
 		foreign:    archivePlantPath(fairviewArchivedID),
 	},
+	// The editor's own two routes take the watering schedule, because opening
+	// the editor and saving it leave the row where they found it.
+	"GET /plants/{plant}/schedule/{care}": {
+		capability: auth.ScheduleEdit,
+		path:       schedulePath(rosewoodPlantID, "water"),
+		foreign:    schedulePath(fairviewPlantID, "water"),
+	},
+	"POST /plants/{plant}/schedule/{care}": {
+		capability: auth.ScheduleEdit,
+		path:       schedulePath(rosewoodPlantID, "water"),
+		foreign:    schedulePath(fairviewPlantID, "water"),
+	},
+	// Removing takes the feeding schedule, because the request it answers
+	// leaves that schedule gone and the two routes above would then have
+	// nothing to open.
+	"GET /plants/{plant}/schedule/{care}/remove": {
+		capability: auth.ScheduleEdit,
+		path:       removeSchedulePath(rosewoodPlantID, "feed"),
+		foreign:    removeSchedulePath(fairviewPlantID, "feed"),
+	},
+	"POST /plants/{plant}/schedule/{care}/remove": {
+		capability: auth.ScheduleEdit,
+		path:       removeSchedulePath(rosewoodPlantID, "feed"),
+		foreign:    removeSchedulePath(fairviewPlantID, "feed"),
+	},
 	"GET /plants/{plant}/log":  {capability: auth.CareLog, path: logPath(rosewoodPlantID), foreign: logPath(fairviewPlantID)},
 	"POST /plants/{plant}/log": {capability: auth.CareLog, path: logPath(rosewoodPlantID), foreign: logPath(fairviewPlantID)},
 	"DELETE /plants/{plant}/log/{event}": {
@@ -96,10 +121,11 @@ var (
 	fairviewArchivedID = uuid.MustParse("00000000-0000-7000-8000-000000000232")
 )
 
-// routeQueries seeds two gardens, each with a scheduled plant and two care
-// events, because a route naming an object needs one in sitterPrincipal's
-// garden and one outside it. The events are the principal's own because the
-// route that deletes one answers a caller who may delete only their own.
+// routeQueries seeds two gardens, each with a plant scheduled for both its care
+// types and two care events, because a route naming an object needs one in
+// sitterPrincipal's garden and one outside it. The events are the principal's
+// own because the route that deletes one answers a caller who may delete only
+// their own. The second care type is the schedule the remove route takes away.
 func routeQueries(t *testing.T) *store.Queries {
 	t.Helper()
 
@@ -111,7 +137,8 @@ func routeQueries(t *testing.T) *store.Queries {
 		args []any
 	}{
 		{"INSERT INTO garden (id, name) VALUES ($1, 'Rosewood'), ($2, 'Fairview')", []any{rosewoodID, fairviewID}},
-		{"INSERT INTO care_type (garden_id, name, slug) VALUES ($1, 'Water', 'water'), ($2, 'Water', 'water')", []any{rosewoodID, fairviewID}},
+		{`INSERT INTO care_type (garden_id, name, slug)
+			VALUES ($1, 'Water', 'water'), ($2, 'Water', 'water'), ($1, 'Feed', 'feed'), ($2, 'Feed', 'feed')`, []any{rosewoodID, fairviewID}},
 		{"INSERT INTO plant (id, garden_id, nickname) VALUES ($1, $2, 'Big Fella'), ($3, $4, 'Gerald')", []any{rosewoodPlantID, rosewoodID, fairviewPlantID, fairviewID}},
 		{"INSERT INTO plant (id, garden_id, nickname) VALUES ($1, $2, 'Doris'), ($3, $4, 'Nigel')", []any{rosewoodArchivedID, rosewoodID, fairviewArchivedID, fairviewID}},
 		{`INSERT INTO care_schedule (garden_id, plant_id, care_type_id, interval_count, interval_unit)
@@ -120,13 +147,13 @@ func routeQueries(t *testing.T) *store.Queries {
 			SELECT garden_id, $1, id, 7, 'day' FROM care_type WHERE garden_id = $2`, []any{fairviewPlantID, fairviewID}},
 		{"INSERT INTO app_user (id, display_name, handle, timezone) VALUES ($1, 'Ellie', 'ellie', 'Europe/London')", []any{sitterPrincipal().User.ID}},
 		{`INSERT INTO care_event (id, garden_id, plant_id, care_type_id, performed_by, performed_at, done)
-			SELECT $1, garden_id, $2, id, $3, now(), true FROM care_type WHERE garden_id = $4`, []any{rosewoodEventID, rosewoodPlantID, sitterPrincipal().User.ID, rosewoodID}},
+			SELECT $1, garden_id, $2, id, $3, now(), true FROM care_type WHERE garden_id = $4 AND slug = 'water'`, []any{rosewoodEventID, rosewoodPlantID, sitterPrincipal().User.ID, rosewoodID}},
 		{`INSERT INTO care_event (id, garden_id, plant_id, care_type_id, performed_by, performed_at, done)
-			SELECT $1, garden_id, $2, id, $3, now(), true FROM care_type WHERE garden_id = $4`, []any{fairviewEventID, fairviewPlantID, sitterPrincipal().User.ID, fairviewID}},
+			SELECT $1, garden_id, $2, id, $3, now(), true FROM care_type WHERE garden_id = $4 AND slug = 'water'`, []any{fairviewEventID, fairviewPlantID, sitterPrincipal().User.ID, fairviewID}},
 		{`INSERT INTO care_event (id, garden_id, plant_id, care_type_id, performed_by, performed_at, done)
-			SELECT $1, garden_id, $2, id, $3, now(), true FROM care_type WHERE garden_id = $4`, []any{rosewoodUndoEventID, rosewoodPlantID, sitterPrincipal().User.ID, rosewoodID}},
+			SELECT $1, garden_id, $2, id, $3, now(), true FROM care_type WHERE garden_id = $4 AND slug = 'water'`, []any{rosewoodUndoEventID, rosewoodPlantID, sitterPrincipal().User.ID, rosewoodID}},
 		{`INSERT INTO care_event (id, garden_id, plant_id, care_type_id, performed_by, performed_at, done)
-			SELECT $1, garden_id, $2, id, $3, now(), true FROM care_type WHERE garden_id = $4`, []any{fairviewUndoEventID, fairviewPlantID, sitterPrincipal().User.ID, fairviewID}},
+			SELECT $1, garden_id, $2, id, $3, now(), true FROM care_type WHERE garden_id = $4 AND slug = 'water'`, []any{fairviewUndoEventID, fairviewPlantID, sitterPrincipal().User.ID, fairviewID}},
 	}
 	for _, row := range seed {
 		if _, err := tx.Exec(ctx, row.sql, row.args...); err != nil {

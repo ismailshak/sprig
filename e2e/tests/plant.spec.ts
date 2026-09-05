@@ -123,7 +123,7 @@ test('a care the plant is not scheduled for is recorded from its own page', asyn
   await sheet.submit('Log repotting');
 
   await expect(plant.recentLines().first()).toContainText('You repotted · today');
-  await expect(plant.scheduleRow('Repot')).toHaveCount(0);
+  await expect(plant.scheduleRow('Repot')).toContainText('Not scheduled');
 });
 
 test('a time later than now is refused on the plant it was logged from', async ({ plant, sheet }) => {

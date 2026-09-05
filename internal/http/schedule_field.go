@@ -86,8 +86,8 @@ func newScheduleDraft(care store.CareType, now time.Time) scheduleDraft {
 	}
 }
 
-// readScheduleDraft reads one row from a query or a form body. It returns
-// false for a value none of the row's controls offers.
+// readScheduleDraft reads one row of the add form from a query or a form body.
+// It returns false for a value none of the row's controls offers.
 //
 // open names the rows that are open and close the one a button just closed,
 // which is how the open rows survive a re-render with no JavaScript.
@@ -97,8 +97,17 @@ func readScheduleDraft(values url.Values, care store.CareType, now time.Time) (s
 	if !f.open {
 		return f, true
 	}
+	return f.fill(values, now)
+}
 
-	name := func(part string) string { return care.Slug + "-" + part }
+// fill reads the row's own controls over the draft. It is separate from
+// readScheduleDraft because the in-place editor has one row and no button
+// saying whether it is open.
+func (f scheduleDraft) fill(values url.Values, now time.Time) (scheduleDraft, bool) {
+	name := func(part string) string { return f.care.Slug + "-" + part }
+	// The years are read from the draft the row was drawn from, so a schedule
+	// anchored before this year comes back under the year it already had.
+	years := anchorYears(now, f.year)
 	if picked := values.Get(name("shape")); picked != "" {
 		if !slices.ContainsFunc(shapes, func(s shape) bool { return s.value == picked }) {
 			return f, false
@@ -136,7 +145,7 @@ func readScheduleDraft(values url.Values, care store.CareType, now time.Time) (s
 		if f.month, ok = monthIn(values.Get(name("month"))); !ok {
 			return f, false
 		}
-		if f.year, ok = numberIn(values.Get(name("year")), anchorYears(now)); !ok {
+		if f.year, ok = numberIn(values.Get(name("year")), years); !ok {
 			return f, false
 		}
 	}
@@ -191,6 +200,52 @@ func (f scheduleDraft) params(gardenID uuid.UUID) (store.CreateCareScheduleParam
 	return p, ""
 }
 
+// scheduleDraftOf is the editor opened on a schedule the plant already has. The
+// three shapes are told apart the way the schema tells them apart, by which of
+// the nullable groups are set.
+func scheduleDraftOf(care store.CareType, s store.CareSchedule, now time.Time) scheduleDraft {
+	f := newScheduleDraft(care, now)
+	switch {
+	case s.AnchorDate == nil:
+		f.shape = shapeCadence
+	case s.IntervalCount == nil:
+		f.shape = shapeOnce
+	default:
+		f.shape = shapeDate
+	}
+	if s.IntervalCount != nil {
+		f.every = strconv.Itoa(int(*s.IntervalCount))
+		f.unit = *s.IntervalUnit
+	}
+	// The schema sets the two season months together, so the end is non-nil
+	// wherever the start is.
+	if s.SeasonStartMonth != nil {
+		f.seasonal = true
+		f.from, f.to = int(*s.SeasonStartMonth), int(*s.SeasonEndMonth)
+	}
+	if s.AnchorDate != nil {
+		// The column is a date, so its parts are read as they were written
+		// rather than converted into the reader's location first.
+		year, month, day := s.AnchorDate.Date()
+		// A month-precise anchor is stored on the first of its month, and that
+		// day is the part nobody gave.
+		f.day = day
+		if *s.AnchorPrecision == schedule.PrecisionMonth {
+			f.day = anyDay
+		}
+		f.month, f.year = int(month), year
+	}
+	return f
+}
+
+// upsert is the row as the editor saves it against a plant that already
+// exists. The two generated params differ only in the query they belong to.
+func (f scheduleDraft) upsert(gardenID, plantID uuid.UUID) (store.UpsertCareScheduleParams, string) {
+	p, message := f.params(gardenID)
+	p.PlantID = plantID
+	return store.UpsertCareScheduleParams(p), message
+}
+
 // scheduleField is one row of the schedule list as the form draws it. An open
 // row is the editor and a closed one names a care the plant is not scheduled
 // for.
@@ -225,7 +280,7 @@ type scheduleField struct {
 
 func newScheduleField(f scheduleDraft, path string, now time.Time) scheduleField {
 	field := scheduleField{
-		ID:       scheduleFieldID(f.care),
+		ID:       scheduleRowID(f.care),
 		Care:     f.care.Name,
 		Slug:     f.care.Slug,
 		Open:     f.open,
@@ -255,14 +310,8 @@ func newScheduleField(f scheduleDraft, path string, now time.Time) scheduleField
 	field.To = monthOptions(f.to)
 	field.Days = append([]option{{Value: strconv.Itoa(anyDay), Label: "Any day", On: f.day == anyDay}}, numberOptions(days()[1:], f.day)...)
 	field.Months = monthOptions(f.month)
-	field.Years = numberOptions(anchorYears(now), f.year)
+	field.Years = numberOptions(anchorYears(now, f.year), f.year)
 	return field
-}
-
-// scheduleFieldID names the row for the swap that replaces it. It uses the
-// slug rather than the name because renaming a care type is free.
-func scheduleFieldID(care store.CareType) string {
-	return "sched-" + care.Slug
 }
 
 // units is the four the schema allows, in the order the select offers them.
@@ -301,9 +350,14 @@ func days() []int {
 	return out
 }
 
-// anchorYears is this year and the six after it.
-func anchorYears(now time.Time) []int {
-	out := make([]int, 0, anchorSpan)
+// anchorYears is this year and the six after it, with of prepended where it
+// comes before this year, so a schedule anchored earlier keeps an option of
+// its own instead of being redrawn as a date nobody gave.
+func anchorYears(now time.Time, of int) []int {
+	out := make([]int, 0, anchorSpan+1)
+	if of < now.Year() {
+		out = append(out, of)
+	}
 	for i := range anchorSpan {
 		out = append(out, now.Year()+i)
 	}

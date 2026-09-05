@@ -3,6 +3,8 @@ package http
 import (
 	"testing"
 	"time"
+
+	"github.com/ismailshak/sprig/internal/schedule"
 )
 
 func TestWhenWord(t *testing.T) {
@@ -36,6 +38,34 @@ func TestLateWord(t *testing.T) {
 	}
 	if got := lateWord(2); got != "2 days late" {
 		t.Errorf("lateWord(2) = %q, want 2 days late", got)
+	}
+}
+
+// A month-precise occurrence was never precise to a day, so neither direction
+// counts days towards or away from it.
+func TestOverdueWord(t *testing.T) {
+	today := time.Date(2026, time.September, 3, 0, 0, 0, 0, time.UTC)
+	day := schedule.Line{Due: today.AddDate(0, 0, -2), Precision: schedule.PrecisionDay, Days: -2}
+	month := schedule.Line{Due: time.Date(2026, time.March, 1, 0, 0, 0, 0, time.UTC), Precision: schedule.PrecisionMonth, Days: -186}
+
+	if got := overdueWord(day, today); got != "2 days late" {
+		t.Errorf("a day-precise line reads %q, want 2 days late", got)
+	}
+	if got := overdueWord(month, today); got != "overdue since March" {
+		t.Errorf("a month-precise line reads %q, want overdue since March", got)
+	}
+}
+
+func TestComingWord(t *testing.T) {
+	today := time.Date(2026, time.September, 3, 0, 0, 0, 0, time.UTC)
+	day := schedule.Line{Due: today.AddDate(0, 0, 2), Precision: schedule.PrecisionDay, Days: 2}
+	month := schedule.Line{Due: time.Date(2027, time.March, 1, 0, 0, 0, 0, time.UTC), Precision: schedule.PrecisionMonth, Days: 179}
+
+	if got := comingWord(day, today); got != "Saturday" {
+		t.Errorf("a day-precise line reads %q, want Saturday", got)
+	}
+	if got := comingWord(month, today); got != "in March 2027" {
+		t.Errorf("a month-precise line reads %q, want in March 2027", got)
 	}
 }
 

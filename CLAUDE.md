@@ -87,7 +87,7 @@ Playwright rules:
 - A test runs in both projects unless tagged `@js` for behaviour that only exists with JavaScript on.
 - A test drives a screen through a screen object under `e2e/screens/`, one class per screen, reached as a fixture on the `test` the harness exports. A screen object holds locators and the actions a person performs, never an assertion and nothing that depends on JavaScript. A method exists because it encodes something the server names, such as the id format of a care row, or because two tests need it.
 - Seeded people and plants are named in one harness file, not as strings in each test.
-- A test name is one claim about the app stated as a fact, like the Go tests: `a signed-out visit is sent to sign in`, `a session survives a reload`. It names a role or a state, never a seeded person, and never joins two claims with `and`. A name that needs `and` is two tests.
+- A test name is one claim about the app stated as a fact, like the Go tests: `a signed-out visit is sent to sign in`, `a session survives a reload`. It names a role or a state, never a seeded person.
 - No test points at a deployed database. The harness refuses to start unless `SPRIG_DATABASE_URL` resolves to loopback or the compose service name.
 - Tests cover our business logic, data mechanics and correctness. They never test libraries, databases or anything else outside the application.
 

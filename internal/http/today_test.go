@@ -97,7 +97,7 @@ func rosewood(t *testing.T) *todayFixture {
 		User:         store.AppUser{ID: readerID, DisplayName: "Ellie", Handle: "ellie", Timezone: "Europe/London"},
 		Garden:       store.Garden{ID: rosewoodID, Name: "Rosewood"},
 		Membership:   store.Membership{Role: "owner"},
-		Capabilities: auth.Capabilities{auth.CareLog: true, auth.PlantCreate: true, auth.PlantEdit: true, auth.PlantArchive: true},
+		Capabilities: auth.Capabilities{auth.CareLog: true, auth.PlantCreate: true, auth.PlantEdit: true, auth.PlantArchive: true, auth.ScheduleEdit: true},
 	}
 	handler := &today{logger: testLogger, queries: queries, templates: testTemplates(), now: func() time.Time { return thursday }}
 	return &todayFixture{handler: handler, tx: tx, principal: principal}

@@ -50,7 +50,7 @@ test('a name finished with Enter adds the plant', async ({ plantForm, plant }) =
   await expect(plant.heading()).toHaveText('Ada');
 });
 
-test('a plant added with no schedule has no Schedule section', async ({ plantForm, plant }) => {
+test('a plant added with no schedule is on none of the care types', async ({ plantForm, plant }) => {
   await plantForm.openNew();
   await plantForm.field('Nickname').fill('Ada');
 
@@ -58,7 +58,9 @@ test('a plant added with no schedule has no Schedule section', async ({ plantFor
   await plantForm.submit('Add plant');
 
   await expect(plant.heading()).toHaveText('Ada');
-  await expect(plant.section('Schedule')).toHaveCount(0);
+  for (const care of ['Water', 'Feed', 'Repot']) {
+    await expect(plant.scheduleRow(care)).toContainText('Not scheduled');
+  }
 });
 
 // The shape decides which fields the row draws, and the swap that redraws it is
