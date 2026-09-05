@@ -17,4 +17,14 @@ export class TodayScreen {
   careRow(plant: Plant, care: string): Locator {
     return this.page.locator(`#care-${plant.id}-${care}`);
   }
+
+  // Without JavaScript the link is a navigation rather than a swap.
+  async openSheet(plant: Plant, care: string): Promise<void> {
+    await this.careRow(plant, care).getByRole('link').click();
+    await this.page.waitForLoadState();
+  }
+
+  careButton(plant: Plant, care: string): Locator {
+    return this.careRow(plant, care).getByRole('button');
+  }
 }
