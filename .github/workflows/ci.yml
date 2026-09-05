@@ -1,9 +1,18 @@
 name: CI
-on: [pull_request]
+# A push to main or a version tag runs the same four jobs and then publishes, so
+# an image ships only from a commit they passed. The push run also writes the
+# caches a pull request reads, because a cache written on a pull request branch is
+# readable from that branch alone.
+on:
+  pull_request:
+  push:
+    branches: [main]
+    tags: ["v*"]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # Only a pull request cancels a superseded run because a cancelled push leaves its caches unwritten or a tag unpublished
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -46,8 +55,22 @@ jobs:
         run: |
           pnpm --dir e2e install --frozen-lockfile
           pnpm --dir e2e exec playwright install --with-deps webkit
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v4
+      # Built here rather than through compose because this action reads and writes the Actions layer cache
+      - name: Build the image the suite runs
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64
+          build-args: GO_TAGS=dev
+          load: true
+          tags: sprig-app:dev
+          # A scope per build because without one the later of the e2e and image builds overwrites the other's cache index
+          cache-from: type=gha,scope=e2e
+          cache-to: type=gha,scope=e2e,mode=max
       - name: Run the suite
-        run: mise run e2e
+        run: mise run e2e --no-build
       - name: Keep the traces of failed tests
         if: failure()
         uses: actions/upload-artifact@v7
@@ -69,3 +92,48 @@ jobs:
           context: .
           platforms: linux/amd64
           push: false
+          cache-from: type=gha,scope=image
+          cache-to: type=gha,scope=image,mode=max
+
+  publish:
+    needs: [lint, test, e2e, image]
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v7
+        with:
+          # go build takes the version off the tag, which a shallow clone leaves behind.
+          fetch-depth: 0
+      - name: Work out the tags
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ghcr.io/${{ github.repository }}
+          # A v0.1.0 push publishes 0.1.0, 0.1 and 0. A main push moves the :main tag.
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=ref,event=branch
+          flavor: latest=false
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v4
+      - name: Sign in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push the image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # No cache-from because a cache fault can't reach a release built from nothing
