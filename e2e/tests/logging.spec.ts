@@ -36,8 +36,8 @@ test('logging from the sheet takes the plant off the list', async ({ today, shee
 
 test('the care button logs the care as now', async ({ today }) => {
   await today.careButton(plants.doris, 'water').click();
-  // With JavaScript the row is still there in its logged state, so a locator
-  // for any button would match its Undo.
+  // With JavaScript the row is still there in its logged state. A locator for
+  // any button would match its Undo.
   await expect(today.careRow(plants.doris, 'water').getByRole('button', { name: 'Water' })).toHaveCount(0);
 
   await today.open();
@@ -107,10 +107,39 @@ test('a logged row can be taken back inside its window @js', async ({ today }) =
   await expect(row.getByRole('button', { name: 'Water' })).toBeVisible();
 });
 
-// Leaves a little room under the default timeout for the grace window to finish.
+// The 15s wait covers the 4s grace window and the collapse after it, inside
+// Playwright's 30s test timeout.
 test('a logged row leaves the list when its window closes @js', async ({ today }) => {
   await today.careButton(plants.doris, 'water').click();
   await expect(today.undoButton(plants.doris, 'water')).toBeVisible();
 
   await expect(today.careRow(plants.doris, 'water')).toHaveCount(0, { timeout: 15_000 });
+});
+
+// Five is the server's bound on the feed rather than a count of the seed,
+// which holds months of history.
+test('the feed carries the five newest events', async ({ today }) => {
+  await expect(today.feedLines()).toHaveCount(5);
+});
+
+test('a care logged from the sheet reaches the top of the feed @js', async ({ today, sheet }) => {
+  await today.openSheet(plants.doris, 'water');
+  await sheet.submit('Log watering');
+
+  await expect(today.feedLines().first()).toContainText('You watered Doris');
+});
+
+// The row leaves the day on the reload that follows the post. The feed holds
+// the only Undo, on the care just logged, because every seeded event is days
+// old and outside the window.
+test('a logged care is taken back from the feed with no script running @nojs', async ({ today }) => {
+  await today.careButton(plants.doris, 'water').click();
+  await expect(today.careRow(plants.doris, 'water')).toHaveCount(0);
+
+  await expect(today.feedUndo()).toHaveCount(1);
+  await expect(today.feedLines().first().getByRole('button', { name: 'Undo' })).toBeVisible();
+
+  await today.feedUndo().click();
+
+  await expect(today.careRow(plants.doris, 'water')).toBeVisible();
 });
