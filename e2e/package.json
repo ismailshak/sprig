@@ -4,6 +4,8 @@
   "type": "module",
   "scripts": {
     "check": "tsc --noEmit",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "test": "playwright test",
     "test:ui": "playwright test --ui",
     "browsers": "playwright install --with-deps webkit"
@@ -11,6 +13,7 @@
   "devDependencies": {
     "@playwright/test": "1.62.1",
     "@types/node": "26.4.1",
+    "prettier": "3.9.6",
     "typescript": "6.0.3"
   }
 }

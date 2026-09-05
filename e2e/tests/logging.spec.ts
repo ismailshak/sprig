@@ -57,7 +57,7 @@ test('a skip asks again in the chosen days', async ({ today, sheet }) => {
   await expect(row).toContainText('Water tomorrow');
 });
 
-test('switching what names that care\'s usual interval', async ({ today, sheet }) => {
+test("switching what names that care's usual interval", async ({ today, sheet }) => {
   await today.openSheet(plants.nigel, 'water');
   await sheet.chip('Skipped').check();
   await expect(sheet.chip('The usual 4 days')).toBeVisible();
