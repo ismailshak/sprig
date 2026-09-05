@@ -7,9 +7,57 @@ package store
 
 import (
 	"context"
+	"time"
 
 	"uuid"
 )
+
+const createCareEvent = `-- name: CreateCareEvent :one
+INSERT INTO care_event (garden_id, plant_id, care_type_id, performed_by, performed_at, recorded_at, done, note, override_interval_days)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+RETURNING id, garden_id, plant_id, care_type_id, performed_by, performed_at, recorded_at, done, note, override_interval_days
+`
+
+type CreateCareEventParams struct {
+	GardenID             uuid.UUID
+	PlantID              uuid.UUID
+	CareTypeID           uuid.UUID
+	PerformedBy          uuid.UUID
+	PerformedAt          time.Time
+	RecordedAt           time.Time
+	Done                 bool
+	Note                 *string
+	OverrideIntervalDays *int32
+}
+
+// The handler passes recorded_at because its clock and the row have to agree.
+func (q *Queries) CreateCareEvent(ctx context.Context, arg CreateCareEventParams) (CareEvent, error) {
+	row := q.db.QueryRow(ctx, createCareEvent,
+		arg.GardenID,
+		arg.PlantID,
+		arg.CareTypeID,
+		arg.PerformedBy,
+		arg.PerformedAt,
+		arg.RecordedAt,
+		arg.Done,
+		arg.Note,
+		arg.OverrideIntervalDays,
+	)
+	var i CareEvent
+	err := row.Scan(
+		&i.ID,
+		&i.GardenID,
+		&i.PlantID,
+		&i.CareTypeID,
+		&i.PerformedBy,
+		&i.PerformedAt,
+		&i.RecordedAt,
+		&i.Done,
+		&i.Note,
+		&i.OverrideIntervalDays,
+	)
+	return i, err
+}
 
 const listLatestCareEvents = `-- name: ListLatestCareEvents :many
 SELECT DISTINCT ON (plant_id, care_type_id) id, garden_id, plant_id, care_type_id, performed_by, performed_at, recorded_at, done, note, override_interval_days
