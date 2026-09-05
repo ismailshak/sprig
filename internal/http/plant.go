@@ -108,7 +108,11 @@ type plantPage struct {
 	// no section rather than an empty one.
 	Reference *plantReference
 	Recent    []recentLine
-	Sheet     *sheet
+	// Activity is the whole log filtered to this plant, at the foot of Recent.
+	// It is nil for a plant with nothing recorded, where the link would lead to
+	// a page saying what the line above it already says.
+	Activity *link
+	Sheet    *sheet
 }
 
 type plantName struct {
@@ -169,6 +173,9 @@ func newPlantPage(principal auth.Principal, d plantDetail) plantPage {
 	}
 	if plant.Location != nil {
 		page.Room = *plant.Location
+	}
+	if len(d.recent) > 0 {
+		page.Activity = &link{Label: "All activity for " + page.Name, Href: plantActivityPath(plant.ID)}
 	}
 	if plant.ArchivedAt != nil {
 		return page

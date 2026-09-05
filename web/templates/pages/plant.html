@@ -66,6 +66,7 @@
 {{range .Recent}}<li class="logline"><b>{{.Who}}</b> {{.Did}} &middot; {{.When}}</li>
 {{else}}<li class="logline logline--none">Nothing recorded yet.</li>
 {{end}}</ul>
+{{with .Activity}}<a class="foot-link" href="{{.Href}}">{{.Label}}{{template "icon-chevron"}}</a>{{end}}
 </section>
 
 {{template "plant-foot" .}}

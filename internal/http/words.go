@@ -106,14 +106,18 @@ func stamp(t time.Time) string {
 	return t.Format("Mon 2 Jan, 3:04pm")
 }
 
+// clockWord is the time of day a log row gives, in the reader's zone.
+func clockWord(at, now time.Time) string {
+	return at.In(now.Location()).Format("3:04pm")
+}
+
 // feedWhen names when an event happened, as the feed on Today says it. Today
 // and yesterday carry the clock because those are the two a reader checks
 // against memory.
 func feedWhen(at, now time.Time) string {
-	at = at.In(now.Location())
 	when := agoWord(at, now)
 	if schedule.DaysBetween(at, now) <= 1 {
-		return when + ", " + at.Format("3:04pm")
+		return when + ", " + clockWord(at, now)
 	}
 	return when
 }

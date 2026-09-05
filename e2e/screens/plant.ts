@@ -88,6 +88,11 @@ export class PlantScreen {
     return this.section('Recent').getByRole('listitem');
   }
 
+  // The link under Recent, which opens the activity log filtered to this plant.
+  allActivity(): Locator {
+    return this.section('Recent').getByRole('link');
+  }
+
   async edit(): Promise<void> {
     await this.page.getByRole('link', { name: 'Edit plant' }).click();
     await this.page.waitForLoadState();

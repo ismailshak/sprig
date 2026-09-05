@@ -2,6 +2,7 @@ package http
 
 import (
 	"context"
+	"html"
 	"net/http"
 	"net/http/httptest"
 	"regexp"
@@ -84,15 +85,45 @@ func at(month time.Month, d, hour, minute int) time.Time {
 
 func (f *logFixture) show(t *testing.T) string {
 	t.Helper()
+	return f.get(t, activityPath)
+}
 
-	ctx := context.WithValue(t.Context(), principalKey, f.principal)
-	req := httptest.NewRequestWithContext(ctx, http.MethodGet, activityPath, nil)
-	rec := httptest.NewRecorder()
-	f.handler.show(rec, req)
+// get requests the log at a URL and fails on any status but 200.
+func (f *logFixture) get(t *testing.T, target string) string {
+	t.Helper()
+
+	rec := f.request(t, target)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusOK, rec.Body.String())
 	}
 	return rec.Body.String()
+}
+
+func (f *logFixture) request(t *testing.T, target string) *httptest.ResponseRecorder {
+	t.Helper()
+
+	ctx := context.WithValue(t.Context(), principalKey, f.principal)
+	req := httptest.NewRequestWithContext(ctx, http.MethodGet, target, nil)
+	rec := httptest.NewRecorder()
+	f.handler.show(rec, req)
+	return rec
+}
+
+// care inserts one care event. The tests write their own history because one
+// derived from a schedule has no gaps in it to find.
+func (f *logFixture) care(t *testing.T, plantID, careID uuid.UUID, at time.Time) {
+	t.Helper()
+	f.exec(t, `INSERT INTO care_event (garden_id, plant_id, care_type_id, performed_by, performed_at, recorded_at, done)
+		VALUES ($1, $2, $3, $4, $5, $5, true)`, rosewoodID, plantID, careID, readerID, at)
+}
+
+// waterings inserts a watering for each argument, that many days before the
+// Thursday the garden is written against.
+func (f *logFixture) waterings(t *testing.T, plantID uuid.UUID, daysAgo ...int) {
+	t.Helper()
+	for _, days := range daysAgo {
+		f.care(t, plantID, waterID, thursday.AddDate(0, 0, -days))
+	}
 }
 
 func (f *logFixture) exec(t *testing.T, sql string, args ...any) {
@@ -100,6 +131,50 @@ func (f *logFixture) exec(t *testing.T, sql string, args ...any) {
 	if _, err := f.tx.Exec(t.Context(), sql, args...); err != nil {
 		t.Fatalf("%v\n%s", err, sql)
 	}
+}
+
+// backlink matches the link in the top bar. The activity log has one only when
+// it is filtered to a plant.
+var backlink = regexp.MustCompile(`(?s)<a class="backlink" href="([^"]*)">(.*?)</a>`)
+
+// footLink matches a link under the list. On the activity log those are the
+// pager's two links.
+var footLink = regexp.MustCompile(`(?s)<a class="foot-link" href="([^"]*)">(.*?)</a>`)
+
+// pagerLink is the href of the link under the list with this text, or "" when
+// the page has no such link.
+func pagerLink(page, label string) string {
+	for _, m := range footLink.FindAllStringSubmatch(page, -1) {
+		if text(m[2]) == label {
+			return html.UnescapeString(m[1])
+		}
+	}
+	return ""
+}
+
+const (
+	olderLink  = "Older activity"
+	latestLink = "Latest activity"
+)
+
+// follow requests the page the link with this text points at.
+func (f *logFixture) follow(t *testing.T, page, label string) string {
+	t.Helper()
+
+	href := pagerLink(page, label)
+	if href == "" {
+		t.Fatalf("the page has no %q link:\n%s", label, text(page))
+	}
+	return f.get(t, href)
+}
+
+// daysBack counts from newest to oldest, for one care a day over that range.
+func daysBack(newest, oldest int) []int {
+	out := make([]int, 0, oldest-newest+1)
+	for d := newest; d <= oldest; d++ {
+		out = append(out, d)
+	}
+	return out
 }
 
 // railItemElement matches every item on the strand, whichever of the three it is.
@@ -344,5 +419,293 @@ func TestActivity_AGardenWithNoPlantsIsOfferedItsFirst(t *testing.T) {
 
 	if !strings.Contains(got, "No plants yet") || !strings.Contains(got, "Add a plant") {
 		t.Errorf("the log of a garden with no plants reads %q, want the first run's screen", got)
+	}
+}
+
+func TestActivity_ALogShorterThanAPageHasNoOlderLink(t *testing.T) {
+	f := rosewoodLog(t)
+
+	if got := pagerLink(f.show(t), olderLink); got != "" {
+		t.Errorf("the page links to %q as older activity, and seven events fit on one page", got)
+	}
+}
+
+// One event a day, so no date spans the page boundary and each page can be
+// identified by the dates on it.
+func TestActivity_TheOlderLinkOpensAtTheEventAfterTheLastOneOnThePage(t *testing.T) {
+	f := rosewoodLog(t)
+	f.waterings(t, nigelID, daysBack(30, 50)...)
+
+	first := f.show(t)
+	second := f.follow(t, first, olderLink)
+
+	firstDays := textOf(strandLines(first), dayKind)
+	secondDays := textOf(strandLines(second), dayKind)
+	if want := "23 July · 1"; firstDays[len(firstDays)-1] != want {
+		t.Errorf("the first page ends on %q, want %q", firstDays[len(firstDays)-1], want)
+	}
+	if want := "22 July · 1"; secondDays[0] != want {
+		t.Errorf("the second page starts on %q, want %q", secondDays[0], want)
+	}
+}
+
+// The reason the link carries a timestamp rather than an offset.
+func TestActivity_TheOlderPageIsUnchangedByCareLoggedAfterTheLinkWasDrawn(t *testing.T) {
+	f := rosewoodLog(t)
+	f.waterings(t, nigelID, daysBack(30, 50)...)
+
+	older := pagerLink(f.show(t), olderLink)
+	f.care(t, spikeID, waterID, thursday)
+	second := f.get(t, older)
+
+	if got := textOf(strandLines(second), dayKind)[0]; got != "22 July · 1" {
+		t.Errorf("the second page starts on %q, want 22 July: an event logged at the top of the log should not move it", got)
+	}
+	if got := len(textOf(strandLines(second), eventKind)); got != 8 {
+		t.Errorf("the second page holds %d events, want the 8 below the first page", got)
+	}
+}
+
+// Logging several plants as "yesterday at 9am" gives them one timestamp. A
+// cursor holding only the timestamp would skip the ones after the first.
+func TestActivity_TwoEventsWithOneTimestampAreBothShownAcrossAPageBoundary(t *testing.T) {
+	f := rosewoodLog(t)
+	f.waterings(t, nigelID, daysBack(30, 41)...)
+	tied := thursday.AddDate(0, 0, -50)
+	f.care(t, spikeID, waterID, tied)
+	f.care(t, sproutID, waterID, tied)
+
+	first := f.show(t)
+	second := f.follow(t, first, olderLink)
+
+	firstEvents := textOf(strandLines(first), eventKind)
+	secondEvents := textOf(strandLines(second), eventKind)
+	if len(firstEvents) != strandPage {
+		t.Fatalf("the first page holds %d events, want %d", len(firstEvents), strandPage)
+	}
+	if len(secondEvents) != 1 {
+		t.Fatalf("the second page holds %d events, want the one sharing a timestamp with the last row of the first page: %v", len(secondEvents), secondEvents)
+	}
+	got := []string{firstEvents[len(firstEvents)-1], secondEvents[0]}
+	slices.Sort(got)
+	want := []string{"Spike You watered · 9:00am", "Sprout You watered · 9:00am"}
+	if !slices.Equal(got, want) {
+		t.Errorf("the rows either side of the page boundary read %v, want %v", got, want)
+	}
+}
+
+func TestActivity_TheFirstPageHasNoLatestActivityLink(t *testing.T) {
+	f := rosewoodLog(t)
+	f.waterings(t, nigelID, daysBack(30, 50)...)
+
+	if got := pagerLink(f.show(t), latestLink); got != "" {
+		t.Errorf("the first page links to %q as the latest activity, and it is already the latest activity", got)
+	}
+}
+
+func TestActivity_APageAfterTheFirstLinksBackToTheLatestActivity(t *testing.T) {
+	f := rosewoodLog(t)
+	f.waterings(t, nigelID, daysBack(30, 50)...)
+
+	second := f.follow(t, f.show(t), olderLink)
+
+	if got := pagerLink(second, latestLink); got != activityPath {
+		t.Errorf("the second page links back to %q, want %q", got, activityPath)
+	}
+}
+
+// The events the link points past can be deleted while it is on screen.
+func TestActivity_ACursorWithNoEventsLeftRedirectsToTheLatestActivity(t *testing.T) {
+	f := rosewoodLog(t)
+	f.waterings(t, nigelID, daysBack(30, 50)...)
+	older := pagerLink(f.show(t), olderLink)
+	f.exec(t, "DELETE FROM care_event WHERE garden_id = $1 AND performed_at < $2", rosewoodID, thursday.AddDate(0, 0, -42))
+
+	rec := f.request(t, older)
+
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusSeeOther, text(rec.Body.String()))
+	}
+	if got := rec.Header().Get("Location"); got != activityPath {
+		t.Errorf("the redirect goes to %q, want %q", got, activityPath)
+	}
+}
+
+func TestActivity_AMalformedBeforeParameterIsNotFound(t *testing.T) {
+	f := rosewoodLog(t)
+
+	rec := f.request(t, activityPath+"?before=yesterday")
+
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusNotFound)
+	}
+}
+
+func TestActivity_AFilteredRowShowsTheCareAndTheDateInsteadOfThePlantName(t *testing.T) {
+	f := rosewoodLog(t)
+
+	got := textOf(strandLines(f.get(t, plantActivityPath(bigFellaID))), eventKind)
+
+	want := []string{"Watered You · today, 7:30am"}
+	if !slices.Equal(got, want) {
+		t.Errorf("the filtered log reads %v, want %v", got, want)
+	}
+}
+
+// There would be one heading per row, since a plant is cared for at most once a
+// day.
+func TestActivity_AFilteredLogHasNoDayHeadings(t *testing.T) {
+	f := rosewoodLog(t)
+	f.waterings(t, bigFellaID, 10, 20, 30)
+
+	got := strandLines(f.get(t, plantActivityPath(bigFellaID)))
+
+	if days := textOf(got, dayKind); days != nil {
+		t.Errorf("the filtered log has the day headings %v, want none", days)
+	}
+	if events := textOf(got, eventKind); len(events) != 4 {
+		t.Errorf("the filtered log holds %d events, want the plant's own 4: %v", len(events), events)
+	}
+}
+
+func TestActivity_ASkippedCareOnAFilteredRowIsShownAsSkipped(t *testing.T) {
+	f := rosewoodLog(t)
+
+	page := f.get(t, plantActivityPath(dorisID))
+
+	if got := textOf(strandLines(page), eventKind)[0]; got != "Skipped Sam · today, 6:15am Asking again in 2 days" {
+		t.Errorf("the skipped row reads %q, want it to say Skipped", got)
+	}
+}
+
+func TestActivity_AFilteredLogLabelsAGapTwiceThePlantsUsualInterval(t *testing.T) {
+	f := rosewoodLog(t)
+	// Watered every ten days, with one thirty-day gap.
+	f.waterings(t, bigFellaID, 10, 20, 30, 60, 70)
+
+	got := textOf(strandLines(f.get(t, plantActivityPath(bigFellaID))), gapKind)
+
+	want := []string{"nothing for 30 days"}
+	if !slices.Equal(got, want) {
+		t.Errorf("the filtered log labels the gaps %v, want %v", got, want)
+	}
+}
+
+// The same thirty days on a plant watered every twenty, where it is the usual
+// interval and not a gap.
+func TestActivity_AFilteredLogDoesNotLabelAGapUnderTwiceThePlantsUsualInterval(t *testing.T) {
+	f := rosewoodLog(t)
+	f.waterings(t, bigFellaID, 20, 40, 60, 90, 110)
+
+	got := textOf(strandLines(f.get(t, plantActivityPath(bigFellaID))), gapKind)
+
+	if got != nil {
+		t.Errorf("the log of a plant watered every twenty days labels the gaps %v, want none", got)
+	}
+}
+
+// Twice a daily plant's interval is two days, which would label most of its
+// rows, so the floor is two weeks whatever the interval.
+func TestActivity_AFilteredLogDoesNotLabelAGapOfUnderTwoWeeks(t *testing.T) {
+	f := rosewoodLog(t)
+	f.waterings(t, bigFellaID, append(daysBack(1, 10), 22)...)
+
+	got := textOf(strandLines(f.get(t, plantActivityPath(bigFellaID))), gapKind)
+
+	if got != nil {
+		t.Errorf("the log of a plant watered daily labels the gaps %v, want none: twelve days is under the two-week floor", got)
+	}
+}
+
+func TestActivity_AFilteredLogLinksBackToThePlant(t *testing.T) {
+	f := rosewoodLog(t)
+
+	page := f.get(t, plantActivityPath(bigFellaID))
+
+	m := backlink.FindStringSubmatch(page)
+	if m == nil {
+		t.Fatalf("the filtered log has no back link:\n%s", text(page))
+	}
+	if got, want := m[1], plantPath(bigFellaID); got != want {
+		t.Errorf("the back link points at %q, want %q", got, want)
+	}
+	if got := text(m[2]); got != "Big Fella" {
+		t.Errorf("the back link reads %q, want the name of the plant the log is filtered to", got)
+	}
+}
+
+func TestActivity_TheOlderLinkOnAFilteredLogKeepsTheFilter(t *testing.T) {
+	f := rosewoodLog(t)
+	f.waterings(t, bigFellaID, daysBack(1, 25)...)
+
+	second := f.follow(t, f.get(t, plantActivityPath(bigFellaID)), olderLink)
+
+	if got := len(textOf(strandLines(second), eventKind)); got != 6 {
+		t.Errorf("the second page holds %d events, want the plant's own 6", got)
+	}
+}
+
+func TestActivity_TheLatestLinkOnAFilteredLogKeepsTheFilter(t *testing.T) {
+	f := rosewoodLog(t)
+	f.waterings(t, bigFellaID, daysBack(1, 25)...)
+
+	second := f.follow(t, f.get(t, plantActivityPath(bigFellaID)), olderLink)
+
+	if got, want := pagerLink(second, latestLink), plantActivityPath(bigFellaID); got != want {
+		t.Errorf("the second page's Latest activity link points at %q, want %q", got, want)
+	}
+}
+
+func TestActivity_AFilteredCursorWithNoEventsLeftRedirectsToThePlantsLatestActivity(t *testing.T) {
+	f := rosewoodLog(t)
+	f.waterings(t, bigFellaID, daysBack(1, 25)...)
+	older := pagerLink(f.get(t, plantActivityPath(bigFellaID)), olderLink)
+	// The first page ends 19 days back, so this removes every event the link
+	// points at.
+	f.exec(t, "DELETE FROM care_event WHERE plant_id = $1 AND performed_at < $2", bigFellaID, thursday.AddDate(0, 0, -19))
+
+	rec := f.request(t, older)
+
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusSeeOther, text(rec.Body.String()))
+	}
+	if got, want := rec.Header().Get("Location"), plantActivityPath(bigFellaID); got != want {
+		t.Errorf("the redirect goes to %q, want %q", got, want)
+	}
+}
+
+func TestActivity_AFilteredLogWithNoEventsSaysNothingIsRecorded(t *testing.T) {
+	f := rosewoodLog(t)
+	f.exec(t, "DELETE FROM care_event WHERE plant_id = $1", bigFellaID)
+
+	page := f.get(t, plantActivityPath(bigFellaID))
+
+	if got := text(page); !strings.Contains(got, "Nothing recorded yet") {
+		t.Errorf("the filtered log with no events reads %q, want it to say nothing is recorded", got)
+	}
+	if strandLines(page) != nil {
+		t.Error("the filtered log with no events still renders a list of rows")
+	}
+}
+
+func TestActivity_AFilterOnAnotherGardensPlantIsNotFound(t *testing.T) {
+	f := rosewoodLog(t)
+	f.exec(t, "INSERT INTO garden (id, name) VALUES ($1, 'Fairview')", fairviewID)
+	f.exec(t, "INSERT INTO plant (id, garden_id, nickname) VALUES ($1, $2, 'Hedge')", fairviewPlantID, fairviewID)
+
+	rec := f.request(t, plantActivityPath(fairviewPlantID))
+
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusNotFound)
+	}
+}
+
+func TestActivity_AMalformedPlantParameterIsNotFound(t *testing.T) {
+	f := rosewoodLog(t)
+
+	rec := f.request(t, activityPath+"?plant=big-fella")
+
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusNotFound)
 	}
 }

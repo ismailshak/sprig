@@ -2,6 +2,7 @@ package http
 
 import (
 	"context"
+	"html"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -356,6 +357,38 @@ func TestPlant_RecentStopsAtFourEvents(t *testing.T) {
 
 	if got := recentOf(f.page(t, bigFellaID)); len(got) != recentLength {
 		t.Errorf("Recent draws %d lines, want %d: %v", len(got), recentLength, got)
+	}
+}
+
+// allActivity is the text and href of the link under Recent, the only link of
+// its kind on a plant's page.
+func allActivity(page string) (label, href string) {
+	m := footLink.FindStringSubmatch(page)
+	if m == nil {
+		return "", ""
+	}
+	return text(m[2]), html.UnescapeString(m[1])
+}
+
+func TestPlant_APlantWithCareEventsLinksToItsOwnActivityLog(t *testing.T) {
+	f := rosewoodPlant(t)
+
+	label, href := allActivity(f.page(t, bigFellaID))
+
+	if want := "All activity for Big Fella"; label != want {
+		t.Errorf("the link under Recent reads %q, want %q", label, want)
+	}
+	if want := plantActivityPath(bigFellaID); href != want {
+		t.Errorf("the link under Recent points at %q, want %q", href, want)
+	}
+}
+
+func TestPlant_APlantWithNoCareEventsHasNoActivityLink(t *testing.T) {
+	f := rosewoodPlant(t)
+	f.exec(t, "DELETE FROM care_event WHERE plant_id = $1", sproutID)
+
+	if label, _ := allActivity(f.page(t, sproutID)); label != "" {
+		t.Errorf("Recent carries a %q link, and the plant has no care events to show", label)
 	}
 }
 
