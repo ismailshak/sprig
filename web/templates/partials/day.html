@@ -1,0 +1,37 @@
+{{/* The feed is one element under one id because it is replaced out of band
+     once no row is inside an undo window. */}}
+{{define "day-feed"}}<div class="app__body app__body--feed" id="day"{{if .OOB}} hx-swap-oob="true"{{end}}>
+{{template "day-head" .Head}}
+{{range .Sections}}{{template "today-section" .}}{{end}}
+</div>{{end}}
+
+{{/* The three shapes share one id because a swap replaces any of them with
+     any other. */}}
+{{define "day-head"}}
+{{- with .Summary}}<div class="summary" id="day-head"{{if $.OOB}} hx-swap-oob="true"{{end}}>
+<span class="summary__count">{{.Outstanding}}</span>
+<span>{{if eq .Outstanding 1}}plant needs{{else}}plants need{{end}} you today{{if .Overdue}}, {{.Overdue}} of them overdue{{end}}.</span>
+</div>{{end}}
+{{- if .Clear}}<div class="summary summary--clear" id="day-head"{{if .OOB}} hx-swap-oob="true"{{end}}>
+<span class="summary__count">{{template "icon-check"}}</span>
+<span>All done for today.</span>
+</div>{{end}}
+{{- with .Empty}}<div class="empty" id="day-head"{{if $.OOB}} hx-swap-oob="true"{{end}}>
+<span class="empty__mark">{{if .Done}}{{template "icon-check"}}{{else}}{{template "icon-plants"}}{{end}}</span>
+<h2 class="empty__title">{{.Title}}</h2>
+<p class="empty__line">{{.Line}}</p>
+{{with .Action}}<a class="empty__action" href="{{.Href}}">{{.Label}}</a>{{end}}
+</div>{{end}}
+{{- end}}
+
+{{define "today-section"}}
+<section class="section" aria-labelledby="{{.ID}}">
+<div class="section__head">
+<h2 class="section__title{{if .Alert}} section__title--alert{{end}}" id="{{.ID}}">{{.Title}}</h2>
+<span class="section__count">{{len .Rows}}</span>
+</div>
+<ul class="list">
+{{range .Rows}}{{template "care-row" .}}
+{{end}}</ul>
+</section>
+{{end}}

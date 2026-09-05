@@ -36,7 +36,9 @@ test('logging from the sheet takes the plant off the list', async ({ today, shee
 
 test('the care button logs the care as now', async ({ today }) => {
   await today.careButton(plants.doris, 'water').click();
-  await expect(today.careButton(plants.doris, 'water')).toHaveCount(0);
+  // With JavaScript the row is still there in its logged state, so a locator
+  // for any button would match its Undo.
+  await expect(today.careRow(plants.doris, 'water').getByRole('button', { name: 'Water' })).toHaveCount(0);
 
   await today.open();
   await expect(today.careRow(plants.doris, 'water')).toHaveCount(0);
@@ -92,4 +94,23 @@ test('a logged row says what was recorded without a reload @js', async ({ today,
 
   await expect(today.careRow(plants.doris, 'water')).toContainText('Watered just now');
   await expect(sheet.dialog()).toHaveCount(0);
+});
+
+test('a logged row can be taken back inside its window @js', async ({ today }) => {
+  await today.careButton(plants.doris, 'water').click();
+  await expect(today.careRow(plants.doris, 'water')).toContainText('Watered just now');
+
+  await today.undoButton(plants.doris, 'water').click();
+
+  const row = today.careRow(plants.doris, 'water');
+  await expect(row).toHaveText(/^\s*Doris\s*Bedroom\s*Water\s*$/);
+  await expect(row.getByRole('button', { name: 'Water' })).toBeVisible();
+});
+
+// Leaves a little room under the default timeout for the grace window to finish.
+test('a logged row leaves the list when its window closes @js', async ({ today }) => {
+  await today.careButton(plants.doris, 'water').click();
+  await expect(today.undoButton(plants.doris, 'water')).toBeVisible();
+
+  await expect(today.careRow(plants.doris, 'water')).toHaveCount(0, { timeout: 15_000 });
 });

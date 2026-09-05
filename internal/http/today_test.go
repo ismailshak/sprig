@@ -146,6 +146,7 @@ func (f *todayFixture) water(t *testing.T, plantID uuid.UUID) {
 var (
 	sectionElement = regexp.MustCompile(`(?s)<section[^>]*aria-labelledby="([a-z-]+)"[^>]*>.*?</section>`)
 	rowElement     = regexp.MustCompile(`(?s)<li[^>]*id="(care-[^"]+)"[^>]*>.*?</li>`)
+	headElement    = regexp.MustCompile(`(?s)<div[^>]*id="day-head"[^>]*>.*?</div>`)
 	sectionHead    = regexp.MustCompile(`^(?:Overdue|Due today|Coming up) (\d+)\b`)
 	tag            = regexp.MustCompile(`<[^>]+>`)
 	spaces         = regexp.MustCompile(`\s+`)

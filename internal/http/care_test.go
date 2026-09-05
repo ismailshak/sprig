@@ -11,6 +11,7 @@ import (
 	"time"
 	"uuid"
 
+	"github.com/ismailshak/sprig/internal/auth"
 	"github.com/ismailshak/sprig/internal/store"
 )
 
@@ -58,6 +59,34 @@ func (f *todayFixture) post(t *testing.T, plantID string, form url.Values, htmx 
 	}
 	rec := httptest.NewRecorder()
 	f.handler.log(rec, req)
+	return rec
+}
+
+func (f *todayFixture) undo(t *testing.T, plantID, eventID uuid.UUID, slug string, htmx bool) *httptest.ResponseRecorder {
+	t.Helper()
+
+	ctx := context.WithValue(t.Context(), principalKey, f.principal)
+	req := httptest.NewRequestWithContext(ctx, http.MethodDelete, undoPath(plantID, eventID, slug), nil)
+	req.SetPathValue("plant", plantID.String())
+	req.SetPathValue("event", eventID.String())
+	if htmx {
+		req.Header.Set("HX-Request", "true")
+	}
+	rec := httptest.NewRecorder()
+	f.handler.undo(rec, req)
+	return rec
+}
+
+// settled is Today asked for by a row whose undo window has closed.
+func (f *todayFixture) settled(t *testing.T, target string) *httptest.ResponseRecorder {
+	t.Helper()
+
+	ctx := context.WithValue(t.Context(), principalKey, f.principal)
+	req := httptest.NewRequestWithContext(ctx, http.MethodGet, todayPath, nil)
+	req.Header.Set("HX-Request", "true")
+	req.Header.Set("HX-Target", target)
+	rec := httptest.NewRecorder()
+	f.handler.show(rec, req)
 	return rec
 }
 
@@ -310,11 +339,11 @@ func TestLog_JustNowRecordsBothInstantsAsNow(t *testing.T) {
 	if !strings.Contains(row, `id="`+rowID(dorisID)+`"`) || !strings.Contains(row, "row--done") {
 		t.Errorf("the swap is not Doris's row in its logged state:\n%s", body)
 	}
-	if got := text(row); got != "Doris Watered just now" {
-		t.Errorf("the row says %q, want what was recorded", got)
+	if got := text(row); got != "Doris Watered just now Undo" {
+		t.Errorf("the row says %q, want what was recorded and the button that reverses it", got)
 	}
-	if strings.Contains(row, "<button") || strings.Contains(row, "<a ") {
-		t.Error("a logged row still offers its two targets")
+	if strings.Contains(row, "<a ") || strings.Contains(row, "<form") {
+		t.Error("a logged row still offers the sheet or its care button")
 	}
 	if !strings.Contains(body, `<div id="sheet" hx-swap-oob="true"></div>`) {
 		t.Error("the swap does not close the sheet")
@@ -327,7 +356,7 @@ func TestLog_JustNowIsSaidWhateverTheClocksPrecision(t *testing.T) {
 	f := rosewood(t)
 	f.handler.now = func() time.Time { return thursday.Add(123456789 * time.Nanosecond) }
 	rec := f.post(t, dorisID.String(), url.Values{"row": {"water"}, "care": {"water"}, "when": {"now"}}, true)
-	if got := text(rowElement.FindString(rec.Body.String())); got != "Doris Watered just now" {
+	if got := text(rowElement.FindString(rec.Body.String())); got != "Doris Watered just now Undo" {
 		t.Errorf("the row says %q", got)
 	}
 }
@@ -383,8 +412,8 @@ func TestLog_ABackdatedTimeIsReadInTheReadersDay(t *testing.T) {
 			if !e.RecordedAt.Equal(thursday) {
 				t.Errorf("recorded at %v, want now", e.RecordedAt)
 			}
-			if got := text(rowElement.FindString(rec.Body.String())); got != "Doris "+c.said {
-				t.Errorf("the row says %q, want %q", got, "Doris "+c.said)
+			if got := text(rowElement.FindString(rec.Body.String())); got != "Doris "+c.said+" Undo" {
+				t.Errorf("the row says %q, want %q", got, "Doris "+c.said+" Undo")
 			}
 		})
 	}
@@ -451,7 +480,7 @@ func TestLog_ASkipStoresTheDaysToAskAgainIn(t *testing.T) {
 		if e.Note == nil || *e.Note != "Soil still damp" {
 			t.Errorf("the note is %v, want it trimmed", e.Note)
 		}
-		if got := text(rowElement.FindString(rec.Body.String())); got != "Nigel Skipped · asking again in 2 days" {
+		if got := text(rowElement.FindString(rec.Body.String())); got != "Nigel Skipped · asking again in 2 days Undo" {
 			t.Errorf("the row says %q", got)
 		}
 	})
@@ -509,7 +538,7 @@ func TestLog_ASheetOpenedOverOneRowCanLogAnotherCare(t *testing.T) {
 	if !strings.Contains(row, `id="`+rowID(nigelID)+`"`) {
 		t.Errorf("the swap is not the watering row the sheet was over:\n%s", row)
 	}
-	if got := text(row); got != "Nigel Fed just now" {
+	if got := text(row); got != "Nigel Fed just now Undo" {
 		t.Errorf("the row says %q", got)
 	}
 }
@@ -550,7 +579,7 @@ func TestToday_ARowOffersItsTwoTargets(t *testing.T) {
 	if !strings.Contains(row, `<a class="row__open" href="`+sheetPath(dorisID, "water")+`" hx-get="`+sheetPath(dorisID, "water")+`" hx-target="#sheet" hx-swap="outerHTML">`) {
 		t.Errorf("the row does not open the sheet for its care:\n%s", row)
 	}
-	if !strings.Contains(row, `<form method="post" action="`+logPath(dorisID)+`" hx-post="`+logPath(dorisID)+`" hx-target="#`+rowID(dorisID)+`" hx-swap="outerHTML">`) {
+	if !strings.Contains(row, `<form method="post" action="`+logPath(dorisID)+`" hx-post="`+logPath(dorisID)+`" hx-target="#`+rowID(dorisID)+`" hx-swap="outerHTML settle:0ms">`) {
 		t.Errorf("the care button does not post to the plant's log and swap the row:\n%s", row)
 	}
 	for _, want := range []string{`name="when" value="now"`, `name="row" value="water"`, `name="care" value="water"`} {
@@ -560,5 +589,233 @@ func TestToday_ARowOffersItsTwoTargets(t *testing.T) {
 	}
 	if !strings.Contains(page, `<div id="sheet"></div>`) {
 		t.Error("the page has no slot for the sheet to land in")
+	}
+}
+
+func TestLog_TheLoggedRowCarriesItsUndoWindow(t *testing.T) {
+	f := rosewood(t)
+	rec := f.post(t, dorisID.String(), url.Values{"row": {"water"}, "care": {"water"}}, true)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d:\n%s", rec.Code, rec.Body.String())
+	}
+	row := rowElement.FindString(rec.Body.String())
+
+	for _, want := range []string{
+		`style="--grace:4000ms"`,
+		`hx-get="/"`,
+		`hx-trigger="load delay:4000ms"`,
+		`hx-swap="delete swap:320ms settle:0ms"`,
+	} {
+		if !strings.Contains(row, want) {
+			t.Errorf("the row lacks %s, so its window has no %s:\n%s", want, map[bool]string{true: "bar", false: "end"}[strings.Contains(want, "grace")], row)
+		}
+	}
+	if want := `hx-delete="` + undoPath(dorisID, f.latest(t, dorisID).ID, "water") + `"`; !strings.Contains(row, want) {
+		t.Errorf("Undo does not delete the event that was just written:\n%s", row)
+	}
+	if !strings.Contains(row, `hx-target="#`+rowID(dorisID)+`" hx-swap="outerHTML settle:0ms"`) {
+		t.Errorf("Undo does not swap the row it sits in:\n%s", row)
+	}
+}
+
+func TestUndo_TakesTheEventBackOutAndTheRowWithIt(t *testing.T) {
+	f := rosewood(t)
+	f.post(t, dorisID.String(), url.Values{"row": {"water"}, "care": {"water"}}, true)
+	event := f.latest(t, dorisID)
+
+	rec := f.undo(t, dorisID, event.ID, "water", true)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d:\n%s", rec.Code, rec.Body.String())
+	}
+	if n := len(f.events(t, dorisID)); n != 1 {
+		t.Errorf("the plant has %d events, want the seeded one alone", n)
+	}
+
+	row := rowElement.FindString(rec.Body.String())
+	if got := text(row); got != "Doris Bedroom Water" {
+		t.Errorf("the row says %q, want the row that was there before the event", got)
+	}
+	if strings.Contains(row, "row--done") || strings.Contains(row, "--grace") {
+		t.Errorf("the row came back still logged:\n%s", row)
+	}
+}
+
+// The row on the page has to come back even where the sheet logged a care it
+// was not opened for.
+func TestUndo_GivesBackTheRowTheSheetWasOpenedFrom(t *testing.T) {
+	f := rosewood(t)
+	f.post(t, nigelID.String(), url.Values{"row": {"water"}, "care": {"feed"}}, true)
+	event := f.latest(t, nigelID)
+
+	row := rowElement.FindString(f.undo(t, nigelID, event.ID, "water", true).Body.String())
+	if !strings.Contains(row, `id="`+rowID(nigelID)+`"`) {
+		t.Errorf("the swap is not the watering row:\n%s", row)
+	}
+	if got := text(row); got != "Nigel Bathroom Water" {
+		t.Errorf("the row says %q, want Nigel's watering as it was", got)
+	}
+}
+
+func TestUndo_RefusesAnEventItCannotFind(t *testing.T) {
+	f := rosewood(t)
+	f.post(t, dorisID.String(), url.Values{"row": {"water"}, "care": {"water"}}, true)
+	event := f.latest(t, dorisID)
+	sam := uuid.MustParse("00000000-0000-7000-8000-000000000199")
+	f.exec(t, "INSERT INTO app_user (id, display_name, handle, timezone) VALUES ($1, 'Sam', 'sam', 'Europe/London')", sam)
+
+	cases := []struct {
+		name    string
+		plant   uuid.UUID
+		event   uuid.UUID
+		arrange func()
+	}{
+		{name: "an event of somebody else's, from a reader who may only delete their own", plant: dorisID, event: event.ID, arrange: func() {
+			f.exec(t, "UPDATE care_event SET performed_by = $1 WHERE id = $2", sam, event.ID)
+		}},
+		{name: "an event that is not there", plant: dorisID, event: uuid.MustParse("00000000-0000-7000-8000-000000000998")},
+		{name: "an event of another plant's", plant: nigelID, event: event.ID},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if c.arrange != nil {
+				c.arrange()
+			}
+			if rec := f.undo(t, c.plant, c.event, "water", true); rec.Code != http.StatusNotFound {
+				t.Errorf("status = %d, want %d", rec.Code, http.StatusNotFound)
+			}
+			if n := len(f.events(t, dorisID)); n != 2 {
+				t.Errorf("the plant has %d events, want the refused undo to have deleted none", n)
+			}
+		})
+	}
+}
+
+func TestUndo_AnOwnerMayTakeBackWhatAnybodyLogged(t *testing.T) {
+	f := rosewood(t)
+	f.post(t, dorisID.String(), url.Values{"row": {"water"}, "care": {"water"}}, true)
+	event := f.latest(t, dorisID)
+	sam := uuid.MustParse("00000000-0000-7000-8000-000000000199")
+	f.exec(t, "INSERT INTO app_user (id, display_name, handle, timezone) VALUES ($1, 'Sam', 'sam', 'Europe/London')", sam)
+	f.exec(t, "UPDATE care_event SET performed_by = $1 WHERE id = $2", sam, event.ID)
+	f.principal.Capabilities[auth.CareDeleteAny] = true
+
+	if rec := f.undo(t, dorisID, event.ID, "water", true); rec.Code != http.StatusOK {
+		t.Fatalf("status = %d:\n%s", rec.Code, rec.Body.String())
+	}
+	if n := len(f.events(t, dorisID)); n != 1 {
+		t.Errorf("the plant has %d events, want Sam's deleted", n)
+	}
+}
+
+func TestUndo_AFormPostIsSentBackToToday(t *testing.T) {
+	f := rosewood(t)
+	f.post(t, dorisID.String(), url.Values{"row": {"water"}, "care": {"water"}}, true)
+	event := f.latest(t, dorisID)
+
+	rec := f.undo(t, dorisID, event.ID, "water", false)
+	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != todayPath {
+		t.Errorf("got %d to %q, want %d to /", rec.Code, rec.Header().Get("Location"), http.StatusSeeOther)
+	}
+	if n := len(f.events(t, dorisID)); n != 1 {
+		t.Errorf("the plant has %d events, want the event deleted", n)
+	}
+}
+
+func TestWindow_TheHeadComesBackWithTheRowItLeavesAbove(t *testing.T) {
+	t.Run("a day with work left counts what is left", func(t *testing.T) {
+		f := rosewood(t)
+		head := headElement.FindString(f.post(t, dorisID.String(), url.Values{"care": {"water"}}, true).Body.String())
+		if got := text(head); got != "2 plants need you today, 1 of them overdue." {
+			t.Errorf("the head says %q, want the count without Doris", got)
+		}
+		if !strings.Contains(head, `hx-swap-oob="true"`) {
+			t.Errorf("the head is not swapped out of band, so nothing but the row would move:\n%s", head)
+		}
+	})
+
+	t.Run("a day whose rows are all logged says so rather than emptying", func(t *testing.T) {
+		f := rosewood(t)
+		f.water(t, bigFellaID)
+		f.water(t, nigelID)
+		head := headElement.FindString(f.post(t, dorisID.String(), url.Values{"care": {"water"}}, true).Body.String())
+		if got := text(head); got != "All done for today." {
+			t.Errorf("the head says %q, want the tick that waits for the windows to close", got)
+		}
+		if strings.Contains(head, "Nothing else is due.") {
+			t.Error("the empty screen was drawn over rows that are still on the page")
+		}
+	})
+
+	t.Run("an undo puts back what it took away", func(t *testing.T) {
+		f := rosewood(t)
+		f.post(t, dorisID.String(), url.Values{"row": {"water"}, "care": {"water"}}, true)
+		event := f.latest(t, dorisID)
+		head := headElement.FindString(f.undo(t, dorisID, event.ID, "water", true).Body.String())
+		if got := text(head); got != "3 plants need you today, 1 of them overdue." {
+			t.Errorf("the head says %q, want Doris counted again", got)
+		}
+	})
+}
+
+func TestWindow_AClosedWindowAsksTodayForWhatTheRowsLeavingChanged(t *testing.T) {
+	t.Run("the head alone while another row is still inside its window", func(t *testing.T) {
+		f := rosewood(t)
+		f.water(t, bigFellaID)
+		f.water(t, dorisID)
+		f.water(t, nigelID)
+
+		body := f.settled(t, rowID(dorisID)).Body.String()
+		if strings.Contains(body, `id="day"`) {
+			t.Errorf("the feed came back under rows that are still on the page:\n%s", body)
+		}
+		if got := text(body); got != "All done for today." {
+			t.Errorf("the answer says %q, want the tick", got)
+		}
+	})
+
+	t.Run("the whole feed once no window is open", func(t *testing.T) {
+		f := rosewood(t)
+		f.water(t, bigFellaID)
+		f.water(t, dorisID)
+		f.water(t, nigelID)
+		f.exec(t, "UPDATE care_event SET recorded_at = recorded_at - interval '1 minute'")
+
+		body := f.settled(t, rowID(dorisID)).Body.String()
+		if !strings.Contains(body, `<div class="app__body app__body--feed" id="day" hx-swap-oob="true">`) {
+			t.Errorf("the feed did not come back as an out-of-band swap:\n%.200s", body)
+		}
+		if !strings.Contains(body, "All done for today") || !strings.Contains(body, "Nothing else is due.") {
+			t.Errorf("the empty screen is not in the feed:\n%s", text(body))
+		}
+		// Watering Nigel puts his row under Coming up rather than off the feed
+		// because his watering is every four days.
+		for _, plant := range []uuid.UUID{bigFellaID, dorisID} {
+			if strings.Contains(body, rowID(plant)) {
+				t.Errorf("%s is still on the feed after its window closed", rowID(plant))
+			}
+		}
+		if strings.Contains(body, "row--done") {
+			t.Errorf("a row came back logged:\n%s", body)
+		}
+		if strings.HasPrefix(body, "<!doctype html>") {
+			t.Error("a row that has settled was answered with the whole page")
+		}
+	})
+}
+
+// A reload is a fresh read because the undo window lives only in the page the
+// swap left behind.
+func TestWindow_ANavigationDrawsNoRowInsideAWindow(t *testing.T) {
+	f := rosewood(t)
+	f.post(t, dorisID.String(), url.Values{"care": {"water"}}, true)
+
+	page := f.show(t)
+	if strings.Contains(page, rowID(dorisID)) {
+		t.Error("Doris is still on the page after being watered")
+	}
+	for _, unwanted := range []string{"--grace", "All done for today.", "row--done"} {
+		if strings.Contains(page, unwanted) {
+			t.Errorf("the page carries %s, which belongs to a row that was swapped in", unwanted)
+		}
 	}
 }

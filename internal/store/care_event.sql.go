@@ -59,6 +59,47 @@ func (q *Queries) CreateCareEvent(ctx context.Context, arg CreateCareEventParams
 	return i, err
 }
 
+const deleteCareEvent = `-- name: DeleteCareEvent :one
+DELETE FROM care_event
+WHERE id = $1 AND garden_id = $2 AND plant_id = $3
+  AND ($4::boolean OR performed_by = $5)
+RETURNING id, garden_id, plant_id, care_type_id, performed_by, performed_at, recorded_at, done, note, override_interval_days
+`
+
+type DeleteCareEventParams struct {
+	ID           uuid.UUID
+	GardenID     uuid.UUID
+	PlantID      uuid.UUID
+	MayDeleteAny bool
+	PerformedBy  uuid.UUID
+}
+
+// DeleteCareEvent matches on performed_by unless may_delete_any is set,
+// because a check standing beside the query can be forgotten.
+func (q *Queries) DeleteCareEvent(ctx context.Context, arg DeleteCareEventParams) (CareEvent, error) {
+	row := q.db.QueryRow(ctx, deleteCareEvent,
+		arg.ID,
+		arg.GardenID,
+		arg.PlantID,
+		arg.MayDeleteAny,
+		arg.PerformedBy,
+	)
+	var i CareEvent
+	err := row.Scan(
+		&i.ID,
+		&i.GardenID,
+		&i.PlantID,
+		&i.CareTypeID,
+		&i.PerformedBy,
+		&i.PerformedAt,
+		&i.RecordedAt,
+		&i.Done,
+		&i.Note,
+		&i.OverrideIntervalDays,
+	)
+	return i, err
+}
+
 const listLatestCareEvents = `-- name: ListLatestCareEvents :many
 SELECT DISTINCT ON (plant_id, care_type_id) id, garden_id, plant_id, care_type_id, performed_by, performed_at, recorded_at, done, note, override_interval_days
 FROM care_event

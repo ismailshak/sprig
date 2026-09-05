@@ -33,10 +33,11 @@ Decisions already taken. Changing one is a conversation, not a refactor.
 7. **Capabilities are read from `role_capability` at request time**, never from a `switch` on the role. Templates and handlers ask the same function.
 8. **Every flow survives a form post and a page navigation.** htmx has four uses: the care-row swap, the undo window, the in-place schedule editor, the lazy photo grid. A fifth is checked against this rule first. `hx-boost` is off.
 9. **A route renders a whole page or one named fragment that page also uses**, picked by `HX-Request`. Where a route answers more than one swap target, `HX-Target` picks which fragment. A swap target is always an element the server can name by id.
-10. **A handler resolves, authorises, then renders**, in that order.
-11. **Errors are logged once where they are handled**, never both logged and returned. No secret, token or database password appears in a log line.
-12. **Due-date computation lives in `internal/schedule`**, because four callers need the same answer.
-13. **A rule that could be revised on its own is a product decision and lives in a handler. A rule whose revision would move code with it is data integrity and lives in the schema.** Uniqueness, foreign keys, `NOT NULL` and the nullness groups that make the three schedule shapes total are schema. A range behind a select and an emptiness rule on a typed field are handler. The eight checks on `care_schedule` are the only `CHECK` constraints.
+10. **A swap replaces what changed and nothing around it, and paints no state between the two.** A frame the change did not ask for is a defect, not a cosmetic complaint. A target larger than the change rebuilds children that did not change, which replays their entrance animations and drops their scroll, focus and typing: the sheet answers a What chip with `#sheet-form` rather than the dialog for that reason. An element swapped under an id it already had carries `settle:0ms`, because htmx otherwise holds the incoming element's `class` and `style` at the outgoing element's values for 20ms and the browser paints that frame. Where a change is meant to be seen moving, the animation is on the outgoing element under `htmx-swapping` with a swap delay long enough to run it.
+11. **A handler resolves, authorises, then renders**, in that order.
+12. **Errors are logged once where they are handled**, never both logged and returned. No secret, token or database password appears in a log line.
+13. **Due-date computation lives in `internal/schedule`**, because four callers need the same answer.
+14. **A rule that could be revised on its own is a product decision and lives in a handler. A rule whose revision would move code with it is data integrity and lives in the schema.** Uniqueness, foreign keys, `NOT NULL` and the nullness groups that make the three schedule shapes total are schema. A range behind a select and an emptiness rule on a typed field are handler. The eight checks on `care_schedule` are the only `CHECK` constraints.
 
 ## Layout
 

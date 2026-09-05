@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 	"uuid"
 
@@ -12,6 +13,8 @@ import (
 	"github.com/ismailshak/sprig/internal/schedule"
 	"github.com/ismailshak/sprig/internal/store"
 )
+
+const todayPath = "/"
 
 type today struct {
 	logger    *slog.Logger
@@ -28,8 +31,19 @@ func (h *today) show(w http.ResponseWriter, r *http.Request) {
 		serverError(h.logger, w, r, "load the day", err)
 		return
 	}
+	if strings.HasPrefix(r.Header.Get("HX-Target"), careRowPrefix) {
+		h.templates.render(w, r, view{page: "today", fragment: "care-settled"}, newCareSettled(principal.Garden, g))
+		return
+	}
 	h.templates.render(w, r, view{page: "today"}, newTodayPage(principal.Garden, g))
 }
+
+// graceWindow is how long a logged row keeps its place on Today with an Undo
+// beside it.
+const graceWindow = 4 * time.Second
+
+// collapseMS is the duration of the stylesheet's transition on a leaving row.
+const collapseMS = 320
 
 // gardenDay is one read of the garden against the reader's clock. The page
 // and the sheet over it draw from the same one because the two have to agree
@@ -64,6 +78,16 @@ func (h *today) load(ctx context.Context, principal auth.Principal) (gardenDay, 
 	return g, nil
 }
 
+// windows reports whether any care is still inside its undo window.
+func (g gardenDay) windows() bool {
+	for _, e := range g.latest {
+		if g.now.Sub(e.RecordedAt) < graceWindow {
+			return true
+		}
+	}
+	return false
+}
+
 // plantLines is every schedule the plant has, in Resolve's order. An empty
 // result is a plant the garden does not have because ListCareSchedules leaves
 // out an archived plant.
@@ -78,14 +102,24 @@ func plantLines(lines []schedule.Line, plantID uuid.UUID) []schedule.Line {
 }
 
 type todayPage struct {
-	Date   string
-	Garden string
-	Sheet  *sheet
-	// Summary is nil when nothing is outstanding, and Empty carries the news
-	// in its place.
-	Summary  *todaySummary
-	Empty    *todayEmpty
+	Date     string
+	Garden   string
+	Sheet    *sheet
+	Head     todayHead
 	Sections []todaySection
+	// OOB marks the feed as an out-of-band swap, which is how an answer aimed
+	// at one row reaches the rest of the day.
+	OOB bool
+}
+
+type todayHead struct {
+	// Exactly one of the three stands. Clear holds Empty's place while logged
+	// rows are still inside their windows because the empty screen would claim
+	// they had gone.
+	Summary *todaySummary
+	Clear   bool
+	Empty   *todayEmpty
+	OOB     bool
 }
 
 type todaySummary struct {
@@ -116,6 +150,30 @@ type link struct {
 	Href  string
 }
 
+// careSwap is what a swap of one row answers with. The head comes back beside
+// the row because logging the last thing outstanding changes what it says.
+type careSwap struct {
+	Row  careRow
+	Head todayHead
+}
+
+// careSettled is what a row whose undo window has closed answers with. The
+// head comes back alone while other rows are still inside their windows
+// because replacing the feed under them would take them with it.
+type careSettled struct {
+	Head todayHead
+	Feed *todayPage
+}
+
+func newCareSettled(garden store.Garden, g gardenDay) careSettled {
+	if g.windows() {
+		return careSettled{Head: swapHead(g)}
+	}
+	page := newTodayPage(garden, g)
+	page.OOB = true
+	return careSettled{Feed: &page}
+}
+
 // careRow is what the care-row fragment takes, so a page load and a swap draw
 // the same row.
 type careRow struct {
@@ -139,13 +197,21 @@ type careRow struct {
 	Care string
 	Slug string
 	// Done marks a row whose care was just logged. Said is what its meta line
-	// says instead.
-	Done bool
-	Said string
+	// says instead. Grace and Collapse are in milliseconds because the style
+	// attribute and the trigger delay are written in them.
+	Done     bool
+	Said     string
+	Undo     string
+	Grace    int
+	Collapse int
 }
 
+// careRowPrefix opens every row id, which is how a swap aimed at a row is
+// told from one aimed at anything else.
+const careRowPrefix = "care-"
+
 func careRowID(plant store.Plant, careType store.CareType) string {
-	return fmt.Sprintf("care-%s-%s", plant.ID, careType.Slug)
+	return fmt.Sprintf("%s%s-%s", careRowPrefix, plant.ID, careType.Slug)
 }
 
 func newTodayPage(garden store.Garden, g gardenDay) todayPage {
@@ -164,12 +230,27 @@ func newTodayPage(garden store.Garden, g gardenDay) todayPage {
 		page.Sections = append(page.Sections, todaySection{ID: "coming-up", Title: "Coming up", Rows: careRows(rows, now)})
 	}
 
-	if outstanding := len(day.Overdue) + len(day.DueToday); outstanding > 0 {
-		page.Summary = &todaySummary{Outstanding: outstanding, Overdue: len(day.Overdue)}
-		return page
-	}
-	page.Empty = newTodayEmpty(day, latest, plants, now)
+	page.Head = newTodayHead(day, latest, plants, now)
 	return page
+}
+
+// newTodayHead is the head as a page load draws it.
+func newTodayHead(day schedule.Day, latest []store.CareEvent, plants int64, now time.Time) todayHead {
+	if outstanding := len(day.Overdue) + len(day.DueToday); outstanding > 0 {
+		return todayHead{Summary: &todaySummary{Outstanding: outstanding, Overdue: len(day.Overdue)}}
+	}
+	return todayHead{Empty: newTodayEmpty(day, latest, plants, now)}
+}
+
+// swapHead is the head as an answer to a swap draws it. Clear is reachable
+// only here because a navigation draws no row inside an undo window.
+func swapHead(g gardenDay) todayHead {
+	head := newTodayHead(g.day, g.latest, g.plants, g.now)
+	if head.Empty != nil && g.windows() {
+		head = todayHead{Clear: true}
+	}
+	head.OOB = true
+	return head
 }
 
 // newTodayEmpty picks which of three pieces of news an empty list is. A tick
