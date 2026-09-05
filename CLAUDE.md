@@ -7,12 +7,13 @@ A plant habit tracker: watering, feeding, repotting, per-plant notes, progress p
 Everything goes through mise, which pins the toolchain and holds the commands:
 
 ```
-mise run build    # the binary at ./sprig, version and revision stamped in
-mise run dev      # Postgres in a container, the server on the host, rebuilt on a change
-mise run dev:stop # the Postgres container the dev task leaves running
-mise run seed     # the prototype's garden into the dev database
-mise run test     # the Go tests, against a throwaway postgres
-mise run e2e      # the Playwright suite, against a seeded throwaway database
+mise run build     # the binary at ./sprig, version and revision stamped in
+mise run dev       # Postgres in a container, the server on the host, rebuilt on a change
+mise run dev:stop  # the Postgres container the dev task leaves running
+mise run dev:reset # the dev database, deleted and seeded from empty
+mise run seed      # the prototype's garden into the dev database
+mise run test      # the Go tests, against a throwaway postgres
+mise run e2e       # the Playwright suite, against a seeded throwaway database
 mise run lint
 mise run migrate
 mise run migrate:new <name>

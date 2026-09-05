@@ -20,6 +20,15 @@ run = "go build -o sprig ./cmd/sprig"
 description = "Stop the Postgres container the dev task leaves running"
 run = "docker compose stop db"
 
+[tasks."dev:reset"]
+description = "Delete the dev database and load the seed into a fresh one"
+run = [
+  # --volumes deletes the db-data volume the database lives in
+  "docker compose down --volumes",
+  "docker compose up -d --wait db",
+  "mise run seed",
+]
+
 [tasks.seed]
 description = "Load the prototype's garden into the dev database"
 run = "go run ./cmd/seed"
