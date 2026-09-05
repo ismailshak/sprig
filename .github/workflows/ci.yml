@@ -136,5 +136,4 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          # cache-from alone, in the image job's scope, because that build already wrote this run's layers
-          cache-from: type=gha,scope=image
+          # No cache-from because a cache fault can't reach a release built from nothing
