@@ -2,7 +2,12 @@ package http
 
 import (
 	"fmt"
+	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
+
+	"github.com/ismailshak/sprig/internal/store"
 )
 
 func daysWord(n int) string {
@@ -34,4 +39,44 @@ func whenWord(days int, today time.Time) string {
 		return "in " + due.Month().String()
 	}
 	return fmt.Sprintf("in %s %d", due.Month(), due.Year())
+}
+
+// The five care types a garden starts with have English forms their names
+// cannot give. A type the map does not know falls back to its own name, as in
+// "Log dust" and "Logged dust just now".
+var careWords = map[string]struct{ noun, past string }{
+	"water": {"watering", "watered"},
+	"feed":  {"feeding", "fed"},
+	"repot": {"repotting", "repotted"},
+	"mist":  {"misting", "misted"},
+	"prune": {"pruning", "pruned"},
+}
+
+// careNoun is the act as a noun, for "Log watering".
+func careNoun(ct store.CareType) string {
+	if w, ok := careWords[ct.Slug]; ok {
+		return w.noun
+	}
+	return strings.ToLower(ct.Name)
+}
+
+// carePast is the act done, for "watered just now".
+func carePast(ct store.CareType) string {
+	if w, ok := careWords[ct.Slug]; ok {
+		return w.past
+	}
+	return "logged " + strings.ToLower(ct.Name)
+}
+
+func capitalise(s string) string {
+	r, size := utf8.DecodeRuneInString(s)
+	if r == utf8.RuneError {
+		return s
+	}
+	return string(unicode.ToUpper(r)) + s[size:]
+}
+
+// stamp names an instant the way a row does, "Tue 1 Sep, 6:00pm".
+func stamp(t time.Time) string {
+	return t.Format("Mon 2 Jan, 3:04pm")
 }

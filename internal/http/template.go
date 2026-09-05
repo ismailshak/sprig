@@ -85,10 +85,12 @@ func parsePages(fsys fs.FS, funcs template.FuncMap) (map[string]*template.Templa
 }
 
 // view is what a route renders, the page for a navigation and the fragment
-// for an htmx request. A view with no fragment answers both with the page.
+// for an htmx request. A view with no fragment answers both with the page. A
+// status of zero is 200.
 type view struct {
 	page     string
 	fragment string
+	status   int
 }
 
 // render writes v to w. It executes into a buffer first, because a template
@@ -127,6 +129,9 @@ func (t *Templates) render(w http.ResponseWriter, r *http.Request, v view, data 
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if v.status != 0 {
+		w.WriteHeader(v.status)
+	}
 	// A failed write means the browser hung up, which nothing here can act on.
 	_, _ = w.Write(buf.Bytes())
 }

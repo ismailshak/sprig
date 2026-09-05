@@ -7,4 +7,8 @@ import type { Page } from '@playwright/test';
 export async function signIn(page: Page, handle: string): Promise<void> {
   await page.goto('/dev/signin');
   await page.getByRole('button', { name: `(${handle})` }).click();
+  // waitForURL holds until the post's redirect lands because click resolves
+  // on the press alone. A navigation started before then interrupts the
+  // redirect.
+  await page.waitForURL('/');
 }

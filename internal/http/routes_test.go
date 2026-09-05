@@ -9,8 +9,11 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"uuid"
 
 	"github.com/ismailshak/sprig/internal/auth"
+	"github.com/ismailshak/sprig/internal/pgtest"
+	"github.com/ismailshak/sprig/internal/store"
 )
 
 // access is the second statement of what a route requires, kept apart from
@@ -33,8 +36,44 @@ var routeAccess = map[string]access{
 	"GET /healthz": {public: true},
 	// The hashed URL is known only at startup, so this path is a plain one the
 	// pattern matches.
-	assetPattern: {public: true, path: assetPrefix + "app.css"},
-	"GET /{$}":   {},
+	assetPattern:               {public: true, path: assetPrefix + "app.css"},
+	"GET /{$}":                 {},
+	"GET /plants/{plant}/log":  {capability: auth.CareLog, path: logPath(rosewoodPlantID), foreign: logPath(fairviewPlantID)},
+	"POST /plants/{plant}/log": {capability: auth.CareLog, path: logPath(rosewoodPlantID), foreign: logPath(fairviewPlantID)},
+}
+
+var (
+	fairviewID      = uuid.MustParse("00000000-0000-7000-8000-000000000201")
+	rosewoodPlantID = uuid.MustParse("00000000-0000-7000-8000-000000000211")
+	fairviewPlantID = uuid.MustParse("00000000-0000-7000-8000-000000000212")
+)
+
+// routeQueries seeds two gardens, each with a scheduled plant, because a route
+// naming a plant needs one in sitterPrincipal's garden and one outside it.
+func routeQueries(t *testing.T) *store.Queries {
+	t.Helper()
+
+	ctx := t.Context()
+	tx := pgtest.Tx(t, migrateSchema)
+	rosewoodID := sitterPrincipal().Garden.ID
+	seed := []struct {
+		sql  string
+		args []any
+	}{
+		{"INSERT INTO garden (id, name) VALUES ($1, 'Rosewood'), ($2, 'Fairview')", []any{rosewoodID, fairviewID}},
+		{"INSERT INTO care_type (garden_id, name, slug) VALUES ($1, 'Water', 'water'), ($2, 'Water', 'water')", []any{rosewoodID, fairviewID}},
+		{"INSERT INTO plant (id, garden_id, nickname) VALUES ($1, $2, 'Big Fella'), ($3, $4, 'Gerald')", []any{rosewoodPlantID, rosewoodID, fairviewPlantID, fairviewID}},
+		{`INSERT INTO care_schedule (garden_id, plant_id, care_type_id, interval_count, interval_unit)
+			SELECT garden_id, $1, id, 7, 'day' FROM care_type WHERE garden_id = $2`, []any{rosewoodPlantID, rosewoodID}},
+		{`INSERT INTO care_schedule (garden_id, plant_id, care_type_id, interval_count, interval_unit)
+			SELECT garden_id, $1, id, 7, 'day' FROM care_type WHERE garden_id = $2`, []any{fairviewPlantID, fairviewID}},
+	}
+	for _, row := range seed {
+		if _, err := tx.Exec(ctx, row.sql, row.args...); err != nil {
+			t.Fatalf("seeding: %v\n%s", err, row.sql)
+		}
+	}
+	return store.New(tx)
 }
 
 func TestRoutes_EveryRouteHasOneEntryAndTheTwoAgree(t *testing.T) {
@@ -87,6 +126,7 @@ func TestRoutes_EveryRouteHasOneEntryAndTheTwoAgree(t *testing.T) {
 func TestRoutes_EachRouteRefusesWhatItsEntrySays(t *testing.T) {
 	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
 	every := everyCapability()
+	queries := routeQueries(t)
 
 	for _, r := range routes(testLogger, testSessions(), nil, testTemplates(), testAssets()) {
 		a, ok := routeAccess[r.pattern]
@@ -107,7 +147,7 @@ func TestRoutes_EachRouteRefusesWhatItsEntrySays(t *testing.T) {
 			handler := New(logger, testSessions(), ResolverFunc(func(context.Context, time.Time, string) (auth.Principal, error) {
 				resolved++
 				return auth.Principal{}, auth.ErrNoSession
-			}), nil, testTemplates(), testAssets())
+			}), queries, testTemplates(), testAssets())
 			rec := httptest.NewRecorder()
 			handler.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), method, path, nil))
 			sentToSignIn := rec.Code == http.StatusSeeOther && rec.Header().Get("Location") == signInPath
@@ -123,13 +163,13 @@ func TestRoutes_EachRouteRefusesWhatItsEntrySays(t *testing.T) {
 			if a.capability != "" {
 				lacking := memberWith(without(every, a.capability))
 				rec = httptest.NewRecorder()
-				New(logger, testSessions(), acceptEveryToken(lacking), nil, testTemplates(), testAssets()).ServeHTTP(rec, signedIn(httptest.NewRequestWithContext(t.Context(), method, path, nil)))
+				New(logger, testSessions(), acceptEveryToken(lacking), queries, testTemplates(), testAssets()).ServeHTTP(rec, signedIn(httptest.NewRequestWithContext(t.Context(), method, path, nil)))
 				if rec.Code != http.StatusNotFound {
 					t.Errorf("a member without %s got %d, want %d", a.capability, rec.Code, http.StatusNotFound)
 				}
 
 				rec = httptest.NewRecorder()
-				New(logger, testSessions(), acceptEveryToken(memberWith(every)), nil, testTemplates(), testAssets()).ServeHTTP(rec, signedIn(httptest.NewRequestWithContext(t.Context(), method, path, nil)))
+				New(logger, testSessions(), acceptEveryToken(memberWith(every)), queries, testTemplates(), testAssets()).ServeHTTP(rec, signedIn(httptest.NewRequestWithContext(t.Context(), method, path, nil)))
 				if rec.Code == http.StatusNotFound {
 					t.Errorf("a member with %s got %d, so the route is hidden from the people it is for", a.capability, rec.Code)
 				}
@@ -137,7 +177,7 @@ func TestRoutes_EachRouteRefusesWhatItsEntrySays(t *testing.T) {
 
 			if a.foreign != "" {
 				rec = httptest.NewRecorder()
-				New(logger, testSessions(), acceptEveryToken(memberWith(every)), nil, testTemplates(), testAssets()).ServeHTTP(rec, signedIn(httptest.NewRequestWithContext(t.Context(), method, a.foreign, nil)))
+				New(logger, testSessions(), acceptEveryToken(memberWith(every)), queries, testTemplates(), testAssets()).ServeHTTP(rec, signedIn(httptest.NewRequestWithContext(t.Context(), method, a.foreign, nil)))
 				if rec.Code != http.StatusNotFound {
 					t.Errorf("an owner asking for Fairview's object at %s got %d, want %d", a.foreign, rec.Code, http.StatusNotFound)
 				}

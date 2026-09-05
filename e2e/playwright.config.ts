@@ -21,17 +21,23 @@ export default defineConfig({
   use: {
     baseURL,
     trace: 'retain-on-failure',
+    // The sheet's entrance animation moves its buttons for 260ms, and
+    // Playwright's retry after an unstable check sleeps on a page timer that
+    // never fires with JavaScript off. The stylesheet stops the animation
+    // under prefers-reduced-motion. reducedMotion sits in contextOptions
+    // because the runner takes no test option of that name.
+    contextOptions: { reducedMotion: 'reduce' },
   },
   // A test runs in both projects unless it carries the @js tag, which marks
   // behaviour that exists only with JavaScript on.
   projects: [
     {
       name: 'phone',
-      use: { ...devices['Pixel 7'] },
+      use: { ...devices['iPhone 16'] },
     },
     {
       name: 'phone-nojs',
-      use: { ...devices['Pixel 7'], javaScriptEnabled: false },
+      use: { ...devices['iPhone 16'], javaScriptEnabled: false },
       grepInvert: /@js/,
     },
   ],
