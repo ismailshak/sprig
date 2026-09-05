@@ -40,6 +40,7 @@ var routeAccess = map[string]access{
 	"GET /{$}":                 {},
 	"GET /plants":              {},
 	"GET /activity":            {},
+	"GET /plants/{plant}":      {path: plantPath(rosewoodPlantID), foreign: plantPath(fairviewPlantID)},
 	"GET /plants/{plant}/log":  {capability: auth.CareLog, path: logPath(rosewoodPlantID), foreign: logPath(fairviewPlantID)},
 	"POST /plants/{plant}/log": {capability: auth.CareLog, path: logPath(rosewoodPlantID), foreign: logPath(fairviewPlantID)},
 	"DELETE /plants/{plant}/log/{event}": {

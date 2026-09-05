@@ -1,0 +1,87 @@
+{{define "title"}}sprig — {{.Name}}{{end}}
+
+{{/* The bar carries the way back and nothing else, because the heading below
+     it already names the plant. */}}
+{{define "main"}}
+<header class="topbar topbar--back">
+<a class="backlink" href="/plants">{{template "icon-back"}}Plants</a>
+</header>
+{{/* The order is the phone's. The stylesheet's named areas move the picture
+     and the reference into a column of their own above 900px, so the wide
+     layout needs no second copy of this markup. */}}
+<div class="app__body app__body--plant">
+<div class="hero">
+{{/* The picture is empty until photos exist. */}}
+<span class="hero__pic"></span>
+<h1 class="hero__name{{if .Botanical}} hero__name--sp{{end}}">{{.Name}}</h1>
+{{with .Names}}<p class="hero__meta">{{range $i, $name := .}}{{if $i}} &middot; {{end}}{{if $name.Italic}}<i>{{$name.Text}}</i>{{else}}{{$name.Text}}{{end}}{{end}}</p>{{end}}
+{{/* The room is a different kind of fact from a name, so it is not a third
+     item in the dot-separated run above it. */}}
+{{with .Room}}<p class="hero__where">{{.}}</p>{{end}}
+</div>
+
+{{with .Schedule}}
+<section class="section section--schedule" aria-labelledby="schedule">
+<div class="section__head">
+<h2 class="section__title" id="schedule">Schedule</h2>
+</div>
+<ul class="list">
+{{range .}}{{template "schedule-row" .}}
+{{end}}</ul>
+</section>
+{{end}}
+
+{{with .Log}}<a class="wide-action" href="{{.}}" hx-get="{{.}}" hx-target="#sheet" hx-swap="outerHTML">Log care</a>{{end}}
+
+{{with .Reference}}
+<section class="section section--reference" aria-labelledby="reference">
+<div class="section__head">
+<h2 class="section__title" id="reference">Reference</h2>
+</div>
+<div class="panel">
+{{with .Facts}}<dl class="facts">
+{{range .}}<dt>{{.Label}}</dt><dd>{{.Value}}</dd>
+{{end}}</dl>{{end}}
+{{with .Note}}<p class="panel__note">{{.}}</p>{{end}}
+{{with .Acquired}}<p class="panel__fact"><span>Acquired</span>{{.}}</p>{{end}}
+</div>
+</section>
+{{end}}
+
+{{/* The strip is empty until photos exist. The section is drawn anyway,
+     because a plant with no photo is the ordinary state. */}}
+<section class="section section--photos" aria-labelledby="photos">
+<div class="section__head">
+<h2 class="section__title" id="photos">Photos</h2>
+</div>
+<div class="strip"></div>
+</section>
+
+{{/* Recent names the person and the action and not the plant, because the
+     subject of every line here is the page it is on. */}}
+<section class="section section--history" aria-labelledby="recent">
+<div class="section__head">
+<h2 class="section__title" id="recent">Recent</h2>
+</div>
+<ul class="loglist">
+{{range .Recent}}<li class="logline"><b>{{.Who}}</b> {{.Did}} &middot; {{.When}}</li>
+{{else}}<li class="logline logline--none">Nothing recorded yet.</li>
+{{end}}</ul>
+</section>
+</div>
+{{end}}
+
+{{/* The rule on the left and the consequence on the right. An anchored line
+     carries no window, because the schema puts a season only on a cadence. */}}
+{{define "schedule-row"}}<li class="sched">
+<span class="sched__icon">{{template "care-icon" .Slug}}</span>
+<div class="sched__text">
+<span class="sched__type">{{.Care}}</span>
+<span class="sched__every">{{.Rule}}{{with .Season}} &middot; {{.}}{{end}}</span>
+</div>
+<span class="sched__when{{if .Late}} sched__when--late{{end}}{{if .Off}} sched__when--off{{end}}">{{.When}}</span>
+</li>{{end}}
+
+{{define "nav"}}{{template "tabs" "Plants"}}{{end}}
+
+{{define "overlay"}}{{template "sheet" .}}{{end}}

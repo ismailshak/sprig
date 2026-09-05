@@ -103,3 +103,84 @@ func TestDayHeading_ReadsTheInstantInTheReadersZone(t *testing.T) {
 		t.Errorf("dayHeading = %q, want the day London was on at half past midnight", got)
 	}
 }
+
+func TestEveryWord(t *testing.T) {
+	cases := []struct {
+		count int32
+		unit  string
+		want  string
+	}{
+		{1, "year", "year"},
+		{1, "day", "day"},
+		{3, "week", "3 weeks"},
+		{10, "day", "10 days"},
+	}
+	for _, c := range cases {
+		if got := everyWord(c.count, c.unit); got != c.want {
+			t.Errorf("everyWord(%d, %q) = %q, want %q", c.count, c.unit, got, c.want)
+		}
+	}
+}
+
+func TestAnchorWord(t *testing.T) {
+	now := time.Date(2026, time.September, 3, 9, 0, 0, 0, london())
+	cases := []struct {
+		name      string
+		due       time.Time
+		precision string
+		want      string
+	}{
+		{"a date in another year carries it", date(2027, time.May, 1), "day", "1 May 2027"},
+		{"a date this year does not", date(2026, time.December, 1), "day", "1 December"},
+		{"a month-precise anchor keeps its vagueness", date(2028, time.March, 1), "month", "in March 2028"},
+		{"a month this year is named alone", date(2026, time.November, 1), "month", "in November"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := anchorWord(c.due, c.precision, now); got != c.want {
+				t.Errorf("anchorWord = %q, want %q", got, c.want)
+			}
+		})
+	}
+}
+
+func TestAcquiredWord(t *testing.T) {
+	year, month := int16(2024), int16(3)
+	if got := acquiredWord(&year, &month); got != "March 2024" {
+		t.Errorf("acquiredWord = %q, want March 2024", got)
+	}
+	if got := acquiredWord(&year, nil); got != "2024" {
+		t.Errorf("a year with no month = %q, want 2024", got)
+	}
+	if got := acquiredWord(nil, &month); got != "" {
+		t.Errorf("a month with no year = %q, want nothing, because a month alone is not a date", got)
+	}
+}
+
+func TestAgoWord(t *testing.T) {
+	now := time.Date(2026, time.September, 3, 9, 0, 0, 0, london())
+	cases := []struct {
+		name string
+		at   time.Time
+		want string
+	}{
+		{"this morning is today", now.Add(-2 * time.Hour), "today"},
+		// Recent is drawn against one clock, so an event recorded a moment
+		// before the page was built can carry a later instant than now.
+		{"an instant a shade after now is still today", now.Add(time.Millisecond), "today"},
+		{"last night is yesterday", now.AddDate(0, 0, -1).Add(9 * time.Hour), "yesterday"},
+		{"two days back is named as a day", now.AddDate(0, 0, -2), "Tuesday"},
+		{"a week back is dated", now.AddDate(0, 0, -7), "27 Aug"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := agoWord(c.at, now); got != c.want {
+				t.Errorf("agoWord = %q, want %q", got, c.want)
+			}
+		})
+	}
+}
+
+func date(year int, month time.Month, day int) time.Time {
+	return time.Date(year, month, day, 0, 0, 0, 0, london())
+}

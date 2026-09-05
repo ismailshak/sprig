@@ -377,17 +377,10 @@ func newTodayFeed(principal auth.Principal, g gardenDay) todayFeed {
 
 func newFeedLine(principal auth.Principal, e store.ListRecentCareEventsRow, now time.Time) feedLine {
 	line := feedLine{
-		Who:   e.PerformedByName,
-		Did:   carePast(e.CareType),
 		Plant: e.Plant.DisplayName(),
 		When:  feedWhen(e.CareEvent.PerformedAt, now),
 	}
-	if e.CareEvent.PerformedBy == principal.User.ID {
-		line.Who = "You"
-	}
-	if !e.CareEvent.Done {
-		line.Did = "skipped"
-	}
+	line.Who, line.Did = whoDid(principal, e.PerformedByName, e.CareEvent, e.CareType)
 	if mayUndo(principal, e.CareEvent, now) {
 		line.Undo = undoFormPath(e.CareEvent.PlantID, e.CareEvent.ID)
 	}
