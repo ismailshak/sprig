@@ -127,7 +127,10 @@ var routeAccess = map[string]access{
 	"POST /signout":      {anyMember: true},
 	"GET /more/account":  {},
 	"POST /more/account": {anyMember: true},
-	"GET /more/passkeys": {},
+	// Recovery codes belong to an account rather than to a garden, so every
+	// member reaches the page.
+	"GET /more/account/recovery": {},
+	"GET /more/passkeys":         {},
 	// A passkey and a push subscription belong to an account rather than to a
 	// garden, so the foreign row here is another person's rather than another
 	// garden's. Both routes answer 404 for one.

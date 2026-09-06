@@ -1,0 +1,45 @@
+{{define "title"}}sprig — recovery codes{{end}}
+
+{{/* The back link points at Account rather than at More, because this page is
+     reached from Account. */}}
+{{define "main"}}
+<header class="topbar topbar--stack topbar--sub">
+<a class="backlink" href="/more/account">{{template "icon-back"}}Account</a>
+<h1 class="topbar__title">Recovery codes</h1>
+</header>
+<div class="app__body app__body--sub">
+{{if .Codes}}
+{{/* Copy all has no handler yet. Writing to the clipboard needs JavaScript. */}}
+<div class="secret">
+<p class="secret__label">The codes</p>
+<ul class="secret__codes">{{range .Codes}}<li>{{.}}</li>{{end}}</ul>
+<button class="care care--outline" type="button">Copy all</button>
+<p class="note">This is the only time they are shown — sprig keeps a hash of each one and nothing else. Put them somewhere that is not the phone you sign in with.</p>
+</div>
+<p class="note">Each code works once. Using one lets a new device register a passkey; it does not sign you in on its own, and the device it enrols appears on your Passkeys page afterwards.</p>
+<a class="wide-action" href="/more/account">Done</a>
+{{else}}
+<p class="lead">A recovery code is how you get back in with no working passkey and nobody to send you a new invite. It does not sign you in — it lets a new device register a passkey, and you sign in with that.</p>
+{{if .Live}}
+<ul class="list">
+<li class="row row--setting row--stack">
+<span class="row__text">
+<span class="row__name">{{.Left}}</span>
+<span class="row__meta"><span class="row__part">{{.Made}}</span></span>
+</span>
+</li>
+</ul>
+{{/* The warning is above the button rather than in a dialog after it, because
+     creating a set invalidates codes somebody has already written down. */}}
+<p class="note">Creating a new set destroys this one. Whatever you wrote down stops working the moment the new codes appear, so replace it in the same sitting rather than meaning to later.</p>
+{{/* No route makes a batch yet, so this button does nothing. */}}
+<button class="wide-action">Create new codes</button>
+{{else}}
+{{if .Prompted}}<p class="note">You are holding none. Anybody may have codes and only an owner is prompted for them: everybody else can be sent a new link by whoever runs their garden, and you are the person with nobody above you to ask.</p>{{end}}
+<button class="wide-action">Create codes</button>
+{{end}}
+{{end}}
+</div>
+{{end}}
+
+{{define "nav"}}{{template "tabs" "More"}}{{end}}

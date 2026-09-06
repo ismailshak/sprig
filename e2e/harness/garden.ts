@@ -21,6 +21,9 @@ export const browsers = {
   laptop: 'Mac · Chrome',
 } as const;
 
+// The recovery codes the seed gives Ellie: ten made, two of them used.
+export const recoveryBatch = { left: 8, size: 10 } as const;
+
 // The care types the garden records against, in the order the Garden page
 // lists them. Mist was tried and turned off, and its row is still there.
 export const careTypes = {

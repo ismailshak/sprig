@@ -10,6 +10,9 @@ SELECT * FROM app_user
 WHERE handle = @handle;
 
 -- name: UpdateAccount :exec
+-- Nothing checks that the handle is free before this runs. The unique index on
+-- app_user.handle rejects a duplicate. A check made first would let two
+-- accounts saving the same handle at the same moment both pass it.
 UPDATE app_user
-SET display_name = @display_name, timezone = @timezone
+SET display_name = @display_name, handle = @handle, timezone = @timezone
 WHERE id = @user_id;

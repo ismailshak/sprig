@@ -259,3 +259,24 @@ func usedNote(at *time.Time, now time.Time) string {
 func hourLabel(hour int16) string {
 	return time.Date(2000, time.January, 1, int(hour), 0, 0, 0, time.UTC).Format("3:04pm")
 }
+
+// codesNote is the note on More's Account row, "No recovery codes" when the
+// reader has none. It names recovery codes because the row itself is only
+// labelled Account.
+func codesNote(missing bool) string {
+	if missing {
+		return "No recovery codes"
+	}
+	return ""
+}
+
+// accountCodesNote is the note on Account's Recovery codes row when the reader
+// has none. It does not repeat "recovery codes" because the row is labelled
+// with them.
+const accountCodesNote = "None yet"
+
+// codesLeftWord is the first line of the batch on Recovery codes, "8 of 10
+// left".
+func codesLeftWord(unused, size int64) string {
+	return fmt.Sprintf("%d of %d left", unused, size)
+}

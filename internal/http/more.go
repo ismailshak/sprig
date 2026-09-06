@@ -15,6 +15,7 @@ import (
 const (
 	morePath          = "/more"
 	accountPath       = morePath + "/account"
+	recoveryPath      = accountPath + "/recovery"
 	passkeysPath      = morePath + "/passkeys"
 	notificationsPath = morePath + "/notifications"
 	gardenPath        = morePath + "/garden"
@@ -37,19 +38,22 @@ type more struct {
 }
 
 type morePage struct {
-	Rows []moreRow
+	Rows []linkRow
 	// Version and Revision are the running binary's, shown as the last line of
 	// the page. Revision is empty in a binary built outside a git working tree.
 	Version  string
 	Revision string
 }
 
-type moreRow struct {
+// linkRow is a row in a settings list, rendered as a label, a chevron and
+// sometimes a note. More's index is a list of them. Account has one, linking
+// to Recovery codes.
+type linkRow struct {
 	Label string
 	Href  string
 	// Note is the text at the right-hand end of the row. It is empty unless the
 	// page behind the row has something outstanding: notifications that are
-	// off, or an invite nobody has taken up.
+	// off, an invite nobody has taken up, or no recovery codes.
 	Note string
 }
 
@@ -57,6 +61,11 @@ type moreRow struct {
 type moreState struct {
 	notificationsOn bool
 	waitingInvites  int
+	// noCodes is true when the signed-in person manages the garden's people and
+	// has no recovery codes. Anyone can have codes. Only someone who manages
+	// people is prompted for them, because there is nobody above them to send a
+	// new invite.
+	noCodes bool
 }
 
 func (h *more) show(w http.ResponseWriter, r *http.Request) {
@@ -76,14 +85,21 @@ func (h *more) state(ctx context.Context, principal auth.Principal) (moreState, 
 	}
 	state := moreState{notificationsOn: anyNotificationOn(preferences)}
 
-	// Only the People row reports waiting invites, and only an owner has that
-	// row, so a member's index does not pay for the count.
+	// The People row and the Account row's note are both only rendered for
+	// someone who can manage people, so a member's index does not pay for
+	// either query.
 	if principal.Can(auth.MemberManage) {
 		waiting, err := h.queries.CountWaitingInvites(ctx, principal.Garden.ID, h.now())
 		if err != nil {
 			return moreState{}, fmt.Errorf("count the waiting invites: %w", err)
 		}
 		state.waitingInvites = int(waiting)
+
+		_, live, err := h.recoveryBatch(ctx, principal.User.ID)
+		if err != nil {
+			return moreState{}, err
+		}
+		state.noCodes = !live
 	}
 	return state, nil
 }
@@ -92,19 +108,19 @@ func (h *more) state(ctx context.Context, principal auth.Principal) (moreState, 
 // rather than shown and refused when pressed, so a sitter gets the first three
 // rows and the foot.
 func newMorePage(principal auth.Principal, state moreState, info build.Info) morePage {
-	rows := []moreRow{
-		{Label: "Account", Href: accountPath},
+	rows := []linkRow{
+		{Label: "Account", Href: accountPath, Note: codesNote(state.noCodes)},
 		{Label: "Passkeys", Href: passkeysPath},
 		{Label: "Notifications", Href: notificationsPath, Note: offNote(state.notificationsOn)},
 	}
 	if principal.Can(auth.GardenEdit) {
-		rows = append(rows, moreRow{Label: "Garden", Href: gardenPath})
+		rows = append(rows, linkRow{Label: "Garden", Href: gardenPath})
 	}
 	if principal.Can(auth.MemberManage) {
-		rows = append(rows, moreRow{Label: "People", Href: peoplePath, Note: waitingNote(state.waitingInvites)})
+		rows = append(rows, linkRow{Label: "People", Href: peoplePath, Note: waitingNote(state.waitingInvites)})
 	}
 	if principal.Can(auth.TokenManage) {
-		rows = append(rows, moreRow{Label: "Tokens", Href: tokensPath})
+		rows = append(rows, linkRow{Label: "Tokens", Href: tokensPath})
 	}
 	return morePage{Rows: rows, Version: info.Version, Revision: shortRevision(info.Revision)}
 }

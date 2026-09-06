@@ -1,0 +1,7 @@
+{{define "link-row"}}<li>
+<a class="row row--link row--setting" href="{{.Href}}">
+<span class="row__label">{{.Label}}</span>
+{{with .Note}}<span class="row__note">{{.}}</span>{{end}}
+<span class="row__go">{{template "icon-chevron"}}</span>
+</a>
+</li>{{end}}

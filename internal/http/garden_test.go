@@ -87,10 +87,10 @@ func listedTypesOf(page string) []listedType {
 	var out []listedType
 	for _, m := range careTypeLink.FindAllStringSubmatch(page, -1) {
 		row := listedType{edit: m[1]}
-		if label := indexRowLabel.FindStringSubmatch(m[2]); label != nil {
+		if label := linkRowLabel.FindStringSubmatch(m[2]); label != nil {
 			row.name = text(label[1])
 		}
-		if note := indexRowNote.FindStringSubmatch(m[2]); note != nil {
+		if note := linkRowNote.FindStringSubmatch(m[2]); note != nil {
 			row.note = text(note[1])
 		}
 		out = append(out, row)
@@ -135,7 +135,7 @@ func editorOn(t *testing.T, page string) editor {
 	if why := careTypeWhyRow.FindStringSubmatch(m[2]); why != nil {
 		open.why = text(why[1])
 	}
-	if message := fieldErrorRow.FindStringSubmatch(m[2]); message != nil {
+	if message := fieldError.FindStringSubmatch(m[2]); message != nil {
 		open.message = text(message[1])
 	}
 	if drop := careTypeDrop.FindStringSubmatch(m[2]); drop != nil {
@@ -192,7 +192,7 @@ func TestGarden_AnEmptyGardenNameIsRefusedWithTheReasonUnderTheField(t *testing.
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusUnprocessableEntity)
 	}
-	if got := fieldErrorRow.FindStringSubmatch(rec.Body.String()); got == nil || text(got[1]) != gardenNameMissing {
+	if got := fieldError.FindStringSubmatch(rec.Body.String()); got == nil || text(got[1]) != gardenNameMissing {
 		t.Errorf("the form says %v, want %q", got, gardenNameMissing)
 	}
 	var name string

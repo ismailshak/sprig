@@ -10,13 +10,7 @@
 </header>
 <div class="app__body app__body--more">
 <ul class="list">
-{{range .Rows}}<li>
-<a class="row row--link row--setting" href="{{.Href}}">
-<span class="row__label">{{.Label}}</span>
-{{with .Note}}<span class="row__note">{{.}}</span>{{end}}
-<span class="row__go">{{template "icon-chevron"}}</span>
-</a>
-</li>
+{{range .Rows}}{{template "link-row" .}}
 {{end}}</ul>
 <div class="more__foot">
 <a class="foot-link" href="/install">Install sprig{{template "icon-chevron"}}</a>

@@ -2,16 +2,44 @@ package http
 
 import (
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"regexp"
 	"testing"
+
+	"github.com/ismailshak/sprig/internal/auth"
 )
 
 var (
-	nameValue     = regexp.MustCompile(`<input class="input" id="name" name="name" type="text" value="([^"]*)">`)
-	zoneOption    = regexp.MustCompile(`<option value="([^"]+)"( selected)?>([^<]+)</option>`)
-	fieldErrorRow = regexp.MustCompile(`<p class="field__error">(.*?)</p>`)
+	nameValue   = regexp.MustCompile(`<input class="input" id="name" name="name" type="text" value="([^"]*)">`)
+	handleValue = regexp.MustCompile(`<input class="input" id="handle" name="handle" type="text" value="([^"]*)">`)
+	handleHint  = regexp.MustCompile(`for="handle">Handle <span class="field__hint">([^<]*)</span>`)
+	zoneOption  = regexp.MustCompile(`<option value="([^"]+)"( selected)?>([^<]+)</option>`)
+	fieldBlock  = regexp.MustCompile(`(?s)<div class="field">(.*?)</div>`)
+	fieldInput  = regexp.MustCompile(`id="([^"]+)" name=`)
+	fieldError  = regexp.MustCompile(`(?s)<p class="field__error">(.*?)</p>`)
 )
+
+// errorUnder returns the error message rendered under the field whose input
+// has this id, or "" when it has none.
+func errorUnder(page, id string) string {
+	for _, block := range fieldBlock.FindAllStringSubmatch(page, -1) {
+		input := fieldInput.FindStringSubmatch(block[1])
+		if input == nil || input[1] != id {
+			continue
+		}
+		if message := fieldError.FindStringSubmatch(block[1]); message != nil {
+			return text(message[1])
+		}
+	}
+	return ""
+}
+
+// saveAccount posts all three fields, because the page saves them together.
+func (f *moreFixture) saveAccount(t *testing.T, name, handle, zone string) *httptest.ResponseRecorder {
+	t.Helper()
+	return f.do(t, f.handler.saveAccount, accountPath, url.Values{"name": {name}, "handle": {handle}, "timezone": {zone}})
+}
 
 type zoneChoice struct {
 	value string
@@ -39,13 +67,16 @@ func selectedZone(t *testing.T, page string) zoneChoice {
 	return zoneChoice{}
 }
 
-func TestAccount_TheFormOpensOnTheNameAndZoneTheAccountHolds(t *testing.T) {
+func TestAccount_TheFormOpensOnTheNameHandleAndZoneTheAccountHolds(t *testing.T) {
 	f := moreGarden(t)
 
 	page := f.page(t, f.handler.account, accountPath)
 
 	if got := nameValue.FindStringSubmatch(page); got == nil || got[1] != "Ellie" {
 		t.Errorf("the display name field holds %v, want Ellie", got)
+	}
+	if got := handleValue.FindStringSubmatch(page); got == nil || got[1] != "ellie" {
+		t.Errorf("the handle field holds %v, want ellie", got)
 	}
 	if got := selectedZone(t, page); got.value != "Europe/London" {
 		t.Errorf("the zone selected is %q, want Europe/London", got.value)
@@ -75,33 +106,34 @@ func TestAccount_AZoneReadsWithoutTheUnderscore(t *testing.T) {
 	}
 }
 
-func TestAccount_SavingWritesTheNameAndTheZone(t *testing.T) {
+func TestAccount_SavingWritesTheNameTheHandleAndTheZone(t *testing.T) {
 	f := moreGarden(t)
 
-	rec := f.do(t, f.handler.saveAccount, accountPath, url.Values{"name": {"  Eleanor  "}, "timezone": {"Asia/Tokyo"}})
+	rec := f.saveAccount(t, "  Eleanor  ", "  eleanor  ", "Asia/Tokyo")
 
 	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != accountPath {
 		t.Fatalf("status = %d to %q, want %d to %s", rec.Code, rec.Header().Get("Location"), http.StatusSeeOther, accountPath)
 	}
-	var name, zone string
-	if err := f.tx.QueryRow(t.Context(), "SELECT display_name, timezone FROM app_user WHERE id = $1", moreUserID).Scan(&name, &zone); err != nil {
+	var name, handle, zone string
+	if err := f.tx.QueryRow(t.Context(), "SELECT display_name, handle, timezone FROM app_user WHERE id = $1", moreUserID).Scan(&name, &handle, &zone); err != nil {
 		t.Fatalf("reading the account back: %v", err)
 	}
-	if name != "Eleanor" || zone != "Asia/Tokyo" {
-		t.Errorf("the account holds %q in %q, want %q in %q", name, zone, "Eleanor", "Asia/Tokyo")
+	if name != "Eleanor" || handle != "eleanor" || zone != "Asia/Tokyo" {
+		t.Errorf("the account holds %q, %q in %q, want %q, %q in %q",
+			name, handle, zone, "Eleanor", "eleanor", "Asia/Tokyo")
 	}
 }
 
 func TestAccount_AnEmptyDisplayNameIsRefusedWithTheReasonUnderTheField(t *testing.T) {
 	f := moreGarden(t)
 
-	rec := f.do(t, f.handler.saveAccount, accountPath, url.Values{"name": {"   "}, "timezone": {"Asia/Tokyo"}})
+	rec := f.saveAccount(t, "   ", "ellie", "Asia/Tokyo")
 
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusUnprocessableEntity)
 	}
-	if got := fieldErrorRow.FindStringSubmatch(rec.Body.String()); got == nil || text(got[1]) != nameMissing {
-		t.Errorf("the form says %v, want %q", got, nameMissing)
+	if got := errorUnder(rec.Body.String(), "name"); got != nameMissing {
+		t.Errorf("the form says %q under Display name, want %q", got, nameMissing)
 	}
 	var name string
 	if err := f.tx.QueryRow(t.Context(), "SELECT display_name FROM app_user WHERE id = $1", moreUserID).Scan(&name); err != nil {
@@ -115,17 +147,21 @@ func TestAccount_AnEmptyDisplayNameIsRefusedWithTheReasonUnderTheField(t *testin
 func TestAccount_TheRefusedFormComesBackWithWhatWasTyped(t *testing.T) {
 	f := moreGarden(t)
 
-	rec := f.do(t, f.handler.saveAccount, accountPath, url.Values{"name": {""}, "timezone": {"Asia/Tokyo"}})
+	rec := f.saveAccount(t, "", "eleanor", "Asia/Tokyo")
 
-	if got := selectedZone(t, rec.Body.String()); got.value != "Asia/Tokyo" {
+	page := rec.Body.String()
+	if got := selectedZone(t, page); got.value != "Asia/Tokyo" {
 		t.Errorf("the zone selected is %q, want the posted Asia/Tokyo", got.value)
+	}
+	if got := handleValue.FindStringSubmatch(page); got == nil || got[1] != "eleanor" {
+		t.Errorf("the handle field holds %v, want the posted eleanor", got)
 	}
 }
 
 func TestAccount_AZoneTheSelectDidNotOfferIsRefused(t *testing.T) {
 	f := moreGarden(t)
 
-	rec := f.do(t, f.handler.saveAccount, accountPath, url.Values{"name": {"Eleanor"}, "timezone": {"Mars/Olympus_Mons"}})
+	rec := f.saveAccount(t, "Eleanor", "eleanor", "Mars/Olympus_Mons")
 
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusBadRequest)
@@ -136,5 +172,127 @@ func TestAccount_AZoneTheSelectDidNotOfferIsRefused(t *testing.T) {
 	}
 	if name != "Ellie" || zone != "Europe/London" {
 		t.Errorf("the refused post left the account as %q in %q, want Ellie in Europe/London", name, zone)
+	}
+}
+
+// Another seeded account has the handle "sam". "Sam" normalises to it, so the
+// update is rejected by the unique index.
+func TestAccount_AHandleAnotherAccountHoldsIsRefusedAndTheMessageNamesIt(t *testing.T) {
+	f := moreGarden(t)
+
+	rec := f.saveAccount(t, "Ellie", "Sam", "Europe/London")
+
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusUnprocessableEntity)
+	}
+	if got, want := errorUnder(rec.Body.String(), "handle"), handleTakenMessage("sam"); got != want {
+		t.Errorf("the form says %q under Handle, want %q", got, want)
+	}
+}
+
+func TestAccount_SavingWithTheHandleUnchangedRedirectsBackToAccount(t *testing.T) {
+	f := moreGarden(t)
+
+	rec := f.saveAccount(t, "Eleanor", "ellie", "Europe/London")
+
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusSeeOther, rec.Body.String())
+	}
+}
+
+func TestAccount_AnEmptyHandleIsRefusedWithTheReasonUnderTheField(t *testing.T) {
+	f := moreGarden(t)
+
+	rec := f.saveAccount(t, "Ellie", "   ", "Europe/London")
+
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusUnprocessableEntity)
+	}
+	if got := errorUnder(rec.Body.String(), "handle"); got != handleMissing {
+		t.Errorf("the form says %q under Handle, want %q", got, handleMissing)
+	}
+}
+
+func TestAccount_AHandleTypedWithACapitalAndASpaceIsSavedAsLowerCaseWithAnUnderscore(t *testing.T) {
+	f := moreGarden(t)
+
+	rec := f.saveAccount(t, "Ellie", "Emma Fletcher", "Europe/London")
+
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusSeeOther, rec.Body.String())
+	}
+	var held string
+	if err := f.tx.QueryRow(t.Context(), "SELECT handle FROM app_user WHERE id = $1", moreUserID).Scan(&held); err != nil {
+		t.Fatalf("reading the account back: %v", err)
+	}
+	if held != "emma_fletcher" {
+		t.Errorf("the account holds %q, want emma_fletcher", held)
+	}
+}
+
+func TestAccount_AHandleOfPunctuationAloneIsRefusedWithTheReasonUnderTheField(t *testing.T) {
+	f := moreGarden(t)
+
+	rec := f.saveAccount(t, "Ellie", "!!!", "Europe/London")
+
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusUnprocessableEntity)
+	}
+	if got := errorUnder(rec.Body.String(), "handle"); got != handleMissing {
+		t.Errorf("the form says %q under Handle, want %q", got, handleMissing)
+	}
+	var held string
+	if err := f.tx.QueryRow(t.Context(), "SELECT handle FROM app_user WHERE id = $1", moreUserID).Scan(&held); err != nil {
+		t.Fatalf("reading the account back: %v", err)
+	}
+	if held != "ellie" {
+		t.Errorf("the refused post left the handle as %q, want ellie", held)
+	}
+}
+
+func TestAccount_BothMessagesAreShownWhenTheNameAndTheHandleAreBothEmpty(t *testing.T) {
+	f := moreGarden(t)
+
+	rec := f.saveAccount(t, "  ", "  ", "Europe/London")
+
+	page := rec.Body.String()
+	if got := errorUnder(page, "name"); got != nameMissing {
+		t.Errorf("the form says %q under Display name, want %q", got, nameMissing)
+	}
+	if got := errorUnder(page, "handle"); got != handleMissing {
+		t.Errorf("the form says %q under Handle, want %q", got, handleMissing)
+	}
+}
+
+func TestAccount_TheHandleHintNamesTheSavedDisplayNameAndNotTheOnePosted(t *testing.T) {
+	f := moreGarden(t)
+
+	rec := f.saveAccount(t, "", "eleanor", "Europe/London")
+
+	got := handleHint.FindStringSubmatch(rec.Body.String())
+	if want := "what tells you from another Ellie"; got == nil || got[1] != want {
+		t.Errorf("the hint beside Handle reads %v, want %q", got, want)
+	}
+}
+
+func TestAccount_TheRecoveryCodesRowSaysNoneYetUntilABatchExists(t *testing.T) {
+	f := moreGarden(t)
+
+	if got := noteOn(t, f.page(t, f.handler.account, accountPath), "Recovery codes"); got != accountCodesNote {
+		t.Errorf("holding none the row says %q, want %q", got, accountCodesNote)
+	}
+
+	f.exec(t, "INSERT INTO recovery_code (user_id, code_hash) VALUES ($1, 'one')", moreUserID)
+	if got := noteOn(t, f.page(t, f.handler.account, accountPath), "Recovery codes"); got != "" {
+		t.Errorf("holding a batch the row says %q, want nothing", got)
+	}
+}
+
+func TestAccount_AMemberIsNotToldTheyHaveNoRecoveryCodes(t *testing.T) {
+	f := moreGarden(t)
+	f.principal.Capabilities = auth.Capabilities{auth.TokenManage: true}
+
+	if got := noteOn(t, f.page(t, f.handler.account, accountPath), "Recovery codes"); got != "" {
+		t.Errorf("the row says %q to a member, want nothing", got)
 	}
 }
