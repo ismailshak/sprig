@@ -45,10 +45,10 @@ func peopleGarden(t *testing.T) *moreFixture {
 	f.exec(t, `INSERT INTO app_user (id, display_name, handle, timezone) VALUES
 		($1, 'Jo', 'jo', 'Europe/London'),
 		($2, 'Clare', 'clare', 'Europe/London')`, peopleJoID, peopleClareID)
-	f.exec(t, `INSERT INTO membership (id, garden_id, user_id, role, created_at, expires_at) VALUES
-		($1, $2, $3, 'member', '2026-01-02T00:00:00Z', NULL),
-		($4, $2, $5, 'sitter', '2026-01-03T00:00:00Z', $6),
-		($7, $2, $8, 'sitter', '2026-01-04T00:00:00Z', $9)`,
+	f.exec(t, `INSERT INTO membership (id, garden_id, user_id, role, created_at, expires_at, digest_hour) VALUES
+		($1, $2, $3, 'member', '2026-01-02T00:00:00Z', NULL, 8),
+		($4, $2, $5, 'sitter', '2026-01-03T00:00:00Z', $6, 8),
+		($7, $2, $8, 'sitter', '2026-01-04T00:00:00Z', $9, 8)`,
 		peopleSamID, moreGardenID, otherUserID,
 		peopleJoID, peopleJoID, thursday.AddDate(0, 0, 8),
 		peopleClareID, peopleClareID, thursday.AddDate(0, 0, -12))
@@ -153,7 +153,7 @@ func TestPeople_AHandleIsShownOnlyWhereTwoMembersShareADisplayName(t *testing.T)
 	}
 
 	f.exec(t, "INSERT INTO app_user (id, display_name, handle, timezone) VALUES ($1, 'Ellie', 'ellie2', 'Europe/London')", peopleSecondID)
-	f.exec(t, "INSERT INTO membership (garden_id, user_id, role) VALUES ($1, $2, 'sitter')", moreGardenID, peopleSecondID)
+	f.exec(t, "INSERT INTO membership (garden_id, user_id, role, digest_hour) VALUES ($1, $2, 'sitter', 8)", moreGardenID, peopleSecondID)
 	page := f.page(t, f.handler.people, peoplePath)
 
 	for _, want := range []string{"ellie", "ellie2"} {
@@ -302,8 +302,8 @@ func TestPeople_AMembersEndDateIsShownAndSavedInTheirOwnZone(t *testing.T) {
 	// access ends at an instant that is 13 September where they are and 14
 	// September where the reader is.
 	f.exec(t, "INSERT INTO app_user (id, display_name, handle, timezone) VALUES ($1, 'Finn', 'finn', 'America/New_York')", peopleFinnID)
-	f.exec(t, `INSERT INTO membership (garden_id, user_id, role, created_at, expires_at)
-		VALUES ($1, $2, 'sitter', '2026-01-05T00:00:00Z', '2026-09-14T02:00:00Z')`, moreGardenID, peopleFinnID)
+	f.exec(t, `INSERT INTO membership (garden_id, user_id, role, created_at, expires_at, digest_hour)
+		VALUES ($1, $2, 'sitter', '2026-01-05T00:00:00Z', '2026-09-14T02:00:00Z', 8)`, moreGardenID, peopleFinnID)
 
 	row := memberNamed(t, f.page(t, f.handler.people, peoplePath), "Finn")
 	if want := "Sitter · until 13 Sep"; row.meta != want {

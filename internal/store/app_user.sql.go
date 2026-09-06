@@ -11,6 +11,33 @@ import (
 	"uuid"
 )
 
+const createUser = `-- name: CreateUser :one
+INSERT INTO app_user (display_name, handle, timezone)
+VALUES ($1, $2, $3)
+RETURNING id, display_name, handle, timezone, created_at
+`
+
+type CreateUserParams struct {
+	DisplayName string
+	Handle      string
+	Timezone    string
+}
+
+// CreateUser inserts an account and returns the row. There is no default
+// timezone, so every caller chooses one.
+func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (AppUser, error) {
+	row := q.db.QueryRow(ctx, createUser, arg.DisplayName, arg.Handle, arg.Timezone)
+	var i AppUser
+	err := row.Scan(
+		&i.ID,
+		&i.DisplayName,
+		&i.Handle,
+		&i.Timezone,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const getUserByHandle = `-- name: GetUserByHandle :one
 SELECT id, display_name, handle, timezone, created_at FROM app_user
 WHERE handle = $1

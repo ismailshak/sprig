@@ -339,7 +339,7 @@ func routeQueries(t *testing.T) *store.Queries {
 		// The rows People and Tokens act on. The reader is a member of
 		// Rosewood, because a page listing members has to find their own row.
 		{"INSERT INTO app_user (id, display_name, handle, timezone) VALUES ($1, 'Jo', 'jo', 'Europe/London'), ($2, 'Robin', 'robin', 'Europe/Lisbon')", []any{joID, fairviewMemberID}},
-		{`INSERT INTO membership (garden_id, user_id, role) VALUES ($1, $2, 'owner'), ($1, $3, 'member'), ($1, $4, 'sitter'), ($5, $6, 'member')`,
+		{`INSERT INTO membership (garden_id, user_id, role, digest_hour) VALUES ($1, $2, 'owner', 8), ($1, $3, 'member', 8), ($1, $4, 'sitter', 8), ($5, $6, 'member', 8)`,
 			[]any{rosewoodID, sitterPrincipal().User.ID, strangerID, joID, fairviewID, fairviewMemberID}},
 		{`INSERT INTO invite (id, garden_id, token_hash, role, created_by, expires_at)
 			VALUES ($1, $2, 'rosewood-invite', 'sitter', $3, now() + interval '7 days'),

@@ -35,9 +35,9 @@ func resolverOnTx(t *testing.T, endsAt *time.Time) (*Resolver, pgx.Tx) {
 	}
 	exec("INSERT INTO garden (id, name) VALUES ($1, 'Fairview')", otherGardenID)
 	exec("INSERT INTO app_user (id, display_name, timezone, handle) VALUES ($1, 'Noor', 'Pacific/Auckland', 'noor')", otherUserID)
-	exec("INSERT INTO membership (garden_id, user_id, role, created_at) VALUES ($1, $2, 'owner', $3)",
+	exec("INSERT INTO membership (garden_id, user_id, role, created_at, digest_hour) VALUES ($1, $2, 'owner', $3, 8)",
 		otherGardenID, otherUserID, signedInAt.AddDate(0, -1, 0))
-	exec("INSERT INTO membership (garden_id, user_id, role, invited_by, created_at, expires_at) VALUES ($1, $2, 'sitter', $3, $4, $5)",
+	exec("INSERT INTO membership (garden_id, user_id, role, invited_by, created_at, expires_at, digest_hour) VALUES ($1, $2, 'sitter', $3, $4, $5, 8)",
 		testGardenID, otherUserID, testUserID, signedInAt.AddDate(0, 0, -7), endsAt)
 
 	return NewResolver(sessions, store.New(tx)), tx

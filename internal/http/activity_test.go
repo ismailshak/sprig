@@ -40,7 +40,7 @@ func rosewoodLog(t *testing.T) *logFixture {
 	f := rosewood(t)
 	f.exec(t, "DELETE FROM care_event WHERE garden_id = $1", rosewoodID)
 	f.exec(t, "INSERT INTO app_user (id, display_name, handle, timezone) VALUES ($1, 'Sam', 'sam', 'Europe/London')", rosewoodSamID)
-	f.exec(t, "INSERT INTO membership (garden_id, user_id, role) VALUES ($1, $2, 'sitter')", rosewoodID, rosewoodSamID)
+	f.exec(t, "INSERT INTO membership (garden_id, user_id, role, digest_hour) VALUES ($1, $2, 'sitter', 8)", rosewoodID, rosewoodSamID)
 
 	events := []struct {
 		plant uuid.UUID

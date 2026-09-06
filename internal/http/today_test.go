@@ -61,7 +61,7 @@ func rosewood(t *testing.T) *todayFixture {
 
 	exec("INSERT INTO garden (id, name) VALUES ($1, 'Rosewood')", rosewoodID)
 	exec("INSERT INTO app_user (id, display_name, handle, timezone) VALUES ($1, 'Ellie', 'ellie', 'Europe/London')", readerID)
-	exec("INSERT INTO membership (garden_id, user_id, role) VALUES ($1, $2, 'owner')", rosewoodID, readerID)
+	exec("INSERT INTO membership (garden_id, user_id, role, digest_hour) VALUES ($1, $2, 'owner', 8)", rosewoodID, readerID)
 	exec("INSERT INTO care_type (id, garden_id, name, slug) VALUES ($1, $2, 'Water', 'water'), ($3, $2, 'Feed', 'feed')", waterID, rosewoodID, feedID)
 
 	plants := []struct {

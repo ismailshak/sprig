@@ -108,8 +108,10 @@ CREATE TABLE membership (
     created_at  timestamptz NOT NULL DEFAULT now(),
     -- NULL means a permanent member.
     expires_at  timestamptz,
-    -- Interpreted in the user's timezone.
-    digest_hour smallint NOT NULL DEFAULT 8,
+    -- The hour the digest is sent, read in the user's timezone. There is no
+    -- default, so every insert names an hour and the hour a new membership
+    -- starts on is decided in the application.
+    digest_hour smallint NOT NULL,
     UNIQUE (garden_id, user_id)
 );
 

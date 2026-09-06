@@ -16,3 +16,10 @@ WHERE handle = @handle;
 UPDATE app_user
 SET display_name = @display_name, handle = @handle, timezone = @timezone
 WHERE id = @user_id;
+
+-- CreateUser inserts an account and returns the row. There is no default
+-- timezone, so every caller chooses one.
+-- name: CreateUser :one
+INSERT INTO app_user (display_name, handle, timezone)
+VALUES (@display_name, @handle, @timezone)
+RETURNING *;

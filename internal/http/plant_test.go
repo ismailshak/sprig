@@ -323,7 +323,7 @@ func TestPlant_ACompletedOneOffShowsAsNotScheduled(t *testing.T) {
 func TestPlant_RecentNamesThePersonAndTheActionAndNotThePlant(t *testing.T) {
 	f := rosewoodPlant(t)
 	f.exec(t, "INSERT INTO app_user (id, display_name, handle, timezone) VALUES ($1, 'Ravi', 'ravi', 'Europe/London')", raviID)
-	f.exec(t, "INSERT INTO membership (garden_id, user_id, role) VALUES ($1, $2, 'member')", rosewoodID, raviID)
+	f.exec(t, "INSERT INTO membership (garden_id, user_id, role, digest_hour) VALUES ($1, $2, 'member', 8)", rosewoodID, raviID)
 	f.exec(t, "INSERT INTO care_event (garden_id, plant_id, care_type_id, performed_by, performed_at, recorded_at, done, override_interval_days) VALUES ($1, $2, $3, $4, $5, $5, false, 2)",
 		rosewoodID, bigFellaID, waterID, raviID, day(time.September, 2))
 

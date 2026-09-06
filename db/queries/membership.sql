@@ -53,3 +53,10 @@ WHERE garden_id = @garden_id AND user_id = @user_id;
 -- name: DeleteMembership :execrows
 DELETE FROM membership
 WHERE garden_id = @garden_id AND user_id = @user_id;
+
+-- CreateMembership inserts the membership row and returns it. The caller also
+-- writes the two notification_preference rows every membership has.
+-- name: CreateMembership :one
+INSERT INTO membership (garden_id, user_id, role, invited_by, expires_at, digest_hour)
+VALUES (@garden_id, @user_id, @role, @invited_by, @expires_at, @digest_hour)
+RETURNING *;
