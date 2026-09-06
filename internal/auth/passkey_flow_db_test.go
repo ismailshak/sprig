@@ -69,7 +69,8 @@ func signInWith(t *testing.T, passkeys *Passkeys, device *passkeytest.Authentica
 		t.Fatalf("BeginAssertion returned an error: %v", err)
 	}
 	answer := strings.NewReader(device.Assert(assertion))
-	return passkeys.FinishAssertion(ctx, time.Now(), answering(t, cookie), answer)
+	user, _, err := passkeys.FinishAssertion(ctx, time.Now(), answering(t, cookie), answer)
+	return user, err
 }
 
 // mustSignIn is signInWith for a sign-in the test expects to be accepted.
@@ -291,11 +292,11 @@ func TestPasskeys_ASignInAnswerCannotBeReplayed(t *testing.T) {
 		t.Fatalf("BeginAssertion returned an error: %v", err)
 	}
 	answer := phone.Assert(assertion)
-	if _, err := passkeys.FinishAssertion(ctx, time.Now(), answering(t, cookie), strings.NewReader(answer)); err != nil {
+	if _, _, err := passkeys.FinishAssertion(ctx, time.Now(), answering(t, cookie), strings.NewReader(answer)); err != nil {
 		t.Fatalf("the first answer was refused: %v", err)
 	}
 
-	_, err = passkeys.FinishAssertion(ctx, time.Now(), answering(t, cookie), strings.NewReader(answer))
+	_, _, err = passkeys.FinishAssertion(ctx, time.Now(), answering(t, cookie), strings.NewReader(answer))
 	if !errors.Is(err, ErrCeremonyGone) {
 		t.Errorf("the same answer a second time returned %v, want %v", err, ErrCeremonyGone)
 	}
@@ -313,7 +314,7 @@ func TestPasskeys_ACeremonyStartedForOnePurposeDoesNotServeTheOther(t *testing.T
 			t.Fatalf("BeginRegistration returned an error: %v", err)
 		}
 		asSignIn := &protocol.CredentialAssertion{Response: protocol.PublicKeyCredentialRequestOptions{Challenge: creation.Response.Challenge}}
-		_, err = passkeys.FinishAssertion(ctx, time.Now(), answering(t, cookie), strings.NewReader(phone.Assert(asSignIn)))
+		_, _, err = passkeys.FinishAssertion(ctx, time.Now(), answering(t, cookie), strings.NewReader(phone.Assert(asSignIn)))
 		if !errors.Is(err, ErrFailedVerification) {
 			t.Errorf("returned %v, want %v", err, ErrFailedVerification)
 		}
