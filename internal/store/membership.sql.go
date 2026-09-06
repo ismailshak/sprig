@@ -7,9 +7,62 @@ package store
 
 import (
 	"context"
+	"time"
 
 	"uuid"
 )
+
+const deleteMembership = `-- name: DeleteMembership :execrows
+DELETE FROM membership
+WHERE garden_id = $1 AND user_id = $2
+`
+
+// Removing a member deletes the membership. Their sessions on this garden go
+// with it through the foreign key, so they lose access at once rather than on
+// the next page they load. Every care event they logged stays where it is,
+// because an event points at the account and not at the membership.
+func (q *Queries) DeleteMembership(ctx context.Context, gardenID uuid.UUID, userID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteMembership, gardenID, userID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const getMemberByHandle = `-- name: GetMemberByHandle :one
+SELECT membership.id, membership.garden_id, membership.user_id, membership.role, membership.invited_by, membership.created_at, membership.expires_at, membership.digest_hour, app_user.id, app_user.display_name, app_user.handle, app_user.timezone, app_user.created_at
+FROM membership
+JOIN app_user ON app_user.id = membership.user_id
+WHERE membership.garden_id = $1 AND app_user.handle = $2
+`
+
+type GetMemberByHandleRow struct {
+	Membership Membership
+	AppUser    AppUser
+}
+
+// People names a member by handle in its URLs. A handle belonging to somebody
+// outside the garden returns no row, so the route returns 404 for it.
+func (q *Queries) GetMemberByHandle(ctx context.Context, gardenID uuid.UUID, handle string) (GetMemberByHandleRow, error) {
+	row := q.db.QueryRow(ctx, getMemberByHandle, gardenID, handle)
+	var i GetMemberByHandleRow
+	err := row.Scan(
+		&i.Membership.ID,
+		&i.Membership.GardenID,
+		&i.Membership.UserID,
+		&i.Membership.Role,
+		&i.Membership.InvitedBy,
+		&i.Membership.CreatedAt,
+		&i.Membership.ExpiresAt,
+		&i.Membership.DigestHour,
+		&i.AppUser.ID,
+		&i.AppUser.DisplayName,
+		&i.AppUser.Handle,
+		&i.AppUser.Timezone,
+		&i.AppUser.CreatedAt,
+	)
+	return i, err
+}
 
 const getMembershipWithUserAndGarden = `-- name: GetMembershipWithUserAndGarden :one
 SELECT membership.id, membership.garden_id, membership.user_id, membership.role, membership.invited_by, membership.created_at, membership.expires_at, membership.digest_hour, app_user.id, app_user.display_name, app_user.handle, app_user.timezone, app_user.created_at, garden.id, garden.name, garden.created_at
@@ -49,6 +102,55 @@ func (q *Queries) GetMembershipWithUserAndGarden(ctx context.Context, gardenID u
 		&i.Garden.CreatedAt,
 	)
 	return i, err
+}
+
+const listMembers = `-- name: ListMembers :many
+SELECT membership.id, membership.garden_id, membership.user_id, membership.role, membership.invited_by, membership.created_at, membership.expires_at, membership.digest_hour, app_user.id, app_user.display_name, app_user.handle, app_user.timezone, app_user.created_at
+FROM membership
+JOIN app_user ON app_user.id = membership.user_id
+WHERE membership.garden_id = $1
+ORDER BY membership.created_at, membership.id
+`
+
+type ListMembersRow struct {
+	Membership Membership
+	AppUser    AppUser
+}
+
+// The People page lists everybody in the garden, oldest membership first, so
+// the person who created it is at the top.
+func (q *Queries) ListMembers(ctx context.Context, gardenID uuid.UUID) ([]ListMembersRow, error) {
+	rows, err := q.db.Query(ctx, listMembers, gardenID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListMembersRow
+	for rows.Next() {
+		var i ListMembersRow
+		if err := rows.Scan(
+			&i.Membership.ID,
+			&i.Membership.GardenID,
+			&i.Membership.UserID,
+			&i.Membership.Role,
+			&i.Membership.InvitedBy,
+			&i.Membership.CreatedAt,
+			&i.Membership.ExpiresAt,
+			&i.Membership.DigestHour,
+			&i.AppUser.ID,
+			&i.AppUser.DisplayName,
+			&i.AppUser.Handle,
+			&i.AppUser.Timezone,
+			&i.AppUser.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listMembershipsForUser = `-- name: ListMembershipsForUser :many
@@ -105,4 +207,42 @@ type SetDigestHourParams struct {
 func (q *Queries) SetDigestHour(ctx context.Context, arg SetDigestHourParams) error {
 	_, err := q.db.Exec(ctx, setDigestHour, arg.DigestHour, arg.GardenID, arg.UserID)
 	return err
+}
+
+const setMemberRole = `-- name: SetMemberRole :execrows
+UPDATE membership SET role = $1
+WHERE garden_id = $2 AND user_id = $3
+`
+
+type SetMemberRoleParams struct {
+	Role     string
+	GardenID uuid.UUID
+	UserID   uuid.UUID
+}
+
+func (q *Queries) SetMemberRole(ctx context.Context, arg SetMemberRoleParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setMemberRole, arg.Role, arg.GardenID, arg.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const setMembershipEnd = `-- name: SetMembershipEnd :execrows
+UPDATE membership SET expires_at = $1
+WHERE garden_id = $2 AND user_id = $3
+`
+
+type SetMembershipEndParams struct {
+	ExpiresAt *time.Time
+	GardenID  uuid.UUID
+	UserID    uuid.UUID
+}
+
+func (q *Queries) SetMembershipEnd(ctx context.Context, arg SetMembershipEndParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setMembershipEnd, arg.ExpiresAt, arg.GardenID, arg.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
