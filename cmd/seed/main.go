@@ -115,7 +115,7 @@ type counts struct {
 
 func seed(ctx context.Context, pool *pgxpool.Pool, ref time.Time) (counts, error) {
 	gardens := []garden{home(), upstairs()}
-	people := []*person{&ellie, &sam, &robin}
+	people := []*person{&ellie, &sam, &robin, &jo, &clare}
 
 	tx, err := pool.Begin(ctx)
 	if err != nil {

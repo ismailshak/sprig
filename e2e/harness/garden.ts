@@ -2,9 +2,13 @@
 // The ids are the ones the seed writes, so a test can find a row by id without
 // querying the database.
 
+// Jo and Clare are sitters. Jo's access ends in eight days and Clare's ended
+// twelve days ago, the two states a membership with no end date has not got.
 export const people = {
   ellie: { name: 'Ellie', handle: 'ellie' },
   sam: { name: 'Sam', handle: 'sam' },
+  jo: { name: 'Jo', handle: 'jo' },
+  clare: { name: 'Clare', handle: 'clare' },
 } as const;
 
 // The devices Ellie has registered a passkey on, one row each on Passkeys.
@@ -61,3 +65,10 @@ export const rooms = {
 } as const;
 
 export type Plant = (typeof plants)[keyof typeof plants];
+
+// The tokens in the Home garden. The spare expired six days ago, so the list
+// has one live row and one expired one.
+export const tokens = {
+  kitchen: 'The kitchen display',
+  spare: 'The spare display',
+} as const;

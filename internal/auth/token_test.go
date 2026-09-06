@@ -2,6 +2,7 @@ package auth
 
 import (
 	"errors"
+	"strings"
 	"testing"
 	"time"
 )
@@ -41,5 +42,28 @@ func TestTokenExpiry(t *testing.T) {
 				t.Errorf("TokenExpiry(now, %s) = %s, want %s", c.lifetime, got, c.want)
 			}
 		})
+	}
+}
+
+func TestNewAPIToken_TheTokenStartsWithThePrefixTheListWillShow(t *testing.T) {
+	token, prefix := NewAPIToken()
+
+	if !strings.HasPrefix(token, prefix+"_") {
+		t.Errorf("the token %q does not start with the prefix %q, so a row cannot be matched to the device holding it", token, prefix)
+	}
+	if len(token) <= len(prefix)+1 {
+		t.Errorf("the token %q is its prefix and nothing else, and the prefix is stored in the clear", token)
+	}
+}
+
+func TestNewAPIToken_TwoTokensDiffer(t *testing.T) {
+	first, firstPrefix := NewAPIToken()
+	second, secondPrefix := NewAPIToken()
+
+	if first == second {
+		t.Error("two tokens are the same value")
+	}
+	if firstPrefix == secondPrefix {
+		t.Error("two tokens carry the same prefix, and the prefix is what tells two rows apart")
 	}
 }

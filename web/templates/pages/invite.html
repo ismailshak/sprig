@@ -1,0 +1,47 @@
+{{define "title"}}sprig — invite{{end}}
+
+{{/* Two steps on one page. Only a hash of the link is stored, so the link
+     itself exists in the one response that created it. Creating it replaces the
+     form rather than redirecting, because a page the browser navigated to could
+     be reloaded with no link on it.
+
+     The role chips are submit buttons that send this form as a GET, so pressing
+     one re-renders the page with that role chosen and the sentence under the
+     chips changed to match. The end date is submitted with it and is rendered
+     back into the field. */}}
+{{define "main"}}
+{{template "more-topbar" .Bar}}
+<div class="app__body app__body--sub">
+{{if .Secret}}
+{{template "secret" .Secret}}
+<p class="note">{{.Made}}</p>
+<a class="wide-action" href="{{.Done}}">Done</a>
+{{else}}
+<p class="lead">They open the link, pick a name, and their phone registers a passkey. There is nothing for them to remember and nothing for you to send twice.</p>
+<form method="post" action="{{.Action}}" novalidate>
+{{/* Enter in the end date submits through the form's first submit button.
+     Without this hidden one that would be a role chip. A chip sends the form as
+     a GET and changes the role instead of creating the link. sheet__default is
+     the class for a hidden default button; no sheet is involved here. */}}
+<button class="sheet__default" type="submit" name="role" value="{{.Chosen}}" tabindex="-1" aria-hidden="true"></button>
+<div class="field">
+<span class="field__label">What can they do</span>
+<div class="chips">{{range .Roles}}<button class="chip" name="role" value="{{.Value}}" formmethod="get" formaction="{{$.Action}}" aria-pressed="{{.On}}">{{.Label}}</button>{{end}}</div>
+<p class="note">{{.What}}</p>
+</div>
+<div class="field">
+<label class="field__label" for="until">Until <span class="field__hint">optional</span></label>
+<input class="input input--narrow" id="until" name="until" type="date" value="{{.Until}}">
+{{with .UntilError}}<p class="field__error">{{.}}</p>{{end}}
+<p class="note">Leave it empty unless their access should stop on a day you already know. It can be set or changed later.</p>
+</div>
+{{/* Create the link posts the chosen role as its own value. A button posts its
+     name and value only when it is the one pressed, so exactly one role reaches
+     the server whether a chip or this button was used. */}}
+<button class="wide-action" type="submit" name="role" value="{{.Chosen}}">Create the link</button>
+</form>
+{{end}}
+</div>
+{{end}}
+
+{{define "nav"}}{{template "tabs" "More"}}{{end}}

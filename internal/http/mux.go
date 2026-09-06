@@ -73,6 +73,17 @@ func routes(logger *slog.Logger, sessions *auth.Sessions, queries *store.Queries
 		{pattern: "POST " + careTypesPath + "/{care}/off", capability: auth.CareTypeManage, handler: http.HandlerFunc(moreHandler.turnOffCareType)},
 		{pattern: "POST " + careTypesPath + "/{care}/on", capability: auth.CareTypeManage, handler: http.HandlerFunc(moreHandler.turnOnCareType)},
 		{pattern: "POST " + careTypesPath + "/{care}/delete", capability: auth.CareTypeManage, handler: http.HandlerFunc(moreHandler.deleteCareType)},
+		{pattern: "GET " + peoplePath, capability: auth.MemberManage, handler: http.HandlerFunc(moreHandler.people)},
+		{pattern: "POST " + peoplePath, capability: auth.MemberManage, handler: http.HandlerFunc(moreHandler.saveMembers)},
+		{pattern: "GET " + invitePath, capability: auth.MemberInvite, handler: http.HandlerFunc(moreHandler.invite)},
+		{pattern: "POST " + invitePath, capability: auth.MemberInvite, handler: http.HandlerFunc(moreHandler.createInviteLink)},
+		{pattern: "POST " + peoplePath + "/invites/{invite}/revoke", capability: auth.MemberManage, handler: http.HandlerFunc(moreHandler.revokeInvite)},
+		{pattern: "GET " + peoplePath + "/{member}/remove", capability: auth.MemberManage, handler: http.HandlerFunc(moreHandler.confirmRemoveMember)},
+		{pattern: "POST " + peoplePath + "/{member}/remove", capability: auth.MemberManage, handler: http.HandlerFunc(moreHandler.removeMember)},
+		{pattern: "POST " + peoplePath + "/{member}/reenrol", capability: auth.MemberManage, handler: http.HandlerFunc(moreHandler.reenrolMember)},
+		{pattern: "GET " + tokensPath, capability: auth.TokenManage, handler: http.HandlerFunc(moreHandler.tokens)},
+		{pattern: "POST " + tokensPath, capability: auth.TokenManage, handler: http.HandlerFunc(moreHandler.createToken)},
+		{pattern: "POST " + tokensPath + "/{token}/revoke", capability: auth.TokenManage, handler: http.HandlerFunc(moreHandler.revokeToken)},
 	}
 	return append(base, devRoutes(sessions, queries, templates)...)
 }

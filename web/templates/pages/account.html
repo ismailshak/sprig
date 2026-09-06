@@ -6,7 +6,7 @@
      novalidate turns the browser's own validation off, so an empty field is
      reported by the server as the message under that field. */}}
 {{define "main"}}
-{{template "more-topbar" "Account"}}
+{{template "more-topbar" .Bar}}
 <div class="app__body app__body--sub">
 <form method="post" action="/more/account" novalidate>
 <div class="field">

@@ -3,7 +3,7 @@
 {{/* Three things, in the order they stop mattering: which types to send, the
      hour the digest arrives, and which browsers are subscribed. */}}
 {{define "main"}}
-{{template "more-topbar" "Notifications"}}
+{{template "more-topbar" .Bar}}
 <div class="app__body app__body--sub">
 <form method="post" action="{{.Action}}" novalidate>
 <div class="section">

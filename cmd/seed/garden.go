@@ -42,10 +42,16 @@ type person struct {
 
 // Robin is in a different timezone from the other two, so a query or digest
 // that applied one zone to everybody would give a wrong answer for Robin.
+//
+// Jo's membership in the Home garden ends in eight days and Clare's ended
+// twelve days ago. They give People the two states a membership with no end
+// date has not got.
 var (
 	ellie = person{id: seedID(tableUser, 1), name: "Ellie", handle: "ellie", timezone: "Europe/London", daysOld: 731}
 	sam   = person{id: seedID(tableUser, 2), name: "Sam", handle: "sam", timezone: "Europe/London", daysOld: 700}
 	robin = person{id: seedID(tableUser, 3), name: "Robin", handle: "robin", timezone: "Europe/Lisbon", daysOld: 366}
+	jo    = person{id: seedID(tableUser, 4), name: "Jo", handle: "jo", timezone: "Europe/London", daysOld: 30}
+	clare = person{id: seedID(tableUser, 5), name: "Clare", handle: "clare", timezone: "Europe/London", daysOld: 400}
 )
 
 type membership struct {
@@ -188,6 +194,11 @@ func home() garden {
 		members: []membership{
 			{id: seedID(tableMembership, 1), person: &ellie, role: "owner", daysOld: 730, digest: true},
 			{id: seedID(tableMembership, 2), person: &sam, role: "member", invitedBy: &ellie, daysOld: 700},
+			{id: seedID(tableMembership, 5), person: &jo, role: "sitter", invitedBy: &ellie, daysOld: 20, expiresInDays: 8},
+			// A membership that has already ended. The row stays on People and
+			// is greyed, so the date can be moved forward instead of a second
+			// invite being issued.
+			{id: seedID(tableMembership, 6), person: &clare, role: "sitter", invitedBy: &ellie, daysOld: 400, expiresInDays: -12},
 		},
 		careTypes: []careType{
 			{id: seedID(tableCareType, 1), name: "Water", slug: "water"},

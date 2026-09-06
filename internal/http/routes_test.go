@@ -181,6 +181,45 @@ var routeAccess = map[string]access{
 		path:       deleteCareTypePath("prune"),
 		foreign:    deleteCareTypePath("trim"),
 	},
+	// People and the pages under it are the owner's. A member is named by
+	// handle, so the foreign path is a handle only Fairview's member holds.
+	"GET /more/people":        {capability: auth.MemberManage},
+	"POST /more/people":       {capability: auth.MemberManage},
+	"GET /more/people/invite": {capability: auth.MemberInvite},
+	// A post with no body names no role, so this is refused before it writes.
+	"POST /more/people/invite": {capability: auth.MemberInvite},
+	"POST /more/people/invites/{invite}/revoke": {
+		capability: auth.MemberManage,
+		path:       revokeInvitePath(rosewoodInviteID),
+		foreign:    revokeInvitePath(fairviewInviteID),
+	},
+	// Rendering the question changes nothing, so it shares a member with
+	// Re-enrol. The post that removes one uses a member of its own, since the
+	// two routes after it would find nothing left.
+	"GET /more/people/{member}/remove": {
+		capability: auth.MemberManage,
+		path:       removeMemberPath("sam"),
+		foreign:    removeMemberPath("robin"),
+	},
+	"POST /more/people/{member}/remove": {
+		capability: auth.MemberManage,
+		path:       removeMemberPath("jo"),
+		foreign:    removeMemberPath("robin"),
+	},
+	"POST /more/people/{member}/reenrol": {
+		capability: auth.MemberManage,
+		path:       reenrolMemberPath("sam"),
+		foreign:    reenrolMemberPath("robin"),
+	},
+	"GET /more/tokens": {capability: auth.TokenManage},
+	// A post with no body names no lifetime, so this is refused before it
+	// writes.
+	"POST /more/tokens": {capability: auth.TokenManage},
+	"POST /more/tokens/{token}/revoke": {
+		capability: auth.TokenManage,
+		path:       revokeTokenPath(rosewoodTokenID),
+		foreign:    revokeTokenPath(fairviewTokenID),
+	},
 	// Restore puts back an event that has been deleted, so it reads no event.
 	// The plant in the path is what has to be the garden's.
 	"POST /plants/{plant}/log/{event}/restore": {
@@ -220,6 +259,15 @@ var (
 	readerBrowserID   = uuid.MustParse("00000000-0000-7000-8000-000000000244")
 	strangerBrowserID = uuid.MustParse("00000000-0000-7000-8000-000000000245")
 	secondPasskeyID   = uuid.MustParse("00000000-0000-7000-8000-000000000246")
+	// The rows People and Tokens act on. Sam and Jo are in Rosewood and Robin
+	// is in Fairview, so the handle in a foreign path is one that exists and
+	// the reader's garden does not hold.
+	joID             = uuid.MustParse("00000000-0000-7000-8000-000000000247")
+	fairviewMemberID = uuid.MustParse("00000000-0000-7000-8000-000000000248")
+	rosewoodInviteID = uuid.MustParse("00000000-0000-7000-8000-000000000251")
+	fairviewInviteID = uuid.MustParse("00000000-0000-7000-8000-000000000252")
+	rosewoodTokenID  = uuid.MustParse("00000000-0000-7000-8000-000000000253")
+	fairviewTokenID  = uuid.MustParse("00000000-0000-7000-8000-000000000254")
 )
 
 // routeQueries seeds two gardens, each with a plant scheduled for both its care
@@ -278,6 +326,19 @@ func routeQueries(t *testing.T) *store.Queries {
 		{`INSERT INTO push_subscription (id, user_id, endpoint, p256dh_key, auth_key)
 			VALUES ($1, $2, 'https://push.invalid/reader', 'key', 'key'), ($3, $4, 'https://push.invalid/stranger', 'key', 'key')`,
 			[]any{readerBrowserID, sitterPrincipal().User.ID, strangerBrowserID, strangerID}},
+		// The rows People and Tokens act on. The reader is a member of
+		// Rosewood, because a page listing members has to find their own row.
+		{"INSERT INTO app_user (id, display_name, handle, timezone) VALUES ($1, 'Jo', 'jo', 'Europe/London'), ($2, 'Robin', 'robin', 'Europe/Lisbon')", []any{joID, fairviewMemberID}},
+		{`INSERT INTO membership (garden_id, user_id, role) VALUES ($1, $2, 'owner'), ($1, $3, 'member'), ($1, $4, 'sitter'), ($5, $6, 'member')`,
+			[]any{rosewoodID, sitterPrincipal().User.ID, strangerID, joID, fairviewID, fairviewMemberID}},
+		{`INSERT INTO invite (id, garden_id, token_hash, role, created_by, expires_at)
+			VALUES ($1, $2, 'rosewood-invite', 'sitter', $3, now() + interval '7 days'),
+			       ($4, $5, 'fairview-invite', 'sitter', $6, now() + interval '7 days')`,
+			[]any{rosewoodInviteID, rosewoodID, sitterPrincipal().User.ID, fairviewInviteID, fairviewID, fairviewMemberID}},
+		{`INSERT INTO api_token (id, garden_id, name, token_hash, prefix, created_by, expires_at)
+			VALUES ($1, $2, 'The kitchen display', 'rosewood-token', 'sprg_1111', $3, now() + interval '30 days'),
+			       ($4, $5, 'The kitchen display', 'fairview-token', 'sprg_2222', $6, now() + interval '30 days')`,
+			[]any{rosewoodTokenID, rosewoodID, sitterPrincipal().User.ID, fairviewTokenID, fairviewID, fairviewMemberID}},
 	}
 
 	for _, row := range seed {

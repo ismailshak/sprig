@@ -280,3 +280,28 @@ const accountCodesNote = "None yet"
 func codesLeftWord(unused, size int64) string {
 	return fmt.Sprintf("%d of %d left", unused, size)
 }
+
+// roleWord is a role's name as the screen writes it, "Sitter".
+func roleWord(role string) string {
+	return capitalise(role)
+}
+
+// dateWord formats a date in the given zone as "14 Sep".
+func dateWord(at time.Time, location *time.Location) string {
+	return at.In(location).Format("2 Jan")
+}
+
+// inviteExpiryWord is the second half of an invite row's second line: "expires
+// in 5 days" while the link works, and "expired" once it has run out. A link
+// that runs out later today still works, so it reads "expires in 1 day" rather
+// than rounding down to none.
+func inviteExpiryWord(expiresAt, now time.Time) string {
+	if !now.Before(expiresAt) {
+		return "expired"
+	}
+	days := schedule.DaysBetween(now, expiresAt.In(now.Location()))
+	if days < 1 {
+		days = 1
+	}
+	return "expires in " + daysWord(days)
+}

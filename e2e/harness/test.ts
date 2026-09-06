@@ -3,15 +3,18 @@ import { AccountScreen } from '../screens/account';
 import { ActivityScreen } from '../screens/activity';
 import { GardenScreen } from '../screens/garden';
 import { InstallScreen } from '../screens/install';
+import { InviteScreen } from '../screens/invite';
 import { MoreScreen } from '../screens/more';
 import { NotificationsScreen } from '../screens/notifications';
 import { PasskeysScreen } from '../screens/passkeys';
+import { PeopleScreen } from '../screens/people';
 import { PlantScreen } from '../screens/plant';
 import { PlantFormScreen } from '../screens/plant-form';
 import { PlantsScreen } from '../screens/plants';
 import { RecoveryScreen } from '../screens/recovery';
 import { SheetScreen } from '../screens/sheet';
 import { TodayScreen } from '../screens/today';
+import { TokensScreen } from '../screens/tokens';
 import { seed, stacks, type Stack } from './database';
 
 type Screens = {
@@ -19,15 +22,18 @@ type Screens = {
   activity: ActivityScreen;
   garden: GardenScreen;
   install: InstallScreen;
+  invite: InviteScreen;
   more: MoreScreen;
   notifications: NotificationsScreen;
   passkeys: PasskeysScreen;
+  people: PeopleScreen;
   plant: PlantScreen;
   plantForm: PlantFormScreen;
   plants: PlantsScreen;
   recovery: RecoveryScreen;
   sheet: SheetScreen;
   today: TodayScreen;
+  tokens: TokensScreen;
 };
 
 export const test = base.extend<{ seededGarden: void } & Screens, { stack: Stack }>({
@@ -65,6 +71,9 @@ export const test = base.extend<{ seededGarden: void } & Screens, { stack: Stack
   install: async ({ page }, use) => {
     await use(new InstallScreen(page));
   },
+  invite: async ({ page }, use) => {
+    await use(new InviteScreen(page));
+  },
   more: async ({ page }, use) => {
     await use(new MoreScreen(page));
   },
@@ -73,6 +82,9 @@ export const test = base.extend<{ seededGarden: void } & Screens, { stack: Stack
   },
   passkeys: async ({ page }, use) => {
     await use(new PasskeysScreen(page));
+  },
+  people: async ({ page }, use) => {
+    await use(new PeopleScreen(page));
   },
   plant: async ({ page }, use) => {
     await use(new PlantScreen(page));
@@ -91,6 +103,9 @@ export const test = base.extend<{ seededGarden: void } & Screens, { stack: Stack
   },
   today: async ({ page }, use) => {
     await use(new TodayScreen(page));
+  },
+  tokens: async ({ page }, use) => {
+    await use(new TokensScreen(page));
   },
 });
 

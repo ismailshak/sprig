@@ -14,14 +14,130 @@ import (
 
 const countWaitingInvites = `-- name: CountWaitingInvites :one
 SELECT count(*) FROM invite
-WHERE garden_id = $1 AND redeemed_at IS NULL AND expires_at > $2
+WHERE garden_id = $1 AND user_id IS NULL AND redeemed_at IS NULL AND expires_at > $2
 `
 
 // An invite that has expired is not waiting for anybody, so More's People row
-// counts only the ones that can still be redeemed.
+// counts only the ones that can still be redeemed. A re-enrolment link is not
+// counted either: it adds a device to somebody already in the garden, and
+// their row is in the members list rather than in the Invited section.
 func (q *Queries) CountWaitingInvites(ctx context.Context, gardenID uuid.UUID, now time.Time) (int64, error) {
 	row := q.db.QueryRow(ctx, countWaitingInvites, gardenID, now)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
+}
+
+const createInvite = `-- name: CreateInvite :one
+INSERT INTO invite (garden_id, token_hash, role, user_id, created_by, expires_at, membership_expires_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+RETURNING id, garden_id, token_hash, role, user_id, created_by, created_at, expires_at, redeemed_at, membership_expires_at
+`
+
+type CreateInviteParams struct {
+	GardenID            uuid.UUID
+	TokenHash           string
+	Role                string
+	UserID              *uuid.UUID
+	CreatedBy           uuid.UUID
+	ExpiresAt           time.Time
+	MembershipExpiresAt *time.Time
+}
+
+func (q *Queries) CreateInvite(ctx context.Context, arg CreateInviteParams) (Invite, error) {
+	row := q.db.QueryRow(ctx, createInvite,
+		arg.GardenID,
+		arg.TokenHash,
+		arg.Role,
+		arg.UserID,
+		arg.CreatedBy,
+		arg.ExpiresAt,
+		arg.MembershipExpiresAt,
+	)
+	var i Invite
+	err := row.Scan(
+		&i.ID,
+		&i.GardenID,
+		&i.TokenHash,
+		&i.Role,
+		&i.UserID,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+		&i.RedeemedAt,
+		&i.MembershipExpiresAt,
+	)
+	return i, err
+}
+
+const deleteReenrolmentInvites = `-- name: DeleteReenrolmentInvites :execrows
+DELETE FROM invite
+WHERE garden_id = $1 AND user_id = $2 AND redeemed_at IS NULL
+`
+
+// Every unredeemed re-enrolment link for one person. Issuing a new one deletes
+// the old, because these rows are not in the Invited section and a link nobody
+// can see is a link nobody can revoke.
+func (q *Queries) DeleteReenrolmentInvites(ctx context.Context, gardenID uuid.UUID, userID *uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteReenrolmentInvites, gardenID, userID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteWaitingInvite = `-- name: DeleteWaitingInvite :execrows
+DELETE FROM invite
+WHERE garden_id = $1 AND id = $2 AND redeemed_at IS NULL
+`
+
+// Revoking deletes the row. That is what makes the link stop working. A
+// redeemed invite is not deleted here, because Revoke is only offered on rows
+// nobody has opened.
+func (q *Queries) DeleteWaitingInvite(ctx context.Context, gardenID uuid.UUID, inviteID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteWaitingInvite, gardenID, inviteID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const listWaitingInvites = `-- name: ListWaitingInvites :many
+SELECT id, garden_id, token_hash, role, user_id, created_by, created_at, expires_at, redeemed_at, membership_expires_at FROM invite
+WHERE garden_id = $1 AND user_id IS NULL AND redeemed_at IS NULL
+ORDER BY created_at DESC, id
+`
+
+// The Invited section on People. It holds invites to people who are not in the
+// garden yet, the ones that have run out included, because an expired link is
+// still a row somebody wants to clear away.
+func (q *Queries) ListWaitingInvites(ctx context.Context, gardenID uuid.UUID) ([]Invite, error) {
+	rows, err := q.db.Query(ctx, listWaitingInvites, gardenID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Invite
+	for rows.Next() {
+		var i Invite
+		if err := rows.Scan(
+			&i.ID,
+			&i.GardenID,
+			&i.TokenHash,
+			&i.Role,
+			&i.UserID,
+			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.ExpiresAt,
+			&i.RedeemedAt,
+			&i.MembershipExpiresAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
