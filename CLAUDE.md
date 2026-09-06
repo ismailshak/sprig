@@ -11,11 +11,11 @@ mise run build     # build ./sprig with the version and revision stamped in
 mise run dev       # Postgres in a container, the server on the host, rebuilt on each change
 mise run dev:stop  # stop the Postgres container that dev leaves running
 mise run dev:reset # delete the dev database and reseed it from empty
-mise run seed      # load the prototype's garden into the dev database
+mise run seed      # load the seed gardens into the dev database
 mise run test      # Go tests against a throwaway Postgres
 mise run e2e       # Playwright suite, with a throwaway app and Postgres stack per worker
 mise run lint
-mise run format    # prettier over e2e, the only JavaScript in the repo
+mise run format    # prettier over e2e and the app's scripts in web/static
 mise run hooks     # point git at .githooks, once per clone
 mise run migrate
 mise run migrate:new <name>
@@ -23,7 +23,7 @@ mise run migrate:new <name>
 
 A command you would type twice becomes a task in `mise.toml`.
 
-The pre-commit hook in `.githooks` runs prettier over the staged files under `e2e/` and stages what it rewrites. If a file is only partially staged the hook stops instead, because staging the formatted file would pull the rest of it into the commit. Git only finds the hook after `mise run hooks`, because `core.hooksPath` is a per-clone setting.
+The pre-commit hook in `.githooks` runs prettier over the staged files under `e2e/` and the staged scripts under `web/static/`, and stages what it rewrites. The vendored htmx in `web/static/vendor/` is left alone. If a file is only partially staged the hook stops instead, because staging the formatted file would pull the rest of it into the commit. Git only finds the hook after `mise run hooks`, because `core.hooksPath` is a per-clone setting.
 
 ## Invariants
 
@@ -61,7 +61,7 @@ Decisions already taken. Changing one is a conversation, not a refactor.
 | `db/migrations/`     | goose migrations, embedded, run at startup under an advisory lock |
 | `db/queries/`        | The `.sql` files sqlc generates from                         |
 | `web/templates/`     | `html/template` files, embedded                              |
-| `web/static/`        | CSS copied from the prototype, vendored htmx, icons          |
+| `web/static/`        | CSS, javascript, vendored htmx, icons |
 | `e2e/`               | The Playwright tests                                         |
 
 ## Testing
