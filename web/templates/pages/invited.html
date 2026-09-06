@@ -1,0 +1,52 @@
+{{define "title"}}sprig — you're invited{{end}}
+
+{{define "app-class"}}app app--bare{{end}}
+
+{{/* The page an invite link opens. There is no tab bar, because the routes
+     are public and no garden is open until the post goes through. It renders one of three things: the
+     sentence for a link that cannot be used, the form that adds a device to an
+     account already in the garden, or the form that joins the garden.
+
+     novalidate turns the browser's own validation off, so an empty field is
+     reported by the server as the message under that field. */}}
+{{define "main"}}
+<div class="app__body app__body--bare">
+{{if .Unusable}}
+<h1 class="bare__title">This link cannot be used</h1>
+<p class="bare__line">An invite link works once and stops working after 7 days. Ask whoever sent it for a new one. If you already used this one, <a href="{{.SignIn}}">sign in</a> instead.</p>
+{{else if .Reenrol}}
+<h1 class="bare__title">Add this device to your account</h1>
+<p class="lead">{{.By}} made this link so this device can sign in to your account in {{.Garden}}. It adds a passkey and changes nothing else: your name and everything you have logged stay as they are.</p>
+{{/* The paragraph below is rendered even when Refusal is empty, because the
+     page's script writes the browser's refusal into it. The button starts
+     disabled and the note stays under it until that script runs, because the
+     server cannot tell whether the browser will run it. */}}
+<p class="field__error" id="passkey-error" role="alert">{{.Refusal}}</p>
+<form method="post" action="{{.Action}}" novalidate data-passkey="create" data-challenge="{{.Challenge}}" data-field="{{.Field}}" data-message="passkey-error" data-note="passkey-noscript">
+<input type="hidden" name="{{.Field}}">
+<button class="wide-action" type="submit" disabled>Add this device</button>
+<p class="note" id="passkey-noscript">Adding a device needs JavaScript and a browser that supports passkeys.</p>
+</form>
+<p class="note">The device will appear on your Passkeys page, which is where to look if you ever wonder whether somebody else has been in.</p>
+{{else}}
+<h1 class="bare__title">{{.By}} invited you to {{.Garden}}</h1>
+<p class="lead">sprig is where {{.Garden}}&rsquo;s plants are looked after. Pick a name to sign your care with, and this device will make a passkey to sign in with. There is nothing to remember.</p>
+<p class="field__error" id="passkey-error" role="alert">{{.Refusal}}</p>
+<form method="post" action="{{.Action}}" novalidate data-passkey="create" data-challenge="{{.Challenge}}" data-field="{{.Field}}" data-message="passkey-error" data-note="passkey-noscript">
+<div class="field">
+<label class="field__label" for="name">Display name <span class="field__hint">what every log row is signed with</span></label>
+<input class="input" id="name" name="name" type="text" value="{{.Name}}" autocomplete="nickname" spellcheck="false">
+{{with .NameError}}<p class="field__error">{{.}}</p>{{end}}
+</div>
+{{template "timezone-field" .Zone}}
+<input type="hidden" name="{{.Field}}">
+<button class="wide-action" type="submit" disabled>Join with a passkey</button>
+<p class="note" id="passkey-noscript">Joining needs JavaScript and a browser that supports passkeys.</p>
+</form>
+<p class="note">{{.Joining}}</p>
+{{end}}
+</div>
+{{end}}
+
+{{define "script"}}{{if not .Unusable}}<script src="{{asset "passkey.js"}}" defer></script>
+{{if not .Reenrol}}<script src="{{asset "timezone.js"}}" defer></script>{{end}}{{end}}{{end}}

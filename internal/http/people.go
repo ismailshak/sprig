@@ -406,7 +406,7 @@ func (h *more) createInvite(r *http.Request, role string, userID *uuid.UUID, end
 // then the path that redeems the token. It has no scheme, because no
 // hostname is configured and the request is the only place the host is known.
 func inviteLink(r *http.Request, token string) string {
-	return r.Host + "/invite/" + token
+	return r.Host + invitedPath(token)
 }
 
 func (h *more) renderPeople(w http.ResponseWriter, r *http.Request, state peopleState) {

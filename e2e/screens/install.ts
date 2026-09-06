@@ -16,4 +16,10 @@ export class InstallScreen {
   steps(): Locator {
     return this.page.getByRole('list').getByRole('listitem');
   }
+
+  // The Go to the garden link at the end of /install?after=invite. The page
+  // reached from More does not have it.
+  goToGarden(): Locator {
+    return this.page.getByRole('link', { name: 'Go to the garden' });
+  }
 }

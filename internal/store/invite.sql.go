@@ -102,6 +102,50 @@ func (q *Queries) DeleteWaitingInvite(ctx context.Context, gardenID uuid.UUID, i
 	return result.RowsAffected(), nil
 }
 
+const getInviteByTokenHash = `-- name: GetInviteByTokenHash :one
+SELECT invite.id, invite.garden_id, invite.token_hash, invite.role, invite.user_id, invite.created_by, invite.created_at, invite.expires_at, invite.redeemed_at, invite.membership_expires_at, garden.id, garden.name, garden.created_at, app_user.id, app_user.display_name, app_user.handle, app_user.timezone, app_user.created_at
+FROM invite
+JOIN garden ON garden.id = invite.garden_id
+JOIN app_user ON app_user.id = invite.created_by
+WHERE invite.token_hash = $1
+`
+
+type GetInviteByTokenHashRow struct {
+	Invite  Invite
+	Garden  Garden
+	AppUser AppUser
+}
+
+// The invite for a token hash, with its garden and the account that created
+// it. The page shows the garden's name and that account's display name. There
+// is no garden_id parameter, because the token is what says which garden the
+// link is for.
+func (q *Queries) GetInviteByTokenHash(ctx context.Context, tokenHash string) (GetInviteByTokenHashRow, error) {
+	row := q.db.QueryRow(ctx, getInviteByTokenHash, tokenHash)
+	var i GetInviteByTokenHashRow
+	err := row.Scan(
+		&i.Invite.ID,
+		&i.Invite.GardenID,
+		&i.Invite.TokenHash,
+		&i.Invite.Role,
+		&i.Invite.UserID,
+		&i.Invite.CreatedBy,
+		&i.Invite.CreatedAt,
+		&i.Invite.ExpiresAt,
+		&i.Invite.RedeemedAt,
+		&i.Invite.MembershipExpiresAt,
+		&i.Garden.ID,
+		&i.Garden.Name,
+		&i.Garden.CreatedAt,
+		&i.AppUser.ID,
+		&i.AppUser.DisplayName,
+		&i.AppUser.Handle,
+		&i.AppUser.Timezone,
+		&i.AppUser.CreatedAt,
+	)
+	return i, err
+}
+
 const listWaitingInvites = `-- name: ListWaitingInvites :many
 SELECT id, garden_id, token_hash, role, user_id, created_by, created_at, expires_at, redeemed_at, membership_expires_at FROM invite
 WHERE garden_id = $1 AND user_id IS NULL AND redeemed_at IS NULL
@@ -140,4 +184,26 @@ func (q *Queries) ListWaitingInvites(ctx context.Context, gardenID uuid.UUID) ([
 		return nil, err
 	}
 	return items, nil
+}
+
+const redeemInvite = `-- name: RedeemInvite :execrows
+UPDATE invite SET redeemed_at = $1::timestamptz
+WHERE garden_id = $2 AND id = $3 AND redeemed_at IS NULL AND expires_at > $1
+`
+
+type RedeemInviteParams struct {
+	Now      time.Time
+	GardenID uuid.UUID
+	InviteID uuid.UUID
+}
+
+// Sets redeemed_at on an invite that has not been redeemed and has not
+// expired. The row count is zero when it had already been redeemed or had
+// expired, so the caller reads the count to find out whether it was usable.
+func (q *Queries) RedeemInvite(ctx context.Context, arg RedeemInviteParams) (int64, error) {
+	result, err := q.db.Exec(ctx, redeemInvite, arg.Now, arg.GardenID, arg.InviteID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }

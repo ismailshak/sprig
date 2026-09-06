@@ -147,6 +147,13 @@ var routeAccess = map[string]access{
 	"GET /setup":            {public: true},
 	"POST /setup/challenge": {public: true},
 	"POST /setup":           {public: true},
+	// An invite link is opened before any session exists. The token here was
+	// never issued, so the handler renders the page for a link that cannot be
+	// redeemed. There is no foreign path, because the token is what says which
+	// garden the link is for.
+	"GET /invite/{token}":            {public: true, path: invitedPath("no-such-token")},
+	"POST /invite/{token}/challenge": {public: true, path: invitedChallengePath("no-such-token")},
+	"POST /invite/{token}":           {public: true, path: invitedPath("no-such-token")},
 	// A passkey and a push subscription belong to an account rather than to a
 	// garden, so the foreign row here is another person's rather than another
 	// garden's. Both routes answer 404 for one.

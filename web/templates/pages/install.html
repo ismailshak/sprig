@@ -1,18 +1,27 @@
 {{define "title"}}sprig — install{{end}}
 
+{{define "app-class"}}app{{if .AfterInvite}} app--bare{{end}}{{end}}
+
 {{/* The steps for one platform, chosen with the chips. The chips are submit
      buttons in a GET form, so choosing one is a page load and the page works
-     with no JavaScript. */}}
+     with no JavaScript.
+
+     The page is reached from More, and again at the end of redeeming an
+     invite. After an invite it is rendered with no back link and no tab bar,
+     and ends in a link to Today. */}}
 {{define "main"}}
-{{template "more-topbar" .Bar}}
-<div class="app__body app__body--sub">
+{{if .AfterInvite}}<div class="app__body app__body--bare">
+<h1 class="bare__title">Install sprig</h1>{{else}}{{template "more-topbar" .Bar}}
+<div class="app__body app__body--sub">{{end}}
 <p class="lead">sprig is a website that can behave like an app: its own icon, no address bar, and notifications.</p>
 <form method="get" action="{{.Action}}">
+{{if .AfterInvite}}<input type="hidden" name="after" value="invite">{{end}}
 <div class="chips">{{range .Chips}}<button class="chip" name="platform" value="{{.Value}}" aria-pressed="{{.On}}">{{.Label}}</button>{{end}}</div>
 </form>
 <ol class="steps">{{range .Steps}}<li>{{.}}</li>{{end}}</ol>
 <p class="note">{{.Why}}</p>
+{{if .AfterInvite}}<a class="wide-action" href="{{.Today}}">Go to the garden</a>{{end}}
 </div>
 {{end}}
 
-{{define "nav"}}{{template "tabs" "More"}}{{end}}
+{{define "nav"}}{{if not .AfterInvite}}{{template "tabs" "More"}}{{end}}{{end}}

@@ -41,6 +41,7 @@ func routes(logger *slog.Logger, sessions *auth.Sessions, passkeys *auth.Passkey
 	passkeyHandler := &passkeyCeremony{logger: logger, passkeys: passkeys, sessions: sessions, resolver: resolver, queries: queries, templates: templates, now: time.Now}
 	moreHandler := &more{logger: logger, sessions: sessions, queries: queries, templates: templates, build: build.Read(), now: time.Now}
 	setupHandler := &setup{logger: logger, passkeys: passkeys, sessions: sessions, queries: queries, templates: templates, now: time.Now, enabled: signupEnabled}
+	invitedHandler := &invited{logger: logger, passkeys: passkeys, sessions: sessions, queries: queries, templates: templates, now: time.Now}
 	base := []route{
 		{pattern: "GET /healthz", handler: http.HandlerFunc(handleHealthz)},
 		{pattern: assetPattern, handler: assets.handler()},
@@ -81,6 +82,9 @@ func routes(logger *slog.Logger, sessions *auth.Sessions, passkeys *auth.Passkey
 		{pattern: "GET " + setupPath, handler: http.HandlerFunc(setupHandler.show)},
 		{pattern: "POST " + setupChallengePath, handler: http.HandlerFunc(setupHandler.challenge)},
 		{pattern: "POST " + setupPath, handler: http.HandlerFunc(setupHandler.create)},
+		{pattern: "GET " + invitedPattern, handler: http.HandlerFunc(invitedHandler.show)},
+		{pattern: "POST " + invitedPattern + "/challenge", limits: inviteLimits(trustedIPHeader, http.HandlerFunc(tooManyChallenges)), handler: http.HandlerFunc(invitedHandler.challenge)},
+		{pattern: "POST " + invitedPattern, limits: inviteLimits(trustedIPHeader, http.HandlerFunc(invitedHandler.tooManyAnswers)), handler: http.HandlerFunc(invitedHandler.redeem)},
 		{pattern: "GET " + notificationsPath, handler: http.HandlerFunc(moreHandler.notifications)},
 		{pattern: "POST " + notificationsPath, handler: http.HandlerFunc(moreHandler.saveNotifications)},
 		{pattern: "POST " + notificationsPath + "/browsers/{browser}/remove", handler: http.HandlerFunc(moreHandler.removeBrowser)},
@@ -126,6 +130,23 @@ func signInLimits(trustedIPHeader string, refused http.Handler) []middleware {
 	}
 }
 
+// inviteLimits returns the rate limiters wrapped around one of the two routes
+// that redeem an invite link. refused is the handler that responds to a
+// request past the budget. The routes are served without a session, so they
+// get budgets of their own.
+//
+// Six a minute from one address is more attempts than joining takes, and that
+// limit is the one doing the work. The shared limit of a hundred and twenty a
+// minute only caps the lookups: a token is 256 bits, and a challenge on a link
+// that cannot be redeemed writes nothing. A tighter shared limit would stop
+// one stranger from stopping everybody else joining.
+func inviteLimits(trustedIPHeader string, refused http.Handler) []middleware {
+	return []middleware{
+		Limit(NewLimiter(rate.Every(time.Minute/6), 6), ClientAddress(trustedIPHeader), refused),
+		Limit(NewLimiter(rate.Every(time.Minute/120), 120), AnySource, refused),
+	}
+}
+
 // publicRoutes is every route served without a session. Authenticate covers
 // the rest, so a route in routes is protected until it is listed here.
 var publicRoutes = map[string]bool{
@@ -142,6 +163,12 @@ var publicRoutes = map[string]bool{
 	"GET " + setupPath:           true,
 	"POST " + setupChallengePath: true,
 	"POST " + setupPath:          true,
+	// An invite link is opened before there is a session, so the page, the
+	// challenge and the post that redeems it are all public. The handler
+	// returns 404 for a link that cannot be redeemed.
+	"GET " + invitedPattern:                 true,
+	"POST " + invitedPattern + "/challenge": true,
+	"POST " + invitedPattern:                true,
 }
 
 // New builds sprig's handler. The middleware order matters. RequestID runs

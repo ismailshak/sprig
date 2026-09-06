@@ -25,6 +25,15 @@ export const browsers = {
   laptop: 'Mac · Chrome',
 } as const;
 
+// The garden the seed gives Ellie. Its name is the heading on Today.
+export const garden = { name: 'Home' } as const;
+
+// The one invite waiting on People: a sitter's, made two days ago. Its token
+// is the plaintext the seed hashes, so a test can open the link.
+export const invites = {
+  sitter: { token: 'development-sitter-invite' },
+} as const;
+
 // The recovery codes the seed gives Ellie: ten made, two of them used.
 export const recoveryBatch = { left: 8, size: 10 } as const;
 
