@@ -1,0 +1,59 @@
+{{define "title"}}sprig — garden{{end}}
+
+{{/* The garden's name and its care types. A care type is renamed, turned off
+     or deleted from its own row: the row is a link to its own URL, and that
+     URL renders this page with the row as a form. Nothing here needs
+     JavaScript, so the row opens by navigating to it. */}}
+{{define "main"}}
+{{template "more-topbar" "Garden"}}
+<div class="app__body app__body--sub">
+{{if .EditName}}
+<form method="post" action="{{.Action}}" novalidate>
+<div class="field">
+<label class="field__label" for="name">Name <span class="field__hint">what the top of Today says</span></label>
+<input class="input" id="name" name="name" type="text" value="{{.Name}}">
+{{with .NameError}}<p class="field__error">{{.}}</p>{{end}}
+</div>
+<button class="wide-action" type="submit">Save the name</button>
+</form>
+{{end}}
+{{if .ManageTypes}}
+<div class="section">
+<div class="section__head"><h2 class="section__title">Care types</h2></div>
+<ul class="list">
+{{range .Types}}<li>
+{{if .Editor}}{{template "care-type-editor" .Editor}}{{else}}
+<a class="row row--link row--setting{{if .Off}} row--off{{end}}" href="{{.Edit}}">
+<span class="row__label">{{.Name}}</span>
+{{if .Off}}<span class="row__note">Off</span>{{end}}
+<span class="row__go">{{template "icon-chevron"}}</span>
+</a>
+{{end}}</li>
+{{end}}</ul>
+<a class="care care--outline" href="{{.AddType}}">Add a care type</a>
+</div>
+{{end}}
+</div>
+{{end}}
+
+{{/* A care type's row while it is being edited. The form is the row, so one
+     care type is saved on its own.
+
+     Save comes before Turn it off in the markup and the stylesheet moves the
+     drop button to the left, because pressing Enter in the name field submits
+     the form's first button and that must not be the one that deletes the care
+     type. */}}
+{{define "care-type-editor"}}<form class="row row--editing" method="post" action="{{.Action}}" novalidate>
+<input class="input" type="text" name="name" value="{{.Name}}" aria-label="Care type name" autofocus>
+{{with .Error}}<p class="field__error">{{.}}</p>{{end}}
+{{with .Why}}<p class="row__why">{{.}}</p>{{end}}
+<div class="row__buttons">
+<span>
+<a class="sched__cancel" href="{{.Cancel}}">Cancel</a>
+<button class="care care--small" type="submit">Save</button>
+</span>
+{{with .Drop}}<button class="row__drop" type="submit" formaction="{{.Action}}">{{.Label}}</button>{{end}}
+</div>
+</form>{{end}}
+
+{{define "nav"}}{{template "tabs" "More"}}{{end}}
