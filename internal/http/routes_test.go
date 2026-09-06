@@ -144,6 +144,40 @@ var routeAccess = map[string]access{
 		foreign:   removeBrowserPath(strangerBrowserID),
 	},
 	"GET /install": {},
+	// Garden and the care types under it are the owner's pages. A care type is
+	// named by slug rather than by id, so the foreign path is a slug only
+	// Fairview has.
+	"GET /more/garden":        {capability: auth.GardenEdit},
+	"POST /more/garden":       {capability: auth.GardenEdit},
+	"GET /more/garden/types":  {capability: auth.CareTypeManage},
+	"POST /more/garden/types": {capability: auth.CareTypeManage},
+	"GET /more/garden/types/{care}": {
+		capability: auth.CareTypeManage,
+		path:       careTypePath("water"),
+		foreign:    careTypePath("trim"),
+	},
+	"POST /more/garden/types/{care}": {
+		capability: auth.CareTypeManage,
+		path:       careTypePath("water"),
+		foreign:    careTypePath("trim"),
+	},
+	// Each of the three that changes a care type uses one of its own, since the
+	// first to run would leave the next nothing to act on.
+	"POST /more/garden/types/{care}/off": {
+		capability: auth.CareTypeManage,
+		path:       offCareTypePath("water"),
+		foreign:    offCareTypePath("trim"),
+	},
+	"POST /more/garden/types/{care}/on": {
+		capability: auth.CareTypeManage,
+		path:       onCareTypePath("mist"),
+		foreign:    onCareTypePath("trim"),
+	},
+	"POST /more/garden/types/{care}/delete": {
+		capability: auth.CareTypeManage,
+		path:       deleteCareTypePath("prune"),
+		foreign:    deleteCareTypePath("trim"),
+	},
 	// Restore puts back an event that has been deleted, so it reads no event.
 	// The plant in the path is what has to be the garden's.
 	"POST /plants/{plant}/log/{event}/restore": {
@@ -204,6 +238,11 @@ func routeQueries(t *testing.T) *store.Queries {
 		{"INSERT INTO garden (id, name) VALUES ($1, 'Rosewood'), ($2, 'Fairview')", []any{rosewoodID, fairviewID}},
 		{`INSERT INTO care_type (garden_id, name, slug)
 			VALUES ($1, 'Water', 'water'), ($2, 'Water', 'water'), ($1, 'Feed', 'feed'), ($2, 'Feed', 'feed')`, []any{rosewoodID, fairviewID}},
+		// The Garden page's routes: a type with no events for the delete route,
+		// one that is already off for the route that turns one back on, and one
+		// only Fairview has for the scope check.
+		{`INSERT INTO care_type (garden_id, name, slug, archived_at)
+			VALUES ($1, 'Prune', 'prune', NULL), ($1, 'Mist', 'mist', now()), ($2, 'Trim', 'trim', NULL)`, []any{rosewoodID, fairviewID}},
 		{"INSERT INTO plant (id, garden_id, nickname) VALUES ($1, $2, 'Big Fella'), ($3, $4, 'Gerald')", []any{rosewoodPlantID, rosewoodID, fairviewPlantID, fairviewID}},
 		{"INSERT INTO plant (id, garden_id, nickname) VALUES ($1, $2, 'Doris'), ($3, $4, 'Nigel')", []any{rosewoodArchivedID, rosewoodID, fairviewArchivedID, fairviewID}},
 		{`INSERT INTO care_schedule (garden_id, plant_id, care_type_id, interval_count, interval_unit)

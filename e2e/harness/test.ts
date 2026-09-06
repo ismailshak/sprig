@@ -1,6 +1,7 @@
 import { test as base } from '@playwright/test';
 import { AccountScreen } from '../screens/account';
 import { ActivityScreen } from '../screens/activity';
+import { GardenScreen } from '../screens/garden';
 import { InstallScreen } from '../screens/install';
 import { MoreScreen } from '../screens/more';
 import { NotificationsScreen } from '../screens/notifications';
@@ -15,6 +16,7 @@ import { seed, stacks, type Stack } from './database';
 type Screens = {
   account: AccountScreen;
   activity: ActivityScreen;
+  garden: GardenScreen;
   install: InstallScreen;
   more: MoreScreen;
   notifications: NotificationsScreen;
@@ -26,7 +28,7 @@ type Screens = {
   today: TodayScreen;
 };
 
-export const test = base.extend<{ garden: void } & Screens, { stack: Stack }>({
+export const test = base.extend<{ seededGarden: void } & Screens, { stack: Stack }>({
   // A worker keeps one stack for its whole life, picked by its index. Two
   // workers never share a database.
   stack: [
@@ -43,7 +45,7 @@ export const test = base.extend<{ garden: void } & Screens, { stack: Stack }>({
     await use(stack.baseURL);
   },
   // Every test starts from a fresh seed, whatever the previous test wrote.
-  garden: [
+  seededGarden: [
     async ({ stack }, use) => {
       await seed(stack.databaseURL);
       await use();
@@ -55,6 +57,9 @@ export const test = base.extend<{ garden: void } & Screens, { stack: Stack }>({
   },
   activity: async ({ page }, use) => {
     await use(new ActivityScreen(page));
+  },
+  garden: async ({ page }, use) => {
+    await use(new GardenScreen(page));
   },
   install: async ({ page }, use) => {
     await use(new InstallScreen(page));

@@ -63,6 +63,15 @@ func routes(logger *slog.Logger, sessions *auth.Sessions, queries *store.Queries
 		{pattern: "POST " + notificationsPath, handler: http.HandlerFunc(moreHandler.saveNotifications)},
 		{pattern: "POST " + notificationsPath + "/browsers/{browser}/remove", handler: http.HandlerFunc(moreHandler.removeBrowser)},
 		{pattern: "GET " + installPath, handler: http.HandlerFunc(moreHandler.install)},
+		{pattern: "GET " + gardenPath, capability: auth.GardenEdit, handler: http.HandlerFunc(moreHandler.garden)},
+		{pattern: "POST " + gardenPath, capability: auth.GardenEdit, handler: http.HandlerFunc(moreHandler.saveGardenName)},
+		{pattern: "GET " + careTypesPath, capability: auth.CareTypeManage, handler: http.HandlerFunc(moreHandler.newCareType)},
+		{pattern: "POST " + careTypesPath, capability: auth.CareTypeManage, handler: http.HandlerFunc(moreHandler.createCareType)},
+		{pattern: "GET " + careTypesPath + "/{care}", capability: auth.CareTypeManage, handler: http.HandlerFunc(moreHandler.editCareType)},
+		{pattern: "POST " + careTypesPath + "/{care}", capability: auth.CareTypeManage, handler: http.HandlerFunc(moreHandler.renameCareType)},
+		{pattern: "POST " + careTypesPath + "/{care}/off", capability: auth.CareTypeManage, handler: http.HandlerFunc(moreHandler.turnOffCareType)},
+		{pattern: "POST " + careTypesPath + "/{care}/on", capability: auth.CareTypeManage, handler: http.HandlerFunc(moreHandler.turnOnCareType)},
+		{pattern: "POST " + careTypesPath + "/{care}/delete", capability: auth.CareTypeManage, handler: http.HandlerFunc(moreHandler.deleteCareType)},
 	}
 	return append(base, devRoutes(sessions, queries, templates)...)
 }
