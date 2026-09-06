@@ -38,6 +38,35 @@ func (h *today) show(w http.ResponseWriter, r *http.Request) {
 	h.templates.render(w, r, view{page: "today"}, newTodayPage(principal, g))
 }
 
+// todayBar holds the parts of Today's top bar that come from the account's
+// memberships. Both fields are empty for an account in one garden it owns.
+type todayBar struct {
+	// owner is "Robin's garden" when the reader is not the garden's owner.
+	owner string
+	// gardens is every garden the account is in, one row each in the sheet.
+	// The link that opens the sheet is rendered only when there is more than
+	// one.
+	gardens []gardenRow
+}
+
+// loadBar reads the gardens the account is in and takes the owner text from
+// the one the session is on. That text is empty when the reader owns the
+// garden and when nobody does.
+func (h *today) loadBar(ctx context.Context, principal auth.Principal) (todayBar, error) {
+	var bar todayBar
+	held, err := liveGardens(ctx, h.queries, principal.User.ID, h.now())
+	if err != nil {
+		return bar, err
+	}
+	for _, m := range held {
+		if m.Garden.ID == principal.Garden.ID && !m.ReaderOwns {
+			bar.owner = ownerWord(m)
+		}
+	}
+	bar.gardens = gardenRows(principal, held)
+	return bar, nil
+}
+
 // graceWindow is how long a logged row stays on Today with an Undo button
 // beside it. It is short because the page runs it as a timer.
 const graceWindow = 4 * time.Second
@@ -68,10 +97,20 @@ type gardenDay struct {
 	plants int64
 	// now is in the reader's timezone.
 	now time.Time
+	// bar is the top bar's owner text and its list of gardens. It is loaded
+	// here because the log-care sheet and a rejected care time both render the
+	// whole page when JavaScript is off.
+	bar todayBar
 }
 
 func (h *today) load(ctx context.Context, principal auth.Principal) (gardenDay, error) {
 	g := gardenDay{now: h.now().In(locationFor(principal.User))}
+
+	bar, err := h.loadBar(ctx, principal)
+	if err != nil {
+		return g, err
+	}
+	g.bar = bar
 
 	schedules, err := h.queries.ListCareSchedules(ctx, principal.Garden.ID)
 	if err != nil {
@@ -119,12 +158,26 @@ func plantLines(lines []schedule.Line, plantID uuid.UUID) []schedule.Line {
 }
 
 type todayPage struct {
-	Date     string
-	Garden   string
-	Sheet    *sheet
-	Head     todayHead
-	Sections []todaySection
-	Feed     todayFeed
+	Date   string
+	Garden string
+	// Owner is the text under the garden's name, "Robin's garden". It is empty
+	// when the reader owns the garden and when nobody does.
+	Owner string
+	// Gardens is every garden the account is in, one row each in the sheet.
+	// Switch is the href of the link after the garden's name that opens the
+	// sheet. It is empty for an account in one garden, and the link is not
+	// rendered then. Action is the URL each garden's form posts to, and Field
+	// is the name of its hidden input. GardenSheet is true when the page is
+	// rendered with the sheet open.
+	Gardens     []gardenRow
+	Switch      string
+	Action      string
+	Field       string
+	GardenSheet bool
+	Sheet       *sheet
+	Head        todayHead
+	Sections    []todaySection
+	Feed        todayFeed
 	// OOB is true when the body is rendered as an out-of-band swap, so a
 	// response to one row can also replace the rest of the page.
 	OOB bool
@@ -238,9 +291,16 @@ func careRowID(plant store.Plant, careType store.CareType) string {
 func newTodayPage(principal auth.Principal, g gardenDay) todayPage {
 	day, latest, plants, now := g.day, g.latest, g.plants, g.now
 	page := todayPage{
-		Date:   now.Format("Monday 2 January"),
-		Garden: principal.Garden.Name,
-		Feed:   newTodayFeed(principal, g),
+		Date:    now.Format("Monday 2 January"),
+		Garden:  principal.Garden.Name,
+		Owner:   g.bar.owner,
+		Gardens: g.bar.gardens,
+		Action:  gardensPath,
+		Field:   gardenField,
+		Feed:    newTodayFeed(principal, g),
+	}
+	if len(g.bar.gardens) > 1 {
+		page.Switch = gardensPath
 	}
 	if rows := day.Overdue; len(rows) > 0 {
 		page.Sections = append(page.Sections, todaySection{ID: "overdue", Title: "Overdue", Alert: true, Rows: careRows(rows, now)})

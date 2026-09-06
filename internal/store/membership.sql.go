@@ -231,6 +231,71 @@ func (q *Queries) ListMembershipsForUser(ctx context.Context, userID uuid.UUID) 
 	return items, nil
 }
 
+const listMembershipsWithGardensForUser = `-- name: ListMembershipsWithGardensForUser :many
+SELECT membership.id, membership.garden_id, membership.user_id, membership.role, membership.invited_by, membership.created_at, membership.expires_at, membership.digest_hour, garden.id, garden.name, garden.created_at,
+    coalesce(owner.display_name, '')::text AS owner_name,
+    coalesce(owner.id = membership.user_id, false)::boolean AS reader_owns
+FROM membership
+JOIN garden ON garden.id = membership.garden_id
+LEFT JOIN LATERAL (
+    SELECT app_user.id, app_user.display_name
+    FROM membership o
+    JOIN app_user ON app_user.id = o.user_id
+    WHERE o.garden_id = garden.id AND o.role = 'owner'
+    ORDER BY o.created_at, o.id
+    LIMIT 1
+) AS owner ON true
+WHERE membership.user_id = $1
+ORDER BY membership.created_at, membership.id
+`
+
+type ListMembershipsWithGardensForUserRow struct {
+	Membership Membership
+	Garden     Garden
+	OwnerName  string
+	ReaderOwns bool
+}
+
+// Every garden the account is a member of, oldest membership first, with the
+// owner's display name. The owner is the oldest owner membership: the person
+// who created the garden, unless they have left it. owner_name is empty and
+// reader_owns is false when no owner is left. This takes no garden_id because
+// it is how the account's other gardens are found. Every row belongs to
+// @user_id.
+func (q *Queries) ListMembershipsWithGardensForUser(ctx context.Context, userID uuid.UUID) ([]ListMembershipsWithGardensForUserRow, error) {
+	rows, err := q.db.Query(ctx, listMembershipsWithGardensForUser, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListMembershipsWithGardensForUserRow
+	for rows.Next() {
+		var i ListMembershipsWithGardensForUserRow
+		if err := rows.Scan(
+			&i.Membership.ID,
+			&i.Membership.GardenID,
+			&i.Membership.UserID,
+			&i.Membership.Role,
+			&i.Membership.InvitedBy,
+			&i.Membership.CreatedAt,
+			&i.Membership.ExpiresAt,
+			&i.Membership.DigestHour,
+			&i.Garden.ID,
+			&i.Garden.Name,
+			&i.Garden.CreatedAt,
+			&i.OwnerName,
+			&i.ReaderOwns,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const setDigestHour = `-- name: SetDigestHour :exec
 UPDATE membership SET digest_hour = $1
 WHERE garden_id = $2 AND user_id = $3

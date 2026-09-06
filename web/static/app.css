@@ -66,14 +66,20 @@ button {
   gap: 12px;
 }
 
-.topbar__date {
+.topbar__date,
+.topbar__owner {
   font-size: var(--label-size);
   font-weight: var(--label-weight);
   letter-spacing: var(--label-tracking);
   text-transform: var(--label-transform);
   color: var(--ink-3);
-  margin-bottom: 4px;
 }
+
+.topbar__date { margin-bottom: 4px; }
+
+/* The line under the garden's name, rendered when the reader is not the
+   garden's owner. */
+.topbar__owner { margin-top: 6px; }
 
 .topbar__title {
   font-family: var(--font-display);
@@ -82,6 +88,29 @@ button {
   font-size: 30px;
   line-height: 1.1;
   margin: 0;
+}
+
+.topbar__name { display: flex; align-items: center; gap: 4px; }
+
+/* The link after the garden's name that opens the garden sheet. It is faded
+   and small so the garden's name stays the heading. The padding makes the tap
+   target larger than the icon. */
+.topbar__switch {
+  display: flex;
+  padding: 6px;
+  color: var(--ink-3);
+}
+
+.topbar__switch svg { width: 20px; height: 20px; }
+
+/* The garden sheet's heading. The log-care sheet has a plant's row here
+   instead, so this is the one sheet with a title. */
+.sheet__title {
+  margin: 4px 0 8px;
+  font-family: var(--font-display);
+  font-weight: var(--display-weight);
+  letter-spacing: var(--display-tracking);
+  font-size: 22px;
 }
 
 /* -------------------------------------------------------------------- summary */
@@ -1843,6 +1872,16 @@ a.wide-action {
 
 @media (hover: hover) {
   .row--stack:hover { background: none; }
+}
+
+/* A garden in the garden sheet is a button filling its row, so the whole row
+   is the tap target. The two .row--stack rules above set cursor: default and
+   remove the hover colour. These put both back, so they have to come after
+   them. */
+.row--switch { width: 100%; text-align: left; cursor: pointer; }
+
+@media (hover: hover) {
+  .row--switch:hover { background: var(--surface-2); }
 }
 
 /* The display font is for plant names, screen titles and empty-state text. A

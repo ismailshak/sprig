@@ -89,6 +89,8 @@ func routes(logger *slog.Logger, sessions *auth.Sessions, passkeys *auth.Passkey
 		{pattern: "POST " + notificationsPath, handler: http.HandlerFunc(moreHandler.saveNotifications)},
 		{pattern: "POST " + notificationsPath + "/browsers/{browser}/remove", handler: http.HandlerFunc(moreHandler.removeBrowser)},
 		{pattern: "GET " + installPath, handler: http.HandlerFunc(moreHandler.install)},
+		{pattern: "GET " + gardensPath, handler: http.HandlerFunc(todayHandler.gardenSheet)},
+		{pattern: "POST " + gardensPath, handler: http.HandlerFunc(todayHandler.switchGarden)},
 		{pattern: "GET " + gardenPath, capability: auth.GardenEdit, handler: http.HandlerFunc(moreHandler.garden)},
 		{pattern: "POST " + gardenPath, capability: auth.GardenEdit, handler: http.HandlerFunc(moreHandler.saveGardenName)},
 		{pattern: "GET " + careTypesPath, capability: auth.CareTypeManage, handler: http.HandlerFunc(moreHandler.newCareType)},

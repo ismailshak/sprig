@@ -170,6 +170,12 @@ var routeAccess = map[string]access{
 		foreign:   removeBrowserPath(strangerBrowserID),
 	},
 	"GET /install": {},
+	// The sheet lists the reader's own memberships and the post moves their
+	// own session, so every role reaches both routes. Neither has a foreign
+	// path, because the garden is posted in the body rather than named in the
+	// URL.
+	"GET /gardens":  {},
+	"POST /gardens": {anyMember: true},
 	// Garden and the care types under it are the owner's pages. A care type is
 	// named by slug rather than by id, so the foreign path is a slug only
 	// Fairview has.

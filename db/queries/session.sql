@@ -22,3 +22,11 @@ RETURNING *;
 -- name: DeleteSession :exec
 DELETE FROM session
 WHERE token_hash = @token_hash;
+
+-- Switching gardens updates the session row rather than creating a new one, so
+-- the cookie stays as it is. The foreign key on (garden_id, user_id) rejects a
+-- garden the session's user is not a member of.
+-- name: SetSessionGarden :execrows
+UPDATE session
+SET garden_id = @garden_id
+WHERE token_hash = @token_hash;

@@ -60,3 +60,26 @@ WHERE garden_id = @garden_id AND user_id = @user_id;
 INSERT INTO membership (garden_id, user_id, role, invited_by, expires_at, digest_hour)
 VALUES (@garden_id, @user_id, @role, @invited_by, @expires_at, @digest_hour)
 RETURNING *;
+
+-- Every garden the account is a member of, oldest membership first, with the
+-- owner's display name. The owner is the oldest owner membership: the person
+-- who created the garden, unless they have left it. owner_name is empty and
+-- reader_owns is false when no owner is left. This takes no garden_id because
+-- it is how the account's other gardens are found. Every row belongs to
+-- @user_id.
+-- name: ListMembershipsWithGardensForUser :many
+SELECT sqlc.embed(membership), sqlc.embed(garden),
+    coalesce(owner.display_name, '')::text AS owner_name,
+    coalesce(owner.id = membership.user_id, false)::boolean AS reader_owns
+FROM membership
+JOIN garden ON garden.id = membership.garden_id
+LEFT JOIN LATERAL (
+    SELECT app_user.id, app_user.display_name
+    FROM membership o
+    JOIN app_user ON app_user.id = o.user_id
+    WHERE o.garden_id = garden.id AND o.role = 'owner'
+    ORDER BY o.created_at, o.id
+    LIMIT 1
+) AS owner ON true
+WHERE membership.user_id = @user_id
+ORDER BY membership.created_at, membership.id;

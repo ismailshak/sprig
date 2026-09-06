@@ -1,6 +1,6 @@
 import type { Browser, BrowserContext, Page } from '@playwright/test';
 import { attach, aWorkingDevice } from '../harness/authenticator';
-import { garden, invites, people } from '../harness/garden';
+import { gardens, invites, people } from '../harness/garden';
 import { signIn } from '../harness/signin';
 import { expect, test } from '../harness/test';
 import { AccountScreen } from '../screens/account';
@@ -26,7 +26,7 @@ test('joining through an invite link signs the sitter in and lands on Install sp
   try {
     await invited.open(invites.sitter.token);
     await expect(
-      page.getByRole('heading', { name: `${people.ellie.name} invited you to ${garden.name}` }),
+      page.getByRole('heading', { name: `${people.ellie.name} invited you to ${gardens.home.name}` }),
     ).toBeVisible();
     await invited.name().fill('Kim');
     await invited.timezone().selectOption('Europe/London');
@@ -38,7 +38,7 @@ test('joining through an invite link signs the sitter in and lands on Install sp
 
     await install.goToGarden().click();
     await expect(page).toHaveURL('/');
-    await expect(page.getByRole('heading', { name: garden.name })).toBeVisible();
+    await expect(page.getByRole('heading', { name: gardens.home.name })).toBeVisible();
 
     // The link works once. A second visit gets the page for a link that
     // cannot be used.
