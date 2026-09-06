@@ -1027,6 +1027,11 @@ a.foot-link { text-decoration: none; color: var(--ink-2); }
   font-weight: 600;
 }
 
+/* The passkey buttons start disabled until a script enables them. Without this
+   they look pressable, and a press that does nothing reads as the app being
+   broken. */
+.wide-action:disabled { opacity: .5; }
+
 /* ------------------------------------------------------------------- reference */
 
 .panel {
@@ -2116,9 +2121,10 @@ a.wide-action {
 
 /* ------------------------------------------------- the pages outside the tabs */
 
-/* No tab bar, so the column is centred in the window. It is narrower than any
-   other page because it has one field, and a single input stretched across a
-   desktop window looks like a broken layout rather than a simple page. */
+/* No tab bar, so the column is centred in the window. It is narrower than More's
+   760 and than the form's 680 because at most three fields sit on it, and an
+   input stretched across a desktop window looks like a broken layout rather than
+   a simple page. */
 .app--bare .app__main { display: flex; }
 
 .app__body--bare {
@@ -2145,5 +2151,7 @@ a.wide-action {
   line-height: 1.55;
   color: var(--ink-2);
 }
+
+.bare__line a { color: var(--ink); }
 
 .app__body--bare .wide-action { margin-top: 22px; }
