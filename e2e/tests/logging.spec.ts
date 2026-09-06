@@ -25,7 +25,7 @@ test('the sheet has no care type choice for a plant with one care', async ({ tod
   await expect(sheet.dialog().getByText('What', { exact: true })).toHaveCount(0);
 });
 
-test("logging a care from the sheet removes the plant from today's list", async ({ today, sheet }) => {
+test("logging a care from the sheet removes the plant from today's list @swap", async ({ today, sheet }) => {
   await today.openSheet(plants.doris, 'water');
   await sheet.submit('Log watering');
   await expect(sheet.dialog()).toHaveCount(0);
@@ -34,7 +34,7 @@ test("logging a care from the sheet removes the plant from today's list", async 
   await expect(today.careRow(plants.doris, 'water')).toHaveCount(0);
 });
 
-test('the care button on a row logs the care with the current time', async ({ today }) => {
+test('the care button on a row logs the care with the current time @swap', async ({ today }) => {
   await today.careButton(plants.doris, 'water').click();
   // With JavaScript the row stays in its logged state, so a locator for any
   // button would match its Undo.
@@ -44,7 +44,7 @@ test('the care button on a row logs the care with the current time', async ({ to
   await expect(today.careRow(plants.doris, 'water')).toHaveCount(0);
 });
 
-test('a skip makes the care due again after the chosen number of days', async ({ today, sheet }) => {
+test('a skip makes the care due again after the chosen number of days @swap', async ({ today, sheet }) => {
   await today.openSheet(plants.nigel, 'water');
   await sheet.chip('Skipped').check();
   await sheet.chip('1 day').check();
@@ -57,7 +57,7 @@ test('a skip makes the care due again after the chosen number of days', async ({
   await expect(row).toContainText('Water tomorrow');
 });
 
-test("switching the care type relabels the usual chip with that type's interval", async ({ today, sheet }) => {
+test("switching the care type relabels the usual chip with that type's interval @swap", async ({ today, sheet }) => {
   await today.openSheet(plants.nigel, 'water');
   await sheet.chip('Skipped').check();
   await expect(sheet.chip('The usual 4 days')).toBeVisible();
@@ -70,7 +70,7 @@ test("switching the care type relabels the usual chip with that type's interval"
   await expect(sheet.dialog().getByRole('button', { name: 'Record a skip' })).toBeVisible();
 });
 
-test('a time later than now is refused', async ({ today, sheet }) => {
+test('a time later than now is refused @swap', async ({ today, sheet }) => {
   await today.openSheet(plants.doris, 'water');
   await sheet.chip('Earlier today').check();
   await sheet.time().fill('23:59');

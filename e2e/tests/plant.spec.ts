@@ -104,7 +104,7 @@ test("the sheet opened from a plant's page has no link back to that page", async
   await expect(sheet.dialog().getByRole('link')).toHaveCount(0);
 });
 
-test("logging a care from a plant's page returns to that page", async ({ page, plant, sheet }) => {
+test("logging a care from a plant's page returns to that page @swap", async ({ page, plant, sheet }) => {
   await plant.open(seeded.doris);
   await plant.logCare();
 
@@ -115,7 +115,7 @@ test("logging a care from a plant's page returns to that page", async ({ page, p
   await expect(plant.scheduleRow('Water')).toContainText('Due in 21 days');
 });
 
-test("a care with no schedule can be logged from the plant's page", async ({ plant, sheet }) => {
+test("a care with no schedule can be logged from the plant's page @swap", async ({ plant, sheet }) => {
   await plant.open(seeded.doris);
   await plant.logCare();
 
@@ -126,7 +126,7 @@ test("a care with no schedule can be logged from the plant's page", async ({ pla
   await expect(plant.scheduleRow('Repot')).toContainText('Not scheduled');
 });
 
-test("a time later than now is refused on the plant's page", async ({ plant, sheet }) => {
+test("a time later than now is refused on the plant's page @swap", async ({ plant, sheet }) => {
   await plant.open(seeded.doris);
   await plant.logCare();
   await sheet.chip('Earlier today').check();

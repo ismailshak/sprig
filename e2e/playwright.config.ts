@@ -5,13 +5,6 @@ import { stacks } from './harness/database';
 // many. The suite runs exactly that many workers.
 const workers = stacks(process.env).length;
 
-// The screens these files drive have an htmx swap. Without JavaScript the same
-// tap is a form post and a redirect. The handler serves that through a separate
-// branch. These files run in both projects to check both branches. Every
-// other screen makes the same request and gets the same page either way, and
-// runs once.
-const htmxScreens = ['today', 'logging', 'plant', 'activity', 'schedule', 'plant-form'];
-
 export default defineConfig({
   testDir: './tests',
   globalSetup: './harness/global-setup.ts',
@@ -37,8 +30,13 @@ export default defineConfig({
     // contextOptions because there is no test option of that name.
     contextOptions: { reducedMotion: 'reduce' },
   },
-  // @js marks behaviour that exists only with JavaScript on, and @nojs
-  // behaviour that exists only with it off.
+  // @swap marks a test whose action is a form submission that JavaScript turns
+  // into an htmx swap. Without JavaScript the same submission is a post and a
+  // redirect, served by a separate branch of the handler, and that branch is
+  // what the no-JavaScript project checks. A test that only reads a page or
+  // follows a link makes the same request either way and runs once. @js marks
+  // behaviour that exists only with JavaScript on, and @nojs behaviour that
+  // exists only with it off.
   projects: [
     {
       name: 'phone',
@@ -48,8 +46,7 @@ export default defineConfig({
     {
       name: 'phone-nojs',
       use: { ...devices['iPhone 16'], javaScriptEnabled: false },
-      testMatch: htmxScreens.map((screen) => `**/${screen}.spec.ts`),
-      grepInvert: /@js/,
+      grep: /@swap|@nojs/,
     },
   ],
 });
