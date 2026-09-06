@@ -59,3 +59,16 @@ func TestHandleFor_ASuffixedCandidateStaysWithinTheLengthLimit(t *testing.T) {
 			got, len(got), maxHandleLength)
 	}
 }
+
+// A generated handle has to normalise to itself. Otherwise opening the Account
+// page and pressing Save would rewrite a handle nobody edited.
+func TestNormaliseHandle_AGeneratedHandleIsUnchanged(t *testing.T) {
+	for _, displayName := range []string{"Emma", "Emma Fletcher", "O'Brien-Smith", "Élodie", "🌱", "", strings.Repeat("a", 40)} {
+		for _, attempt := range []int{1, 2} {
+			handle := handleFor(displayName, attempt)
+			if got := NormaliseHandle(handle); got != handle {
+				t.Errorf("handleFor(%q, %d) = %q and NormaliseHandle rewrites it to %q", displayName, attempt, handle, got)
+			}
+		}
+	}
+}

@@ -1,10 +1,10 @@
 {{define "title"}}sprig — account{{end}}
 
-{{/* A display name and a timezone, the two things the account holds. There is
-     no email to change and no password to reset, because there is neither.
+{{/* The account's display name, handle and timezone. There is no email or
+     password to change, because sprig has neither.
 
-     novalidate, so an empty display name comes back as the message under the
-     field rather than as the browser's own bubble. */}}
+     novalidate turns the browser's own validation off, so an empty field is
+     reported by the server as the message under that field. */}}
 {{define "main"}}
 {{template "more-topbar" "Account"}}
 <div class="app__body app__body--sub">
@@ -15,11 +15,20 @@
 {{with .NameError}}<p class="field__error">{{.}}</p>{{end}}
 </div>
 <div class="field">
+<label class="field__label" for="handle">Handle <span class="field__hint">{{.HandleHint}}</span></label>
+<input class="input" id="handle" name="handle" type="text" value="{{.Handle}}">
+{{with .HandleError}}<p class="field__error">{{.}}</p>{{end}}
+</div>
+{{/* The note opens by saying what a handle is not, because a field called
+     Handle reads as a username. */}}
+<p class="note">Nothing signs in with a handle and there is no password behind it. It is a name for your account that a person can say out loud, and it is what People shows when two of you are called the same thing.</p>
+<div class="field">
 <label class="field__label" for="timezone">Timezone <span class="field__hint">what &ldquo;due today&rdquo; is worked out in</span></label>
 <select class="input" id="timezone" name="timezone">{{template "options" .Zones}}</select>
 </div>
 <button class="wide-action" type="submit">Save changes</button>
 </form>
+<ul class="list">{{template "link-row" .Codes}}</ul>
 </div>
 {{end}}
 

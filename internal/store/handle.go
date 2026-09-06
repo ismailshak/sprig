@@ -54,3 +54,12 @@ func slugify(name string, limit int) string {
 	// The cut can leave a trailing underscore.
 	return strings.TrimRight(string(runes), "_")
 }
+
+// NormaliseHandle returns the stored form of a handle typed on the Account
+// page: lower case letters and digits, single underscores between them, cut to
+// maxHandleLength characters. It applies the same rule as handleFor does when
+// an account is created, so "Emma Fletcher" is stored as "emma_fletcher"
+// rather than rejected. It returns "" when there is no letter or digit.
+func NormaliseHandle(handle string) string {
+	return slugify(handle, maxHandleLength)
+}

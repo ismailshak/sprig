@@ -1,10 +1,12 @@
 package http
 
 import (
+	"context"
 	"net/http"
 	"slices"
 	"strings"
 
+	"github.com/ismailshak/sprig/internal/auth"
 	"github.com/ismailshak/sprig/internal/store"
 )
 
@@ -21,16 +23,54 @@ var zones = []string{
 // nameMissing is shown under Display name when the field is posted empty.
 const nameMissing = "Give a display name. Every row in the log is signed with it."
 
+// handleMissing is shown under Handle when the field normalises to nothing:
+// empty, or with no letter or digit in it.
+const handleMissing = "Give a handle. It is what tells two accounts with the same display name apart."
+
+// handleTakenMessage is the message shown under Handle when another account
+// already has the handle. It repeats the handle, because normalising can
+// change what was typed before the save is refused.
+func handleTakenMessage(handle string) string {
+	return handle + " is taken. Pick a different one."
+}
+
+// accountForm is the three values the Account form posts. Opening the page
+// fills it from the stored account instead.
+type accountForm struct {
+	name   string
+	handle string
+	zone   string
+}
+
 type accountPage struct {
 	Name string
 	// NameError is shown under Display name, empty when the form is valid.
 	NameError string
-	Zones     []option
+	Handle    string
+	// HandleHint is the hint beside the Handle label, reading "what tells you
+	// from another Ellie". It uses the stored display name and not the one just
+	// posted, because a post refused for an empty display name would leave it
+	// reading "what tells you from another ".
+	HandleHint string
+	// HandleError is shown under Handle, empty when the form is valid.
+	HandleError string
+	Zones       []option
+	// Codes is the row at the bottom of the page. It links to Recovery codes.
+	// That page is reached from Account rather than from More, because every
+	// other page under More is about the garden.
+	Codes linkRow
 }
 
 func (h *more) account(w http.ResponseWriter, r *http.Request) {
-	user := PrincipalFrom(r).User
-	h.templates.render(w, r, view{page: "account"}, newAccountPage(user.DisplayName, user.Timezone, user.Timezone))
+	principal := PrincipalFrom(r)
+	user := principal.User
+	held := accountForm{name: user.DisplayName, handle: user.Handle, zone: user.Timezone}
+	page, err := h.newAccountPage(r.Context(), principal, held)
+	if err != nil {
+		serverError(h.logger, w, r, "open the account", err)
+		return
+	}
+	h.templates.render(w, r, view{page: "account"}, page)
 }
 
 func (h *more) saveAccount(w http.ResponseWriter, r *http.Request) {
@@ -39,37 +79,95 @@ func (h *more) saveAccount(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "the form did not parse", http.StatusBadRequest)
 		return
 	}
-	name := strings.TrimSpace(r.PostForm.Get("name"))
-	zone := r.PostForm.Get("timezone")
-	if !slices.Contains(zonesFor(principal.User.Timezone), zone) {
+	// A handle is normalised rather than rejected for its shape, so "Emma
+	// Fletcher" is stored as "emma_fletcher". The field is re-rendered from the
+	// normalised value.
+	form := accountForm{
+		name:   strings.TrimSpace(r.PostForm.Get("name")),
+		handle: store.NormaliseHandle(r.PostForm.Get("handle")),
+		zone:   r.PostForm.Get("timezone"),
+	}
+	if !slices.Contains(zonesFor(principal.User.Timezone), form.zone) {
 		http.Error(w, "the form did not offer that", http.StatusBadRequest)
 		return
 	}
 
-	if name == "" {
-		page := newAccountPage(name, zone, principal.User.Timezone)
-		page.NameError = nameMissing
+	// The page is built before the update, because both refusals below
+	// re-render it: an empty field, and the unique index rejecting the handle.
+	// A save that goes through redirects and throws it away.
+	page, err := h.newAccountPage(r.Context(), principal, form)
+	if err != nil {
+		serverError(h.logger, w, r, "save the account", err)
+		return
+	}
+	page.NameError = nameErrorFor(form.name)
+	page.HandleError = handleErrorFor(form.handle)
+	if page.NameError != "" || page.HandleError != "" {
 		h.templates.render(w, r, view{page: "account", status: http.StatusUnprocessableEntity}, page)
 		return
 	}
 
-	params := store.UpdateAccountParams{DisplayName: name, Timezone: zone, UserID: principal.User.ID}
-	if err := h.queries.UpdateAccount(r.Context(), params); err != nil {
+	params := store.UpdateAccountParams{
+		DisplayName: form.name,
+		Handle:      form.handle,
+		Timezone:    form.zone,
+		UserID:      principal.User.ID,
+	}
+	switch err := h.queries.UpdateAccount(r.Context(), params); {
+	case store.HandleTaken(err):
+		page.HandleError = handleTakenMessage(form.handle)
+		h.templates.render(w, r, view{page: "account", status: http.StatusUnprocessableEntity}, page)
+		return
+	case err != nil:
 		serverError(h.logger, w, r, "save the account", err)
 		return
 	}
 	http.Redirect(w, r, accountPath, http.StatusSeeOther)
 }
 
-// newAccountPage builds the form. held is the zone on the account. It is an
-// option even when it is not one of the ten, so opening the page and saving
-// moves nobody to a zone they did not choose.
-func newAccountPage(name, selected, held string) accountPage {
-	page := accountPage{Name: name}
-	for _, zone := range zonesFor(held) {
-		page.Zones = append(page.Zones, option{Value: zone, Label: zoneLabel(zone), On: zone == selected})
+func nameErrorFor(name string) string {
+	if name == "" {
+		return nameMissing
 	}
-	return page
+	return ""
+}
+
+// handleErrorFor returns the message to show under Handle, or "" when there is
+// nothing to say. handle has already been normalised, so an empty string is the
+// only thing left to reject.
+func handleErrorFor(handle string) string {
+	if handle == "" {
+		return handleMissing
+	}
+	return ""
+}
+
+// newAccountPage fills the Account page from form: the stored values when the
+// page is opened, and the posted values when a save was refused. The account's
+// own timezone is one of the options even when it is not among the ten listed,
+// so opening the page and saving does not move anyone to a zone they did not
+// choose.
+func (h *more) newAccountPage(ctx context.Context, principal auth.Principal, form accountForm) (accountPage, error) {
+	page := accountPage{
+		Name:       form.name,
+		Handle:     form.handle,
+		HandleHint: "what tells you from another " + principal.User.DisplayName,
+		Codes:      linkRow{Label: "Recovery codes", Href: recoveryPath},
+	}
+	for _, zone := range zonesFor(principal.User.Timezone) {
+		page.Zones = append(page.Zones, option{Value: zone, Label: zoneLabel(zone), On: zone == form.zone})
+	}
+
+	if principal.Can(auth.MemberManage) {
+		_, live, err := h.recoveryBatch(ctx, principal.User.ID)
+		if err != nil {
+			return accountPage{}, err
+		}
+		if !live {
+			page.Codes.Note = accountCodesNote
+		}
+	}
+	return page, nil
 }
 
 // zonesFor returns the options for an account whose zone is held. A zone the

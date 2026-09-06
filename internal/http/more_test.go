@@ -167,27 +167,27 @@ func (f *moreFixture) exec(t *testing.T, sql string, args ...any) {
 }
 
 var (
-	indexRowElement = regexp.MustCompile(`(?s)<a class="row row--link row--setting" href="([^"]+)">(.*?)</a>`)
-	indexRowLabel   = regexp.MustCompile(`(?s)<span class="row__label">(.*?)</span>`)
-	indexRowNote    = regexp.MustCompile(`(?s)<span class="row__note">(.*?)</span>`)
-	buildLine       = regexp.MustCompile(`(?s)<p class="more__build">(.*?)</p>`)
+	linkRowElement = regexp.MustCompile(`(?s)<a class="row row--link row--setting" href="([^"]+)">(.*?)</a>`)
+	linkRowLabel   = regexp.MustCompile(`(?s)<span class="row__label">(.*?)</span>`)
+	linkRowNote    = regexp.MustCompile(`(?s)<span class="row__note">(.*?)</span>`)
+	buildLine      = regexp.MustCompile(`(?s)<p class="more__build">(.*?)</p>`)
 )
 
-type indexRow struct {
+type renderedLinkRow struct {
 	href  string
 	label string
 	note  string
 }
 
-// indexRowsOf reads the index's rows in page order.
-func indexRowsOf(page string) []indexRow {
-	var out []indexRow
-	for _, m := range indexRowElement.FindAllStringSubmatch(page, -1) {
-		row := indexRow{href: m[1]}
-		if label := indexRowLabel.FindStringSubmatch(m[2]); label != nil {
+// linkRowsOf reads the page's link rows in page order.
+func linkRowsOf(page string) []renderedLinkRow {
+	var out []renderedLinkRow
+	for _, m := range linkRowElement.FindAllStringSubmatch(page, -1) {
+		row := renderedLinkRow{href: m[1]}
+		if label := linkRowLabel.FindStringSubmatch(m[2]); label != nil {
 			row.label = text(label[1])
 		}
-		if note := indexRowNote.FindStringSubmatch(m[2]); note != nil {
+		if note := linkRowNote.FindStringSubmatch(m[2]); note != nil {
 			row.note = text(note[1])
 		}
 		out = append(out, row)
@@ -195,7 +195,7 @@ func indexRowsOf(page string) []indexRow {
 	return out
 }
 
-func labelsOf(rows []indexRow) []string {
+func labelsOf(rows []renderedLinkRow) []string {
 	out := make([]string, 0, len(rows))
 	for _, row := range rows {
 		out = append(out, row.label)
@@ -207,19 +207,19 @@ func labelsOf(rows []indexRow) []string {
 func noteOn(t *testing.T, page, label string) string {
 	t.Helper()
 
-	for _, row := range indexRowsOf(page) {
+	for _, row := range linkRowsOf(page) {
 		if row.label == label {
 			return row.note
 		}
 	}
-	t.Fatalf("the index has no %s row:\n%v", label, labelsOf(indexRowsOf(page)))
+	t.Fatalf("the page has no %s row:\n%v", label, labelsOf(linkRowsOf(page)))
 	return ""
 }
 
 func TestMore_AnOwnerSeesEveryRow(t *testing.T) {
 	f := moreGarden(t)
 
-	got := labelsOf(indexRowsOf(f.page(t, f.handler.show, morePath)))
+	got := labelsOf(linkRowsOf(f.page(t, f.handler.show, morePath)))
 
 	want := []string{"Account", "Passkeys", "Notifications", "Garden", "People", "Tokens"}
 	if !slices.Equal(got, want) {
@@ -231,7 +231,7 @@ func TestMore_AMembersIndexHasTokensAndNeitherGardenNorPeople(t *testing.T) {
 	f := moreGarden(t)
 	f.principal.Capabilities = auth.Capabilities{auth.TokenManage: true}
 
-	got := labelsOf(indexRowsOf(f.page(t, f.handler.show, morePath)))
+	got := labelsOf(linkRowsOf(f.page(t, f.handler.show, morePath)))
 
 	want := []string{"Account", "Passkeys", "Notifications", "Tokens"}
 	if !slices.Equal(got, want) {
@@ -243,7 +243,7 @@ func TestMore_ASittersIndexIsThreeRows(t *testing.T) {
 	f := moreGarden(t)
 	f.principal.Capabilities = auth.Capabilities{auth.CareLog: true}
 
-	got := labelsOf(indexRowsOf(f.page(t, f.handler.show, morePath)))
+	got := labelsOf(linkRowsOf(f.page(t, f.handler.show, morePath)))
 
 	want := []string{"Account", "Passkeys", "Notifications"}
 	if !slices.Equal(got, want) {
@@ -255,7 +255,7 @@ func TestMore_EachRowLinksToItsPage(t *testing.T) {
 	f := moreGarden(t)
 
 	var got []string
-	for _, row := range indexRowsOf(f.page(t, f.handler.show, morePath)) {
+	for _, row := range linkRowsOf(f.page(t, f.handler.show, morePath)) {
 		got = append(got, row.href)
 	}
 
@@ -299,6 +299,37 @@ func TestMore_ThePeopleRowCountsOnlyInvitesThatCanStillBeRedeemed(t *testing.T) 
 	f.exec(t, "DELETE FROM invite WHERE garden_id = $1 AND redeemed_at IS NULL", moreGardenID)
 	if got := noteOn(t, f.page(t, f.handler.show, morePath), "People"); got != "" {
 		t.Errorf("with none out the row says %q, want nothing", got)
+	}
+}
+
+func TestMore_TheAccountRowSaysThereAreNoRecoveryCodesUntilABatchExists(t *testing.T) {
+	f := moreGarden(t)
+
+	if got := noteOn(t, f.page(t, f.handler.show, morePath), "Account"); got != "No recovery codes" {
+		t.Errorf("holding none the row says %q, want %q", got, "No recovery codes")
+	}
+
+	f.exec(t, "INSERT INTO recovery_code (user_id, code_hash) VALUES ($1, 'one'), ($1, 'two')", moreUserID)
+	if got := noteOn(t, f.page(t, f.handler.show, morePath), "Account"); got != "" {
+		t.Errorf("holding a batch the row says %q, want nothing", got)
+	}
+}
+
+func TestMore_AMemberIsNotToldTheyHaveNoRecoveryCodes(t *testing.T) {
+	f := moreGarden(t)
+	f.principal.Capabilities = auth.Capabilities{auth.TokenManage: true}
+
+	if got := noteOn(t, f.page(t, f.handler.show, morePath), "Account"); got != "" {
+		t.Errorf("the row says %q to a member, want nothing", got)
+	}
+}
+
+func TestMore_TheAccountRowStillSaysNoRecoveryCodesWhenAnotherAccountHoldsABatch(t *testing.T) {
+	f := moreGarden(t)
+	f.exec(t, "INSERT INTO recovery_code (user_id, code_hash) VALUES ($1, 'someone-elses')", otherUserID)
+
+	if got := noteOn(t, f.page(t, f.handler.show, morePath), "Account"); got != "No recovery codes" {
+		t.Errorf("the row says %q, want %q", got, "No recovery codes")
 	}
 }
 

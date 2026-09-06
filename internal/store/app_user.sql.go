@@ -65,17 +65,26 @@ func (q *Queries) ListUsers(ctx context.Context) ([]AppUser, error) {
 
 const updateAccount = `-- name: UpdateAccount :exec
 UPDATE app_user
-SET display_name = $1, timezone = $2
-WHERE id = $3
+SET display_name = $1, handle = $2, timezone = $3
+WHERE id = $4
 `
 
 type UpdateAccountParams struct {
 	DisplayName string
+	Handle      string
 	Timezone    string
 	UserID      uuid.UUID
 }
 
+// Nothing checks that the handle is free before this runs. The unique index on
+// app_user.handle rejects a duplicate. A check made first would let two
+// accounts saving the same handle at the same moment both pass it.
 func (q *Queries) UpdateAccount(ctx context.Context, arg UpdateAccountParams) error {
-	_, err := q.db.Exec(ctx, updateAccount, arg.DisplayName, arg.Timezone, arg.UserID)
+	_, err := q.db.Exec(ctx, updateAccount,
+		arg.DisplayName,
+		arg.Handle,
+		arg.Timezone,
+		arg.UserID,
+	)
 	return err
 }

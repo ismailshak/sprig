@@ -9,6 +9,7 @@ import { PasskeysScreen } from '../screens/passkeys';
 import { PlantScreen } from '../screens/plant';
 import { PlantFormScreen } from '../screens/plant-form';
 import { PlantsScreen } from '../screens/plants';
+import { RecoveryScreen } from '../screens/recovery';
 import { SheetScreen } from '../screens/sheet';
 import { TodayScreen } from '../screens/today';
 import { seed, stacks, type Stack } from './database';
@@ -24,6 +25,7 @@ type Screens = {
   plant: PlantScreen;
   plantForm: PlantFormScreen;
   plants: PlantsScreen;
+  recovery: RecoveryScreen;
   sheet: SheetScreen;
   today: TodayScreen;
 };
@@ -80,6 +82,9 @@ export const test = base.extend<{ seededGarden: void } & Screens, { stack: Stack
   },
   plants: async ({ page }, use) => {
     await use(new PlantsScreen(page));
+  },
+  recovery: async ({ page }, use) => {
+    await use(new RecoveryScreen(page));
   },
   sheet: async ({ page }, use) => {
     await use(new SheetScreen(page));

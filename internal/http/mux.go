@@ -57,6 +57,7 @@ func routes(logger *slog.Logger, sessions *auth.Sessions, queries *store.Queries
 		{pattern: "POST " + signOutPath, handler: http.HandlerFunc(moreHandler.signOut)},
 		{pattern: "GET " + accountPath, handler: http.HandlerFunc(moreHandler.account)},
 		{pattern: "POST " + accountPath, handler: http.HandlerFunc(moreHandler.saveAccount)},
+		{pattern: "GET " + recoveryPath, handler: http.HandlerFunc(moreHandler.recovery)},
 		{pattern: "GET " + passkeysPath, handler: http.HandlerFunc(moreHandler.passkeys)},
 		{pattern: "POST " + passkeysPath + "/{key}/remove", handler: http.HandlerFunc(moreHandler.removePasskey)},
 		{pattern: "GET " + notificationsPath, handler: http.HandlerFunc(moreHandler.notifications)},
