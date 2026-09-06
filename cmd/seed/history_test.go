@@ -183,8 +183,10 @@ func TestHistory_TwoRunsProduceTheSameEvents(t *testing.T) {
 }
 
 // If every event were the owner's, no page would ever show care given by
-// someone else.
-func TestHistory_BothMembersAppearInTheLog(t *testing.T) {
+// someone else. history attributes events to a garden's first two members, so
+// those are the two the log has to hold. The sitters after them joined long
+// after the history starts and logged nothing.
+func TestHistory_TheFirstTwoMembersBothAppearInTheLog(t *testing.T) {
 	ref := testReference(t)
 	g := home()
 
@@ -194,7 +196,7 @@ func TestHistory_BothMembersAppearInTheLog(t *testing.T) {
 			by[e.performedBy.handle]++
 		}
 	}
-	for _, m := range g.members {
+	for _, m := range g.members[:2] {
 		if by[m.person.handle] == 0 {
 			t.Errorf("%s appears in none of the garden's events", m.person.handle)
 		}
