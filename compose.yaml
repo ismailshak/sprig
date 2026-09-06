@@ -42,6 +42,9 @@ services:
       # only valid on a Secure cookie.
       SPRIG_COOKIE_SECURE: "false"
       SPRIG_COOKIE_NAME: sprig_session
+      # On, so the e2e suite can reach Set up your garden on a database the
+      # seed has already put an account in. A deployment leaves it off.
+      SPRIG_SIGNUP_ENABLED: "true"
     ports:
       - "${APP_PORTS:-8080:8080}"
     depends_on:
