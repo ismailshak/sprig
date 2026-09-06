@@ -81,7 +81,7 @@ test('a row on the activity log opens a sheet filled in from the event', async (
   await expect(sheet.recorded()).toBeVisible();
 });
 
-test('a correction files the event under the day it was saved with', async ({ activity, sheet }) => {
+test('a correction files the event under the day it was saved with @swap', async ({ activity, sheet }) => {
   await activity.open();
   await activity.openSheet(activity.rows().first());
 
@@ -100,7 +100,7 @@ test('a correction files the event under the day it was saved with', async ({ ac
   expect(day).toContain('Yesterday');
 });
 
-test('an event recorded as the wrong care is corrected to the right one', async ({ page, activity, sheet }) => {
+test('an event recorded as the wrong care is corrected to the right one @swap', async ({ page, activity, sheet }) => {
   await page.goto(`/activity?plant=${seeded.bigFella.id}`);
   await activity.openSheet(activity.rows().first());
 
@@ -115,7 +115,7 @@ test('an event recorded as the wrong care is corrected to the right one', async 
   await expect(activity.rows().first()).toContainText('Fed');
 });
 
-test('a deleted event is not on the log', async ({ page, activity, sheet }) => {
+test('a deleted event is not on the log @swap', async ({ page, activity, sheet }) => {
   await activity.open();
   const row = activity.rows().first();
   const id = await row.getAttribute('id');

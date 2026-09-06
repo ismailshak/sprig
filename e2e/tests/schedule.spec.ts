@@ -20,7 +20,7 @@ test('clicking a schedule row opens the editor in place', async ({ plant }) => {
   await expect(plant.scheduleRow('Water')).toContainText('Counted from the last time it was done');
 });
 
-test('changing the interval updates the due date on the row', async ({ plant }) => {
+test('changing the interval updates the due date on the row @swap', async ({ plant }) => {
   await plant.open(seeded.bigFella);
   await plant.editSchedule('Water');
 
@@ -51,7 +51,7 @@ test('a care type with no schedule is listed as Not scheduled', async ({ plant }
   await expect(plant.scheduleRow('Repot')).toContainText('Not scheduled');
 });
 
-test('a care type with no schedule can be given one from its row', async ({ plant }) => {
+test('a care type with no schedule can be given one from its row @swap', async ({ plant }) => {
   await plant.open(seeded.doris);
 
   await plant.editSchedule('Feed');
@@ -63,7 +63,7 @@ test('a care type with no schedule can be given one from its row', async ({ plan
   await expect(plant.scheduleRow('Feed')).not.toContainText('Not scheduled');
 });
 
-test('a removed schedule leaves the care type listed as Not scheduled', async ({ plant }) => {
+test('a removed schedule leaves the care type listed as Not scheduled @swap', async ({ plant }) => {
   await plant.open(seeded.bigFella);
 
   await plant.editSchedule('Water');
@@ -73,7 +73,7 @@ test('a removed schedule leaves the care type listed as Not scheduled', async ({
   await expect(plant.scheduleRow('Water')).not.toContainText('Every 10 days');
 });
 
-test('Keep it after Remove leaves the schedule unchanged', async ({ plant }) => {
+test('Keep it after Remove leaves the schedule unchanged @swap', async ({ plant }) => {
   await plant.open(seeded.bigFella);
   await plant.editSchedule('Water');
 
@@ -128,6 +128,9 @@ test('a saved schedule survives a reload', async ({ page, plant }) => {
   await plant.editSchedule('Water');
   await plant.every('Water').fill('20');
   await plant.saveSchedule('Water');
+  // With JavaScript the save is a swap that click does not wait for. A reload
+  // before the row has changed cancels the request before the save commits.
+  await expect(plant.scheduleRow('Water')).toContainText('Every 20 days');
 
   await page.reload();
 

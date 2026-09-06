@@ -10,7 +10,7 @@ test.beforeEach(async ({ page }) => {
   await signIn(page, people.ellie.handle);
 });
 
-test("a new plant's page shows the watering schedule entered on the form", async ({
+test("a new plant's page shows the watering schedule entered on the form @swap", async ({
   page,
   plants,
   plantForm,
@@ -50,7 +50,7 @@ test('pressing Enter in a name field adds the plant', async ({ plantForm, plant 
   await expect(plant.heading()).toHaveText('Ada');
 });
 
-test('a plant added with no schedule shows every care type as not scheduled', async ({ plantForm, plant }) => {
+test('a plant added with no schedule shows every care type as not scheduled @swap', async ({ plantForm, plant }) => {
   await plantForm.openNew();
   await plantForm.field('Nickname').fill('Ada');
 
@@ -135,7 +135,7 @@ test('the edit form has no Schedule section', async ({ page, plantForm }) => {
   await expect(page.getByRole('heading', { name: 'Schedule' })).toHaveCount(0);
 });
 
-test('an archived plant is not listed on Plants', async ({ page, plant, plants }) => {
+test('an archived plant is not listed on Plants @swap', async ({ page, plant, plants }) => {
   await plant.open(seeded.doris);
 
   await plant.archive();
@@ -146,7 +146,11 @@ test('an archived plant is not listed on Plants', async ({ page, plant, plants }
 
 // Archiving asks for confirmation because it removes the plant from Plants and
 // leaves no row to undo from.
-test('Archive asks for confirmation and the plant stays listed until it is given', async ({ page, plant, plants }) => {
+test('Archive asks for confirmation and the plant stays listed until it is given @swap', async ({
+  page,
+  plant,
+  plants,
+}) => {
   await plant.open(seeded.doris);
 
   await plant.askToArchive();
@@ -158,7 +162,7 @@ test('Archive asks for confirmation and the plant stays listed until it is given
   await expect(plants.row(seeded.doris)).toHaveCount(1);
 });
 
-test('choosing Keep after Archive leaves the plant listed', async ({ plant, plants }) => {
+test('choosing Keep after Archive leaves the plant listed @swap', async ({ plant, plants }) => {
   await plant.open(seeded.doris);
   await plant.askToArchive();
 

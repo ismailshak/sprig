@@ -71,8 +71,13 @@ jobs:
           cache-to: type=gha,scope=e2e,mode=max
       - name: Run the suite
         run: mise run e2e --no-build
-      - name: Keep the traces of failed tests
-        if: failure()
+        env:
+          # One stack per worker, on a four-core runner
+          SPRIG_E2E_WORKERS: 4
+      # A test that fails and then passes on the retry leaves the job green. The trace
+      # of the failed attempt is only kept if this step runs on a green run too.
+      - name: Keep the traces and container logs
+        if: always()
         uses: actions/upload-artifact@v7
         with:
           name: playwright-traces

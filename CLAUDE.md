@@ -13,7 +13,7 @@ mise run dev:stop  # stop the Postgres container that dev leaves running
 mise run dev:reset # delete the dev database and reseed it from empty
 mise run seed      # load the prototype's garden into the dev database
 mise run test      # Go tests against a throwaway Postgres
-mise run e2e       # Playwright suite against a seeded throwaway database
+mise run e2e       # Playwright suite, with a throwaway app and Postgres stack per worker
 mise run lint
 mise run format    # prettier over e2e, the only JavaScript in the repo
 mise run hooks     # point git at .githooks, once per clone
@@ -77,9 +77,9 @@ Playwright rules:
 - A test asserts behaviour, never appearance: where a flow lands and what the page says when it gets there. No screenshots, pixel diffs or golden images.
 - A claim about a stored value belongs in a Go handler test against Postgres. An e2e test never queries the database, and the suite has no way to.
 - Select by role, accessible name, visible text, or an id the server assigns as part of a swap contract. Never by CSS class. Renaming a class is a design decision and stays free.
-- Nothing is mocked, stubbed or intercepted. The harness reseeds before every test, so a test asserts against the seed and never against what an earlier test wrote.
+- Nothing is mocked, stubbed or intercepted. The harness reseeds before every test, so a test asserts against the seed and never against what an earlier test wrote. Tests run in parallel with one app and one database per worker. A test never sees another's writes either.
 - One test is one flow from start to finish, not one page. A card that adds a screen adds the flows that screen makes possible.
-- A test runs in both projects unless tagged `@js` for behaviour that only exists with JavaScript on.
+- A test runs in the no-JavaScript project only when tagged `@swap`: its action is a form submission that JavaScript turns into an htmx swap. Without JavaScript the same submission is a post and a redirect, served by a separate branch of the handler. A test that only reads a page or follows a link runs once. `@js` marks behaviour that only exists with JavaScript on and `@nojs` the reverse.
 - A test drives a screen through a screen object under `e2e/screens/`, one class per screen, reached as a fixture on the `test` the harness exports. A screen object holds locators and the actions a person performs. It holds no assertions and nothing that depends on JavaScript. A method exists because it encodes something the server defines, such as the id format of a care row, or because two tests need it.
 - Seeded people and plants are named in one harness file, not as strings in each test.
 - A test name is one plain claim about the app, like the Go tests: `a signed-out visit is sent to sign in`, `a session survives a reload`. It names a role or a state, never a seeded person.
