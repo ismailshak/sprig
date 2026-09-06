@@ -32,3 +32,21 @@ WHERE garden_id = @garden_id AND id = @invite_id AND redeemed_at IS NULL;
 -- name: DeleteReenrolmentInvites :execrows
 DELETE FROM invite
 WHERE garden_id = @garden_id AND user_id = @user_id AND redeemed_at IS NULL;
+
+-- The invite for a token hash, with its garden and the account that created
+-- it. The page shows the garden's name and that account's display name. There
+-- is no garden_id parameter, because the token is what says which garden the
+-- link is for.
+-- name: GetInviteByTokenHash :one
+SELECT sqlc.embed(invite), sqlc.embed(garden), sqlc.embed(app_user)
+FROM invite
+JOIN garden ON garden.id = invite.garden_id
+JOIN app_user ON app_user.id = invite.created_by
+WHERE invite.token_hash = @token_hash;
+
+-- Sets redeemed_at on an invite that has not been redeemed and has not
+-- expired. The row count is zero when it had already been redeemed or had
+-- expired, so the caller reads the count to find out whether it was usable.
+-- name: RedeemInvite :execrows
+UPDATE invite SET redeemed_at = @now::timestamptz
+WHERE garden_id = @garden_id AND id = @invite_id AND redeemed_at IS NULL AND expires_at > @now;

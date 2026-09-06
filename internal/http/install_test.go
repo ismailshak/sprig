@@ -81,3 +81,38 @@ func TestInstall_APlatformTheChipsDoNotOfferFallsBackToTheIPhone(t *testing.T) {
 		t.Errorf("the platform pressed is %q, want iphone", got.value)
 	}
 }
+
+func TestInstall_AfterAnInviteHasNoTabBarAndNoBackLinkAndEndsInALinkIntoTheGarden(t *testing.T) {
+	f := moreGarden(t)
+
+	page := f.page(t, f.handler.install, afterInvitePath)
+
+	if strings.Contains(page, "nav__item") {
+		t.Error("the page renders the tab bar, and there is no garden open yet")
+	}
+	if strings.Contains(page, `class="backlink"`) {
+		t.Error("the page has a back link, and it was not reached from More")
+	}
+	if !strings.Contains(page, `href="/">Go to the garden<`) {
+		t.Errorf("the page does not end in a link into the garden:\n%s", page)
+	}
+	if !strings.Contains(page, `<input type="hidden" name="after" value="invite">`) {
+		t.Error("the chips drop the after parameter, so choosing a platform would bring the tab bar back")
+	}
+	if got := pressedChip(t, page); got.value != "iphone" {
+		t.Errorf("the platform pressed is %q, want iphone", got.value)
+	}
+}
+
+func TestInstall_FromMoreHasTheTabBarAndNoLinkIntoTheGarden(t *testing.T) {
+	f := moreGarden(t)
+
+	page := f.page(t, f.handler.install, installPath)
+
+	if !strings.Contains(page, "nav__item") {
+		t.Error("the page has no tab bar, and it was reached from More")
+	}
+	if strings.Contains(page, "Go to the garden") {
+		t.Error("the page ends in a link into the garden, and the tab bar already opens it")
+	}
+}

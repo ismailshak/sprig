@@ -4,6 +4,7 @@ import { ActivityScreen } from '../screens/activity';
 import { GardenScreen } from '../screens/garden';
 import { InstallScreen } from '../screens/install';
 import { InviteScreen } from '../screens/invite';
+import { InvitedScreen } from '../screens/invited';
 import { MoreScreen } from '../screens/more';
 import { NotificationsScreen } from '../screens/notifications';
 import { PasskeysScreen } from '../screens/passkeys';
@@ -25,6 +26,7 @@ type Screens = {
   garden: GardenScreen;
   install: InstallScreen;
   invite: InviteScreen;
+  invited: InvitedScreen;
   more: MoreScreen;
   notifications: NotificationsScreen;
   passkeys: PasskeysScreen;
@@ -77,6 +79,9 @@ export const test = base.extend<{ seededGarden: void } & Screens, { stack: Stack
   },
   invite: async ({ page }, use) => {
     await use(new InviteScreen(page));
+  },
+  invited: async ({ page }, use) => {
+    await use(new InvitedScreen(page));
   },
   more: async ({ page }, use) => {
     await use(new MoreScreen(page));

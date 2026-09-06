@@ -46,6 +46,10 @@ var platforms = []struct {
 	},
 }
 
+// afterInvite is the value of the after query parameter that /install takes
+// when it is reached at the end of redeeming an invite.
+const afterInvite = "invite"
+
 type installPage struct {
 	Bar topbar
 	// Action is the URL the chips submit to. It is this page, with the chosen
@@ -54,17 +58,25 @@ type installPage struct {
 	Chips  []chip
 	Steps  []string
 	Why    string
+	// AfterInvite is true when the page is reached at the end of redeeming an
+	// invite. It is then rendered with no tab bar and no back link, and ends in
+	// a link to Today. The form the chips submit keeps the after parameter in a
+	// hidden input, so choosing a platform stays on this version of the page.
+	AfterInvite bool
+	// Today is the URL the Go to the garden link points at.
+	Today string
 }
 
 // install renders the steps for the platform in the query string, and the
 // iPhone's for anything else, including a first visit with no query string at
 // all.
 func (h *more) install(w http.ResponseWriter, r *http.Request) {
-	h.templates.render(w, r, view{page: "install"}, newInstallPage(r.URL.Query().Get("platform")))
+	query := r.URL.Query()
+	h.templates.render(w, r, view{page: "install"}, newInstallPage(query.Get("platform"), query.Get("after") == afterInvite))
 }
 
-func newInstallPage(chosen string) installPage {
-	page := installPage{Bar: moreBar("Install sprig"), Action: installPath}
+func newInstallPage(chosen string, fromInvite bool) installPage {
+	page := installPage{Bar: moreBar("Install sprig"), Action: installPath, AfterInvite: fromInvite, Today: todayPath}
 	offered := false
 	for _, platform := range platforms {
 		on := platform.value == chosen

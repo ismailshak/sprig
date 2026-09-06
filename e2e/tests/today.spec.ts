@@ -1,4 +1,4 @@
-import { people, plants } from '../harness/garden';
+import { garden, people, plants } from '../harness/garden';
 import { signIn } from '../harness/signin';
 import { expect, test } from '../harness/test';
 
@@ -39,7 +39,7 @@ test('a plant coming up shows the day it is due and a Log button', async ({ toda
 test('the summary counts the overdue plants', async ({ page, today }) => {
   await today.open();
 
-  await expect(page.getByRole('heading', { name: 'Home' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: garden.name })).toBeVisible();
   await expect(page.getByText('1 of them overdue')).toBeVisible();
 });
 

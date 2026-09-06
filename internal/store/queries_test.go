@@ -366,11 +366,12 @@ func TestListPlants_AnEmptyGardenReturnsNoRowsAndNoError(t *testing.T) {
 // reads more than one scoped table must scope each of them, because scoping
 // only the driving table leaves a join free to cross gardens.
 //
-// Two tables are exempt when read alone, because they are how a request finds
-// out which garden it is on, so the lookup cannot take the garden as input. A
-// read of session alone binds @token_hash, and a read of membership alone
-// binds @user_id, so every row returned belongs to the caller. A query joining
-// either to another scoped table binds @garden_id like any other.
+// Three tables are exempt when read alone, because they are how a request
+// finds out which garden it is on, so the lookup cannot take the garden as
+// input. A read of session alone or of invite alone binds @token_hash, and a
+// read of membership alone binds @user_id, so every row returned belongs to
+// the caller. A query joining any of them to another scoped table binds
+// @garden_id like any other.
 func TestQueries_EveryQueryOnAGardenScopedTableBindsTheGarden(t *testing.T) {
 	tx := sharedTx(t)
 
@@ -411,6 +412,12 @@ func TestQueries_EveryQueryOnAGardenScopedTableBindsTheGarden(t *testing.T) {
 			if !strings.Contains(query.sql, "@token_hash") {
 				t.Errorf("%s reads session and takes no @token_hash, so it can return another garden's rows", query.name)
 			}
+			continue
+		}
+		// The page an invite link opens finds the invite by the hash of the
+		// token in the URL, before any garden is known. Every other read of
+		// invite binds @garden_id.
+		if slices.Equal(touched, []string{"invite"}) && strings.Contains(query.sql, "@token_hash") {
 			continue
 		}
 		if slices.Equal(touched, []string{"membership"}) && strings.Contains(query.sql, "@user_id") {
