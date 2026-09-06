@@ -135,8 +135,10 @@ var routeAccess = map[string]access{
 	// may add one to their own.
 	"POST /more/passkeys/challenge": {anyMember: true},
 	"POST /more/passkeys":           {anyMember: true},
-	// The sign-in challenge and the answer to it are served without a session,
-	// because signing in is what somebody with no session comes to do.
+	// The sign-in page, the challenge and the post that signs in are served
+	// without a session, because signing in is what somebody with no session
+	// comes to do.
+	"GET /signin":            {public: true},
 	"POST /signin/challenge": {public: true},
 	"POST /signin":           {public: true},
 	// A passkey and a push subscription belong to an account rather than to a

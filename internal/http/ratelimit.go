@@ -86,11 +86,15 @@ func (l *Limiter) sweep(now time.Time) {
 	}
 }
 
-// Limit refuses a request whose key has spent its budget with a 429 and a
-// Retry-After. A route with both a per-source budget and a shared one wraps the
-// shared limiter inside the per-source limiter, so a source already refused
-// spends nothing from the shared budget.
-func Limit(l *Limiter, key func(*http.Request) string) func(http.Handler) http.Handler {
+// Limit refuses a request whose key has spent its budget. It sets Retry-After
+// and then calls refused, the handler that writes the 429 body. A route passes
+// its own handler there so the refusal can be a page rather than the status
+// text.
+//
+// A route with both a per-source budget and a shared one wraps the shared
+// limiter inside the per-source limiter, so a source already refused spends
+// nothing from the shared budget.
+func Limit(l *Limiter, key func(*http.Request) string, refused http.Handler) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ok, retryAfter := l.Allow(key(r), time.Now())
@@ -99,7 +103,7 @@ func Limit(l *Limiter, key func(*http.Request) string) func(http.Handler) http.H
 				// retry the bucket refuses again.
 				seconds := max(int(math.Ceil(retryAfter.Seconds())), 1)
 				w.Header().Set("Retry-After", strconv.Itoa(seconds))
-				http.Error(w, http.StatusText(http.StatusTooManyRequests), http.StatusTooManyRequests)
+				refused.ServeHTTP(w, r)
 				return
 			}
 			next.ServeHTTP(w, r)

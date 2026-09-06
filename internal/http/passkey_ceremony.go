@@ -147,7 +147,7 @@ func (h *passkeyCeremony) signIn(w http.ResponseWriter, r *http.Request) {
 
 	http.SetCookie(w, h.passkeys.ClearedCeremonyCookie())
 	body := strings.NewReader(r.PostForm.Get(credentialField))
-	user, err := h.passkeys.FinishAssertion(r.Context(), h.now(), r, body)
+	user, passkey, err := h.passkeys.FinishAssertion(r.Context(), h.now(), r, body)
 	if err != nil {
 		h.refuseSignIn(w, r, err)
 		return
@@ -158,8 +158,10 @@ func (h *passkeyCeremony) signIn(w http.ResponseWriter, r *http.Request) {
 	if errors.Is(err, auth.ErrNoLiveMembership) {
 		// The passkey is valid and the account is in no garden, so there is
 		// nothing to open a session on. A sitter whose membership ran out is
-		// the case this covers.
-		http.Error(w, "You are not in a garden. Ask whoever looks after it to invite you again.", http.StatusConflict)
+		// the case this covers. The status is 403 rather than 404 because the
+		// 404 rule is for an object a request named, and this request named
+		// none.
+		h.renderSignIn(w, r, http.StatusForbidden, "That passkey signed in, and the account behind it is in no garden. Ask whoever runs the garden to invite you again.")
 		return
 	}
 	if err != nil {
@@ -176,7 +178,7 @@ func (h *passkeyCeremony) signIn(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	token, _, err := h.sessions.Create(r.Context(), now, user.ID, membership.GardenID, r.UserAgent())
+	token, _, err := h.sessions.Create(r.Context(), now, user.ID, membership.GardenID, &passkey.ID, r.UserAgent())
 	if err != nil {
 		serverError(h.logger, w, r, "start the session", err)
 		return
@@ -185,30 +187,36 @@ func (h *passkeyCeremony) signIn(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
-// refuseSignIn writes the reason a sign-in was refused. The messages are plain
-// text until the sign-in page exists to render them.
+// refuseSignIn renders the sign-in page again as a 401, with the reason the
+// sign-in failed above the button. Every reason the person can act on has its
+// own sentence. A post with no credential in it is a 400, and anything else is
+// a 500 with the error in the log.
 func (h *passkeyCeremony) refuseSignIn(w http.ResponseWriter, r *http.Request, err error) {
+	var message string
 	switch {
 	case errors.Is(err, auth.ErrNotVerified):
-		http.Error(w, "This device did not check that it was you. Unlock it and try again.", http.StatusUnauthorized)
+		message = "This device did not check that it was you. Unlock it and try again."
 	case errors.Is(err, auth.ErrUnknownCredential):
-		http.Error(w, "That passkey is not one this garden knows. Ask whoever looks after it to invite you.", http.StatusUnauthorized)
+		message = "That passkey is not one sprig knows. It may have been removed from the account's Passkeys page."
 	case errors.Is(err, auth.ErrClonedCredential):
 		// Two copies of the private key are in use, and this request may be from
 		// either of them, so the message does not say what was wrong. The log
 		// line names the passkey row, so whoever reads it can find the account.
 		h.logger.WarnContext(r.Context(), "refuse the sign-in", slog.Any("error", err))
-		http.Error(w, "That passkey cannot be used. Ask whoever looks after the garden to remove it and invite you again.", http.StatusUnauthorized)
+		message = "That passkey cannot be used. Ask whoever runs the garden to remove it and invite you again."
 	case errors.Is(err, auth.ErrFailedVerification):
 		h.logger.WarnContext(r.Context(), "refuse the sign-in", slog.Any("error", err))
-		http.Error(w, "That passkey could not be checked. Try signing in again.", http.StatusUnauthorized)
+		message = "That passkey could not be checked. Try signing in again."
 	case errors.Is(err, auth.ErrCeremonyGone):
-		http.Error(w, "That took too long, so the request has expired. Try signing in again.", http.StatusUnauthorized)
+		message = "That took too long, so the request has expired. Try signing in again."
 	case errors.Is(err, auth.ErrBadCredential):
 		http.Error(w, "the form did not send a credential", http.StatusBadRequest)
+		return
 	default:
 		serverError(h.logger, w, r, "sign in", err)
+		return
 	}
+	h.renderSignIn(w, r, http.StatusUnauthorized, message)
 }
 
 // writeJSON writes v as a JSON response with Cache-Control: no-store, because a

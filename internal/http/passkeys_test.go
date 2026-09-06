@@ -1,10 +1,14 @@
 package http
 
 import (
+	"errors"
 	"net/http"
 	"slices"
 	"strings"
 	"testing"
+	"uuid"
+
+	"github.com/ismailshak/sprig/internal/auth"
 )
 
 func TestPasskeys_EachDeviceIsARowWithWhenItWasLastUsed(t *testing.T) {
@@ -85,5 +89,56 @@ func TestPasskeys_AnotherAccountsCredentialIsNotFound(t *testing.T) {
 	}
 	if left != 1 {
 		t.Errorf("the other account has %d passkeys, want 1", left)
+	}
+}
+
+// passkeyRowID returns the id of the passkey_credential row a device
+// registered.
+func (f *moreFixture) passkeyRowID(t *testing.T, credentialID string) uuid.UUID {
+	t.Helper()
+
+	var id uuid.UUID
+	if err := f.tx.QueryRow(t.Context(), "SELECT id FROM passkey_credential WHERE credential_id = $1", credentialID).Scan(&id); err != nil {
+		t.Fatalf("finding the passkey: %v", err)
+	}
+	return id
+}
+
+func TestPasskeys_RemovingAPasskeyEndsTheSessionsItSignedInAndNoOther(t *testing.T) {
+	f := moreGarden(t)
+	h := ceremonyOn(t, f)
+	device := aDevice()
+	f.enrolDevice(t, h, device)
+	now := f.handler.now()
+
+	rec := f.signInWith(t, h, device)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("signing in: status = %d, want %d:\n%s", rec.Code, http.StatusSeeOther, rec.Body.String())
+	}
+	byPasskey := cookieNamed(t, rec, "__Host-sprig_session").Value
+	byDevSignIn, _, err := h.sessions.Create(t.Context(), now, moreUserID, moreGardenID, nil, "")
+	if err != nil {
+		t.Fatalf("starting a session with no passkey: %v", err)
+	}
+
+	var recorded *uuid.UUID
+	if err := f.tx.QueryRow(t.Context(), "SELECT passkey_credential_id FROM session WHERE token_hash = $1", auth.HashToken(byPasskey)).Scan(&recorded); err != nil {
+		t.Fatalf("reading the session: %v", err)
+	}
+	passkeyID := f.passkeyRowID(t, device.CredentialID())
+	if recorded == nil || *recorded != passkeyID {
+		t.Fatalf("the session records passkey %v, want %s", recorded, passkeyID)
+	}
+
+	removal := f.remove(t, f.handler.removePasskey, "key", passkeyID, removePasskeyPath(passkeyID))
+
+	if removal.Code != http.StatusSeeOther {
+		t.Fatalf("removing: status = %d, want %d:\n%s", removal.Code, http.StatusSeeOther, removal.Body.String())
+	}
+	if _, err := h.sessions.Lookup(t.Context(), now, byPasskey); !errors.Is(err, auth.ErrNoSession) {
+		t.Errorf("the session the removed passkey signed in still resolves: err = %v, want %v", err, auth.ErrNoSession)
+	}
+	if _, err := h.sessions.Lookup(t.Context(), now, byDevSignIn); err != nil {
+		t.Errorf("the session with no passkey behind it stopped resolving: %v", err)
 	}
 }

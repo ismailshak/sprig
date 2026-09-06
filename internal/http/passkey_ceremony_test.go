@@ -82,18 +82,23 @@ func (f *moreFixture) challengeCookie(t *testing.T, handler http.HandlerFunc, pa
 	return cookie
 }
 
-// addButton matches the Add a passkey button, whatever attributes it has.
-var addButton = regexp.MustCompile(`(?s)<button[^>]*>\s*Add a passkey\s*</button>`)
-
-// addIsDisabled reports whether the Add a passkey button is disabled.
-func addIsDisabled(t *testing.T, page string) bool {
+// buttonNamed returns the markup of the button labelled label, whatever
+// attributes it has. It fails the test when the page has no such button.
+func buttonNamed(t *testing.T, page, label string) string {
 	t.Helper()
 
-	button := addButton.FindString(page)
+	button := regexp.MustCompile(`(?s)<button[^>]*>\s*` + regexp.QuoteMeta(label) + `\s*</button>`).FindString(page)
 	if button == "" {
-		t.Fatalf("the page has no Add a passkey button:\n%s", page)
+		t.Fatalf("the page has no %s button:\n%s", label, page)
 	}
-	return strings.Contains(button, " disabled")
+	return button
+}
+
+// buttonIsDisabled reports whether the button labelled label is disabled.
+func buttonIsDisabled(t *testing.T, page, label string) bool {
+	t.Helper()
+
+	return strings.Contains(buttonNamed(t, page, label), " disabled")
 }
 
 func TestPasskeys_AddAPasskeyPostsToTheChallengeURLAndThenToThePasskeysPage(t *testing.T) {
@@ -118,7 +123,7 @@ func TestPasskeys_AddAPasskeyIsDisabledUntilThePagesScriptRuns(t *testing.T) {
 
 	// Only the browser can talk to the device, so a press with no script
 	// running would post an empty credential.
-	if !addIsDisabled(t, page) {
+	if !buttonIsDisabled(t, page, "Add a passkey") {
 		t.Errorf("Add a passkey is not disabled:\n%s", page)
 	}
 }
@@ -279,6 +284,9 @@ func TestSignIn_AnAddressPastItsBudgetIsRefusedAndStartsNoCeremony(t *testing.T)
 	}
 	if rec.Header().Get("Retry-After") == "" {
 		t.Error("the refusal sets no Retry-After, so nothing says when to try again")
+	}
+	if strings.TrimSpace(rec.Body.String()) != tooManySignIns {
+		t.Errorf("the refusal's body is %q, want the sentence the page shows above the button", rec.Body.String())
 	}
 	if got := ceremonies(t, f); got != 6 {
 		t.Errorf("%d challenges are waiting, want 6, so the refused request started one", got)
@@ -485,7 +493,7 @@ func TestSignIn_SigningInAgainEndsTheSessionTheBrowserAlreadyHad(t *testing.T) {
 	device := aDevice()
 	f.enrolDevice(t, h, device)
 	now := f.handler.now()
-	old, _, err := h.sessions.Create(t.Context(), now, moreUserID, moreGardenID, "")
+	old, _, err := h.sessions.Create(t.Context(), now, moreUserID, moreGardenID, nil, "")
 	if err != nil {
 		t.Fatalf("creating the first session: %v", err)
 	}

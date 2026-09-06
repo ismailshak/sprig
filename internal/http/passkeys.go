@@ -52,8 +52,12 @@ func (h *more) passkeys(w http.ResponseWriter, r *http.Request) {
 	h.templates.render(w, r, view{page: "passkeys"}, page)
 }
 
-// removePasskey deletes one credential. Removing the last one is refused by
-// the query, because an account with none has no way back in.
+// removePasskey deletes one credential. The sessions that passkey signed in
+// are deleted with it, so a browser holding one of them is sent to the sign-in
+// page on its next request. Removing the last credential is refused by the
+// query, because an account with none has no way back in. The delete runs
+// under a lock on the account's row, so two removals sent at the same moment
+// cannot both pass that check and empty the list.
 func (h *more) removePasskey(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	passkeyID, err := uuid.Parse(r.PathValue("key"))
@@ -61,7 +65,15 @@ func (h *more) removePasskey(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	removed, err := h.queries.DeletePasskey(r.Context(), principal.User.ID, passkeyID)
+	var removed int64
+	err = h.queries.InTx(r.Context(), func(q *store.Queries) error {
+		if err := q.LockUser(r.Context(), principal.User.ID); err != nil {
+			return err
+		}
+		n, err := q.DeletePasskey(r.Context(), principal.User.ID, passkeyID)
+		removed = n
+		return err
+	})
 	if err != nil {
 		serverError(h.logger, w, r, "remove the passkey", err)
 		return
