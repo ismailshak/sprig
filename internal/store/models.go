@@ -181,13 +181,14 @@ type RoleCapability struct {
 }
 
 type Session struct {
-	ID         uuid.UUID
-	TokenHash  string
-	UserID     uuid.UUID
-	GardenID   uuid.UUID
-	UserAgent  *string
-	CreatedAt  time.Time
-	LastSeenAt time.Time
+	ID                  uuid.UUID
+	TokenHash           string
+	UserID              uuid.UUID
+	GardenID            uuid.UUID
+	PasskeyCredentialID *uuid.UUID
+	UserAgent           *string
+	CreatedAt           time.Time
+	LastSeenAt          time.Time
 }
 
 type WebauthnCeremony struct {

@@ -3,24 +3,6 @@
 -- Every secret below is stored as the SHA-256 of a value the app generated and
 -- showed once, so a database dump contains nothing usable for sign-in.
 
-CREATE TABLE session (
-    id           uuid PRIMARY KEY DEFAULT uuidv7(),
-    token_hash   text COLLATE "C" NOT NULL UNIQUE,
-    user_id      uuid NOT NULL,
-    -- The garden this session is on. This is why URLs need no garden segment.
-    garden_id    uuid NOT NULL,
-    user_agent   text,
-    created_at   timestamptz NOT NULL DEFAULT now(),
-    last_seen_at timestamptz NOT NULL DEFAULT now(),
-
-    -- Deleting a membership deletes its sessions, so a removed member is signed
-    -- out immediately rather than on the next page they load.
-    FOREIGN KEY (garden_id, user_id) REFERENCES membership (garden_id, user_id) ON DELETE CASCADE
-);
-
--- Used by the cascade above.
-CREATE INDEX session_garden_id_user_id_idx ON session (garden_id, user_id);
-
 CREATE TABLE passkey_credential (
     id            uuid PRIMARY KEY DEFAULT uuidv7(),
     user_id       uuid NOT NULL REFERENCES app_user (id) ON DELETE CASCADE,
@@ -39,10 +21,45 @@ CREATE TABLE passkey_credential (
     flags         smallint NOT NULL DEFAULT 0,
     transports    text[] COLLATE "C",
     created_at    timestamptz NOT NULL DEFAULT now(),
-    last_used_at  timestamptz
+    last_used_at  timestamptz,
+
+    -- Referenced by the session table's foreign key on the same two columns.
+    -- That key stops a session naming another account's passkey.
+    UNIQUE (user_id, id)
 );
 
 CREATE INDEX passkey_credential_user_id_idx ON passkey_credential (user_id);
+
+-- session is created after passkey_credential because its foreign key
+-- references that table.
+CREATE TABLE session (
+    id                    uuid PRIMARY KEY DEFAULT uuidv7(),
+    token_hash            text COLLATE "C" NOT NULL UNIQUE,
+    user_id               uuid NOT NULL,
+    -- The garden this session is on. This is why URLs need no garden segment.
+    garden_id             uuid NOT NULL,
+    -- The passkey this session was signed in with. Removing the passkey
+    -- deletes the session, so the device it was on is signed out then rather
+    -- than when the session expires. NULL for a session the development
+    -- sign-in started.
+    passkey_credential_id uuid,
+    user_agent            text,
+    created_at            timestamptz NOT NULL DEFAULT now(),
+    last_seen_at          timestamptz NOT NULL DEFAULT now(),
+
+    -- Deleting a membership deletes its sessions, so a removed member is signed
+    -- out immediately rather than on the next page they load.
+    FOREIGN KEY (garden_id, user_id) REFERENCES membership (garden_id, user_id) ON DELETE CASCADE,
+
+    -- Both columns, so a session cannot name a passkey that belongs to another
+    -- account. MATCH SIMPLE, the default, lets a row with no passkey insert
+    -- while user_id is set.
+    FOREIGN KEY (user_id, passkey_credential_id) REFERENCES passkey_credential (user_id, id) MATCH SIMPLE ON DELETE CASCADE
+);
+
+-- Used by the two cascades above.
+CREATE INDEX session_garden_id_user_id_idx ON session (garden_id, user_id);
+CREATE INDEX session_passkey_credential_id_idx ON session (passkey_credential_id);
 
 -- One row per WebAuthn ceremony in progress. The browser is given a challenge
 -- in one request and signs it in the next, so the challenge has to be kept
@@ -189,5 +206,5 @@ DROP TABLE api_token;
 DROP TABLE recovery_code;
 DROP TABLE invite;
 DROP TABLE webauthn_ceremony;
-DROP TABLE passkey_credential;
 DROP TABLE session;
+DROP TABLE passkey_credential;

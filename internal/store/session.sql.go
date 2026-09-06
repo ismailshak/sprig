@@ -13,17 +13,18 @@ import (
 )
 
 const createSession = `-- name: CreateSession :one
-INSERT INTO session (token_hash, user_id, garden_id, user_agent, created_at, last_seen_at)
-VALUES ($1, $2, $3, $4, $5, $5)
-RETURNING id, token_hash, user_id, garden_id, user_agent, created_at, last_seen_at
+INSERT INTO session (token_hash, user_id, garden_id, passkey_credential_id, user_agent, created_at, last_seen_at)
+VALUES ($1, $2, $3, $4, $5, $6, $6)
+RETURNING id, token_hash, user_id, garden_id, passkey_credential_id, user_agent, created_at, last_seen_at
 `
 
 type CreateSessionParams struct {
-	TokenHash string
-	UserID    uuid.UUID
-	GardenID  uuid.UUID
-	UserAgent *string
-	Now       time.Time
+	TokenHash           string
+	UserID              uuid.UUID
+	GardenID            uuid.UUID
+	PasskeyCredentialID *uuid.UUID
+	UserAgent           *string
+	Now                 time.Time
 }
 
 // Timestamps come from the caller's clock rather than now(), so the expiry
@@ -33,6 +34,7 @@ func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) (S
 		arg.TokenHash,
 		arg.UserID,
 		arg.GardenID,
+		arg.PasskeyCredentialID,
 		arg.UserAgent,
 		arg.Now,
 	)
@@ -42,6 +44,7 @@ func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) (S
 		&i.TokenHash,
 		&i.UserID,
 		&i.GardenID,
+		&i.PasskeyCredentialID,
 		&i.UserAgent,
 		&i.CreatedAt,
 		&i.LastSeenAt,
@@ -60,7 +63,7 @@ func (q *Queries) DeleteSession(ctx context.Context, tokenHash string) error {
 }
 
 const getSessionByTokenHash = `-- name: GetSessionByTokenHash :one
-SELECT id, token_hash, user_id, garden_id, user_agent, created_at, last_seen_at FROM session
+SELECT id, token_hash, user_id, garden_id, passkey_credential_id, user_agent, created_at, last_seen_at FROM session
 WHERE token_hash = $1
 `
 
@@ -74,6 +77,7 @@ func (q *Queries) GetSessionByTokenHash(ctx context.Context, tokenHash string) (
 		&i.TokenHash,
 		&i.UserID,
 		&i.GardenID,
+		&i.PasskeyCredentialID,
 		&i.UserAgent,
 		&i.CreatedAt,
 		&i.LastSeenAt,
@@ -85,7 +89,7 @@ const touchSession = `-- name: TouchSession :one
 UPDATE session
 SET last_seen_at = $1
 WHERE token_hash = $2
-RETURNING id, token_hash, user_id, garden_id, user_agent, created_at, last_seen_at
+RETURNING id, token_hash, user_id, garden_id, passkey_credential_id, user_agent, created_at, last_seen_at
 `
 
 // The caller checks expiry in Go before calling this, so an expired row is
@@ -98,6 +102,7 @@ func (q *Queries) TouchSession(ctx context.Context, lastSeenAt time.Time, tokenH
 		&i.TokenHash,
 		&i.UserID,
 		&i.GardenID,
+		&i.PasskeyCredentialID,
 		&i.UserAgent,
 		&i.CreatedAt,
 		&i.LastSeenAt,

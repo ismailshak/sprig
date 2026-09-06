@@ -62,8 +62,10 @@ WHERE k.user_id = $1 AND k.id = $2
 
 // The subselect refuses a delete that names the only credential the account
 // has, since there is no password behind it and no self-service way back in.
-// Two removals sent at the same moment can still empty the list: each one
-// counts on its own snapshot and neither blocks the other.
+// The count comes from the statement's own snapshot, so two removals sent at
+// the same moment would each count two and both go through. The caller locks
+// the account's row in the same transaction first, so the second removal waits
+// for the first to commit and counts one.
 func (q *Queries) DeletePasskey(ctx context.Context, userID uuid.UUID, passkeyID uuid.UUID) (int64, error) {
 	result, err := q.db.Exec(ctx, deletePasskey, userID, passkeyID)
 	if err != nil {
@@ -144,6 +146,19 @@ func (q *Queries) ListPasskeys(ctx context.Context, userID uuid.UUID) ([]Passkey
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockUser = `-- name: LockUser :exec
+SELECT id FROM app_user
+WHERE id = $1
+FOR UPDATE
+`
+
+// Locks the account's row until the transaction ends, so two writes that
+// each depend on a count of the account's rows run one after the other.
+func (q *Queries) LockUser(ctx context.Context, userID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, lockUser, userID)
+	return err
 }
 
 const recordPasskeyUse = `-- name: RecordPasskeyUse :execrows
