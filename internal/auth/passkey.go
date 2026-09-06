@@ -226,22 +226,23 @@ func (p *Passkeys) BeginAssertion(ctx context.Context, now time.Time) (*protocol
 	return assertion, cookie, nil
 }
 
-// FinishAssertion verifies the browser's answer to a sign-in challenge and
-// returns the account it proves. body is the credential JSON the page posted.
-// The credential's signature counter and last-used date are written here, so
-// the Passkeys page shows a device as used as soon as it is.
-func (p *Passkeys) FinishAssertion(ctx context.Context, now time.Time, r *http.Request, body io.Reader) (store.AppUser, error) {
+// FinishAssertion verifies the credential the browser signed for a sign-in
+// challenge. It returns the account the credential proves and the passkey row
+// that proved it. body is the credential JSON the page posted. The passkey's
+// signature counter and last-used date are written here, so the Passkeys page
+// shows a device as used as soon as it is.
+func (p *Passkeys) FinishAssertion(ctx context.Context, now time.Time, r *http.Request, body io.Reader) (store.AppUser, store.PasskeyCredential, error) {
 	_, session, err := p.takeCeremony(ctx, now, r)
 	if err != nil {
-		return store.AppUser{}, err
+		return store.AppUser{}, store.PasskeyCredential{}, err
 	}
 	response, err := protocol.ParseCredentialRequestResponseBody(body)
 	if err != nil {
-		return store.AppUser{}, ErrBadCredential
+		return store.AppUser{}, store.PasskeyCredential{}, ErrBadCredential
 	}
 
 	if !response.Response.AuthenticatorData.Flags.UserVerified() {
-		return store.AppUser{}, ErrNotVerified
+		return store.AppUser{}, store.PasskeyCredential{}, ErrNotVerified
 	}
 
 	// go-webauthn calls lookup with the credential id from the browser's
@@ -265,10 +266,10 @@ func (p *Passkeys) FinishAssertion(ctx context.Context, now time.Time, r *http.R
 
 	_, err = p.webauthn.ValidateDiscoverableLogin(lookup, session, response)
 	if lookupErr != nil {
-		return store.AppUser{}, lookupErr
+		return store.AppUser{}, store.PasskeyCredential{}, lookupErr
 	}
 	if err != nil {
-		return store.AppUser{}, verificationFailure("verify the assertion", err)
+		return store.AppUser{}, store.PasskeyCredential{}, verificationFailure("verify the assertion", err)
 	}
 
 	// The counter compared is the one the device sent. go-webauthn leaves its
@@ -276,7 +277,7 @@ func (p *Passkeys) FinishAssertion(ctx context.Context, now time.Time, r *http.R
 	returned := response.Response.AuthenticatorData.Counter
 	cloned := fmt.Errorf("%w: passkey %s on account %s", ErrClonedCredential, stored.PasskeyCredential.ID, stored.AppUser.ID)
 	if Cloned(storedCount(stored.PasskeyCredential.SignCount), returned) {
-		return store.AppUser{}, cloned
+		return store.AppUser{}, store.PasskeyCredential{}, cloned
 	}
 
 	// The write repeats the comparison against the row as it is now. Two
@@ -288,12 +289,12 @@ func (p *Passkeys) FinishAssertion(ctx context.Context, now time.Time, r *http.R
 		UsedAt:    &now,
 	})
 	if err != nil {
-		return store.AppUser{}, fmt.Errorf("record the passkey use: %w", err)
+		return store.AppUser{}, store.PasskeyCredential{}, fmt.Errorf("record the passkey use: %w", err)
 	}
 	if rows == 0 {
-		return store.AppUser{}, cloned
+		return store.AppUser{}, store.PasskeyCredential{}, cloned
 	}
-	return stored.AppUser, nil
+	return stored.AppUser, stored.PasskeyCredential, nil
 }
 
 // verificationFailure wraps err in ErrFailedVerification when it is

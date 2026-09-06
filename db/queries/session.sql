@@ -1,8 +1,8 @@
 -- Timestamps come from the caller's clock rather than now(), so the expiry
 -- check in Go compares two readings of the same clock.
 -- name: CreateSession :one
-INSERT INTO session (token_hash, user_id, garden_id, user_agent, created_at, last_seen_at)
-VALUES (@token_hash, @user_id, @garden_id, @user_agent, @now, @now)
+INSERT INTO session (token_hash, user_id, garden_id, passkey_credential_id, user_agent, created_at, last_seen_at)
+VALUES (@token_hash, @user_id, @garden_id, @passkey_credential_id, @user_agent, @now, @now)
 RETURNING *;
 
 -- The session row is how a request learns its garden, so this query cannot

@@ -22,7 +22,6 @@ import (
 func init() {
 	routeAccess["GET "+devSignInPath] = access{public: true}
 	routeAccess["POST "+devSignInPath] = access{public: true}
-	routeAccess["GET "+signInPath] = access{public: true}
 }
 
 var (
@@ -191,16 +190,5 @@ func TestDevSignIn_AnUnknownHandleIs404AndAUserWithNoGardenIs409(t *testing.T) {
 				t.Error("a refused sign-in set a cookie")
 			}
 		})
-	}
-}
-
-func TestDevSignIn_TheSignInPathRedirectsToTheDevSignIn(t *testing.T) {
-	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
-	handler := New(logger, testSessions(), testPasskeys(), rejectEveryToken, nil, testTemplates(), testAssets(), "")
-
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, signInPath, nil))
-	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != devSignInPath {
-		t.Errorf("status = %d to %q, want %d to %s", rec.Code, rec.Header().Get("Location"), http.StatusSeeOther, devSignInPath)
 	}
 }

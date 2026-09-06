@@ -72,8 +72,9 @@ func routes(logger *slog.Logger, sessions *auth.Sessions, passkeys *auth.Passkey
 		{pattern: "POST " + passkeysPath + "/{key}/remove", handler: http.HandlerFunc(moreHandler.removePasskey)},
 		{pattern: "POST " + registerPath, handler: http.HandlerFunc(passkeyHandler.registerChallenge)},
 		{pattern: "POST " + passkeysPath, handler: http.HandlerFunc(passkeyHandler.register)},
-		{pattern: "POST " + challengePath, limits: signInLimits(trustedIPHeader), handler: http.HandlerFunc(passkeyHandler.signInChallenge)},
-		{pattern: "POST " + signInPath, limits: signInLimits(trustedIPHeader), handler: http.HandlerFunc(passkeyHandler.signIn)},
+		{pattern: "GET " + signInPath, handler: http.HandlerFunc(passkeyHandler.showSignIn)},
+		{pattern: "POST " + challengePath, limits: signInLimits(trustedIPHeader, http.HandlerFunc(tooManySignInChallenges)), handler: http.HandlerFunc(passkeyHandler.signInChallenge)},
+		{pattern: "POST " + signInPath, limits: signInLimits(trustedIPHeader, http.HandlerFunc(passkeyHandler.tooManySignInAnswers)), handler: http.HandlerFunc(passkeyHandler.signIn)},
 		{pattern: "GET " + notificationsPath, handler: http.HandlerFunc(moreHandler.notifications)},
 		{pattern: "POST " + notificationsPath, handler: http.HandlerFunc(moreHandler.saveNotifications)},
 		{pattern: "POST " + notificationsPath + "/browsers/{browser}/remove", handler: http.HandlerFunc(moreHandler.removeBrowser)},
@@ -102,8 +103,9 @@ func routes(logger *slog.Logger, sessions *auth.Sessions, passkeys *auth.Passkey
 	return append(base, devRoutes(sessions, resolver, queries, templates)...)
 }
 
-// signInLimits returns the rate limiters wrapped around the two sign-in
-// routes. They are served without a session and a credential id is guessable,
+// signInLimits returns the rate limiters wrapped around one of the two sign-in
+// routes. refused is the handler that responds to a request past the budget.
+// Both routes are served without a session and a credential id is guessable,
 // so they get budgets of their own.
 //
 // Six a minute from one address is more sign-ins than anybody needs, and that
@@ -111,10 +113,10 @@ func routes(logger *slog.Logger, sessions *auth.Sessions, passkeys *auth.Passkey
 // minute is only there to stop one stranger filling the ceremony table. It is
 // far looser than the ten a minute a recovery code gets, because a tight shared
 // limit would let that stranger lock every member out of the app.
-func signInLimits(trustedIPHeader string) []middleware {
+func signInLimits(trustedIPHeader string, refused http.Handler) []middleware {
 	return []middleware{
-		Limit(NewLimiter(rate.Every(time.Minute/6), 6), ClientAddress(trustedIPHeader)),
-		Limit(NewLimiter(rate.Every(time.Minute/120), 120), AnySource),
+		Limit(NewLimiter(rate.Every(time.Minute/6), 6), ClientAddress(trustedIPHeader), refused),
+		Limit(NewLimiter(rate.Every(time.Minute/120), 120), AnySource, refused),
 	}
 }
 
@@ -123,8 +125,9 @@ func signInLimits(trustedIPHeader string) []middleware {
 var publicRoutes = map[string]bool{
 	"GET /healthz": true,
 	assetPattern:   true,
-	// Signing in has to work with no session, so the challenge and the answer
-	// to it are both public.
+	// Signing in has to work with no session, so the page, the challenge and
+	// the post that signs in are all public.
+	"GET " + signInPath:     true,
 	"POST " + challengePath: true,
 	"POST " + signInPath:    true,
 }

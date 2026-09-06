@@ -99,16 +99,20 @@ func NewSessions(queries *store.Queries, ttl time.Duration, cookie CookieSetting
 }
 
 // Create starts a session for userID on gardenID at now and returns the token
-// to put in the cookie. userAgent may be empty. The row's foreign key points at
-// the membership, so a user who is not in the garden cannot get a session on
-// it.
-func (s *Sessions) Create(ctx context.Context, now time.Time, userID, gardenID uuid.UUID, userAgent string) (string, store.Session, error) {
+// to put in the cookie. passkeyID is the passkey the sign-in used. Removing
+// that passkey deletes the session, so the device it was on is signed out then
+// rather than when the session expires. Only the development sign-in passes
+// nil, because it uses no passkey. userAgent may be empty. The row's foreign
+// key points at the membership, so a user who is not in the garden cannot get
+// a session on it.
+func (s *Sessions) Create(ctx context.Context, now time.Time, userID, gardenID uuid.UUID, passkeyID *uuid.UUID, userAgent string) (string, store.Session, error) {
 	token := NewSessionToken()
 	params := store.CreateSessionParams{
-		TokenHash: HashToken(token),
-		UserID:    userID,
-		GardenID:  gardenID,
-		Now:       now,
+		TokenHash:           HashToken(token),
+		UserID:              userID,
+		GardenID:            gardenID,
+		PasskeyCredentialID: passkeyID,
+		Now:                 now,
 	}
 	if userAgent != "" {
 		params.UserAgent = &userAgent

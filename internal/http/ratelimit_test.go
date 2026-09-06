@@ -57,9 +57,16 @@ func TestLimiter_SweepsBucketsNobodyHasUsedForARefill(t *testing.T) {
 	}
 }
 
+// tooManyRequests is the handler these tests give Limit for a request past the
+// budget. It writes the status text. The sign-in routes give a handler that
+// renders their own page.
+var tooManyRequests = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	http.Error(w, http.StatusText(http.StatusTooManyRequests), http.StatusTooManyRequests)
+})
+
 func TestLimit_OverTheLimitIsA429WithRetryAfter(t *testing.T) {
 	l := NewLimiter(rate.Every(time.Minute), 1)
-	handler := Limit(l, AnySource)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	handler := Limit(l, AnySource, tooManyRequests)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 	}))
 
@@ -85,7 +92,7 @@ func TestLimit_OverTheLimitIsA429WithRetryAfter(t *testing.T) {
 
 func TestLimit_ByTokenGivesTwoTokensOnOneAddressSeparateBuckets(t *testing.T) {
 	l := NewLimiter(rate.Every(time.Minute), 1)
-	handler := Limit(l, ByToken)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	handler := Limit(l, ByToken, tooManyRequests)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 	}))
 
@@ -115,8 +122,8 @@ func TestLimit_ASharedBudgetIsRefusedWhateverTheAddress(t *testing.T) {
 	var handler http.Handler = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 	})
-	handler = Limit(shared, AnySource)(handler)
-	handler = Limit(perAddress, ClientAddress(""))(handler)
+	handler = Limit(shared, AnySource, tooManyRequests)(handler)
+	handler = Limit(perAddress, ClientAddress(""), tooManyRequests)(handler)
 
 	attempt := func(addr string) int {
 		req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/recover", nil)

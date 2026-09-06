@@ -5,8 +5,10 @@ ORDER BY created_at, id;
 
 -- The subselect refuses a delete that names the only credential the account
 -- has, since there is no password behind it and no self-service way back in.
--- Two removals sent at the same moment can still empty the list: each one
--- counts on its own snapshot and neither blocks the other.
+-- The count comes from the statement's own snapshot, so two removals sent at
+-- the same moment would each count two and both go through. The caller locks
+-- the account's row in the same transaction first, so the second removal waits
+-- for the first to commit and counts one.
 -- name: DeletePasskey :execrows
 DELETE FROM passkey_credential AS k
 WHERE k.user_id = @user_id AND k.id = @passkey_id
@@ -34,3 +36,10 @@ UPDATE passkey_credential
 SET sign_count = @sign_count, last_used_at = @used_at
 WHERE id = @passkey_id
   AND (sign_count < @sign_count OR (sign_count = 0 AND @sign_count = 0));
+
+-- Locks the account's row until the transaction ends, so two writes that
+-- each depend on a count of the account's rows run one after the other.
+-- name: LockUser :exec
+SELECT id FROM app_user
+WHERE id = @user_id
+FOR UPDATE;

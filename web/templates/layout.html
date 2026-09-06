@@ -16,7 +16,9 @@
 <meta name="htmx-config" content='{"responseHandling":[{"code":"204","swap":false},{"code":"[23]..","swap":true},{"code":"422","swap":true},{"code":"[45]..","swap":false,"error":true}]}'>
 </head>
 <body>
-<div class="app">
+{{/* A page with no tab bar overrides this block to add a modifier class that
+     centres its column. Sign in is the only one so far. */}}
+<div class="{{block "app-class" .}}app{{end}}">
 <div class="app__main">
 {{/* Each page renders its own topbar and app__body, because their max width
      above 900px differs by page and is set by a modifier class on them. */}}

@@ -26,13 +26,10 @@ import (
 const devSignInPath = "/dev/signin"
 
 func init() {
-	// The allowlist entries live here rather than in mux.go, where a
-	// production build would list routes it does not have. Authenticate sends
-	// a stranger to signInPath, and nothing serves it until passkeys do, so a
-	// development build redirects it here instead of looping.
+	// The allowlist entries live here rather than beside the other public
+	// routes, so a production build does not name a route it does not serve.
 	publicRoutes["GET "+devSignInPath] = true
 	publicRoutes["POST "+devSignInPath] = true
-	publicRoutes["GET "+signInPath] = true
 }
 
 // devRoutes returns the development sign-in routes. The page is rendered from
@@ -42,7 +39,6 @@ func devRoutes(sessions *auth.Sessions, resolver *auth.Resolver, queries *store.
 	return []route{
 		{pattern: "GET " + devSignInPath, handler: http.HandlerFunc(d.show)},
 		{pattern: "POST " + devSignInPath, handler: http.HandlerFunc(d.start)},
-		{pattern: "GET " + signInPath, handler: http.RedirectHandler(devSignInPath, http.StatusSeeOther)},
 	}
 }
 
@@ -103,7 +99,7 @@ func (d *devSignIn) start(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	token, _, err := d.sessions.Create(ctx, now, user.ID, membership.GardenID, r.UserAgent())
+	token, _, err := d.sessions.Create(ctx, now, user.ID, membership.GardenID, nil, r.UserAgent())
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

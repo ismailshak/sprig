@@ -28,7 +28,7 @@ test('signing out ends the session', async ({ page, more }) => {
 
   await more.signOut().click();
 
-  await expect(page).toHaveURL('/dev/signin');
+  await expect(page).toHaveURL('/signin');
   await page.goto('/');
-  await expect(page).toHaveURL('/dev/signin');
+  await expect(page).toHaveURL('/signin');
 });

@@ -45,7 +45,7 @@ func resolverOnTx(t *testing.T, endsAt *time.Time) (*Resolver, pgx.Tx) {
 
 func signIn(t *testing.T, r *Resolver, userID, gardenID uuid.UUID) string {
 	t.Helper()
-	token, _, err := r.sessions.Create(t.Context(), signedInAt, userID, gardenID, "")
+	token, _, err := r.sessions.Create(t.Context(), signedInAt, userID, gardenID, nil, "")
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}

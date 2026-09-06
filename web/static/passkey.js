@@ -39,6 +39,10 @@
 
       try {
         const response = await fetch(form.dataset.challenge, { method: 'POST' });
+        // The body of a 429 is a sentence for the person to read, so it is
+        // shown as it is. Any other failed response gets the generic sentence
+        // in refusal below.
+        if (response.status === 429) throw new Refused(await response.text());
         if (!response.ok) throw new Error('the challenge was refused');
         const options = await response.json();
 
@@ -60,21 +64,37 @@
         form.submit();
       } catch (error) {
         button.disabled = false;
-        if (message) message.textContent = refusal(error);
+        if (message) message.textContent = refusal(error, form.dataset.passkey);
       }
     });
   }
 
-  /* refusal turns what the credential API threw into a sentence.
+  /* Refused is an Error holding a message the server sent for the person to
+     read. refusal returns that message unchanged. */
+  class Refused extends Error {
+    constructor(sentence) {
+      super(sentence);
+      this.name = 'Refused';
+    }
+  }
+
+  /* refusal turns what the credential API threw into a sentence. ceremony is
+     the form's data-passkey, create or get.
 
      NotAllowedError covers a cancelled prompt, a prompt nobody answered, and a
-     device that cannot store a passkey or check who is using it. Chrome reports
-     all of those under the one name on purpose, so that a site cannot find out
-     what somebody's devices can do by asking. The sentence names all three
-     rather than guessing at one. */
-  function refusal(error) {
+     device that cannot do what was asked: for a registration, store a passkey
+     or check who is using it, and for a sign-in, a device holding no passkey
+     for this site. Chrome reports all of those under the one name on purpose,
+     so that a site cannot find out what somebody's devices can do by asking.
+     The sentence names every case rather than guessing at one. */
+  function refusal(error, ceremony) {
     switch (error.name) {
+      case 'Refused':
+        return error.message.trim();
       case 'NotAllowedError':
+        if (ceremony === 'get') {
+          return 'Nothing signed in. Either you cancelled, or this device holds no passkey for sprig. The browser does not say which.';
+        }
         return 'No passkey was added. Either you cancelled, or this device cannot do what sprig needs: store the passkey itself, and check that it is you with a screen lock, a fingerprint or a PIN. The browser does not say which.';
       case 'InvalidStateError':
         return 'This device already has a passkey for sprig.';
