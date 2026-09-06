@@ -1,9 +1,15 @@
 package store
 
 import (
+	"context"
 	"crypto/rand"
+	"errors"
+	"fmt"
 	"strings"
 	"unicode"
+	"uuid"
+
+	"github.com/jackc/pgx/v5"
 )
 
 // Four base32 characters gives about a million possible suffixes.
@@ -11,11 +17,21 @@ const handleSuffixLength = 4
 
 const maxHandleLength = 32
 
-// handleFor returns the attempt-th candidate handle for displayName. The
+// HandleFor returns the handle an account is given when no other account holds
+// it: displayName slugified. Set up your garden gives it to the browser before
+// the account row exists, because the browser stores the handle with the
+// passkey. CreateAccount may add a random suffix to the handle it writes, so
+// the account's handle can differ from the one on the passkey. Nothing reads
+// the one on the passkey.
+func HandleFor(displayName string) string {
+	return handleCandidate(displayName, 1)
+}
+
+// handleCandidate returns the attempt-th candidate handle for displayName. The
 // caller tries candidates in turn until the unique index accepts one. The
 // suffix is random rather than a count, so a handle does not reveal how many
 // people share a name.
-func handleFor(displayName string, attempt int) string {
+func handleCandidate(displayName string, attempt int) string {
 	limit := maxHandleLength
 	if attempt > 1 {
 		// Leave room for the underscore and suffix.
@@ -57,9 +73,38 @@ func slugify(name string, limit int) string {
 
 // NormaliseHandle returns the stored form of a handle typed on the Account
 // page: lower case letters and digits, single underscores between them, cut to
-// maxHandleLength characters. It applies the same rule as handleFor does when
+// maxHandleLength characters. It applies the same rule as HandleFor does when
 // an account is created, so "Emma Fletcher" is stored as "emma_fletcher"
 // rather than rejected. It returns "" when there is no letter or digit.
 func NormaliseHandle(handle string) string {
 	return slugify(handle, maxHandleLength)
+}
+
+// handleAttempts is how many candidate handles CreateAccount tries before
+// giving up. The first is the slug alone and the rest end in a random suffix,
+// so running out means the random suffix collided nine times in a row.
+const handleAttempts = 10
+
+// CreateAccount inserts an account under id with a handle derived from
+// displayName: the slug of the name, or the slug and a random suffix when
+// another account already holds it. The unique index is what decides a
+// candidate is free. A lookup first would let two accounts created at the
+// same moment both be told the slug was free.
+func (q *Queries) CreateAccount(ctx context.Context, id uuid.UUID, displayName, timezone string) (AppUser, error) {
+	for attempt := 1; attempt <= handleAttempts; attempt++ {
+		user, err := q.CreateUser(ctx, CreateUserParams{
+			ID:          id,
+			DisplayName: displayName,
+			Handle:      handleCandidate(displayName, attempt),
+			Timezone:    timezone,
+		})
+		if errors.Is(err, pgx.ErrNoRows) {
+			continue
+		}
+		if err != nil {
+			return AppUser{}, fmt.Errorf("writing the account: %w", err)
+		}
+		return user, nil
+	}
+	return AppUser{}, fmt.Errorf("no free handle for %q in %d attempts", displayName, handleAttempts)
 }

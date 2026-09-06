@@ -11,6 +11,19 @@ import (
 	"uuid"
 )
 
+const createGarden = `-- name: CreateGarden :one
+INSERT INTO garden (name)
+VALUES ($1)
+RETURNING id, name, created_at
+`
+
+func (q *Queries) CreateGarden(ctx context.Context, name string) (Garden, error) {
+	row := q.db.QueryRow(ctx, createGarden, name)
+	var i Garden
+	err := row.Scan(&i.ID, &i.Name, &i.CreatedAt)
+	return i, err
+}
+
 const renameGarden = `-- name: RenameGarden :exec
 UPDATE garden SET name = $1 WHERE id = $2
 `
