@@ -22,7 +22,10 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   reporter: process.env.CI ? [['github'], ['list']] : 'list',
   use: {
-    trace: process.env.CI ? 'on-first-retry' : 'retain-on-failure',
+    // on-first-retry records the retry. A test that fails and then passes on
+    // the retry leaves a trace of the attempt that passed and none of the one
+    // that failed.
+    trace: 'retain-on-failure',
     // reducedMotion turns off the sheet's entrance animation, because the
     // stylesheet disables it under prefers-reduced-motion. Otherwise the
     // animation moves the buttons for 260ms and, with JavaScript off,

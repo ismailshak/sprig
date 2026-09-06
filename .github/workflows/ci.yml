@@ -74,8 +74,10 @@ jobs:
         env:
           # One stack per worker, on a four-core runner
           SPRIG_E2E_WORKERS: 4
-      - name: Keep the traces and container logs of a failed run
-        if: failure()
+      # A test that fails and then passes on the retry leaves the job green. The trace
+      # of the failed attempt is only kept if this step runs on a green run too.
+      - name: Keep the traces and container logs
+        if: always()
         uses: actions/upload-artifact@v7
         with:
           name: playwright-traces
