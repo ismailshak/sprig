@@ -1,6 +1,7 @@
 import { test as base } from '@playwright/test';
 import { AccountScreen } from '../screens/account';
 import { ActivityScreen } from '../screens/activity';
+import { GardenScreen } from '../screens/garden';
 import { InstallScreen } from '../screens/install';
 import { MoreScreen } from '../screens/more';
 import { NotificationsScreen } from '../screens/notifications';
@@ -15,6 +16,7 @@ import { seed } from './database';
 type Screens = {
   account: AccountScreen;
   activity: ActivityScreen;
+  garden: GardenScreen;
   install: InstallScreen;
   more: MoreScreen;
   notifications: NotificationsScreen;
@@ -27,8 +29,8 @@ type Screens = {
 };
 
 // Every test starts from a fresh seed, whatever the previous test wrote.
-export const test = base.extend<{ garden: void } & Screens>({
-  garden: [
+export const test = base.extend<{ seededGarden: void } & Screens>({
+  seededGarden: [
     async ({}, use) => {
       await seed();
       await use();
@@ -40,6 +42,9 @@ export const test = base.extend<{ garden: void } & Screens>({
   },
   activity: async ({ page }, use) => {
     await use(new ActivityScreen(page));
+  },
+  garden: async ({ page }, use) => {
+    await use(new GardenScreen(page));
   },
   install: async ({ page }, use) => {
     await use(new InstallScreen(page));

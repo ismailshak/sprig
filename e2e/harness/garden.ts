@@ -21,6 +21,15 @@ export const browsers = {
   laptop: 'Mac · Chrome',
 } as const;
 
+// The care types the garden records against, in the order the Garden page
+// lists them. Mist was tried and turned off, and its row is still there.
+export const careTypes = {
+  water: 'Water',
+  feed: 'Feed',
+  repot: 'Repot',
+  mist: 'Mist',
+} as const;
+
 export const plants = {
   bigFella: { id: '00000000-0000-7000-8000-050000000001', name: 'Big Fella' },
   gerald: { id: '00000000-0000-7000-8000-050000000002', name: 'Gerald' },
