@@ -1,4 +1,4 @@
-import { people, plants as seeded } from '../harness/garden';
+import { people, plants as seeded, rooms } from '../harness/garden';
 import { signIn } from '../harness/signin';
 import { expect, test } from '../harness/test';
 
@@ -171,4 +171,75 @@ test('choosing Keep after Archive leaves the plant listed @swap', async ({ plant
   await expect(plant.foot()).toContainText('Edit plant');
   await plants.open();
   await expect(plants.row(seeded.doris)).toHaveCount(1);
+});
+
+test('typing in Location lists the rooms that match and offers the text as a new room @js', async ({ plantForm }) => {
+  await plantForm.openNew();
+
+  await plantForm.field('Location').fill('b');
+
+  // Bathroom and Bedroom both contain a b. The option for a room that does not
+  // exist yet is always last.
+  await expect(plantForm.roomOptions()).toHaveText([rooms.bathroom, rooms.bedroom, 'Add “b” as a new room']);
+});
+
+// The datalist is the list a browser running no script shows. Left on the
+// field, it would open the browser's own dropdown over the listbox.
+test("the browser's own room list is gone once the listbox opens @js", async ({ plantForm }) => {
+  await plantForm.openNew();
+
+  await plantForm.field('Location').focus();
+
+  await expect(plantForm.roomList()).toBeVisible();
+  await expect(plantForm.field('Location')).not.toHaveAttribute('list');
+});
+
+test('a room picked with the arrow keys is the room the plant is added to @js', async ({ plantForm, plants }) => {
+  await plantForm.openNew();
+  await plantForm.field('Nickname').fill('Ada');
+  await plantForm.field('Location').fill('b');
+
+  // The first press lands on Bathroom and the second on Bedroom.
+  await plantForm.field('Location').press('ArrowDown');
+  await plantForm.field('Location').press('ArrowDown');
+  await plantForm.field('Location').press('Enter');
+  await plantForm.submit('Add plant');
+
+  await plants.open();
+  await expect(plants.room(rooms.bedroom).getByRole('link', { name: 'Ada' })).toBeVisible();
+});
+
+test('a plant is added to a new room by choosing the option that names it @js', async ({ plantForm, plants }) => {
+  await plantForm.openNew();
+  await plantForm.field('Nickname').fill('Ada');
+  await plantForm.field('Location').fill('Potting shed');
+
+  await plantForm.roomOption('Add “Potting shed” as a new room').click();
+  await plantForm.submit('Add plant');
+
+  await plants.open();
+  await expect(plants.rowsIn('Potting shed')).toHaveText([/^\s*Ada\s*$/]);
+});
+
+test('a room typed in a different case adds the plant to the room the garden already has @swap', async ({
+  plantForm,
+  plants,
+}) => {
+  await plantForm.openNew();
+  await plantForm.field('Nickname').fill('Ada');
+  await plantForm.field('Location').fill('bathroom');
+
+  await plantForm.submit('Add plant');
+
+  await plants.open();
+  await expect(plants.room(rooms.bathroom).getByRole('link', { name: 'Ada' })).toBeVisible();
+  // A second room spelled the other way would be a heading of its own.
+  await expect(plants.roomHeadings()).toHaveText([
+    rooms.bathroom,
+    rooms.bedroom,
+    rooms.kitchen,
+    rooms.livingRoom,
+    rooms.windowsill,
+    rooms.noRoom,
+  ]);
 });

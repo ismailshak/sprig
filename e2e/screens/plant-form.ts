@@ -19,6 +19,21 @@ export class PlantFormScreen {
     return this.page.getByLabel(name);
   }
 
+  // The listbox of rooms under the Location field. It is empty until the field
+  // is focused and the script fills it, so it stays empty in a browser running
+  // no script.
+  roomList(): Locator {
+    return this.page.getByRole('listbox', { name: 'Rooms' });
+  }
+
+  roomOptions(): Locator {
+    return this.roomList().getByRole('option');
+  }
+
+  roomOption(name: string): Locator {
+    return this.roomList().getByRole('option', { name, exact: true });
+  }
+
   // A schedule row is found by its care type, the one part that does not change
   // when the row opens.
   row(care: string): Locator {

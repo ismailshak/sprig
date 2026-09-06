@@ -29,5 +29,8 @@
 {{/* The log-care sheet is outside .app so it is not laid out inside one of
      the app's columns. */}}
 {{block "overlay" .}}{{end}}
+{{/* A page with a script of its own defines this block. A page that leaves it
+     undefined loads htmx alone. */}}
+{{block "script" .}}{{end}}
 </body>
 </html>

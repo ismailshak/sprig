@@ -897,6 +897,28 @@ a.foot-link { text-decoration: none; color: var(--ink-2); }
 .sched--add .sched__type { color: var(--ink-2); font-weight: 500; }
 .sched--add .sched__when { color: var(--ink-3); }
 
+/* The button that opens a schedule on the add form. It lays out the icon and
+   the text itself rather than using display: contents, so its padding and the
+   gaps between them are inside the click target. text-align is inherited
+   because a button centres its text by default. */
+.sched__open {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  text-align: inherit;
+}
+
+/* Where the button fills the row, the row drops its own padding and stops
+   centring its children, so the button covers the whole row. */
+.sched:has(> .sched__open) { padding: 0; align-items: stretch; }
+
+/* The negative offset puts the focus outline inside the button's edge. The
+   list around the row is a card with overflow: hidden. An outline drawn
+   outside that edge would be cut off. */
+.sched__open:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
 /* The editing row replaces the due date column with buttons, so it has less
    space between its parts than a row being read. */
 .sched--editing { gap: 8px; }
@@ -1361,7 +1383,11 @@ a.plant__archive { text-decoration: none; }
   right: 15px;
   top: 50%;
   width: 8px; height: 8px;
-  margin-top: -2px;
+  /* Two nudges that nearly cancel. The input's 8px top margin is inside this
+     wrapper, so the wrapper's centre is 4px above the input's, and only the two
+     lower edges of the square are inked, so the chevron hangs about 3px below
+     the centre of its own box. */
+  margin-top: 1px;
   border-right: 2px solid var(--ink-3);
   border-bottom: 2px solid var(--ink-3);
   transform: translateY(-50%) rotate(45deg);
@@ -1379,10 +1405,12 @@ a.plant__archive { text-decoration: none; }
   list-style: none;
   max-height: 244px;
   overflow-y: auto;
-  background: var(--surface);
+  background: var(--surface-raised);
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  box-shadow: var(--shadow);
+  /* Deeper than the token shadow, because the list opens over the Schedule
+     card and has to read as being in front of it rather than part of it. */
+  box-shadow: 0 10px 28px rgba(0, 0, 0, .18);
 }
 
 .combo__option {
@@ -1395,6 +1423,8 @@ a.plant__archive { text-decoration: none; }
   cursor: pointer;
 }
 
+/* The arrow keys and the pointer mark an option the same way, because both mean
+   the same thing: this is the one that choosing now would pick. */
 .combo__option[aria-selected="true"] { background: var(--accent-soft); }
 
 /* The new-room option is dimmer than the existing rooms and separated from
@@ -1408,7 +1438,7 @@ a.plant__archive { text-decoration: none; }
 }
 
 @media (hover: hover) {
-  .combo__option:hover { background: var(--surface-2); }
+  .combo__option:hover { background: var(--accent-soft); }
 }
 
 /* Archive sits under Save, not beside it. They are not equal choices, and a
