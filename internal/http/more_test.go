@@ -302,6 +302,17 @@ func TestMore_ThePeopleRowCountsOnlyInvitesThatCanStillBeRedeemed(t *testing.T) 
 	}
 }
 
+func TestMore_ThePeopleRowDoesNotCountAReenrolmentLink(t *testing.T) {
+	f := moreGarden(t)
+
+	f.exec(t, `INSERT INTO invite (garden_id, token_hash, role, user_id, created_by, expires_at)
+		VALUES ($1, 'reenrolment', 'member', $2, $3, $4)`, moreGardenID, otherUserID, moreUserID, thursday.AddDate(0, 0, 5))
+
+	if got := noteOn(t, f.page(t, f.handler.show, morePath), "People"); got != "1 invite waiting" {
+		t.Errorf("the row says %q, want %q; a re-enrolment link goes to somebody already in the garden", got, "1 invite waiting")
+	}
+}
+
 func TestMore_TheAccountRowSaysThereAreNoRecoveryCodesUntilABatchExists(t *testing.T) {
 	f := moreGarden(t)
 

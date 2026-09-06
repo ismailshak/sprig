@@ -15,6 +15,9 @@ import (
 
 // recoveryPage is the Recovery codes page, reached from Account.
 type recoveryPage struct {
+	// Bar goes back to Account rather than to More, because this page is
+	// reached from Account.
+	Bar topbar
 	// Codes is a batch in plaintext. Only hashes are stored, so it is set on
 	// the single response that created the batch and is empty on every other
 	// request.
@@ -38,7 +41,11 @@ func (h *more) recovery(w http.ResponseWriter, r *http.Request) {
 		serverError(h.logger, w, r, "open the recovery codes", err)
 		return
 	}
-	page := recoveryPage{Live: live, Prompted: principal.Can(auth.MemberManage)}
+	page := recoveryPage{
+		Bar:      topbar{Href: accountPath, Back: "Account", Title: "Recovery codes"},
+		Live:     live,
+		Prompted: principal.Can(auth.MemberManage),
+	}
 	if live {
 		page.Left = codesLeftWord(batch.Unused, batch.Size)
 		page.Made = "Made " + agoWord(batch.MadeAt, h.now().In(locationFor(principal.User)))

@@ -13,6 +13,7 @@ func removePasskeyPath(passkeyID uuid.UUID) string {
 }
 
 type passkeysPage struct {
+	Bar  topbar
 	Keys []passkeyRow
 	// OnlyOne is true when the account has one credential left. The page then
 	// says why no row offers Remove.
@@ -63,7 +64,7 @@ func (h *more) removePasskey(w http.ResponseWriter, r *http.Request) {
 }
 
 func newPasskeysPage(keys []store.PasskeyCredential, now time.Time) passkeysPage {
-	page := passkeysPage{OnlyOne: len(keys) == 1}
+	page := passkeysPage{Bar: moreBar("Passkeys"), OnlyOne: len(keys) == 1}
 	for _, key := range keys {
 		row := passkeyRow{Name: key.Name, Used: usedNote(key.LastUsedAt, now)}
 		if !page.OnlyOne {

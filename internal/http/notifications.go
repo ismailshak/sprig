@@ -21,6 +21,7 @@ func removeBrowserPath(subscriptionID uuid.UUID) string {
 }
 
 type notificationsPage struct {
+	Bar    topbar
 	Action string
 	// Digest is one digest a day of what is due. Activity is a message when
 	// somebody else in the garden logs care.
@@ -138,6 +139,7 @@ func (h *more) removeBrowser(w http.ResponseWriter, r *http.Request) {
 
 func newNotificationsPage(zone string, digest, activity bool, hour int16, subscriptions []store.PushSubscription, now time.Time) notificationsPage {
 	page := notificationsPage{
+		Bar:      moreBar("Notifications"),
 		Action:   notificationsPath,
 		Digest:   digest,
 		Activity: activity,

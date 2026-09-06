@@ -56,6 +56,7 @@ func careTypeNameTaken(name string) string {
 }
 
 type gardenPage struct {
+	Bar topbar
 	// Action is the URL the name form posts to.
 	Action string
 	Name   string
@@ -358,6 +359,7 @@ func (h *more) careTypeWithSlug(ctx context.Context, gardenID uuid.UUID, slug st
 // means 200.
 func (h *more) renderGarden(w http.ResponseWriter, r *http.Request, page gardenPage, edit careTypeEdit, status int) {
 	principal := PrincipalFrom(r)
+	page.Bar = moreBar("Garden")
 	page.Action = gardenPath
 	page.AddType = careTypesPath
 	page.EditName = principal.Can(auth.GardenEdit)

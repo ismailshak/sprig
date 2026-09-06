@@ -43,6 +43,7 @@ type accountForm struct {
 }
 
 type accountPage struct {
+	Bar  topbar
 	Name string
 	// NameError is shown under Display name, empty when the form is valid.
 	NameError string
@@ -149,6 +150,7 @@ func handleErrorFor(handle string) string {
 // choose.
 func (h *more) newAccountPage(ctx context.Context, principal auth.Principal, form accountForm) (accountPage, error) {
 	page := accountPage{
+		Bar:        moreBar("Account"),
 		Name:       form.name,
 		Handle:     form.handle,
 		HandleHint: "what tells you from another " + principal.User.DisplayName,

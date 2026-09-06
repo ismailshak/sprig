@@ -1,0 +1,53 @@
+{{define "title"}}sprig — tokens{{end}}
+
+{{/* The API tokens a device sends instead of signing in as a person. A token
+     can only read and works for this garden alone, so Revoke and Remove act
+     without asking first. */}}
+{{define "main"}}
+{{template "more-topbar" .Bar}}
+<div class="app__body app__body--sub">
+{{if .Secret}}
+{{template "secret" .Secret}}
+{{else}}
+<p class="lead">A token lets a machine read what is due without signing in as a person. It can only read, it works for this garden alone, and it stops working on a date you choose.</p>
+{{end}}
+{{if .Tokens}}
+<ul class="list">
+{{range .Tokens}}<li class="row row--setting row--stack{{if .Expired}} row--off{{end}}">
+<span class="row__text">
+<span class="row__name">{{.Name}}</span>
+<span class="row__meta">
+<span class="row__part"><code>{{.Prefix}}&hellip;</code></span>
+<span class="dot">&middot;</span>
+<span class="row__part">{{.Used}}</span>
+</span>
+<span class="row__life">{{.Life}}</span>
+</span>
+<form method="post" action="{{.Revoke}}"><button class="row__drop" type="submit">{{.Drop}}</button></form>
+</li>
+{{end}}</ul>
+{{if .AnyExpired}}
+<p class="note">An expired token stopped working on its own. Nothing told the device — it simply started being refused — so make a new one and paste it in, then remove the old row.</p>
+{{else}}
+<p class="note">A token stops working on its date whether or not anybody is watching, and the device it is in will not say so. Make its replacement before then.</p>
+{{end}}
+{{else}}
+<p class="note">No tokens yet.</p>
+{{end}}
+<form class="section" method="post" action="{{.Action}}" novalidate>
+<div class="section__head"><h2 class="section__title">New token</h2></div>
+<div class="field">
+<label class="field__label" for="name">What is it for <span class="field__hint">so a row can be told from the next one</span></label>
+<input class="input" id="name" name="name" type="text" value="{{.Name}}">
+{{with .NameError}}<p class="field__error">{{.}}</p>{{end}}
+</div>
+<div class="field">
+<label class="field__label" for="expiry">Stops working <span class="field__hint">ninety days is the longest one can live</span></label>
+<select class="input" id="expiry" name="expiry">{{template "options" .Lives}}</select>
+</div>
+<button class="wide-action" type="submit">Create a token</button>
+</form>
+</div>
+{{end}}
+
+{{define "nav"}}{{template "tabs" "More"}}{{end}}

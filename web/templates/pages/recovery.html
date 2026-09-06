@@ -1,12 +1,7 @@
 {{define "title"}}sprig — recovery codes{{end}}
 
-{{/* The back link points at Account rather than at More, because this page is
-     reached from Account. */}}
 {{define "main"}}
-<header class="topbar topbar--stack topbar--sub">
-<a class="backlink" href="/more/account">{{template "icon-back"}}Account</a>
-<h1 class="topbar__title">Recovery codes</h1>
-</header>
+{{template "more-topbar" .Bar}}
 <div class="app__body app__body--sub">
 {{if .Codes}}
 {{/* Copy all has no handler yet. Writing to the clipboard needs JavaScript. */}}

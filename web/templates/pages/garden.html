@@ -5,7 +5,7 @@
      URL renders this page with the row as a form. Nothing here needs
      JavaScript, so the row opens by navigating to it. */}}
 {{define "main"}}
-{{template "more-topbar" "Garden"}}
+{{template "more-topbar" .Bar}}
 <div class="app__body app__body--sub">
 {{if .EditName}}
 <form method="post" action="{{.Action}}" novalidate>

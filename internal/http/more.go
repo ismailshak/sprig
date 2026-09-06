@@ -45,6 +45,22 @@ type morePage struct {
 	Revision string
 }
 
+// topbar is the bar at the top of every page under More: a link back above the
+// page's title. The title is in the bar because a word like "Passkeys" appears
+// nowhere else on the page.
+type topbar struct {
+	// Href is the URL the back link points at, and Back the word on it.
+	Href  string
+	Back  string
+	Title string
+}
+
+// moreBar is the top bar for a page reached from More's index, with its back
+// link pointing there.
+func moreBar(title string) topbar {
+	return topbar{Href: morePath, Back: "More", Title: title}
+}
+
 // linkRow is a row in a settings list, rendered as a label, a chevron and
 // sometimes a note. More's index is a list of them. Account has one, linking
 // to Recovery codes.

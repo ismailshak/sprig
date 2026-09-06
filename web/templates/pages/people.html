@@ -1,0 +1,91 @@
+{{define "title"}}sprig — people{{end}}
+
+{{/* Every membership in the garden and what each person can do, then the
+     invites that have been sent and nobody has opened.
+
+     The member rows are inside one form with Save changes under them, so
+     changing two people's roles is one post. Re-enrol and Remove leave the page
+     instead of saving it, and forms cannot nest, so each has an empty form after
+     the list that the row's button names in its form attribute. */}}
+{{define "main"}}
+{{template "more-topbar" .Bar}}
+<div class="app__body app__body--sub">
+{{with .Secret}}
+<div class="section">
+{{template "secret" .}}
+<p class="note">{{$.SecretWhy}}</p>
+</div>
+{{end}}
+<div class="section">
+<div class="section__head"><h2 class="section__title">Members</h2></div>
+<form method="post" action="{{.Action}}" novalidate>
+<ul class="list">
+{{range .Members}}{{template "member-row" .}}{{end}}
+</ul>
+{{if .Save}}<button class="wide-action" type="submit">Save changes</button>{{end}}
+</form>
+{{/* The forms a row's own buttons submit. Each is empty apart from its action,
+     because the button that submits it is in the row above. */}}
+{{range .Members}}
+{{if .ReenrolForm}}<form id="{{.ReenrolForm}}" method="post" action="{{.Reenrol}}"></form>{{end}}
+{{with .Asking}}<form id="{{.Form}}" method="post" action="{{.Action}}"></form>{{end}}
+{{end}}
+</div>
+{{with .Invites}}
+<div class="section">
+<div class="section__head"><h2 class="section__title">Invited</h2></div>
+<ul class="list">
+{{range .}}<li class="row row--setting row--stack">
+<span class="row__text">
+<span class="row__name">{{.Role}}</span>
+<span class="row__meta">
+<span class="row__part">{{.Sent}}</span>
+<span class="dot">&middot;</span>
+<span class="row__part">{{.Expires}}</span>
+</span>
+</span>
+<form method="post" action="{{.Revoke}}"><button class="row__drop" type="submit">Revoke</button></form>
+</li>
+{{end}}</ul>
+<p class="note">Nobody has opened these yet. Revoking one makes its link stop working.</p>
+</div>
+{{end}}
+{{with .InviteSomeone}}<a class="wide-action" href="{{.}}">Invite someone</a>{{end}}
+</div>
+{{end}}
+
+{{/* One person's row. The reader's own row has no select, no date and no
+     Remove, because an owner who demoted or removed themselves would leave a
+     garden nobody can administer. */}}
+{{define "member-row"}}<li class="row row--setting row--stack{{if .Asking}} row--editing row--asking{{else}} row--people{{if .Ended}} row--off{{end}}{{end}}">
+{{if .Asking}}
+<span class="row__ask">{{.Asking.Ask}}</span>
+<p class="row__why">They keep their account, and their name stays on every watering, feeding and repotting they have logged. What goes is their way into this garden, and inviting them again brings it back.</p>
+<div class="row__buttons">
+<a class="sched__cancel" href="{{.Asking.Keep}}">Keep them</a>
+<button class="care care--small" type="submit" form="{{.Asking.Form}}">Remove</button>
+</div>
+{{else}}
+<span class="row__text">
+<span class="row__name">{{.Name}}{{with .Handle}} <span class="row__handle">{{.}}</span>{{end}}{{if .You}} <span class="row__you">You</span>{{end}}</span>
+{{if not .You}}<span class="row__meta">
+{{if .Until}}<span class="row__part row__part--word">{{.Role}}</span>
+<span class="dot">&middot;</span>
+<span class="row__part">{{.Until}}</span>
+{{else}}<span class="row__part">{{.What}}</span>{{end}}
+</span>{{end}}
+</span>
+{{if .You}}<span class="row__note">{{.Role}}</span>
+{{else}}<span class="row__controls">
+{{with .UntilValue}}<input class="input input--unit" type="date" name="{{$.UntilField}}" aria-label="{{$.UntilLabel}}" value="{{.}}">{{end}}
+{{with .Roles}}<select class="input input--unit" name="{{$.RoleField}}" aria-label="{{$.RoleLabel}}">{{template "options" .}}</select>{{end}}
+<span class="row__acts">
+<button class="row__drop" type="submit" form="{{.ReenrolForm}}" aria-label="Re-enrol {{.Who}}">Re-enrol</button>
+<a class="row__drop" href="{{.Remove}}" aria-label="Remove {{.Who}}">Remove</a>
+</span>
+</span>
+{{end}}
+{{end}}
+</li>{{end}}
+
+{{define "nav"}}{{template "tabs" "More"}}{{end}}

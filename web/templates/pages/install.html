@@ -4,7 +4,7 @@
      buttons in a GET form, so choosing one is a page load and the page works
      with no JavaScript. */}}
 {{define "main"}}
-{{template "more-topbar" "Install sprig"}}
+{{template "more-topbar" .Bar}}
 <div class="app__body app__body--sub">
 <p class="lead">sprig is a website that can behave like an app: its own icon, no address bar, and notifications.</p>
 <form method="get" action="{{.Action}}">

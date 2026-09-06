@@ -47,6 +47,7 @@ var platforms = []struct {
 }
 
 type installPage struct {
+	Bar topbar
 	// Action is the URL the chips submit to. It is this page, with the chosen
 	// platform in the query string.
 	Action string
@@ -63,7 +64,7 @@ func (h *more) install(w http.ResponseWriter, r *http.Request) {
 }
 
 func newInstallPage(chosen string) installPage {
-	page := installPage{Action: installPath}
+	page := installPage{Bar: moreBar("Install sprig"), Action: installPath}
 	offered := false
 	for _, platform := range platforms {
 		on := platform.value == chosen
