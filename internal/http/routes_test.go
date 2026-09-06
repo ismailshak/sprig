@@ -120,6 +120,30 @@ var routeAccess = map[string]access{
 		path:       eventPath(rosewoodPlantID, rosewoodDeleteEventID, "/delete", logQuery{}),
 		foreign:    eventPath(fairviewPlantID, fairviewDeleteEventID, "/delete", logQuery{}),
 	},
+	// Every route under More acts on the reader's own account or their own
+	// membership, so none of them names a capability. The pages a role cannot
+	// use, Garden and People, are routes of their own.
+	"GET /more":          {},
+	"POST /signout":      {anyMember: true},
+	"GET /more/account":  {},
+	"POST /more/account": {anyMember: true},
+	"GET /more/passkeys": {},
+	// A passkey and a push subscription belong to an account rather than to a
+	// garden, so the foreign row here is another person's rather than another
+	// garden's. Both routes answer 404 for one.
+	"POST /more/passkeys/{key}/remove": {
+		anyMember: true,
+		path:      removePasskeyPath(readerPasskeyID),
+		foreign:   removePasskeyPath(strangerPasskeyID),
+	},
+	"GET /more/notifications":  {},
+	"POST /more/notifications": {anyMember: true},
+	"POST /more/notifications/browsers/{browser}/remove": {
+		anyMember: true,
+		path:      removeBrowserPath(readerBrowserID),
+		foreign:   removeBrowserPath(strangerBrowserID),
+	},
+	"GET /install": {},
 	// Restore puts back an event that has been deleted, so it reads no event.
 	// The plant in the path is what has to be the garden's.
 	"POST /plants/{plant}/log/{event}/restore": {
@@ -149,6 +173,16 @@ var (
 	// the edit routes would then find nothing to edit.
 	rosewoodArchivedID = uuid.MustParse("00000000-0000-7000-8000-000000000231")
 	fairviewArchivedID = uuid.MustParse("00000000-0000-7000-8000-000000000232")
+	// The stranger is a second account, holding the passkey and the push
+	// subscription the More routes have to refuse. The reader holds two
+	// passkeys, because the query refuses to remove the last one an account
+	// has and that answer is a 404 as well.
+	strangerID        = uuid.MustParse("00000000-0000-7000-8000-000000000241")
+	readerPasskeyID   = uuid.MustParse("00000000-0000-7000-8000-000000000242")
+	strangerPasskeyID = uuid.MustParse("00000000-0000-7000-8000-000000000243")
+	readerBrowserID   = uuid.MustParse("00000000-0000-7000-8000-000000000244")
+	strangerBrowserID = uuid.MustParse("00000000-0000-7000-8000-000000000245")
+	secondPasskeyID   = uuid.MustParse("00000000-0000-7000-8000-000000000246")
 )
 
 // routeQueries seeds two gardens, each with a plant scheduled for both its care
@@ -193,7 +227,17 @@ func routeQueries(t *testing.T) *store.Queries {
 			SELECT $1, garden_id, $2, id, $3, now(), true FROM care_type WHERE garden_id = $4 AND slug = 'water'`, []any{rosewoodCorrectEventID, rosewoodPlantID, sitterPrincipal().User.ID, rosewoodID}},
 		{`INSERT INTO care_event (id, garden_id, plant_id, care_type_id, performed_by, performed_at, done)
 			SELECT $1, garden_id, $2, id, $3, now(), true FROM care_type WHERE garden_id = $4 AND slug = 'water'`, []any{fairviewCorrectEventID, fairviewPlantID, sitterPrincipal().User.ID, fairviewID}},
+		// The rows the routes under More read: a second account, and passkeys
+		// and push subscriptions on both accounts.
+		{"INSERT INTO app_user (id, display_name, handle, timezone) VALUES ($1, 'Sam', 'sam', 'Europe/London')", []any{strangerID}},
+		{`INSERT INTO passkey_credential (id, user_id, credential_id, name, public_key)
+			VALUES ($1, $2, 'reader-one', 'iPhone', '\x00'), ($3, $2, 'reader-two', 'MacBook Air', '\x00'), ($4, $5, 'stranger-one', 'iPhone', '\x00')`,
+			[]any{readerPasskeyID, sitterPrincipal().User.ID, secondPasskeyID, strangerPasskeyID, strangerID}},
+		{`INSERT INTO push_subscription (id, user_id, endpoint, p256dh_key, auth_key)
+			VALUES ($1, $2, 'https://push.invalid/reader', 'key', 'key'), ($3, $4, 'https://push.invalid/stranger', 'key', 'key')`,
+			[]any{readerBrowserID, sitterPrincipal().User.ID, strangerBrowserID, strangerID}},
 	}
+
 	for _, row := range seed {
 		if _, err := tx.Exec(ctx, row.sql, row.args...); err != nil {
 			t.Fatalf("seeding: %v\n%s", err, row.sql)

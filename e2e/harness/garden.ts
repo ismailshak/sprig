@@ -7,6 +7,20 @@ export const people = {
   sam: { name: 'Sam', handle: 'sam' },
 } as const;
 
+// The devices Ellie has registered a passkey on, one row each on Passkeys.
+export const devices = {
+  phone: 'iPhone',
+  laptop: 'MacBook Air',
+} as const;
+
+// The browsers Ellie has subscribed to notifications in, one row each under
+// "Where they arrive". The server builds each name from the User-Agent the
+// seed writes. A User-Agent names no model, so the laptop's row says Mac.
+export const browsers = {
+  phone: 'iPhone · Safari',
+  laptop: 'Mac · Chrome',
+} as const;
+
 export const plants = {
   bigFella: { id: '00000000-0000-7000-8000-050000000001', name: 'Big Fella' },
   gerald: { id: '00000000-0000-7000-8000-050000000002', name: 'Gerald' },

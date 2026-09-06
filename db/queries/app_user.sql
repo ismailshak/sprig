@@ -8,3 +8,8 @@ ORDER BY created_at, id;
 -- name: GetUserByHandle :one
 SELECT * FROM app_user
 WHERE handle = @handle;
+
+-- name: UpdateAccount :exec
+UPDATE app_user
+SET display_name = @display_name, timezone = @timezone
+WHERE id = @user_id;
