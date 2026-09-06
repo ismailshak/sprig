@@ -22,10 +22,7 @@
 {{/* The note opens by saying what a handle is not, because a field called
      Handle reads as a username. */}}
 <p class="note">Nothing signs in with a handle and there is no password behind it. It is a name for your account that a person can say out loud, and it is what People shows when two of you are called the same thing.</p>
-<div class="field">
-<label class="field__label" for="timezone">Timezone <span class="field__hint">what &ldquo;due today&rdquo; is worked out in</span></label>
-<select class="input" id="timezone" name="timezone">{{template "options" .Zones}}</select>
-</div>
+{{template "timezone-field" .Zone}}
 <button class="wide-action" type="submit">Save changes</button>
 </form>
 <ul class="list">{{template "link-row" .Codes}}</ul>

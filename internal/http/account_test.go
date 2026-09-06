@@ -5,19 +5,20 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/ismailshak/sprig/internal/auth"
 )
 
 var (
-	nameValue   = regexp.MustCompile(`<input class="input" id="name" name="name" type="text" value="([^"]*)">`)
-	handleValue = regexp.MustCompile(`<input class="input" id="handle" name="handle" type="text" value="([^"]*)">`)
-	handleHint  = regexp.MustCompile(`for="handle">Handle <span class="field__hint">([^<]*)</span>`)
-	zoneOption  = regexp.MustCompile(`<option value="([^"]+)"( selected)?>([^<]+)</option>`)
-	fieldBlock  = regexp.MustCompile(`(?s)<div class="field">(.*?)</div>`)
-	fieldInput  = regexp.MustCompile(`id="([^"]+)" name=`)
-	fieldError  = regexp.MustCompile(`(?s)<p class="field__error">(.*?)</p>`)
+	nameValue     = regexp.MustCompile(`<input class="input" id="name" name="name" type="text" value="([^"]*)">`)
+	handleValue   = regexp.MustCompile(`<input class="input" id="handle" name="handle" type="text" value="([^"]*)">`)
+	handleHint    = regexp.MustCompile(`for="handle">Handle <span class="field__hint">([^<]*)</span>`)
+	zoneOptionTag = regexp.MustCompile(`<option value="([^"]+)"(?: data-also="[^"]+")?( selected)?>([^<]+)</option>`)
+	fieldBlock    = regexp.MustCompile(`(?s)<div class="field">(.*?)</div>`)
+	fieldInput    = regexp.MustCompile(`id="([^"]+)" name=`)
+	fieldError    = regexp.MustCompile(`(?s)<p class="field__error">(.*?)</p>`)
 )
 
 // errorUnder returns the error message rendered under the field whose input
@@ -49,7 +50,7 @@ type zoneChoice struct {
 
 func zoneOptionsOf(page string) []zoneChoice {
 	var out []zoneChoice
-	for _, m := range zoneOption.FindAllStringSubmatch(page, -1) {
+	for _, m := range zoneOptionTag.FindAllStringSubmatch(page, -1) {
 		out = append(out, zoneChoice{value: m[1], label: m[3], on: m[2] != ""})
 	}
 	return out
@@ -83,14 +84,43 @@ func TestAccount_TheFormOpensOnTheNameHandleAndZoneTheAccountHolds(t *testing.T)
 	}
 }
 
+// Europe/Belfast is an old name the tz database keeps for Europe/London.
+// zone.tab does not list it, so it is a zone an account can hold that the
+// select does not offer.
 func TestAccount_AZoneTheSelectDoesNotListIsStillOfferedAndSelected(t *testing.T) {
 	f := moreGarden(t)
-	f.principal.User.Timezone = "Europe/Lisbon"
+	f.principal.User.Timezone = "Europe/Belfast"
 
 	page := f.page(t, f.handler.account, accountPath)
 
-	if got := selectedZone(t, page); got.value != "Europe/Lisbon" {
-		t.Errorf("the zone selected is %q, want Europe/Lisbon", got.value)
+	if got := selectedZone(t, page); got.value != "Europe/Belfast" {
+		t.Errorf("the zone selected is %q, want Europe/Belfast", got.value)
+	}
+}
+
+func TestAccount_TheZoneSelectOffersAZoneFromEveryRegion(t *testing.T) {
+	f := moreGarden(t)
+
+	page := f.page(t, f.handler.account, accountPath)
+
+	offered := map[string]bool{}
+	for _, zone := range zoneOptionsOf(page) {
+		offered[zone.value] = true
+	}
+	for _, zone := range []string{"Africa/Lagos", "America/Argentina/Buenos_Aires", "Asia/Kolkata", "Europe/Madrid", "Pacific/Auckland"} {
+		if !offered[zone] {
+			t.Errorf("%s is not offered", zone)
+		}
+	}
+}
+
+func TestAccount_TheZoneSelectIsNotMarkedForTheBrowsersZone(t *testing.T) {
+	f := moreGarden(t)
+
+	page := f.page(t, f.handler.account, accountPath)
+
+	if strings.Contains(page, "data-propose") {
+		t.Error("the select is marked data-propose, and Account opens on the zone the account holds")
 	}
 }
 

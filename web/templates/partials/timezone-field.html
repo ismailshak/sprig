@@ -1,0 +1,10 @@
+{{/* The Timezone select. data-propose marks the select for the script that
+     pre-selects the browser's own zone. data-also holds the name ICU gives a
+     zone where that differs from the tz database's, because Chrome and Safari
+     report the ICU name. */}}
+{{define "timezone-field"}}
+<div class="field">
+<label class="field__label" for="timezone">Timezone <span class="field__hint">what &ldquo;due today&rdquo; is worked out in</span></label>
+<select class="input" id="timezone" name="timezone"{{if .Propose}} data-propose{{end}}>{{range .Zones}}<option value="{{.Value}}"{{with .Also}} data-also="{{.}}"{{end}}{{if .On}} selected{{end}}>{{.Label}}</option>{{end}}</select>
+</div>
+{{end}}

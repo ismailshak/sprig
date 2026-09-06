@@ -65,11 +65,11 @@ type membership struct {
 	// ends. Zero means it is permanent.
 	expiresInDays int
 
-	// Both notification kinds default to off, so nothing asks for browser
-	// permission until a person turns one on. The handler that creates a
-	// membership uses the same default.
-	digest   bool
-	activity bool
+	// digestOff turns the daily digest off and activity turns the activity
+	// notification on. They are named this way round so that their zero values
+	// are what the app gives a new membership: the digest on, activity off.
+	digestOff bool
+	activity  bool
 }
 
 type careType struct {
@@ -192,13 +192,13 @@ func home() garden {
 		name:    "Home",
 		daysOld: 730,
 		members: []membership{
-			{id: seedID(tableMembership, 1), person: &ellie, role: "owner", daysOld: 730, digest: true},
-			{id: seedID(tableMembership, 2), person: &sam, role: "member", invitedBy: &ellie, daysOld: 700},
-			{id: seedID(tableMembership, 5), person: &jo, role: "sitter", invitedBy: &ellie, daysOld: 20, expiresInDays: 8},
+			{id: seedID(tableMembership, 1), person: &ellie, role: "owner", daysOld: 730},
+			{id: seedID(tableMembership, 2), person: &sam, role: "member", invitedBy: &ellie, daysOld: 700, digestOff: true},
+			{id: seedID(tableMembership, 5), person: &jo, role: "sitter", invitedBy: &ellie, daysOld: 20, expiresInDays: 8, digestOff: true},
 			// A membership that has already ended. The row stays on People and
 			// is greyed, so the date can be moved forward instead of a second
 			// invite being issued.
-			{id: seedID(tableMembership, 6), person: &clare, role: "sitter", invitedBy: &ellie, daysOld: 400, expiresInDays: -12},
+			{id: seedID(tableMembership, 6), person: &clare, role: "sitter", invitedBy: &ellie, daysOld: 400, expiresInDays: -12, digestOff: true},
 		},
 		careTypes: []careType{
 			{id: seedID(tableCareType, 1), name: "Water", slug: "water"},
@@ -432,9 +432,9 @@ func upstairs() garden {
 		name:    "Upstairs",
 		daysOld: 365,
 		members: []membership{
-			{id: seedID(tableMembership, 3), person: &robin, role: "owner", daysOld: 365},
+			{id: seedID(tableMembership, 3), person: &robin, role: "owner", daysOld: 365, digestOff: true},
 			// A sitter for a fortnight, exercising the nullable expires_at.
-			{id: seedID(tableMembership, 4), person: &sam, role: "sitter", invitedBy: &robin, daysOld: 60, expiresInDays: 12},
+			{id: seedID(tableMembership, 4), person: &sam, role: "sitter", invitedBy: &robin, daysOld: 60, expiresInDays: 12, digestOff: true},
 		},
 		careTypes: []careType{
 			{id: seedID(tableCareType, 5), name: "Water", slug: "water"},

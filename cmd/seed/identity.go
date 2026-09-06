@@ -203,13 +203,13 @@ func writeTokens(ctx context.Context, tx pgx.Tx, g *garden, ref time.Time) error
 	return nil
 }
 
-// writePreferences writes a row for both notification kinds, as the handler
-// that creates a membership does, so the Notifications page always finds one.
+// writePreferences writes a row for both notification kinds, as the app does
+// when it creates a membership, so the Notifications page always finds one.
 func writePreferences(ctx context.Context, tx pgx.Tx, g *garden, m *membership) error {
 	kinds := []struct {
 		kind    string
 		enabled bool
-	}{{"digest", m.digest}, {"activity", m.activity}}
+	}{{"digest", !m.digestOff}, {"activity", m.activity}}
 	for _, k := range kinds {
 		if _, err := tx.Exec(ctx,
 			"INSERT INTO notification_preference (membership_id, kind, enabled) VALUES ($1, $2, $3)",
