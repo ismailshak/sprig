@@ -10,16 +10,6 @@ import (
 	"github.com/ismailshak/sprig/internal/store"
 )
 
-// zones is the timezone select's options. The zone decides which day the app
-// calls due today, so it is asked for rather than read off the browser. A
-// browser answering from wherever it is that week would move every due date by
-// a day with nobody having chosen it.
-var zones = []string{
-	"Europe/London", "Europe/Dublin", "Europe/Paris", "Europe/Berlin",
-	"America/New_York", "America/Chicago", "America/Los_Angeles",
-	"Asia/Tokyo", "Asia/Singapore", "Australia/Sydney",
-}
-
 // nameMissing is shown under Display name when the field is posted empty.
 const nameMissing = "Give a display name. Every row in the log is signed with it."
 
@@ -55,7 +45,7 @@ type accountPage struct {
 	HandleHint string
 	// HandleError is shown under Handle, empty when the form is valid.
 	HandleError string
-	Zones       []option
+	Zone        timezoneField
 	// Codes is the row at the bottom of the page. It links to Recovery codes.
 	// That page is reached from Account rather than from More, because every
 	// other page under More is about the garden.
@@ -144,10 +134,7 @@ func handleErrorFor(handle string) string {
 }
 
 // newAccountPage fills the Account page from form: the stored values when the
-// page is opened, and the posted values when a save was refused. The account's
-// own timezone is one of the options even when it is not among the ten listed,
-// so opening the page and saving does not move anyone to a zone they did not
-// choose.
+// page is opened, and the posted values when a save was refused.
 func (h *more) newAccountPage(ctx context.Context, principal auth.Principal, form accountForm) (accountPage, error) {
 	page := accountPage{
 		Bar:        moreBar("Account"),
@@ -156,9 +143,7 @@ func (h *more) newAccountPage(ctx context.Context, principal auth.Principal, for
 		HandleHint: "what tells you from another " + principal.User.DisplayName,
 		Codes:      linkRow{Label: "Recovery codes", Href: recoveryPath},
 	}
-	for _, zone := range zonesFor(principal.User.Timezone) {
-		page.Zones = append(page.Zones, option{Value: zone, Label: zoneLabel(zone), On: zone == form.zone})
-	}
+	page.Zone.Zones = zoneOptions(form.zone)
 
 	if principal.Can(auth.MemberManage) {
 		_, live, err := h.recoveryBatch(ctx, principal.User.ID)
@@ -170,20 +155,4 @@ func (h *more) newAccountPage(ctx context.Context, principal auth.Principal, for
 		}
 	}
 	return page, nil
-}
-
-// zonesFor returns the options for an account whose zone is held. A zone the
-// list does not have goes last, so the ten stay in the order they are grouped
-// in.
-func zonesFor(held string) []string {
-	if slices.Contains(zones, held) {
-		return zones
-	}
-	return append(slices.Clone(zones), held)
-}
-
-// zoneLabel is how a zone reads on the screen: "America/New York", since the
-// underscore is a detail of the zone database.
-func zoneLabel(zone string) string {
-	return strings.ReplaceAll(zone, "_", " ")
 }

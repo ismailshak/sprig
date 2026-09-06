@@ -87,7 +87,7 @@ func TestSchema_OneMembershipPerUserAndGarden(t *testing.T) {
 	pool := migratedPool(t)
 	garden, user := seedGardenAndUser(t, pool)
 
-	insert := "INSERT INTO membership (garden_id, user_id, role) VALUES ($1, $2, 'member')"
+	insert := "INSERT INTO membership (garden_id, user_id, role, digest_hour) VALUES ($1, $2, 'member', 8)"
 	if _, err := pool.Exec(ctx, insert, garden, user); err != nil {
 		t.Fatalf("inserting the first membership: %v", err)
 	}
@@ -105,7 +105,7 @@ func TestSchema_AnExpiredMembershipIsStillARow(t *testing.T) {
 
 	var id uuid.UUID
 	err := pool.QueryRow(ctx,
-		"INSERT INTO membership (garden_id, user_id, role, expires_at) VALUES ($1, $2, 'sitter', now() - interval '1 day') RETURNING id",
+		"INSERT INTO membership (garden_id, user_id, role, expires_at, digest_hour) VALUES ($1, $2, 'sitter', now() - interval '1 day', 8) RETURNING id",
 		garden, user).Scan(&id)
 	if err != nil {
 		t.Fatalf("inserting an expired membership: %v", err)
@@ -130,7 +130,7 @@ func TestSchema_RemovingAMemberDeletesTheMembershipAndKeepsTheUser(t *testing.T)
 
 	var id uuid.UUID
 	err := pool.QueryRow(ctx,
-		"INSERT INTO membership (garden_id, user_id, role) VALUES ($1, $2, 'sitter') RETURNING id",
+		"INSERT INTO membership (garden_id, user_id, role, digest_hour) VALUES ($1, $2, 'sitter', 8) RETURNING id",
 		garden, user).Scan(&id)
 	if err != nil {
 		t.Fatalf("inserting the membership: %v", err)
@@ -163,23 +163,6 @@ func TestSchema_AHandleIsUniqueAcrossAllGardens(t *testing.T) {
 	}
 }
 
-func TestSchema_TheDigestHourDefaultsToEight(t *testing.T) {
-	ctx := t.Context()
-	pool := migratedPool(t)
-	garden, user := seedGardenAndUser(t, pool)
-
-	var hour int
-	err := pool.QueryRow(ctx,
-		"INSERT INTO membership (garden_id, user_id, role) VALUES ($1, $2, 'member') RETURNING digest_hour",
-		garden, user).Scan(&hour)
-	if err != nil {
-		t.Fatalf("inserting the membership: %v", err)
-	}
-	if hour != 8 {
-		t.Errorf("digest_hour defaulted to %d, want 8", hour)
-	}
-}
-
 // role is a table so that membership.role and role_capability.role cannot name
 // a role that does not exist.
 func TestSchema_ARoleMustExistInTheRoleTable(t *testing.T) {
@@ -187,7 +170,7 @@ func TestSchema_ARoleMustExistInTheRoleTable(t *testing.T) {
 	garden, user := seedGardenAndUser(t, pool)
 
 	_, err := pool.Exec(t.Context(),
-		"INSERT INTO membership (garden_id, user_id, role) VALUES ($1, $2, 'administrator')",
+		"INSERT INTO membership (garden_id, user_id, role, digest_hour) VALUES ($1, $2, 'administrator', 8)",
 		garden, user)
 	if err == nil {
 		t.Error("a membership naming a role that does not exist was accepted")

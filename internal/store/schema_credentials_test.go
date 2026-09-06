@@ -312,7 +312,7 @@ func seedMembership(t *testing.T, pool *pgxpool.Pool, gardenID, userID uuid.UUID
 
 	var id uuid.UUID
 	err := pool.QueryRow(t.Context(),
-		"INSERT INTO membership (garden_id, user_id, role) VALUES ($1, $2, $3) RETURNING id",
+		"INSERT INTO membership (garden_id, user_id, role, digest_hour) VALUES ($1, $2, $3, 8) RETURNING id",
 		gardenID, userID, role).Scan(&id)
 	if err != nil {
 		t.Fatalf("inserting the %s membership: %v", role, err)

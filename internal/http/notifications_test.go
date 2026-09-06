@@ -171,19 +171,8 @@ func TestNotifications_SavingWritesBothTypesAndTheHour(t *testing.T) {
 	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != notificationsPath {
 		t.Fatalf("status = %d to %q, want %d to %s", rec.Code, rec.Header().Get("Location"), http.StatusSeeOther, notificationsPath)
 	}
-	var digest, activity bool
-	var hour int16
-	err := f.tx.QueryRow(t.Context(), `
-		SELECT d.enabled, a.enabled, m.digest_hour
-		FROM membership m
-		JOIN notification_preference d ON d.membership_id = m.id AND d.kind = 'digest'
-		JOIN notification_preference a ON a.membership_id = m.id AND a.kind = 'activity'
-		WHERE m.id = $1`, moreMembershipID).Scan(&digest, &activity, &hour)
-	if err != nil {
-		t.Fatalf("reading the settings back: %v", err)
-	}
-	if digest || !activity || hour != 19 {
-		t.Errorf("digest = %v, activity = %v, hour = %d, want false, true, 19", digest, activity, hour)
+	if got, want := settingsOf(t, f, moreMembershipID), (notificationSettings{digest: false, activity: true, hour: 19}); got != want {
+		t.Errorf("the membership holds %+v, want %+v", got, want)
 	}
 }
 

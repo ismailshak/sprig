@@ -12,6 +12,46 @@ import (
 	"uuid"
 )
 
+const createMembership = `-- name: CreateMembership :one
+INSERT INTO membership (garden_id, user_id, role, invited_by, expires_at, digest_hour)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING id, garden_id, user_id, role, invited_by, created_at, expires_at, digest_hour
+`
+
+type CreateMembershipParams struct {
+	GardenID   uuid.UUID
+	UserID     uuid.UUID
+	Role       string
+	InvitedBy  *uuid.UUID
+	ExpiresAt  *time.Time
+	DigestHour int16
+}
+
+// CreateMembership inserts the membership row and returns it. The caller also
+// writes the two notification_preference rows every membership has.
+func (q *Queries) CreateMembership(ctx context.Context, arg CreateMembershipParams) (Membership, error) {
+	row := q.db.QueryRow(ctx, createMembership,
+		arg.GardenID,
+		arg.UserID,
+		arg.Role,
+		arg.InvitedBy,
+		arg.ExpiresAt,
+		arg.DigestHour,
+	)
+	var i Membership
+	err := row.Scan(
+		&i.ID,
+		&i.GardenID,
+		&i.UserID,
+		&i.Role,
+		&i.InvitedBy,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+		&i.DigestHour,
+	)
+	return i, err
+}
+
 const deleteMembership = `-- name: DeleteMembership :execrows
 DELETE FROM membership
 WHERE garden_id = $1 AND user_id = $2

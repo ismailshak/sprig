@@ -63,7 +63,7 @@ func moreGarden(t *testing.T) *moreFixture {
 		VALUES ($1, 'Ellie', 'ellie', 'Europe/London'), ($2, 'Sam', 'sam', 'Europe/London')`, moreUserID, otherUserID)
 	exec("INSERT INTO membership (id, garden_id, user_id, role, digest_hour) VALUES ($1, $2, $3, 'owner', 8)",
 		moreMembershipID, moreGardenID, moreUserID)
-	exec("INSERT INTO membership (garden_id, user_id, role) VALUES ($1, $2, 'owner')", otherGardenID, otherUserID)
+	exec("INSERT INTO membership (garden_id, user_id, role, digest_hour) VALUES ($1, $2, 'owner', 8)", otherGardenID, otherUserID)
 	exec(`INSERT INTO notification_preference (membership_id, kind, enabled)
 		VALUES ($1, 'digest', true), ($1, 'activity', false)`, moreMembershipID)
 

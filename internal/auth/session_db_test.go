@@ -55,7 +55,7 @@ func sessionsOnTx(t *testing.T) (*Sessions, pgx.Tx) {
 	}{
 		{"INSERT INTO garden (id, name) VALUES ($1, 'Rosewood')", []any{testGardenID}},
 		{"INSERT INTO app_user (id, display_name, timezone, handle) VALUES ($1, 'Emma', 'Europe/London', 'emma')", []any{testUserID}},
-		{"INSERT INTO membership (garden_id, user_id, role) VALUES ($1, $2, 'owner')", []any{testGardenID, testUserID}},
+		{"INSERT INTO membership (garden_id, user_id, role, digest_hour) VALUES ($1, $2, 'owner', 8)", []any{testGardenID, testUserID}},
 	}
 	for _, row := range seed {
 		if _, err := tx.Exec(ctx, row.sql, row.args...); err != nil {

@@ -223,8 +223,8 @@ func writeGarden(ctx context.Context, tx pgx.Tx, g *garden, ref time.Time, event
 			expires = &at
 		}
 		if _, err := tx.Exec(ctx,
-			`INSERT INTO membership (id, garden_id, user_id, role, invited_by, created_at, expires_at)
-				VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+			`INSERT INTO membership (id, garden_id, user_id, role, invited_by, created_at, expires_at, digest_hour)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, 8)`,
 			m.id, g.id, m.person.id, m.role, invitedBy, ref.AddDate(0, 0, -m.daysOld), expires,
 		); err != nil {
 			return 0, fmt.Errorf("writing %s's membership of %s: %w", m.person.handle, g.name, err)
