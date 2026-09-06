@@ -37,9 +37,20 @@
 </div>
 {{with .NameError}}<p class="field__error">{{.}}</p>{{end}}
 </div>
+{{/* Location is a text input with a <datalist> of the rooms the garden's
+     plants are already in. The Plants list groups on the text as it was typed,
+     so "Bathroom" and "bathroom" are two rooms there. The script this page
+     loads removes the list attribute and fills the listbox below instead, so
+     only one of the two lists ever opens. The field posts the same value under
+     the same name either way. */}}
 <div class="field">
 <label class="field__label" for="where">Location</label>
-<input class="input" id="where" name="where" type="text" placeholder="Pick a room, or name a new one" value="{{.Location}}">
+<div class="combo">
+<input class="input" id="where" name="where" type="text" list="rooms" autocomplete="off" placeholder="Pick a room, or name a new one" value="{{.Location}}">
+<span class="combo__mark" aria-hidden="true"></span>
+<datalist id="rooms">{{range .Rooms}}<option value="{{.}}">{{end}}</datalist>
+<ul class="combo__list" id="where-list" role="listbox" aria-label="Rooms" hidden></ul>
+</div>
 </div>
 {{/* Schedules are on the add form but not on the edit form. A new plant can be
      created with a schedule already set. Changing one later happens on the
@@ -93,3 +104,5 @@
 {{end}}
 
 {{define "nav"}}{{template "tabs" "Plants"}}{{end}}
+
+{{define "script"}}<script src="{{asset "room-combobox.js"}}" defer></script>{{end}}

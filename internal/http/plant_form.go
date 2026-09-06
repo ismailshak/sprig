@@ -190,6 +190,19 @@ func set(s string) *string {
 	return &s
 }
 
+// canonicalRoom returns the room in rooms that matches typed ignoring case, or
+// typed unchanged when none does. Without it, "bathroom" would be a second
+// room next to "Bathroom" on the Plants list. Text matching no room is
+// kept as it was typed, because typing a name is how a new room is made.
+func canonicalRoom(rooms []string, typed string) string {
+	for _, room := range rooms {
+		if strings.EqualFold(room, typed) {
+			return room
+		}
+	}
+	return typed
+}
+
 // acquiredPart converts an acquired month or year to its column value, null
 // for the placeholder option.
 func acquiredPart(n int) *int16 {
@@ -231,6 +244,8 @@ type plantFormPage struct {
 	// satisfies the requirement.
 	NameError string
 	Location  string
+	// Rooms fills the <datalist> under the Location field.
+	Rooms []string
 	// Schedules is empty on the edit form. Schedules are edited on the plant's
 	// page, beside the due date they change.
 	Schedules []scheduleField
@@ -341,6 +356,17 @@ func swappedRow(rows []scheduleField, values url.Values) (scheduleField, bool) {
 	return scheduleField{}, false
 }
 
+// gardenRooms returns the rooms for the Location field. It writes the response
+// itself and returns false when the query fails.
+func (h *plants) gardenRooms(w http.ResponseWriter, r *http.Request, gardenID uuid.UUID) ([]string, bool) {
+	rooms, err := h.queries.ListRooms(r.Context(), gardenID)
+	if err != nil {
+		serverError(h.logger, w, r, "list the rooms", err)
+		return nil, false
+	}
+	return rooms, true
+}
+
 // newPlant handles GET /plants/new. The form is empty when first opened, and
 // keeps its values when a schedule row re-renders it.
 func (h *plants) newPlant(w http.ResponseWriter, r *http.Request) {
@@ -355,16 +381,15 @@ func (h *plants) newPlant(w http.ResponseWriter, r *http.Request) {
 	// A request with no query string is the form being opened. A re-render
 	// sends every field the form rendered.
 	query := r.URL.Query()
-	if len(query) == 0 {
-		h.templates.render(w, r, view{page: plantFormPageName}, addPlantPage(plantFields{}, openingRows(cares, now), now))
-		return
-	}
-
-	fields, fieldsOK := readPlantFields(query, now)
-	rows, rowsOK := readScheduleRows(query, cares, now)
-	if !fieldsOK || !rowsOK {
-		http.Error(w, "the form did not offer that", http.StatusBadRequest)
-		return
+	fields, rows := plantFields{}, openingRows(cares, now)
+	if len(query) > 0 {
+		var fieldsOK, rowsOK bool
+		fields, fieldsOK = readPlantFields(query, now)
+		rows, rowsOK = readScheduleRows(query, cares, now)
+		if !fieldsOK || !rowsOK {
+			http.Error(w, "the form did not offer that", http.StatusBadRequest)
+			return
+		}
 	}
 	page := addPlantPage(fields, rows, now)
 
@@ -380,6 +405,13 @@ func (h *plants) newPlant(w http.ResponseWriter, r *http.Request) {
 		h.templates.render(w, r, view{page: plantFormPageName, fragment: "schedule-fields"}, page)
 		return
 	}
+
+	rooms, ok := h.gardenRooms(w, r, principal.Garden.ID)
+	if !ok {
+		return
+	}
+	page.Rooms = rooms
+	page.Location = canonicalRoom(rooms, page.Location)
 	h.templates.render(w, r, view{page: plantFormPageName}, page)
 }
 
@@ -404,9 +436,15 @@ func (h *plants) create(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "the form did not offer that", http.StatusBadRequest)
 		return
 	}
+	rooms, ok := h.gardenRooms(w, r, principal.Garden.ID)
+	if !ok {
+		return
+	}
+	fields.location = canonicalRoom(rooms, fields.location)
 
 	schedules, messages, refused := checkSchedules(rows, principal.Garden.ID)
 	page := addPlantPage(fields, rows, now)
+	page.Rooms = rooms
 	page.NameError, page.AcquiredError = fields.refuse()
 	for i := range page.Schedules {
 		page.Schedules[i].Error = messages[page.Schedules[i].Slug]
@@ -463,8 +501,14 @@ func (h *plants) edit(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	rooms, ok := h.gardenRooms(w, r, principal.Garden.ID)
+	if !ok {
+		return
+	}
 	now := h.now().In(locationFor(principal.User))
-	h.templates.render(w, r, view{page: plantFormPageName}, editPlantPage(principal, plantFieldsOf(plant), plant.ID, now))
+	page := editPlantPage(principal, plantFieldsOf(plant), plant.ID, now)
+	page.Rooms = rooms
+	h.templates.render(w, r, view{page: plantFormPageName}, page)
 }
 
 // update handles POST /plants/{plant}/edit and redirects to the plant's page.
@@ -486,8 +530,14 @@ func (h *plants) update(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "the form did not offer that", http.StatusBadRequest)
 		return
 	}
+	rooms, ok := h.gardenRooms(w, r, principal.Garden.ID)
+	if !ok {
+		return
+	}
+	fields.location = canonicalRoom(rooms, fields.location)
 
 	page := editPlantPage(principal, fields, plant.ID, now)
+	page.Rooms = rooms
 	page.NameError, page.AcquiredError = fields.refuse()
 	if page.NameError != "" || page.AcquiredError != "" {
 		h.templates.render(w, r, view{page: plantFormPageName, status: http.StatusUnprocessableEntity}, page)

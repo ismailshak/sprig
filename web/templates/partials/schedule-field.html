@@ -19,12 +19,19 @@
  hx-get="{{.Path}}?close={{.Slug}}" hx-target="#{{.ID}}" hx-swap="outerHTML settle:0ms">Don't schedule</button>
 </div>
 </li>{{else}}<li class="sched sched--add" id="{{.ID}}">
+{{/* The whole row is one submit button, so a press anywhere on it opens the
+     schedule. It is a button rather than a link because submitting sends the
+     values already typed into the other fields and a link would send none of
+     them. Its contents are spans because a button cannot contain block
+     elements. */}}
+<button class="sched__open" type="submit" name="open" value="{{.Slug}}" formmethod="get" formaction="{{.Path}}"
+ hx-get="{{.Path}}?open={{.Slug}}" hx-target="#{{.ID}}" hx-swap="outerHTML settle:0ms">
 <span class="sched__icon">{{template "care-icon" .Slug}}</span>
-<div class="sched__text">
+<span class="sched__text">
 <span class="sched__type">{{.Care}}</span>
-</div>
-<button class="sched__when" type="submit" name="open" value="{{.Slug}}" formmethod="get" formaction="{{.Path}}"
- hx-get="{{.Path}}?open={{.Slug}}" hx-target="#{{.ID}}" hx-swap="outerHTML settle:0ms">Not scheduled</button>
+</span>
+<span class="sched__when">Not scheduled</span>
+</button>
 </li>{{end}}{{end}}
 
 {{/* The When select and the fields it reveals, shared by the add form and the

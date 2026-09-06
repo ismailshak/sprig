@@ -186,6 +186,8 @@ var (
 	formPicked = regexp.MustCompile(`<option value="([^"]+)" selected>`)
 	formError  = regexp.MustCompile(`<p class="field__error">(.*?)</p>`)
 	formRow    = regexp.MustCompile(`<li class="sched sched--(editing|add)" id="sched-([a-z]+)"`)
+	formRooms  = regexp.MustCompile(`(?s)<datalist id="rooms">(.*?)</datalist>`)
+	formRoom   = regexp.MustCompile(`<option value="([^"]*)">`)
 	formTitle  = regexp.MustCompile(`<h1 class="topbar__title">(.*?)</h1>`)
 )
 
@@ -212,6 +214,21 @@ func filled(t *testing.T, page, id string) string {
 	}
 	t.Fatalf("the form has no field called %s", id)
 	return ""
+}
+
+// roomsOffered returns the rooms the Location field lists, in page order.
+func roomsOffered(t *testing.T, page string) []string {
+	t.Helper()
+
+	list := formRooms.FindStringSubmatch(page)
+	if list == nil {
+		t.Fatal("the form offers no rooms under Location")
+	}
+	var rooms []string
+	for _, m := range formRoom.FindAllStringSubmatch(list[1], -1) {
+		rooms = append(rooms, text(m[1]))
+	}
+	return rooms
 }
 
 func hasField(page, id string) bool {
@@ -591,6 +608,113 @@ func TestPlantForm_AnHTMXRequestGetsTheRowAlone(t *testing.T) {
 	}
 	if !strings.Contains(page, `id="sched-repot"`) {
 		t.Error("the row came back without the id the swap replaces")
+	}
+}
+
+func TestPlantForm_BothFormsOfferEveryRoomThePlantsAreIn(t *testing.T) {
+	f := plantFormOn(t)
+
+	// Windowsill holds two plants and Sprout has no location, so a room appears
+	// once and a plant with no room adds nothing.
+	want := []string{"Bathroom", "Bedroom", "Kitchen", "Living room", "Windowsill"}
+	if got := roomsOffered(t, f.open(t, newPlantPath, false).Body.String()); !slices.Equal(got, want) {
+		t.Errorf("the add form offers %v, want %v", got, want)
+	}
+	if got := roomsOffered(t, f.editForm(t, bigFellaID).Body.String()); !slices.Equal(got, want) {
+		t.Errorf("the edit form offers %v, want %v", got, want)
+	}
+}
+
+func TestPlantForm_ARoomOnlyAnArchivedPlantIsInIsNotOffered(t *testing.T) {
+	f := plantFormOn(t)
+	// Trail Mix is the only plant in the Kitchen, so archiving it leaves the
+	// Kitchen with nothing in it.
+	f.archive(t, trailMixID)
+
+	rooms := roomsOffered(t, f.open(t, newPlantPath, false).Body.String())
+
+	if slices.Contains(rooms, "Kitchen") {
+		t.Errorf("the form offers %v, and the Kitchen is empty", rooms)
+	}
+}
+
+func TestPlantForm_ALocationTypedInAnotherCaseIsStoredAsTheRoomTheGardenHas(t *testing.T) {
+	f := plantFormOn(t)
+	values := addValues()
+	values.Set("nickname", "Ada")
+	values.Set("where", "bathroom")
+
+	plant := f.created(t, f.add(t, values))
+
+	if value(plant.Location) != "Bathroom" {
+		t.Errorf("the plant is in %q, want Bathroom, the room the garden already has", value(plant.Location))
+	}
+}
+
+func TestPlantForm_ALocationMatchingNoRoomIsStoredAsItWasTyped(t *testing.T) {
+	f := plantFormOn(t)
+	values := addValues()
+	values.Set("nickname", "Ada")
+	values.Set("where", "Potting shed")
+
+	plant := f.created(t, f.add(t, values))
+
+	if value(plant.Location) != "Potting shed" {
+		t.Errorf("the plant is in %q, want the Potting shed it was given", value(plant.Location))
+	}
+}
+
+func TestPlantForm_SavingALocationInAnotherCaseKeepsTheGardensSpelling(t *testing.T) {
+	f := plantFormOn(t)
+	values := addValues()
+	values.Set("nickname", "Big Fella")
+	values.Set("where", "LIVING ROOM")
+
+	rec := f.save(t, bigFellaID, values)
+
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusSeeOther, text(rec.Body.String()))
+	}
+	plant, err := store.New(f.tx).GetPlant(t.Context(), rosewoodID, bigFellaID)
+	if err != nil {
+		t.Fatalf("reading the plant the save wrote: %v", err)
+	}
+	if value(plant.Location) != "Living room" {
+		t.Errorf("the plant is in %q, want Living room, the room the garden already has", value(plant.Location))
+	}
+}
+
+func TestPlantForm_ARefusedPostShowsTheLocationInTheGardensSpelling(t *testing.T) {
+	f := plantFormOn(t)
+	values := addValues()
+	values.Set("where", "bathroom")
+
+	rec := f.add(t, values)
+
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusUnprocessableEntity)
+	}
+	if got := filled(t, rec.Body.String(), "where"); got != "Bathroom" {
+		t.Errorf("the Location field reads %q, want Bathroom", got)
+	}
+}
+
+func TestPlantForm_OpeningARowShowsTheLocationInTheGardensSpelling(t *testing.T) {
+	f := plantFormOn(t)
+	values := addValues()
+	values.Set("nickname", "Ada")
+	values.Set("where", "bathroom")
+	values.Add("open", "water")
+
+	// With no script the button that opens a schedule row submits the whole
+	// form as a GET, so the server re-renders the Location field.
+	rec := f.open(t, newPlantPath+"?"+values.Encode(), false)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	if got := filled(t, rec.Body.String(), "where"); got != "Bathroom" {
+		t.Errorf("the Location field reads %q, want Bathroom", got)
 	}
 }
 

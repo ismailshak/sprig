@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
-# Runs prettier over the staged files under e2e/ and stages what it rewrites,
-# so a formatting fix never needs a second commit.
+# Runs prettier over the staged files under e2e/ and the staged scripts under
+# web/static/, and stages what it rewrites, so a formatting fix never needs a
+# second commit. prettier is installed under e2e/. Its config and ignore file are
+# named on the command line, because prettier would otherwise fall back to its
+# defaults for a file outside that directory.
 #
 # A file that is only partly staged stops the hook instead, because staging
 # prettier's fix would pull the unstaged rest of that file into the commit.
@@ -10,10 +13,16 @@ set -euo pipefail
 
 cd "$(git rev-parse --show-toplevel)"
 
+prettier=e2e/node_modules/.bin/prettier
+settings=(--config e2e/.prettierrc.json --ignore-path e2e/.prettierignore)
+
 files=()
 while IFS= read -r file; do
   case "$file" in
-    e2e/*.ts | e2e/*.js | e2e/*.json | e2e/*.md | e2e/*.yml | e2e/*.yaml) files+=("${file#e2e/}") ;;
+    # The vendored htmx is left as it was downloaded. A * in a case pattern
+    # matches a slash, so the pattern below would otherwise match it.
+    web/static/vendor/*) ;;
+    e2e/*.ts | e2e/*.js | e2e/*.json | e2e/*.md | e2e/*.yml | e2e/*.yaml | web/static/*.js) files+=("$file") ;;
   esac
 done < <(git diff --cached --name-only --diff-filter=ACMR)
 
@@ -21,7 +30,7 @@ if [ ${#files[@]} -eq 0 ]; then
   exit 0
 fi
 
-if [ ! -x e2e/node_modules/.bin/prettier ]; then
+if [ ! -x "$prettier" ]; then
   echo "pre-commit: e2e has no prettier installed. Run mise run format." >&2
   exit 1
 fi
@@ -29,7 +38,7 @@ fi
 unformatted=()
 while IFS= read -r file; do
   unformatted+=("$file")
-done < <(cd e2e && ./node_modules/.bin/prettier --list-different "${files[@]}")
+done < <("$prettier" "${settings[@]}" --list-different "${files[@]}")
 
 if [ ${#unformatted[@]} -eq 0 ]; then
   exit 0
@@ -37,8 +46,8 @@ fi
 
 held=()
 for file in "${unformatted[@]}"; do
-  if [ -n "$(git diff --name-only -- "e2e/$file")" ]; then
-    held+=("e2e/$file")
+  if [ -n "$(git diff --name-only -- "$file")" ]; then
+    held+=("$file")
   fi
 done
 
@@ -49,6 +58,6 @@ if [ ${#held[@]} -ne 0 ]; then
   exit 1
 fi
 
-(cd e2e && ./node_modules/.bin/prettier --write "${unformatted[@]}")
-git add -- "${unformatted[@]/#/e2e/}"
+"$prettier" "${settings[@]}" --write "${unformatted[@]}"
+git add -- "${unformatted[@]}"
 printf 'pre-commit: prettier formatted %s and staged the result.\n' "${unformatted[*]}"

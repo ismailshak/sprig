@@ -18,6 +18,11 @@
   --bg: var(--light-bg);
   --surface: var(--light-surface);
   --surface-2: var(--light-surface-2);
+  /* The background of something that floats above the page, such as the room
+     list on the plant form. Light raises with a shadow and keeps the page's
+     own surface; dark raises by lightening, because a shadow on a dark page
+     cannot be seen. */
+  --surface-raised: var(--light-surface);
   --accent-soft: var(--light-accent-soft);
   --ink: var(--light-ink);
   --ink-2: var(--light-ink-2);
@@ -45,6 +50,7 @@
     --bg: var(--dark-bg);
     --surface: var(--dark-surface);
     --surface-2: var(--dark-surface-2);
+    --surface-raised: var(--dark-surface-2);
     --accent-soft: var(--dark-accent-soft);
     --ink: var(--dark-ink);
     --ink-2: var(--dark-ink-2);
@@ -74,6 +80,7 @@
   --bg: var(--dark-bg);
   --surface: var(--dark-surface);
   --surface-2: var(--dark-surface-2);
+  --surface-raised: var(--dark-surface-2);
   --accent-soft: var(--dark-accent-soft);
   --ink: var(--dark-ink);
   --ink-2: var(--dark-ink-2);

@@ -203,6 +203,40 @@ func (q *Queries) ListPlants(ctx context.Context, gardenID uuid.UUID) ([]Plant, 
 	return items, nil
 }
 
+const listRooms = `-- name: ListRooms :many
+SELECT location::text AS room FROM plant
+WHERE garden_id = $1 AND archived_at IS NULL AND location IS NOT NULL
+GROUP BY location
+ORDER BY lower(location), location
+`
+
+// Every room the garden's plants are in, listed once, for the Location field on
+// the plant form. A room only archived plants are in is left out, because the
+// Plants list stops showing it too. The order ignores case, the same as the
+// Plants list's grouping. GROUP BY rather than SELECT DISTINCT, because
+// DISTINCT can only order by an expression that is in the select list, and
+// lower(location) is not. The ::text cast is what makes sqlc return []string
+// rather than []*string for a nullable column.
+func (q *Queries) ListRooms(ctx context.Context, gardenID uuid.UUID) ([]string, error) {
+	rows, err := q.db.Query(ctx, listRooms, gardenID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var room string
+		if err := rows.Scan(&room); err != nil {
+			return nil, err
+		}
+		items = append(items, room)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updatePlant = `-- name: UpdatePlant :one
 UPDATE plant
 SET nickname = $1, common_name = $2, botanical_name = $3,

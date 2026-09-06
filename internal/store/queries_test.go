@@ -187,6 +187,47 @@ func TestListPlants_OmitsArchivedPlantsAndOrdersByRoomThenName(t *testing.T) {
 	}
 }
 
+func TestListRooms_ListsEachRoomOnceAndOmitsArchivedPlantsRooms(t *testing.T) {
+	queries, tx := seedTwoGardens(t)
+
+	// A second plant in the Bathroom, so the test can show a room two plants are
+	// in is listed once.
+	if _, err := tx.Exec(t.Context(), "INSERT INTO plant (garden_id, nickname, location) VALUES ($1, 'Ivy', 'Bathroom')", testGardenID); err != nil {
+		t.Fatalf("inserting a second plant in the Bathroom: %v", err)
+	}
+
+	rooms, err := queries.ListRooms(t.Context(), testGardenID)
+	if err != nil {
+		t.Fatalf("listing Rosewood's rooms: %v", err)
+	}
+
+	// Bedroom is left out because the only plant in it is archived. Aloe has no
+	// location. Porch is Fairview's room, not Rosewood's.
+	want := []string{"Bathroom", "Living room"}
+	if !slices.Equal(rooms, want) {
+		t.Errorf("listed\n\t%v\nwant\n\t%v", rooms, want)
+	}
+}
+
+// The order matches the way the Plants list groups rooms.
+func TestListRooms_OrdersARoomSpelledLowercaseByItsLetterNotItsCase(t *testing.T) {
+	queries, tx := seedTwoGardens(t)
+
+	if _, err := tx.Exec(t.Context(), "INSERT INTO plant (garden_id, nickname, location) VALUES ($1, 'Kev', 'attic')", testGardenID); err != nil {
+		t.Fatalf("inserting a plant in the attic: %v", err)
+	}
+
+	rooms, err := queries.ListRooms(t.Context(), testGardenID)
+	if err != nil {
+		t.Fatalf("listing Rosewood's rooms: %v", err)
+	}
+
+	want := []string{"attic", "Bathroom", "Living room"}
+	if !slices.Equal(rooms, want) {
+		t.Errorf("listed\n\t%v\nwant\n\t%v", rooms, want)
+	}
+}
+
 func TestListCareTypes_OmitsArchivedTypes(t *testing.T) {
 	queries, _ := seedTwoGardens(t)
 
