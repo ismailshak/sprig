@@ -70,6 +70,32 @@ func TestLoadConfig_Defaults(t *testing.T) {
 	if cfg.templateDir != "" {
 		t.Errorf("templateDir = %q, want none, so the templates are the ones compiled in", cfg.templateDir)
 	}
+	if cfg.signupEnabled {
+		t.Error("signupEnabled = true, want false, so a stranger cannot make a garden on an install nobody opened up")
+	}
+}
+
+func TestLoadConfig_SignUpIsOnWhenSPRIG_SIGNUP_ENABLEDIsTrue(t *testing.T) {
+	env := map[string]string{"SPRIG_DATABASE_URL": "postgres://example/db", "SPRIG_BASE_URL": "https://sprig.example.com", "SPRIG_SIGNUP_ENABLED": "true"}
+	getenv := func(k string) string { return env[k] }
+
+	cfg, err := loadConfig(getenv)
+	if err != nil {
+		t.Fatalf("loadConfig returned an error: %v", err)
+	}
+	if !cfg.signupEnabled {
+		t.Error("signupEnabled = false with SPRIG_SIGNUP_ENABLED=true")
+	}
+}
+
+func TestLoadConfig_ASignUpFlagThatIsNotABooleanIsRefusedByName(t *testing.T) {
+	env := map[string]string{"SPRIG_DATABASE_URL": "postgres://example/db", "SPRIG_BASE_URL": "https://sprig.example.com", "SPRIG_SIGNUP_ENABLED": "yes"}
+	getenv := func(k string) string { return env[k] }
+
+	_, err := loadConfig(getenv)
+	if err == nil || !strings.Contains(err.Error(), "SPRIG_SIGNUP_ENABLED") {
+		t.Errorf("loadConfig returned %v, want an error naming SPRIG_SIGNUP_ENABLED", err)
+	}
 }
 
 func TestLoadConfig_APlainCookieOverHTTPNeedsBothCookieVariables(t *testing.T) {

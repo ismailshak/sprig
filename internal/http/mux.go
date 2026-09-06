@@ -29,7 +29,9 @@ type middleware func(http.Handler) http.Handler
 // enforcement test walks it, because http.ServeMux does not list its patterns
 // and a route registered directly on the mux would be one the test cannot see.
 // devRoutes is what a development build adds, and empty otherwise.
-func routes(logger *slog.Logger, sessions *auth.Sessions, passkeys *auth.Passkeys, queries *store.Queries, templates *Templates, assets *Assets, trustedIPHeader string) []route {
+// signupEnabled is SPRIG_SIGNUP_ENABLED, whether Set up your garden is served
+// on an install that already has an account.
+func routes(logger *slog.Logger, sessions *auth.Sessions, passkeys *auth.Passkeys, queries *store.Queries, templates *Templates, assets *Assets, trustedIPHeader string, signupEnabled bool) []route {
 	todayHandler := &today{logger: logger, queries: queries, templates: templates, now: time.Now}
 	plantsHandler := &plants{logger: logger, queries: queries, templates: templates, now: time.Now}
 	activityHandler := &activity{logger: logger, queries: queries, templates: templates, now: time.Now}
@@ -38,6 +40,7 @@ func routes(logger *slog.Logger, sessions *auth.Sessions, passkeys *auth.Passkey
 	resolver := auth.NewResolver(sessions, queries)
 	passkeyHandler := &passkeyCeremony{logger: logger, passkeys: passkeys, sessions: sessions, resolver: resolver, queries: queries, templates: templates, now: time.Now}
 	moreHandler := &more{logger: logger, sessions: sessions, queries: queries, templates: templates, build: build.Read(), now: time.Now}
+	setupHandler := &setup{logger: logger, passkeys: passkeys, sessions: sessions, queries: queries, templates: templates, now: time.Now, enabled: signupEnabled}
 	base := []route{
 		{pattern: "GET /healthz", handler: http.HandlerFunc(handleHealthz)},
 		{pattern: assetPattern, handler: assets.handler()},
@@ -75,6 +78,9 @@ func routes(logger *slog.Logger, sessions *auth.Sessions, passkeys *auth.Passkey
 		{pattern: "GET " + signInPath, handler: http.HandlerFunc(passkeyHandler.showSignIn)},
 		{pattern: "POST " + challengePath, limits: signInLimits(trustedIPHeader, http.HandlerFunc(tooManySignInChallenges)), handler: http.HandlerFunc(passkeyHandler.signInChallenge)},
 		{pattern: "POST " + signInPath, limits: signInLimits(trustedIPHeader, http.HandlerFunc(passkeyHandler.tooManySignInAnswers)), handler: http.HandlerFunc(passkeyHandler.signIn)},
+		{pattern: "GET " + setupPath, handler: http.HandlerFunc(setupHandler.show)},
+		{pattern: "POST " + setupChallengePath, handler: http.HandlerFunc(setupHandler.challenge)},
+		{pattern: "POST " + setupPath, handler: http.HandlerFunc(setupHandler.create)},
 		{pattern: "GET " + notificationsPath, handler: http.HandlerFunc(moreHandler.notifications)},
 		{pattern: "POST " + notificationsPath, handler: http.HandlerFunc(moreHandler.saveNotifications)},
 		{pattern: "POST " + notificationsPath + "/browsers/{browser}/remove", handler: http.HandlerFunc(moreHandler.removeBrowser)},
@@ -130,6 +136,12 @@ var publicRoutes = map[string]bool{
 	"GET " + signInPath:     true,
 	"POST " + challengePath: true,
 	"POST " + signInPath:    true,
+	// The first account is created here, so these cannot require a session.
+	// Whether they are served at all is the handler's decision, and a route it
+	// closes is a 404.
+	"GET " + setupPath:           true,
+	"POST " + setupChallengePath: true,
+	"POST " + setupPath:          true,
 }
 
 // New builds sprig's handler. The middleware order matters. RequestID runs
@@ -137,9 +149,9 @@ var publicRoutes = map[string]bool{
 // recovered panic's 500 still gets a request line. The cross-origin check is
 // inside both so a refused request is logged like any other. Authentication is
 // inside that so a cross-site post is refused before it costs a session lookup.
-func New(logger *slog.Logger, sessions *auth.Sessions, passkeys *auth.Passkeys, resolver Resolver, queries *store.Queries, templates *Templates, assets *Assets, trustedIPHeader string) http.Handler {
+func New(logger *slog.Logger, sessions *auth.Sessions, passkeys *auth.Passkeys, resolver Resolver, queries *store.Queries, templates *Templates, assets *Assets, trustedIPHeader string, signupEnabled bool) http.Handler {
 	mux := http.NewServeMux()
-	for _, r := range routes(logger, sessions, passkeys, queries, templates, assets, trustedIPHeader) {
+	for _, r := range routes(logger, sessions, passkeys, queries, templates, assets, trustedIPHeader, signupEnabled) {
 		h := r.handler
 		if r.capability != "" {
 			h = require(r.capability, h)

@@ -87,7 +87,7 @@ func run(ctx context.Context, getenv func(string) string, stdout io.Writer) erro
 		return err
 	}
 
-	return serve(ctx, logger, listener, sprighttp.New(logger, sessions, passkeys, resolver, queries, templates, assets, cfg.trustedIPHeader))
+	return serve(ctx, logger, listener, sprighttp.New(logger, sessions, passkeys, resolver, queries, templates, assets, cfg.trustedIPHeader, cfg.signupEnabled))
 }
 
 // serve runs the server on listener until ctx is cancelled, then gives

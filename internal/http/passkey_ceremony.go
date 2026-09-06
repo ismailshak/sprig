@@ -93,35 +93,45 @@ func (h *passkeyCeremony) register(w http.ResponseWriter, r *http.Request) {
 
 // refuseRegistration re-renders the Passkeys page with the reason the device
 // was not enrolled. keys is the list the page shows, read before the answer was
-// checked. Every refusal the person can act on has its own sentence, and
-// anything else is a 500 with the error in the log.
+// checked.
 func (h *passkeyCeremony) refuseRegistration(w http.ResponseWriter, r *http.Request, principal auth.Principal, keys []store.PasskeyCredential, err error) {
-	var message string
-	switch {
-	case errors.Is(err, auth.ErrNotVerified):
-		message = "This device did not check that it was you. Turn on its screen lock, or set a PIN on your security key, and try again."
-	case errors.Is(err, auth.ErrNotDiscoverable):
-		message = "This device would not store the passkey, so there would be nothing to sign in with. Try a phone, a laptop or a security key with room on it."
-	case errors.Is(err, auth.ErrCeremonyGone):
-		message = "That took too long, so the request has expired. Press Add a passkey again."
-	case errors.Is(err, auth.ErrAlreadyRegistered):
-		message = "This device already has a passkey for sprig."
-	case errors.Is(err, auth.ErrFailedVerification):
-		// The answer parsed and did not check out. The page's script never
-		// produces one of those, so the reason goes in the log.
-		h.logger.WarnContext(r.Context(), "refuse the passkey", slog.Any("error", err))
-		message = "This passkey could not be checked, so it was not added. Press Add a passkey again."
-	case errors.Is(err, auth.ErrBadCredential):
-		http.Error(w, "the form did not send a credential", http.StatusBadRequest)
-		return
-	default:
-		serverError(h.logger, w, r, "add the passkey", err)
+	message := registrationRefusal(h.logger, w, r, err, "Add a passkey", "add the passkey")
+	if message == "" {
 		return
 	}
-
 	page := newPasskeysPage(keys, h.now().In(locationFor(principal.User)))
 	page.Error = message
 	h.templates.render(w, r, view{page: "passkeys", status: http.StatusUnprocessableEntity}, page)
+}
+
+// registrationRefusal returns the sentence a page shows when a device was not
+// enrolled. button is the label of the button the sentence tells the person to
+// press again. Every refusal the person can act on has its own sentence.
+// Anything else gets no sentence, because the response has been written here
+// instead: a 400 for a post with no credential in it, and a 500 for the rest.
+// what is the action the 500's log line names as failed.
+func registrationRefusal(logger *slog.Logger, w http.ResponseWriter, r *http.Request, err error, button, what string) string {
+	switch {
+	case errors.Is(err, auth.ErrNotVerified):
+		return "This device did not check that it was you. Turn on its screen lock, or set a PIN on your security key, and try again."
+	case errors.Is(err, auth.ErrNotDiscoverable):
+		return "This device would not store the passkey, so there would be nothing to sign in with. Try a phone, a laptop or a security key with room on it."
+	case errors.Is(err, auth.ErrCeremonyGone):
+		return "That took too long, so the request has expired. Press " + button + " again."
+	case errors.Is(err, auth.ErrAlreadyRegistered):
+		return "This device already has a passkey for sprig."
+	case errors.Is(err, auth.ErrFailedVerification):
+		// The answer parsed and did not check out. The page's script never
+		// produces one of those, so the reason goes in the log.
+		logger.WarnContext(r.Context(), "refuse the passkey", slog.Any("error", err))
+		return "This passkey could not be checked, so it was not added. Press " + button + " again."
+	case errors.Is(err, auth.ErrBadCredential):
+		http.Error(w, "the form did not send a credential", http.StatusBadRequest)
+		return ""
+	default:
+		serverError(logger, w, r, what, err)
+		return ""
+	}
 }
 
 // signInChallenge handles POST /signin/challenge and returns the options for
@@ -169,14 +179,11 @@ func (h *passkeyCeremony) signIn(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// A browser that was already signed in gets a new session. The row behind
-	// the cookie it sent is deleted, so the token in it stops resolving rather
-	// than staying live until its TTL.
-	if old := h.sessions.TokenFromRequest(r); old != "" {
-		if err := h.sessions.Delete(r.Context(), old); err != nil {
-			serverError(h.logger, w, r, "end the previous session", err)
-			return
-		}
+	// A browser that was already signed in gets a new session in place of the
+	// one it arrived with.
+	if err := h.sessions.DeleteFromRequest(r.Context(), r); err != nil {
+		serverError(h.logger, w, r, "end the previous session", err)
+		return
 	}
 	token, _, err := h.sessions.Create(r.Context(), now, user.ID, membership.GardenID, &passkey.ID, r.UserAgent())
 	if err != nil {

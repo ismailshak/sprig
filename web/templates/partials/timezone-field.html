@@ -6,5 +6,6 @@
 <div class="field">
 <label class="field__label" for="timezone">Timezone <span class="field__hint">what &ldquo;due today&rdquo; is worked out in</span></label>
 <select class="input" id="timezone" name="timezone"{{if .Propose}} data-propose{{end}}>{{range .Zones}}<option value="{{.Value}}"{{with .Also}} data-also="{{.}}"{{end}}{{if .On}} selected{{end}}>{{.Label}}</option>{{end}}</select>
+{{with .Error}}<p class="field__error">{{.}}</p>{{end}}
 </div>
 {{end}}

@@ -12,25 +12,46 @@ import (
 )
 
 var (
-	nameValue     = regexp.MustCompile(`<input class="input" id="name" name="name" type="text" value="([^"]*)">`)
-	handleValue   = regexp.MustCompile(`<input class="input" id="handle" name="handle" type="text" value="([^"]*)">`)
-	handleHint    = regexp.MustCompile(`for="handle">Handle <span class="field__hint">([^<]*)</span>`)
-	zoneOptionTag = regexp.MustCompile(`<option value="([^"]+)"(?: data-also="[^"]+")?( selected)?>([^<]+)</option>`)
-	fieldBlock    = regexp.MustCompile(`(?s)<div class="field">(.*?)</div>`)
-	fieldInput    = regexp.MustCompile(`id="([^"]+)" name=`)
-	fieldError    = regexp.MustCompile(`(?s)<p class="field__error">(.*?)</p>`)
+	handleHint      = regexp.MustCompile(`for="handle">Handle <span class="field__hint">([^<]*)</span>`)
+	zoneOptionTag   = regexp.MustCompile(`<option value="([^"]+)"(?: data-also="[^"]+")?( selected)?>([^<]+)</option>`)
+	fieldBlock      = regexp.MustCompile(`(?s)<div class="field">(.*?)</div>`)
+	fieldInput      = regexp.MustCompile(`id="([^"]+)" name=`)
+	fieldInputValue = regexp.MustCompile(`value="([^"]*)"`)
+	fieldError      = regexp.MustCompile(`(?s)<p class="field__error">(.*?)</p>`)
 )
+
+// valueOf returns the value rendered on the input with this id. It fails the
+// test when the page has no such input.
+func valueOf(t *testing.T, page, id string) string {
+	t.Helper()
+
+	block := fieldWithInput(page, id)
+	if block == "" {
+		t.Fatalf("the page has no field with an input called %q:\n%s", id, page)
+	}
+	value := fieldInputValue.FindStringSubmatch(block)
+	if value == nil {
+		t.Fatalf("the %q input has no value:\n%s", id, block)
+	}
+	return value[1]
+}
 
 // errorUnder returns the error message rendered under the field whose input
 // has this id, or "" when it has none.
 func errorUnder(page, id string) string {
+	block := fieldWithInput(page, id)
+	if message := fieldError.FindStringSubmatch(block); message != nil {
+		return text(message[1])
+	}
+	return ""
+}
+
+// fieldWithInput returns the markup of the field whose input has this id, or ""
+// when the page has no such field.
+func fieldWithInput(page, id string) string {
 	for _, block := range fieldBlock.FindAllStringSubmatch(page, -1) {
-		input := fieldInput.FindStringSubmatch(block[1])
-		if input == nil || input[1] != id {
-			continue
-		}
-		if message := fieldError.FindStringSubmatch(block[1]); message != nil {
-			return text(message[1])
+		if input := fieldInput.FindStringSubmatch(block[1]); input != nil && input[1] == id {
+			return block[1]
 		}
 	}
 	return ""
@@ -73,11 +94,11 @@ func TestAccount_TheFormOpensOnTheNameHandleAndZoneTheAccountHolds(t *testing.T)
 
 	page := f.page(t, f.handler.account, accountPath)
 
-	if got := nameValue.FindStringSubmatch(page); got == nil || got[1] != "Ellie" {
-		t.Errorf("the display name field holds %v, want Ellie", got)
+	if got := valueOf(t, page, "name"); got != "Ellie" {
+		t.Errorf("the display name field holds %q, want Ellie", got)
 	}
-	if got := handleValue.FindStringSubmatch(page); got == nil || got[1] != "ellie" {
-		t.Errorf("the handle field holds %v, want ellie", got)
+	if got := valueOf(t, page, "handle"); got != "ellie" {
+		t.Errorf("the handle field holds %q, want ellie", got)
 	}
 	if got := selectedZone(t, page); got.value != "Europe/London" {
 		t.Errorf("the zone selected is %q, want Europe/London", got.value)
@@ -183,8 +204,8 @@ func TestAccount_TheRefusedFormComesBackWithWhatWasTyped(t *testing.T) {
 	if got := selectedZone(t, page); got.value != "Asia/Tokyo" {
 		t.Errorf("the zone selected is %q, want the posted Asia/Tokyo", got.value)
 	}
-	if got := handleValue.FindStringSubmatch(page); got == nil || got[1] != "eleanor" {
-		t.Errorf("the handle field holds %v, want the posted eleanor", got)
+	if got := valueOf(t, page, "handle"); got != "eleanor" {
+		t.Errorf("the handle field holds %q, want the posted eleanor", got)
 	}
 }
 
