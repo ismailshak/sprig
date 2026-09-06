@@ -217,10 +217,11 @@ var (
 	}
 )
 
-// browserName labels a subscription's row, as "Mac · Chrome". The User-Agent
-// is everything a subscription carries and it names no model, so a MacBook Air
-// is a Mac. A string that names neither device nor browser is "Unknown
-// browser", and its date still tells the row from the others.
+// browserName reads a device and a browser out of a User-Agent, as
+// "Mac · Chrome". It names the rows on the Notifications page and a passkey on
+// the Passkeys page. A User-Agent names no model, so a MacBook Air is a Mac. A
+// string that names neither device nor browser is "Unknown browser", and its
+// date still tells the row from the others.
 func browserName(userAgent *string) string {
 	if userAgent == nil {
 		return "Unknown browser"

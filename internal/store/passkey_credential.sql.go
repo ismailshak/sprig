@@ -7,9 +7,52 @@ package store
 
 import (
 	"context"
+	"time"
 
 	"uuid"
 )
+
+const createPasskey = `-- name: CreatePasskey :one
+INSERT INTO passkey_credential (user_id, credential_id, name, public_key, sign_count, flags, transports)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+RETURNING id, user_id, credential_id, name, public_key, sign_count, flags, transports, created_at, last_used_at
+`
+
+type CreatePasskeyParams struct {
+	UserID       uuid.UUID
+	CredentialID string
+	Name         string
+	PublicKey    []byte
+	SignCount    int64
+	Flags        int16
+	Transports   []string
+}
+
+func (q *Queries) CreatePasskey(ctx context.Context, arg CreatePasskeyParams) (PasskeyCredential, error) {
+	row := q.db.QueryRow(ctx, createPasskey,
+		arg.UserID,
+		arg.CredentialID,
+		arg.Name,
+		arg.PublicKey,
+		arg.SignCount,
+		arg.Flags,
+		arg.Transports,
+	)
+	var i PasskeyCredential
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.CredentialID,
+		&i.Name,
+		&i.PublicKey,
+		&i.SignCount,
+		&i.Flags,
+		&i.Transports,
+		&i.CreatedAt,
+		&i.LastUsedAt,
+	)
+	return i, err
+}
 
 const deletePasskey = `-- name: DeletePasskey :execrows
 DELETE FROM passkey_credential AS k
@@ -29,8 +72,45 @@ func (q *Queries) DeletePasskey(ctx context.Context, userID uuid.UUID, passkeyID
 	return result.RowsAffected(), nil
 }
 
+const getPasskeyByCredentialID = `-- name: GetPasskeyByCredentialID :one
+SELECT k.id, k.user_id, k.credential_id, k.name, k.public_key, k.sign_count, k.flags, k.transports, k.created_at, k.last_used_at, u.id, u.display_name, u.handle, u.timezone, u.created_at
+FROM passkey_credential AS k
+JOIN app_user AS u ON u.id = k.user_id
+WHERE k.credential_id = $1
+`
+
+type GetPasskeyByCredentialIDRow struct {
+	PasskeyCredential PasskeyCredential
+	AppUser           AppUser
+}
+
+// Sign-in has no username field, so the credential the browser returns is the
+// only thing naming the account. The query returns that account row too.
+func (q *Queries) GetPasskeyByCredentialID(ctx context.Context, credentialID string) (GetPasskeyByCredentialIDRow, error) {
+	row := q.db.QueryRow(ctx, getPasskeyByCredentialID, credentialID)
+	var i GetPasskeyByCredentialIDRow
+	err := row.Scan(
+		&i.PasskeyCredential.ID,
+		&i.PasskeyCredential.UserID,
+		&i.PasskeyCredential.CredentialID,
+		&i.PasskeyCredential.Name,
+		&i.PasskeyCredential.PublicKey,
+		&i.PasskeyCredential.SignCount,
+		&i.PasskeyCredential.Flags,
+		&i.PasskeyCredential.Transports,
+		&i.PasskeyCredential.CreatedAt,
+		&i.PasskeyCredential.LastUsedAt,
+		&i.AppUser.ID,
+		&i.AppUser.DisplayName,
+		&i.AppUser.Handle,
+		&i.AppUser.Timezone,
+		&i.AppUser.CreatedAt,
+	)
+	return i, err
+}
+
 const listPasskeys = `-- name: ListPasskeys :many
-SELECT id, user_id, credential_id, name, public_key, sign_count, transports, created_at, last_used_at FROM passkey_credential
+SELECT id, user_id, credential_id, name, public_key, sign_count, flags, transports, created_at, last_used_at FROM passkey_credential
 WHERE user_id = $1
 ORDER BY created_at, id
 `
@@ -51,6 +131,7 @@ func (q *Queries) ListPasskeys(ctx context.Context, userID uuid.UUID) ([]Passkey
 			&i.Name,
 			&i.PublicKey,
 			&i.SignCount,
+			&i.Flags,
 			&i.Transports,
 			&i.CreatedAt,
 			&i.LastUsedAt,
@@ -63,4 +144,29 @@ func (q *Queries) ListPasskeys(ctx context.Context, userID uuid.UUID) ([]Passkey
 		return nil, err
 	}
 	return items, nil
+}
+
+const recordPasskeyUse = `-- name: RecordPasskeyUse :execrows
+UPDATE passkey_credential
+SET sign_count = $1, last_used_at = $2
+WHERE id = $3
+  AND (sign_count < $1 OR (sign_count = 0 AND $1 = 0))
+`
+
+type RecordPasskeyUseParams struct {
+	SignCount int64
+	UsedAt    *time.Time
+	PasskeyID uuid.UUID
+}
+
+// The counter is compared in the statement that writes it, so two sign-ins
+// sending the same counter cannot both pass: the second finds the row already
+// advanced and updates nothing. Zero stored and zero returned is an
+// authenticator that keeps no counter, and is the one equal pair allowed.
+func (q *Queries) RecordPasskeyUse(ctx context.Context, arg RecordPasskeyUseParams) (int64, error) {
+	result, err := q.db.Exec(ctx, recordPasskeyUse, arg.SignCount, arg.UsedAt, arg.PasskeyID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }

@@ -14,18 +14,31 @@
 <span class="row__name">{{.Name}}</span>
 <span class="row__meta"><span class="row__part">{{.Used}}</span></span>
 </span>
-{{/* Remove is a post of its own, so each row carries its own form. */}}
+{{/* Remove is a post of its own, so each row has its own form. */}}
 {{with .Remove}}<form method="post" action="{{.}}"><button class="row__drop" type="submit">Remove</button></form>{{end}}
 </li>
 {{end}}</ul>
-{{/* The reason sits under the list rather than in a dialog after the press,
+{{/* The reason is under the list rather than in a dialog after the press,
      because removing the last passkey is the one action here that nothing can
      undo. */}}
 {{if .OnlyOne}}<p class="note">This is the only way you can sign in, so it cannot be removed. Add a second device first.</p>{{end}}
-{{/* Registering a passkey is a browser ceremony sprig does not run yet, so
-     this button does nothing. */}}
-<button class="wide-action">Add a passkey</button>
+{{/* Only the browser can talk to the device holding a passkey, so a script
+     drives this form. It posts to data-challenge for a challenge, puts the
+     browser's answer in the hidden field, then posts the form. The button
+     starts disabled with the note under it, because the server cannot tell
+     whether the script will run. The script enables the button and removes the
+     note. In a browser with no credential API it does neither. The error line
+     is always rendered, because the script writes the browser's refusal into
+     it. */}}
+<p class="field__error" id="passkey-error" role="alert">{{.Error}}</p>
+<form method="post" action="{{.Add}}" data-passkey="create" data-challenge="{{.Challenge}}" data-field="{{.Field}}" data-message="passkey-error" data-note="passkey-noscript">
+<input type="hidden" name="{{.Field}}">
+<button class="wide-action" type="submit" disabled>Add a passkey</button>
+<p class="note" id="passkey-noscript">Adding a passkey needs JavaScript and a browser that supports passkeys.</p>
+</form>
 </div>
 {{end}}
+
+{{define "script"}}<script src="{{asset "passkey.js"}}" defer></script>{{end}}
 
 {{define "nav"}}{{template "tabs" "More"}}{{end}}

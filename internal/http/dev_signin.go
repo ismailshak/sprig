@@ -37,8 +37,8 @@ func init() {
 
 // devRoutes returns the development sign-in routes. The page is rendered from
 // its own template rather than the template tree.
-func devRoutes(sessions *auth.Sessions, queries *store.Queries, _ *Templates) []route {
-	d := &devSignIn{sessions: sessions, queries: queries, resolver: auth.NewResolver(sessions, queries)}
+func devRoutes(sessions *auth.Sessions, resolver *auth.Resolver, queries *store.Queries, _ *Templates) []route {
+	d := &devSignIn{sessions: sessions, queries: queries, resolver: resolver}
 	return []route{
 		{pattern: "GET " + devSignInPath, handler: http.HandlerFunc(d.show)},
 		{pattern: "POST " + devSignInPath, handler: http.HandlerFunc(d.start)},

@@ -14,9 +14,24 @@ const uniqueViolation = "23505"
 // declared with UNIQUE on the column after the table and the column.
 const handleIndex = "app_user_handle_key"
 
+// passkeyIndex is the unique index on passkey_credential.credential_id.
+const passkeyIndex = "passkey_credential_credential_id_key" //nolint:gosec // the name of a unique index, not a secret
+
 // HandleTaken reports whether err is Postgres refusing a write because another
 // account already holds the handle.
 func HandleTaken(err error) bool {
+	return violates(err, handleIndex)
+}
+
+// CredentialTaken reports whether err is Postgres refusing a write because a
+// passkey with the same credential id is already registered.
+func CredentialTaken(err error) bool {
+	return violates(err, passkeyIndex)
+}
+
+// violates reports whether err is Postgres refusing a write because of the
+// unique index named.
+func violates(err error, index string) bool {
 	var pgErr *pgconn.PgError
-	return errors.As(err, &pgErr) && pgErr.Code == uniqueViolation && pgErr.ConstraintName == handleIndex
+	return errors.As(err, &pgErr) && pgErr.Code == uniqueViolation && pgErr.ConstraintName == index
 }

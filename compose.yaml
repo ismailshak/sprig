@@ -33,6 +33,10 @@ services:
     environment:
       SPRIG_DATABASE_URL: postgres://sprig:sprig@db:5432/sprig?sslmode=disable
       SPRIG_LOG_FORMAT: text
+      # The origin a passkey ceremony is checked against. It has to be the URL
+      # the browser reaches the app at, port included, so the e2e task fixes the
+      # host port per stack and passes it in here.
+      SPRIG_BASE_URL: ${SPRIG_BASE_URL:-http://localhost:8080}
       # Secure is off because WebKit refuses a Secure cookie over plain http
       # and the suite has no TLS. The __Host- prefix is dropped because it is
       # only valid on a Secure cookie.

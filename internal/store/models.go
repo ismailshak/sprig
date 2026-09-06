@@ -125,6 +125,7 @@ type PasskeyCredential struct {
 	Name         string
 	PublicKey    []byte
 	SignCount    int64
+	Flags        int16
 	Transports   []string
 	CreatedAt    time.Time
 	LastUsedAt   *time.Time
@@ -187,4 +188,13 @@ type Session struct {
 	UserAgent  *string
 	CreatedAt  time.Time
 	LastSeenAt time.Time
+}
+
+type WebauthnCeremony struct {
+	ID        uuid.UUID
+	TokenHash string
+	UserID    *uuid.UUID
+	Session   []byte
+	CreatedAt time.Time
+	ExpiresAt time.Time
 }
