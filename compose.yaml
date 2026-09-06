@@ -13,7 +13,7 @@ services:
     volumes:
       - db-data:/var/lib/postgresql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U sprig -d sprig"]
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U sprig -d sprig"]
       interval: 2s
       timeout: 3s
       retries: 15
