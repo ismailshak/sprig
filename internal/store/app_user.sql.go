@@ -7,6 +7,8 @@ package store
 
 import (
 	"context"
+
+	"uuid"
 )
 
 const getUserByHandle = `-- name: GetUserByHandle :one
@@ -59,4 +61,21 @@ func (q *Queries) ListUsers(ctx context.Context) ([]AppUser, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const updateAccount = `-- name: UpdateAccount :exec
+UPDATE app_user
+SET display_name = $1, timezone = $2
+WHERE id = $3
+`
+
+type UpdateAccountParams struct {
+	DisplayName string
+	Timezone    string
+	UserID      uuid.UUID
+}
+
+func (q *Queries) UpdateAccount(ctx context.Context, arg UpdateAccountParams) error {
+	_, err := q.db.Exec(ctx, updateAccount, arg.DisplayName, arg.Timezone, arg.UserID)
+	return err
 }

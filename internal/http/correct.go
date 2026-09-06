@@ -365,7 +365,8 @@ func (h *activity) restore(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !isHTMX(r) {
-		//nolint:gosec // G710: href builds /activity from a parsed uuid and a parsed cursor, not from the request's own text
+		// href builds /activity from a parsed uuid and a parsed cursor, never
+		// from text the request supplied.
 		http.Redirect(w, r, q.href(), http.StatusSeeOther)
 		return
 	}

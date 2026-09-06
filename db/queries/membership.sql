@@ -14,3 +14,9 @@ WHERE membership.garden_id = @garden_id AND membership.user_id = @user_id;
 SELECT * FROM membership
 WHERE user_id = @user_id
 ORDER BY created_at, id;
+
+-- The hour the digest arrives, which is per membership: a person may want one
+-- for their own garden and nothing from a garden they are sitting.
+-- name: SetDigestHour :exec
+UPDATE membership SET digest_hour = @digest_hour
+WHERE garden_id = @garden_id AND user_id = @user_id;

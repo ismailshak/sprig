@@ -1,0 +1,29 @@
+{{define "title"}}sprig — more{{end}}
+
+{{/* The index of everything that is not about plants. Every row opens a page
+     that does the work, so this page holds no state of its own. A row shows a
+     note only when the page behind it has a loose end, and a row a reader's
+     role cannot use is not rendered at all. */}}
+{{define "main"}}
+<header class="topbar topbar--more">
+<h1 class="topbar__title">More</h1>
+</header>
+<div class="app__body app__body--more">
+<ul class="list">
+{{range .Rows}}<li>
+<a class="row row--link row--setting" href="{{.Href}}">
+<span class="row__label">{{.Label}}</span>
+{{with .Note}}<span class="row__note">{{.}}</span>{{end}}
+<span class="row__go">{{template "icon-chevron"}}</span>
+</a>
+</li>
+{{end}}</ul>
+<div class="more__foot">
+<a class="foot-link" href="/install">Install sprig{{template "icon-chevron"}}</a>
+<form method="post" action="/signout"><button class="more__signout">Sign out</button></form>
+<p class="more__build">sprig {{.Version}}{{with .Revision}} &middot; {{.}}{{end}}</p>
+</div>
+</div>
+{{end}}
+
+{{define "nav"}}{{template "tabs" "More"}}{{end}}

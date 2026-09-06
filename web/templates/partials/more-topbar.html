@@ -1,0 +1,8 @@
+{{/* The bar on the pages under More. The way back is above the title rather
+     than replacing it, because a title like "Passkeys" appears nowhere else on
+     the page and the bar is the only thing that can say it. The argument is
+     the title. */}}
+{{define "more-topbar"}}<header class="topbar topbar--stack topbar--sub">
+<a class="backlink" href="/more">{{template "icon-back"}}More</a>
+<h1 class="topbar__title">{{.}}</h1>
+</header>{{end}}

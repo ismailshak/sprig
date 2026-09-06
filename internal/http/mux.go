@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/ismailshak/sprig/internal/auth"
+	"github.com/ismailshak/sprig/internal/build"
 	"github.com/ismailshak/sprig/internal/store"
 )
 
@@ -26,6 +27,7 @@ func routes(logger *slog.Logger, sessions *auth.Sessions, queries *store.Queries
 	todayHandler := &today{logger: logger, queries: queries, templates: templates, now: time.Now}
 	plantsHandler := &plants{logger: logger, queries: queries, templates: templates, now: time.Now}
 	activityHandler := &activity{logger: logger, queries: queries, templates: templates, now: time.Now}
+	moreHandler := &more{logger: logger, sessions: sessions, queries: queries, templates: templates, build: build.Read(), now: time.Now}
 	base := []route{
 		{pattern: "GET /healthz", handler: http.HandlerFunc(handleHealthz)},
 		{pattern: assetPattern, handler: assets.handler()},
@@ -51,6 +53,16 @@ func routes(logger *slog.Logger, sessions *auth.Sessions, queries *store.Queries
 		{pattern: "POST /plants/{plant}/log/{event}", capability: auth.CareEditOwn, handler: http.HandlerFunc(activityHandler.save)},
 		{pattern: "POST /plants/{plant}/log/{event}/delete", capability: auth.CareDeleteOwn, handler: http.HandlerFunc(activityHandler.remove)},
 		{pattern: "POST /plants/{plant}/log/{event}/restore", capability: auth.CareDeleteOwn, handler: http.HandlerFunc(activityHandler.restore)},
+		{pattern: "GET " + morePath, handler: http.HandlerFunc(moreHandler.show)},
+		{pattern: "POST " + signOutPath, handler: http.HandlerFunc(moreHandler.signOut)},
+		{pattern: "GET " + accountPath, handler: http.HandlerFunc(moreHandler.account)},
+		{pattern: "POST " + accountPath, handler: http.HandlerFunc(moreHandler.saveAccount)},
+		{pattern: "GET " + passkeysPath, handler: http.HandlerFunc(moreHandler.passkeys)},
+		{pattern: "POST " + passkeysPath + "/{key}/remove", handler: http.HandlerFunc(moreHandler.removePasskey)},
+		{pattern: "GET " + notificationsPath, handler: http.HandlerFunc(moreHandler.notifications)},
+		{pattern: "POST " + notificationsPath, handler: http.HandlerFunc(moreHandler.saveNotifications)},
+		{pattern: "POST " + notificationsPath + "/browsers/{browser}/remove", handler: http.HandlerFunc(moreHandler.removeBrowser)},
+		{pattern: "GET " + installPath, handler: http.HandlerFunc(moreHandler.install)},
 	}
 	return append(base, devRoutes(sessions, queries, templates)...)
 }

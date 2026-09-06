@@ -1,0 +1,18 @@
+{{define "title"}}sprig — install{{end}}
+
+{{/* The steps for one platform, chosen with the chips. The chips are submit
+     buttons in a GET form, so choosing one is a page load and the page works
+     with no JavaScript. */}}
+{{define "main"}}
+{{template "more-topbar" "Install sprig"}}
+<div class="app__body app__body--sub">
+<p class="lead">sprig is a website that can behave like an app: its own icon, no address bar, and notifications.</p>
+<form method="get" action="{{.Action}}">
+<div class="chips">{{range .Chips}}<button class="chip" name="platform" value="{{.Value}}" aria-pressed="{{.On}}">{{.Label}}</button>{{end}}</div>
+</form>
+<ol class="steps">{{range .Steps}}<li>{{.}}</li>{{end}}</ol>
+<p class="note">{{.Why}}</p>
+</div>
+{{end}}
+
+{{define "nav"}}{{template "tabs" "More"}}{{end}}

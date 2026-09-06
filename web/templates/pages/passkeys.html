@@ -1,0 +1,31 @@
+{{define "title"}}sprig — passkeys{{end}}
+
+{{/* One row per device the account has registered, with when it was last used.
+     That date is what makes the list readable: two rows called iPhone and
+     MacBook Air are told apart by their names, and two rows both called iPhone
+     only by when each was last used. */}}
+{{define "main"}}
+{{template "more-topbar" "Passkeys"}}
+<div class="app__body app__body--sub">
+<p class="lead">A passkey is how you sign in — your phone or laptop unlocks it the way it unlocks itself. Add one for each device you use.</p>
+<ul class="list">
+{{range .Keys}}<li class="row row--setting row--stack">
+<span class="row__text">
+<span class="row__name">{{.Name}}</span>
+<span class="row__meta"><span class="row__part">{{.Used}}</span></span>
+</span>
+{{/* Remove is a post of its own, so each row carries its own form. */}}
+{{with .Remove}}<form method="post" action="{{.}}"><button class="row__drop" type="submit">Remove</button></form>{{end}}
+</li>
+{{end}}</ul>
+{{/* The reason sits under the list rather than in a dialog after the press,
+     because removing the last passkey is the one action here that nothing can
+     undo. */}}
+{{if .OnlyOne}}<p class="note">This is the only way you can sign in, so it cannot be removed. Add a second device first.</p>{{end}}
+{{/* Registering a passkey is a browser ceremony sprig does not run yet, so
+     this button does nothing. */}}
+<button class="wide-action">Add a passkey</button>
+</div>
+{{end}}
+
+{{define "nav"}}{{template "tabs" "More"}}{{end}}

@@ -211,3 +211,51 @@ func agoWord(at, now time.Time) string {
 	}
 	return at.Format("2 Jan")
 }
+
+// offNote is the Notifications row's note on More. A row reports its state
+// only when that state is a loose end, so notifications that are on say
+// nothing at all.
+func offNote(on bool) string {
+	if on {
+		return ""
+	}
+	return "Off"
+}
+
+// waitingNote is the People row's note on More: how many invites have been
+// issued and not taken up, and nothing when there are none.
+func waitingNote(invites int) string {
+	switch invites {
+	case 0:
+		return ""
+	case 1:
+		return "1 invite waiting"
+	}
+	return fmt.Sprintf("%d invites waiting", invites)
+}
+
+// shortRevision cuts a git revision to the seven characters a person reads it
+// by. A binary built outside a git working tree has none, and gets none.
+func shortRevision(revision string) string {
+	const short = 7
+	if len(revision) < short {
+		return revision
+	}
+	return revision[:short]
+}
+
+// usedNote is the second line of a passkey or a browser row: "Last used
+// today", or "Never used" where nothing has been recorded against it. A device
+// that has never been seen is the interesting row in the list, since it is
+// either the one to remove or the one whose setup did not finish.
+func usedNote(at *time.Time, now time.Time) string {
+	if at == nil {
+		return "Never used"
+	}
+	return "Last used " + agoWord(*at, now)
+}
+
+// hourLabel formats an hour of the day for the digest select, as "8:00am".
+func hourLabel(hour int16) string {
+	return time.Date(2000, time.January, 1, int(hour), 0, 0, 0, time.UTC).Format("3:04pm")
+}

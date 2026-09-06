@@ -88,3 +88,21 @@ func (q *Queries) ListMembershipsForUser(ctx context.Context, userID uuid.UUID) 
 	}
 	return items, nil
 }
+
+const setDigestHour = `-- name: SetDigestHour :exec
+UPDATE membership SET digest_hour = $1
+WHERE garden_id = $2 AND user_id = $3
+`
+
+type SetDigestHourParams struct {
+	DigestHour int16
+	GardenID   uuid.UUID
+	UserID     uuid.UUID
+}
+
+// The hour the digest arrives, which is per membership: a person may want one
+// for their own garden and nothing from a garden they are sitting.
+func (q *Queries) SetDigestHour(ctx context.Context, arg SetDigestHourParams) error {
+	_, err := q.db.Exec(ctx, setDigestHour, arg.DigestHour, arg.GardenID, arg.UserID)
+	return err
+}

@@ -1,0 +1,26 @@
+{{define "title"}}sprig — account{{end}}
+
+{{/* A display name and a timezone, the two things the account holds. There is
+     no email to change and no password to reset, because there is neither.
+
+     novalidate, so an empty display name comes back as the message under the
+     field rather than as the browser's own bubble. */}}
+{{define "main"}}
+{{template "more-topbar" "Account"}}
+<div class="app__body app__body--sub">
+<form method="post" action="/more/account" novalidate>
+<div class="field">
+<label class="field__label" for="name">Display name <span class="field__hint">what every log row is signed with</span></label>
+<input class="input" id="name" name="name" type="text" value="{{.Name}}">
+{{with .NameError}}<p class="field__error">{{.}}</p>{{end}}
+</div>
+<div class="field">
+<label class="field__label" for="timezone">Timezone <span class="field__hint">what &ldquo;due today&rdquo; is worked out in</span></label>
+<select class="input" id="timezone" name="timezone">{{template "options" .Zones}}</select>
+</div>
+<button class="wide-action" type="submit">Save changes</button>
+</form>
+</div>
+{{end}}
+
+{{define "nav"}}{{template "tabs" "More"}}{{end}}
