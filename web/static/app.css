@@ -398,7 +398,9 @@ a.empty__action { display: inline-flex; align-items: center; }
               padding .32s var(--ease), min-height .32s var(--ease);
 }
 
-.row:not(.row--leaving):not(.htmx-swapping) { max-height: 200px; }
+/* The height the collapse starts from. An open editor is excluded: it never
+   collapses, and capping it makes its buttons overlap the row below. */
+.row:not(.row--leaving):not(.htmx-swapping):not(.row--editing) { max-height: 200px; }
 .row__said { color: var(--good); }
 
 /* The undo window is a bar along the bottom edge of the row that shrinks from
@@ -1751,6 +1753,10 @@ a.plant__archive { text-decoration: none; }
 .app__body--sub .section { margin-top: 28px; }
 .app__body--sub .section .care--outline { margin-top: 12px; }
 
+/* Add a care type navigates to a page, so it is a link styled as a button.
+   A button is the width of its label without being told; a link is not. */
+.app__body--sub .section a.care { width: fit-content; }
+
 /* The wide action follows a field, a list or a paragraph rather than sitting
    under its own heading, so it has a top margin to separate it from the thing
    above. The plant page's 4px, where the schedule list is already a bounded
@@ -1907,7 +1913,14 @@ a.wide-action {
   margin-top: 2px;
 }
 
-.row__buttons .row__drop { padding-left: 0; }
+/* Save comes before the drop button in the markup, because Enter in the name
+   field submits the form's first button and that must not be Delete. order
+   puts the drop button back at the left. */
+.row__buttons .row__drop { padding-left: 0; order: -1; }
+
+/* The message under the name in an open row takes its own line, as the
+   sentence under it does. */
+.row--editing .field__error { flex: 1 1 100%; margin-top: 0; }
 
 /* The Remove confirmation. The row becomes the question, as the schedule
    editor's does. The question takes the whole width and the two buttons sit
