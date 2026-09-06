@@ -12,7 +12,11 @@ workers="${SPRIG_E2E_WORKERS:-6}"
 
 # An empty host port has Docker pick a free one for each container
 export DB_PORTS=127.0.0.1::5432
-export APP_PORTS=127.0.0.1::8080
+
+# The app's host port is fixed per worker instead. The container has to be told the URL it is reached at, because a
+# passkey ceremony is checked against that origin, and Docker only reports a port it picked after the container is
+# running. A fixed port already in use fails the stack with "port is already allocated".
+app_port_base="${SPRIG_E2E_PORT_BASE:-18080}"
 
 # A project per run keeps the stacks clear of the dev stack. The suite refuses to start without the prefix
 export COMPOSE_PROJECT_NAME="sprig-e2e-$$"
@@ -21,7 +25,11 @@ export COMPOSE_PROFILES=app
 # stack runs a compose command in worker $1's project. Progress is off because six stacks starting at once print
 # several screens of it
 stack() {
-  COMPOSE_PROJECT_NAME="$COMPOSE_PROJECT_NAME-$1" docker compose --progress quiet "${@:2}"
+  local port=$((app_port_base + $1))
+  APP_PORTS="127.0.0.1:$port:8080" \
+    SPRIG_BASE_URL="http://localhost:$port" \
+    COMPOSE_PROJECT_NAME="$COMPOSE_PROJECT_NAME-$1" \
+    docker compose --progress quiet "${@:2}"
 }
 
 # every runs a compose command in each worker's project at once and fails if any of them did
@@ -69,10 +77,9 @@ base_urls=()
 database_urls=()
 for ((i = 0; i < workers; i++)); do
   db_port=$(stack "$i" port db 5432)
-  app_port=$(stack "$i" port app 8080)
   database_urls+=("postgres://sprig:sprig@127.0.0.1:${db_port##*:}/sprig?sslmode=disable")
-  # localhost rather than 127.0.0.1, so the suite hits the same origin development uses
-  base_urls+=("http://localhost:${app_port##*:}")
+  # localhost rather than 127.0.0.1, so the suite uses the same origin the container was given
+  base_urls+=("http://localhost:$((app_port_base + i))")
 done
 
 # One URL per stack, in worker order. The harness reads them back into pairs

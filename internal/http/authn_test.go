@@ -31,6 +31,17 @@ func testSessions() *auth.Sessions {
 	return auth.NewSessions(nil, testTTL, auth.CookieSettings{Name: "__Host-sprig_session", Secure: true})
 }
 
+// testPasskeys is a Passkeys with no database behind it. The route table and
+// the middleware only need it to exist. A test that runs a ceremony builds its
+// own against a real Postgres.
+func testPasskeys() *auth.Passkeys {
+	passkeys, err := auth.NewPasskeys(nil, "localhost", "sprig", "http://localhost:8080", auth.CookieSettings{Name: "__Host-sprig_session", Secure: true})
+	if err != nil {
+		panic(err)
+	}
+	return passkeys
+}
+
 func signedIn(r *http.Request) *http.Request {
 	r.AddCookie(&http.Cookie{Name: "__Host-sprig_session", Value: testToken})
 	return r

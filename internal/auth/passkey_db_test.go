@@ -1,0 +1,189 @@
+package auth
+
+import (
+	"errors"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/go-webauthn/webauthn/protocol"
+	"github.com/jackc/pgx/v5"
+
+	"github.com/ismailshak/sprig/internal/store"
+)
+
+// passkeysOnTx returns Passkeys over the same garden, account and membership
+// the session tests seed, inside a transaction rolled back when the test ends.
+func passkeysOnTx(t *testing.T) (*Passkeys, pgx.Tx) {
+	t.Helper()
+
+	_, tx := sessionsOnTx(t)
+	passkeys, err := NewPasskeys(store.New(tx), "localhost", "sprig", "http://localhost:8080", testCookie)
+	if err != nil {
+		t.Fatalf("building the passkeys: %v", err)
+	}
+	return passkeys, tx
+}
+
+// answering returns a request with the ceremony cookie on it. That cookie is
+// what says which challenge the request is answering.
+func answering(t *testing.T, cookie *http.Cookie) *http.Request {
+	t.Helper()
+
+	r := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/more/passkeys", nil)
+	r.AddCookie(cookie)
+	return r
+}
+
+// notACredential is what the credential field holds when nothing valid was
+// posted. FinishRegistration reads it only after the ceremony is found and
+// checked, so a test about the ceremony never has to build a real one.
+func notACredential() *strings.Reader { return strings.NewReader("{}") }
+
+// testAccount is the row sessionsOnTx seeds.
+var testAccount = store.AppUser{ID: testUserID, DisplayName: "Emma", Handle: "emma"}
+
+func TestPasskeys_AChallengeCanOnlyBeAnsweredOnce(t *testing.T) {
+	ctx := t.Context()
+	passkeys, _ := passkeysOnTx(t)
+
+	_, cookie, err := passkeys.BeginRegistration(ctx, time.Now(), testAccount, nil)
+	if err != nil {
+		t.Fatalf("BeginRegistration returned an error: %v", err)
+	}
+
+	// The first answer gets as far as the credential it posted, so the
+	// challenge was found. The second no longer finds one.
+	_, err = passkeys.FinishRegistration(ctx, time.Now(), answering(t, cookie), testAccount, notACredential(), "iPhone")
+	if !errors.Is(err, ErrBadCredential) {
+		t.Fatalf("the first answer to the challenge returned %v, want %v", err, ErrBadCredential)
+	}
+	_, err = passkeys.FinishRegistration(ctx, time.Now(), answering(t, cookie), testAccount, notACredential(), "iPhone")
+	if !errors.Is(err, ErrCeremonyGone) {
+		t.Errorf("the second answer to the challenge returned %v, want %v", err, ErrCeremonyGone)
+	}
+}
+
+func TestPasskeys_AChallengeLeftOpenPastItsLifeIsGone(t *testing.T) {
+	ctx := t.Context()
+	passkeys, _ := passkeysOnTx(t)
+
+	// The row expires ceremonyLife after the ceremony started, so starting one
+	// that long ago is the same as nobody answering in time.
+	stale := time.Now().Add(-ceremonyLife - time.Minute)
+	_, cookie, err := passkeys.BeginRegistration(ctx, stale, testAccount, nil)
+	if err != nil {
+		t.Fatalf("BeginRegistration returned an error: %v", err)
+	}
+
+	_, err = passkeys.FinishRegistration(ctx, time.Now(), answering(t, cookie), testAccount, notACredential(), "iPhone")
+	if !errors.Is(err, ErrCeremonyGone) {
+		t.Errorf("answering a challenge from %s ago returned %v, want %v", ceremonyLife, err, ErrCeremonyGone)
+	}
+}
+
+func TestPasskeys_AChallengeIsStillAnswerableASecondBeforeItExpires(t *testing.T) {
+	ctx := t.Context()
+	passkeys, _ := passkeysOnTx(t)
+
+	started := time.Now()
+	_, cookie, err := passkeys.BeginRegistration(ctx, started, testAccount, nil)
+	if err != nil {
+		t.Fatalf("BeginRegistration returned an error: %v", err)
+	}
+
+	answeredAt := started.Add(ceremonyLife - time.Second)
+	_, err = passkeys.FinishRegistration(ctx, answeredAt, answering(t, cookie), testAccount, notACredential(), "iPhone")
+	if !errors.Is(err, ErrBadCredential) {
+		t.Errorf("answering a challenge a second before it expires returned %v, want %v", err, ErrBadCredential)
+	}
+}
+
+func TestPasskeys_StartingACeremonyDeletesTheOnesNobodyAnswered(t *testing.T) {
+	ctx := t.Context()
+	passkeys, tx := passkeysOnTx(t)
+
+	stale := time.Now().Add(-ceremonyLife - time.Minute)
+	if _, _, err := passkeys.BeginAssertion(ctx, stale); err != nil {
+		t.Fatalf("BeginAssertion returned an error: %v", err)
+	}
+	if _, _, err := passkeys.BeginAssertion(ctx, time.Now()); err != nil {
+		t.Fatalf("BeginAssertion returned an error: %v", err)
+	}
+
+	var rows int
+	if err := tx.QueryRow(ctx, "SELECT count(*) FROM webauthn_ceremony").Scan(&rows); err != nil {
+		t.Fatalf("counting the ceremonies: %v", err)
+	}
+	if rows != 1 {
+		t.Errorf("webauthn_ceremony holds %d rows, want 1, so an abandoned prompt does not leave one behind", rows)
+	}
+}
+
+func TestPasskeys_AnAnswerWithNoCeremonyCookieIsRefused(t *testing.T) {
+	ctx := t.Context()
+	passkeys, _ := passkeysOnTx(t)
+
+	r := httptest.NewRequestWithContext(ctx, http.MethodPost, "/more/passkeys", nil)
+	_, err := passkeys.FinishRegistration(ctx, time.Now(), r, testAccount, notACredential(), "iPhone")
+	if !errors.Is(err, ErrCeremonyGone) {
+		t.Errorf("an answer with no ceremony cookie returned %v, want %v", err, ErrCeremonyGone)
+	}
+}
+
+func TestPasskeys_ARegistrationStartedByAnotherAccountIsRefused(t *testing.T) {
+	ctx := t.Context()
+	passkeys, _ := passkeysOnTx(t)
+
+	// The ceremony cookie outlives a sign-out, so the next person at the same
+	// browser must not finish the previous one and enrol their device on that
+	// account.
+	_, cookie, err := passkeys.BeginRegistration(ctx, time.Now(), testAccount, nil)
+	if err != nil {
+		t.Fatalf("BeginRegistration returned an error: %v", err)
+	}
+
+	_, err = passkeys.FinishRegistration(ctx, time.Now(), answering(t, cookie), store.AppUser{ID: otherUserID}, notACredential(), "iPhone")
+	if !errors.Is(err, ErrCeremonyGone) {
+		t.Errorf("a registration finished by a second account returned %v, want %v", err, ErrCeremonyGone)
+	}
+}
+
+func TestPasskeys_ASignInChallengeNamesNoCredential(t *testing.T) {
+	ctx := t.Context()
+	passkeys, _ := passkeysOnTx(t)
+
+	// A discoverable credential is what lets the sign-in page have no username
+	// field: the browser offers the passkeys it holds rather than being told
+	// which ones to accept.
+	assertion, _, err := passkeys.BeginAssertion(ctx, time.Now())
+	if err != nil {
+		t.Fatalf("BeginAssertion returned an error: %v", err)
+	}
+	if got := assertion.Response.AllowedCredentials; len(got) != 0 {
+		t.Errorf("the challenge allows %d named credentials, want none", len(got))
+	}
+}
+
+func TestPasskeys_ARegistrationChallengeNamesTheAccountAddingTheDevice(t *testing.T) {
+	ctx := t.Context()
+	passkeys, _ := passkeysOnTx(t)
+
+	creation, _, err := passkeys.BeginRegistration(ctx, time.Now(), testAccount, nil)
+	if err != nil {
+		t.Fatalf("BeginRegistration returned an error: %v", err)
+	}
+
+	handle, ok := creation.Response.User.ID.(protocol.URLEncodedBase64)
+	if !ok {
+		t.Fatalf("the challenge names the account as %T, want the raw user handle", creation.Response.User.ID)
+	}
+	if want := testUserID[:]; string(handle) != string(want) {
+		t.Errorf("the challenge names account %x, want %x", handle, want)
+	}
+	if creation.Response.User.Name != "emma" {
+		t.Errorf("the challenge calls the account %q, want %q", creation.Response.User.Name, "emma")
+	}
+}

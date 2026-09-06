@@ -33,12 +33,39 @@ CREATE TABLE passkey_credential (
     -- Hardware keys increment this on every use, so a value that does not
     -- increase indicates a cloned key. Synced passkeys always return zero.
     sign_count    bigint NOT NULL DEFAULT 0,
+    -- The authenticator data flags byte from the registration. go-webauthn
+    -- compares the backup-eligible flag on every assertion against the one it
+    -- was given, so a credential stored without it is refused at sign-in.
+    flags         smallint NOT NULL DEFAULT 0,
     transports    text[] COLLATE "C",
     created_at    timestamptz NOT NULL DEFAULT now(),
     last_used_at  timestamptz
 );
 
 CREATE INDEX passkey_credential_user_id_idx ON passkey_credential (user_id);
+
+-- One row per WebAuthn ceremony in progress. The browser is given a challenge
+-- in one request and signs it in the next, so the challenge has to be kept
+-- between the two. It is held here rather than in a cookie so that only a
+-- challenge this server issued is accepted, and rather than in memory so that
+-- ceremonies survive a restart.
+CREATE TABLE webauthn_ceremony (
+    id         uuid PRIMARY KEY DEFAULT uuidv7(),
+    -- SHA-256 of the value in the ceremony cookie. The second request presents
+    -- the cookie and the hash of it finds this row.
+    token_hash text COLLATE "C" NOT NULL UNIQUE,
+    -- NULL for a sign-in, where the account is unknown until the browser
+    -- returns a credential. Set to the signed-in account when it is
+    -- registering a device.
+    user_id    uuid REFERENCES app_user (id) ON DELETE CASCADE,
+    -- The challenge and what it was issued for, as go-webauthn's session JSON.
+    session    jsonb NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    expires_at timestamptz NOT NULL
+);
+
+-- Used by the sweep that deletes ceremonies nobody finished.
+CREATE INDEX webauthn_ceremony_expires_at_idx ON webauthn_ceremony (expires_at);
 
 CREATE TABLE invite (
     id                    uuid PRIMARY KEY DEFAULT uuidv7(),
@@ -161,5 +188,6 @@ DROP TABLE push_subscription;
 DROP TABLE api_token;
 DROP TABLE recovery_code;
 DROP TABLE invite;
+DROP TABLE webauthn_ceremony;
 DROP TABLE passkey_credential;
 DROP TABLE session;

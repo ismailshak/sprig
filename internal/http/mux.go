@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"time"
 
+	"golang.org/x/time/rate"
+
 	"github.com/ismailshak/sprig/internal/auth"
 	"github.com/ismailshak/sprig/internal/build"
 	"github.com/ismailshak/sprig/internal/store"
@@ -16,17 +18,25 @@ import (
 type route struct {
 	pattern    string
 	capability auth.Capability
-	handler    http.Handler
+	// limits are the rate limiters wrapped around this route, outermost first.
+	limits  []middleware
+	handler http.Handler
 }
+
+type middleware func(http.Handler) http.Handler
 
 // routes is every route the server has. New registers from this slice and the
 // enforcement test walks it, because http.ServeMux does not list its patterns
 // and a route registered directly on the mux would be one the test cannot see.
 // devRoutes is what a development build adds, and empty otherwise.
-func routes(logger *slog.Logger, sessions *auth.Sessions, queries *store.Queries, templates *Templates, assets *Assets) []route {
+func routes(logger *slog.Logger, sessions *auth.Sessions, passkeys *auth.Passkeys, queries *store.Queries, templates *Templates, assets *Assets, trustedIPHeader string) []route {
 	todayHandler := &today{logger: logger, queries: queries, templates: templates, now: time.Now}
 	plantsHandler := &plants{logger: logger, queries: queries, templates: templates, now: time.Now}
 	activityHandler := &activity{logger: logger, queries: queries, templates: templates, now: time.Now}
+	// The sign-in handlers pick a garden for the account through the resolver,
+	// the same call the session middleware resolves a token with.
+	resolver := auth.NewResolver(sessions, queries)
+	passkeyHandler := &passkeyCeremony{logger: logger, passkeys: passkeys, sessions: sessions, resolver: resolver, queries: queries, templates: templates, now: time.Now}
 	moreHandler := &more{logger: logger, sessions: sessions, queries: queries, templates: templates, build: build.Read(), now: time.Now}
 	base := []route{
 		{pattern: "GET /healthz", handler: http.HandlerFunc(handleHealthz)},
@@ -60,6 +70,10 @@ func routes(logger *slog.Logger, sessions *auth.Sessions, queries *store.Queries
 		{pattern: "GET " + recoveryPath, handler: http.HandlerFunc(moreHandler.recovery)},
 		{pattern: "GET " + passkeysPath, handler: http.HandlerFunc(moreHandler.passkeys)},
 		{pattern: "POST " + passkeysPath + "/{key}/remove", handler: http.HandlerFunc(moreHandler.removePasskey)},
+		{pattern: "POST " + registerPath, handler: http.HandlerFunc(passkeyHandler.registerChallenge)},
+		{pattern: "POST " + passkeysPath, handler: http.HandlerFunc(passkeyHandler.register)},
+		{pattern: "POST " + challengePath, limits: signInLimits(trustedIPHeader), handler: http.HandlerFunc(passkeyHandler.signInChallenge)},
+		{pattern: "POST " + signInPath, limits: signInLimits(trustedIPHeader), handler: http.HandlerFunc(passkeyHandler.signIn)},
 		{pattern: "GET " + notificationsPath, handler: http.HandlerFunc(moreHandler.notifications)},
 		{pattern: "POST " + notificationsPath, handler: http.HandlerFunc(moreHandler.saveNotifications)},
 		{pattern: "POST " + notificationsPath + "/browsers/{browser}/remove", handler: http.HandlerFunc(moreHandler.removeBrowser)},
@@ -85,7 +99,23 @@ func routes(logger *slog.Logger, sessions *auth.Sessions, queries *store.Queries
 		{pattern: "POST " + tokensPath, capability: auth.TokenManage, handler: http.HandlerFunc(moreHandler.createToken)},
 		{pattern: "POST " + tokensPath + "/{token}/revoke", capability: auth.TokenManage, handler: http.HandlerFunc(moreHandler.revokeToken)},
 	}
-	return append(base, devRoutes(sessions, queries, templates)...)
+	return append(base, devRoutes(sessions, resolver, queries, templates)...)
+}
+
+// signInLimits returns the rate limiters wrapped around the two sign-in
+// routes. They are served without a session and a credential id is guessable,
+// so they get budgets of their own.
+//
+// Six a minute from one address is more sign-ins than anybody needs, and that
+// limit is the one doing the work. The shared limit of a hundred and twenty a
+// minute is only there to stop one stranger filling the ceremony table. It is
+// far looser than the ten a minute a recovery code gets, because a tight shared
+// limit would let that stranger lock every member out of the app.
+func signInLimits(trustedIPHeader string) []middleware {
+	return []middleware{
+		Limit(NewLimiter(rate.Every(time.Minute/6), 6), ClientAddress(trustedIPHeader)),
+		Limit(NewLimiter(rate.Every(time.Minute/120), 120), AnySource),
+	}
 }
 
 // publicRoutes is every route served without a session. Authenticate covers
@@ -93,6 +123,10 @@ func routes(logger *slog.Logger, sessions *auth.Sessions, queries *store.Queries
 var publicRoutes = map[string]bool{
 	"GET /healthz": true,
 	assetPattern:   true,
+	// Signing in has to work with no session, so the challenge and the answer
+	// to it are both public.
+	"POST " + challengePath: true,
+	"POST " + signInPath:    true,
 }
 
 // New builds sprig's handler. The middleware order matters. RequestID runs
@@ -100,12 +134,17 @@ var publicRoutes = map[string]bool{
 // recovered panic's 500 still gets a request line. The cross-origin check is
 // inside both so a refused request is logged like any other. Authentication is
 // inside that so a cross-site post is refused before it costs a session lookup.
-func New(logger *slog.Logger, sessions *auth.Sessions, resolver Resolver, queries *store.Queries, templates *Templates, assets *Assets) http.Handler {
+func New(logger *slog.Logger, sessions *auth.Sessions, passkeys *auth.Passkeys, resolver Resolver, queries *store.Queries, templates *Templates, assets *Assets, trustedIPHeader string) http.Handler {
 	mux := http.NewServeMux()
-	for _, r := range routes(logger, sessions, queries, templates, assets) {
+	for _, r := range routes(logger, sessions, passkeys, queries, templates, assets, trustedIPHeader) {
 		h := r.handler
 		if r.capability != "" {
 			h = require(r.capability, h)
+		}
+		// Wrapping backwards leaves limits[0] outermost, so a request already
+		// refused by the per-address budget spends nothing from the shared one.
+		for i := len(r.limits) - 1; i >= 0; i-- {
+			h = r.limits[i](h)
 		}
 		mux.Handle(r.pattern, h)
 	}

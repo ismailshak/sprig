@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log/slog"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -14,8 +15,15 @@ import (
 type config struct {
 	addr        string
 	databaseURL string
-	cookie      auth.CookieSettings
-	sessionTTL  time.Duration
+	// baseURL is the origin the app is served at, with no path. A passkey
+	// ceremony is checked against it, so it has to be the URL a browser reaches
+	// the app at, port included.
+	baseURL *url.URL
+	// rpID is the WebAuthn relying party id. A passkey is bound to it. It
+	// defaults to baseURL's host, and is "localhost" in development.
+	rpID       string
+	cookie     auth.CookieSettings
+	sessionTTL time.Duration
 	// trustedIPHeader is the header a reverse proxy puts the client address
 	// in. Empty means RemoteAddr is the client address.
 	trustedIPHeader string
@@ -25,6 +33,11 @@ type config struct {
 	logLevel    slog.Level
 	logFormat   string
 }
+
+// defaultBaseURL is the address the development server runs on, so a local run
+// needs no configuration. A deployment sets SPRIG_BASE_URL, because a browser
+// refuses a passkey ceremony whose origin is not the one it is on.
+const defaultBaseURL = "http://localhost:8080"
 
 // defaultSessionTTL is 30 days without use before a session expires. Shorter
 // would prompt for a passkey more often than people tolerate.
@@ -55,6 +68,24 @@ func loadConfig(getenv func(string) string) (config, error) {
 		problems = append(problems, fmt.Sprintf("SPRIG_LOG_FORMAT must be json or text, got %q", cfg.logFormat))
 	}
 
+	base := withDefault(getenv("SPRIG_BASE_URL"), defaultBaseURL)
+	baseURL, err := parseBaseURL(base)
+	if err != nil {
+		problems = append(problems, err.Error())
+	}
+	cfg.baseURL = baseURL
+
+	// A passkey is bound to the relying party id, so an id the browser will not
+	// accept for the page's own origin makes every ceremony fail in the browser
+	// with nothing reaching the server. The check is here rather than at the
+	// first sign-in attempt.
+	if baseURL != nil {
+		cfg.rpID = withDefault(strings.TrimSpace(getenv("SPRIG_RP_ID")), baseURL.Hostname())
+		if !isRegistrableFor(cfg.rpID, baseURL.Hostname()) {
+			problems = append(problems, fmt.Sprintf("SPRIG_RP_ID must be %s or a parent domain of it, got %q", baseURL.Hostname(), cfg.rpID))
+		}
+	}
+
 	cfg.cookie.Name = withDefault(getenv("SPRIG_COOKIE_NAME"), "__Host-sprig_session")
 	secure, err := strconv.ParseBool(withDefault(getenv("SPRIG_COOKIE_SECURE"), "true"))
 	if err != nil {
@@ -65,6 +96,14 @@ func loadConfig(getenv func(string) string) (config, error) {
 		if err := cfg.cookie.Validate(); err != nil {
 			problems = append(problems, "SPRIG_COOKIE_NAME with SPRIG_COOKIE_SECURE: "+err.Error())
 		}
+	}
+	// A Secure cookie is the deployed setting and an http base URL is the
+	// development default. Together they are a deployment that forgot
+	// SPRIG_BASE_URL. It would start, and then every passkey ceremony would be
+	// refused, because the browser signs the origin it is on and the server
+	// checks that against this one.
+	if err == nil && secure && baseURL != nil && baseURL.Scheme != "https" {
+		problems = append(problems, fmt.Sprintf("SPRIG_BASE_URL must be https when SPRIG_COOKIE_SECURE is true, got %q", base))
 	}
 
 	// The cookie's Max-Age is whole seconds, so a TTL with a fractional second
@@ -89,6 +128,38 @@ func loadConfig(getenv func(string) string) (config, error) {
 	}
 
 	return cfg, nil
+}
+
+// parseBaseURL returns the scheme and host of a SPRIG_BASE_URL value. Anything
+// but an absolute http or https URL with a host is refused, because a passkey
+// ceremony is checked against this origin.
+func parseBaseURL(v string) (*url.URL, error) {
+	parsed, err := url.Parse(v)
+	if err != nil {
+		return nil, fmt.Errorf("SPRIG_BASE_URL must be an absolute URL such as https://sprig.example.com, got %q", v)
+	}
+	if (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
+		return nil, fmt.Errorf("SPRIG_BASE_URL must be an absolute URL such as https://sprig.example.com, got %q", v)
+	}
+	return &url.URL{Scheme: parsed.Scheme, Host: parsed.Host}, nil
+}
+
+// isRegistrableFor reports whether a browser will accept rpID for a page served
+// from host. WebAuthn allows the relying party id to be the host itself or a
+// parent domain of it, so a passkey registered on sprig.example.com under the
+// id example.com is also offered on app.example.com. A parent domain has to
+// contain a dot, because no browser accepts a bare "com" for example.com.
+//
+// A public suffix of more than one label still passes here. "co.uk" for
+// sprig.co.uk is refused by browsers and accepted by this check. Telling those
+// apart needs the public suffix list, and the app does not have one. The check
+// turns the likely mistake into a message at startup rather than covering
+// every wrong value.
+func isRegistrableFor(rpID, host string) bool {
+	if rpID == host {
+		return true
+	}
+	return strings.Contains(rpID, ".") && strings.HasSuffix(host, "."+rpID)
 }
 
 func withDefault(v, def string) string {

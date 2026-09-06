@@ -63,7 +63,11 @@ func devStack(t *testing.T) (http.Handler, *auth.Resolver) {
 	sessions := auth.NewSessions(queries, testTTL, auth.CookieSettings{Name: "__Host-sprig_session", Secure: true})
 	resolver := auth.NewResolver(sessions, queries)
 	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
-	return New(logger, sessions, resolver, queries, testTemplates(), testAssets()), resolver
+	passkeys, err := auth.NewPasskeys(queries, "localhost", "sprig", "http://localhost:8080", auth.CookieSettings{Name: "__Host-sprig_session", Secure: true})
+	if err != nil {
+		t.Fatalf("building the passkeys: %v", err)
+	}
+	return New(logger, sessions, passkeys, resolver, queries, testTemplates(), testAssets(), ""), resolver
 }
 
 func postHandle(t *testing.T, handler http.Handler, handle string, cookie *http.Cookie) *httptest.ResponseRecorder {
@@ -192,7 +196,7 @@ func TestDevSignIn_AnUnknownHandleIs404AndAUserWithNoGardenIs409(t *testing.T) {
 
 func TestDevSignIn_TheSignInPathRedirectsToTheDevSignIn(t *testing.T) {
 	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
-	handler := New(logger, testSessions(), rejectEveryToken, nil, testTemplates(), testAssets())
+	handler := New(logger, testSessions(), testPasskeys(), rejectEveryToken, nil, testTemplates(), testAssets(), "")
 
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, signInPath, nil))

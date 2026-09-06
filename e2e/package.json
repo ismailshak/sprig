@@ -8,7 +8,7 @@
     "format:check": "prettier --check .",
     "test": "playwright test",
     "test:ui": "playwright test --ui",
-    "browsers": "playwright install --with-deps webkit"
+    "browsers": "playwright install --with-deps webkit chromium"
   },
   "devDependencies": {
     "@playwright/test": "1.62.1",

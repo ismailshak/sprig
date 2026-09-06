@@ -82,8 +82,12 @@ func run(ctx context.Context, getenv func(string) string, stdout io.Writer) erro
 	queries := store.New(pool)
 	sessions := auth.NewSessions(queries, cfg.sessionTTL, cfg.cookie)
 	resolver := auth.NewResolver(sessions, queries)
+	passkeys, err := auth.NewPasskeys(queries, cfg.rpID, "sprig", cfg.baseURL.String(), cfg.cookie)
+	if err != nil {
+		return err
+	}
 
-	return serve(ctx, logger, listener, sprighttp.New(logger, sessions, resolver, queries, templates, assets))
+	return serve(ctx, logger, listener, sprighttp.New(logger, sessions, passkeys, resolver, queries, templates, assets, cfg.trustedIPHeader))
 }
 
 // serve runs the server on listener until ctx is cancelled, then gives

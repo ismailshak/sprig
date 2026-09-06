@@ -18,10 +18,22 @@ type passkeysPage struct {
 	// OnlyOne is true when the account has one credential left. The page then
 	// says why no row offers Remove.
 	OnlyOne bool
+	// Error is the message shown above Add a passkey when a device was refused.
+	// Empty otherwise.
+	Error string
+	// Add is the URL the Add a passkey form posts the browser's answer to.
+	Add string
+	// Challenge is the URL the page's script posts to for a challenge, before it
+	// calls the browser's credential API.
+	Challenge string
+	// Field is the name of the hidden input the browser's answer goes in. The
+	// script reads it off the form, so the name is written once.
+	Field string
 }
 
 type passkeyRow struct {
-	// Name is what the browser called the device when it registered.
+	// Name is the device and browser the passkey was registered from, as
+	// "Mac · Chrome".
 	Name string
 	Used string
 	// Remove is the URL the row's Remove button posts to. It is empty on the
@@ -64,7 +76,13 @@ func (h *more) removePasskey(w http.ResponseWriter, r *http.Request) {
 }
 
 func newPasskeysPage(keys []store.PasskeyCredential, now time.Time) passkeysPage {
-	page := passkeysPage{Bar: moreBar("Passkeys"), OnlyOne: len(keys) == 1}
+	page := passkeysPage{
+		Bar:       moreBar("Passkeys"),
+		OnlyOne:   len(keys) == 1,
+		Add:       passkeysPath,
+		Challenge: registerPath,
+		Field:     credentialField,
+	}
 	for _, key := range keys {
 		row := passkeyRow{Name: key.Name, Used: usedNote(key.LastUsedAt, now)}
 		if !page.OnlyOne {

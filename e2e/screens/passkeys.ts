@@ -18,4 +18,17 @@ export class PasskeysScreen {
   removeOn(device: string): Locator {
     return this.row(device).getByRole('button', { name: 'Remove' });
   }
+
+  // add is the Add a passkey button. It is disabled until the page's script
+  // runs.
+  add(): Locator {
+    return this.page.getByRole('button', { name: 'Add a passkey' });
+  }
+
+  // refusal is the line above Add a passkey saying why a device was not
+  // enrolled. The server writes it when an answer reaches it, and the page's
+  // script when the browser refuses before that.
+  refusal(): Locator {
+    return this.page.getByRole('alert');
+  }
 }

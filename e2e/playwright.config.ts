@@ -42,12 +42,21 @@ export default defineConfig({
     {
       name: 'phone',
       use: { ...devices['iPhone 16'] },
-      grepInvert: /@nojs/,
+      grepInvert: /@nojs|@passkey/,
     },
     {
       name: 'phone-nojs',
       use: { ...devices['iPhone 16'], javaScriptEnabled: false },
       grep: /@swap|@nojs/,
+    },
+    // @passkey runs on Chromium alone, because Chrome DevTools' virtual
+    // authenticator is the only way to register a passkey without a real
+    // device. It is a desktop Chrome, so this is also the only project running
+    // at a width where the pages take their wide layout.
+    {
+      name: 'desktop',
+      use: { ...devices['Desktop Chrome'] },
+      grep: /@passkey/,
     },
   ],
 });

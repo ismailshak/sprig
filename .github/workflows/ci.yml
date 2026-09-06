@@ -54,7 +54,7 @@ jobs:
       - name: Install the browser and its system libraries
         run: |
           pnpm --dir e2e install --frozen-lockfile
-          pnpm --dir e2e exec playwright install --with-deps webkit
+          pnpm --dir e2e exec playwright install --with-deps webkit chromium
       - name: Set up Buildx
         uses: docker/setup-buildx-action@v4
       # Built here rather than through compose because this action reads and writes the Actions layer cache
