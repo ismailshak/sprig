@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestHandleFor(t *testing.T) {
+func TestHandleCandidate_ANameBecomesItsLowerCaseSlug(t *testing.T) {
 	tests := []struct {
 		name        string
 		displayName string
@@ -29,21 +29,21 @@ func TestHandleFor(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := handleFor(tt.displayName, tt.attempt); got != tt.want {
-				t.Errorf("handleFor(%q, %d) = %q, want %q", tt.displayName, tt.attempt, got, tt.want)
+			if got := handleCandidate(tt.displayName, tt.attempt); got != tt.want {
+				t.Errorf("handleCandidate(%q, %d) = %q, want %q", tt.displayName, tt.attempt, got, tt.want)
 			}
 		})
 	}
 }
 
-func TestHandleFor_ACollisionGetsARandomSuffixNotACounter(t *testing.T) {
+func TestHandleCandidate_ACollisionGetsARandomSuffixNotACounter(t *testing.T) {
 	shape := regexp.MustCompile(`^emma_[a-z2-7]{4}$`)
 
 	seen := map[string]bool{}
 	for attempt := 2; attempt < 12; attempt++ {
-		got := handleFor("Emma", attempt)
+		got := handleCandidate("Emma", attempt)
 		if !shape.MatchString(got) {
-			t.Fatalf("handleFor(\"Emma\", %d) = %q, want the slug and a random suffix", attempt, got)
+			t.Fatalf("handleCandidate(\"Emma\", %d) = %q, want the slug and a random suffix", attempt, got)
 		}
 		seen[got] = true
 	}
@@ -52,10 +52,10 @@ func TestHandleFor_ACollisionGetsARandomSuffixNotACounter(t *testing.T) {
 	}
 }
 
-func TestHandleFor_ASuffixedCandidateStaysWithinTheLengthLimit(t *testing.T) {
-	got := handleFor(strings.Repeat("a", 40), 2)
+func TestHandleCandidate_ASuffixedCandidateStaysWithinTheLengthLimit(t *testing.T) {
+	got := handleCandidate(strings.Repeat("a", 40), 2)
 	if len(got) != maxHandleLength {
-		t.Errorf("handleFor on a forty-character name = %q, %d characters, want %d",
+		t.Errorf("handleCandidate on a forty-character name = %q, %d characters, want %d",
 			got, len(got), maxHandleLength)
 	}
 }
@@ -65,9 +65,9 @@ func TestHandleFor_ASuffixedCandidateStaysWithinTheLengthLimit(t *testing.T) {
 func TestNormaliseHandle_AGeneratedHandleIsUnchanged(t *testing.T) {
 	for _, displayName := range []string{"Emma", "Emma Fletcher", "O'Brien-Smith", "Élodie", "🌱", "", strings.Repeat("a", 40)} {
 		for _, attempt := range []int{1, 2} {
-			handle := handleFor(displayName, attempt)
+			handle := handleCandidate(displayName, attempt)
 			if got := NormaliseHandle(handle); got != handle {
-				t.Errorf("handleFor(%q, %d) = %q and NormaliseHandle rewrites it to %q", displayName, attempt, handle, got)
+				t.Errorf("handleCandidate(%q, %d) = %q and NormaliseHandle rewrites it to %q", displayName, attempt, handle, got)
 			}
 		}
 	}

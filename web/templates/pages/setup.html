@@ -1,0 +1,40 @@
+{{define "title"}}sprig — set up your garden{{end}}
+
+{{define "app-class"}}app app--bare{{end}}
+
+{{/* Set up your garden, the first page of a new install. With sign-up on it
+     is also how a second person creates a garden of their own. There is no tab
+     bar, because there is no garden to open until the post goes through.
+
+     novalidate turns the browser's own validation off, so an empty field is
+     reported by the server as the message under that field. */}}
+{{define "main"}}
+<div class="app__body app__body--bare">
+<h1 class="bare__title">Set up your garden</h1>
+<p class="lead">Name the garden, pick a name to sign your care with, and this device will make a passkey to sign in with. You&rsquo;ll own the garden, and you can invite people to it afterwards.</p>
+{{/* The paragraph below is rendered even when Refusal is empty, because the
+     page's script writes the browser's refusal into it. The button starts
+     disabled and the note stays under it until that script runs, because the
+     server cannot tell whether the browser will run it. */}}
+<p class="field__error" id="passkey-error" role="alert">{{.Refusal}}</p>
+<form method="post" action="{{.Action}}" novalidate data-passkey="create" data-challenge="{{.Challenge}}" data-field="{{.Field}}" data-message="passkey-error" data-note="passkey-noscript">
+<div class="field">
+<label class="field__label" for="garden">Garden name <span class="field__hint">it can be changed later</span></label>
+<input class="input" id="garden" name="garden" type="text" value="{{.Garden}}" autocomplete="off" spellcheck="false">
+{{with .GardenError}}<p class="field__error">{{.}}</p>{{end}}
+</div>
+<div class="field">
+<label class="field__label" for="name">Display name <span class="field__hint">what every log row is signed with</span></label>
+<input class="input" id="name" name="name" type="text" value="{{.Name}}" autocomplete="nickname" spellcheck="false">
+{{with .NameError}}<p class="field__error">{{.}}</p>{{end}}
+</div>
+{{template "timezone-field" .Zone}}
+<input type="hidden" name="{{.Field}}">
+<button class="wide-action" type="submit" disabled>Create the garden</button>
+<p class="note" id="passkey-noscript">Setting up needs JavaScript and a browser that supports passkeys.</p>
+</form>
+</div>
+{{end}}
+
+{{define "script"}}<script src="{{asset "passkey.js"}}" defer></script>
+<script src="{{asset "timezone.js"}}" defer></script>{{end}}

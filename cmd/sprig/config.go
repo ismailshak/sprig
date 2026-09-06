@@ -32,6 +32,10 @@ type config struct {
 	templateDir string
 	logLevel    slog.Level
 	logFormat   string
+	// signupEnabled is whether a stranger can create an account and a garden of
+	// their own at /setup. When it is off, the page is served only on an
+	// install with no account yet. An invite is then the only other way in.
+	signupEnabled bool
 }
 
 // defaultBaseURL is the address the development server runs on, so a local run
@@ -116,6 +120,12 @@ func loadConfig(getenv func(string) string) (config, error) {
 		problems = append(problems, fmt.Sprintf("SPRIG_SESSION_TTL must be a whole number of seconds and at least one, got %s", ttl))
 	}
 	cfg.sessionTTL = ttl
+
+	signup, err := strconv.ParseBool(withDefault(getenv("SPRIG_SIGNUP_ENABLED"), "false"))
+	if err != nil {
+		problems = append(problems, fmt.Sprintf("SPRIG_SIGNUP_ENABLED must be true or false, got %q", getenv("SPRIG_SIGNUP_ENABLED")))
+	}
+	cfg.signupEnabled = signup
 
 	level, err := parseLogLevel(withDefault(getenv("SPRIG_LOG_LEVEL"), "info"))
 	if err != nil {

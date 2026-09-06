@@ -1,14 +1,18 @@
 /* Registering a passkey and signing in with one. Both do the same three
    things: post for a challenge, hand it to the browser's credential API, and
    submit the browser's answer as an ordinary form post. Only the browser can
-   talk to the authenticator. These two forms are the only ones in sprig that
-   need a script.
+   talk to the authenticator. The forms it runs on are the only ones in sprig
+   that need a script.
 
    A form here has data-passkey="create" or data-passkey="get", a
    data-challenge URL to post for the challenge, and a data-field naming the
    hidden input the answer goes in. Its submit button starts disabled, and the
    note named by data-note says the form needs a script. This script enables the
-   button and removes the note. */
+   button and removes the note.
+
+   The form's fields are posted with the request for the challenge. Set up
+   your garden needs the display name before the passkey is made, because the
+   browser stores that name with the passkey. */
 (function () {
   const forms = document.querySelectorAll('form[data-passkey]');
   // The three JSON helpers arrived in browsers later than the credential API
@@ -38,7 +42,17 @@
       if (message) message.textContent = '';
 
       try {
-        const response = await fetch(form.dataset.challenge, { method: 'POST' });
+        const response = await fetch(form.dataset.challenge, {
+          method: 'POST',
+          body: new URLSearchParams(new FormData(form)),
+        });
+        // A 422 says the server refused a field. The form is submitted as
+        // it is, so the server renders the page again with the message under
+        // that field. No passkey is made for a form the post would refuse.
+        if (response.status === 422) {
+          form.submit();
+          return;
+        }
         // The body of a 429 is a sentence for the person to read, so it is
         // shown as it is. Any other failed response gets the generic sentence
         // in refusal below.

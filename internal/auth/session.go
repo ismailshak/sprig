@@ -171,6 +171,18 @@ func (s *Sessions) Delete(ctx context.Context, token string) error {
 	return nil
 }
 
+// DeleteFromRequest removes the session for the token in the request's session
+// cookie. A request with no session cookie deletes nothing and is not an error.
+// A handler that starts a new session calls this first, so the token the
+// browser arrived with stops resolving rather than staying live until its TTL.
+func (s *Sessions) DeleteFromRequest(ctx context.Context, r *http.Request) error {
+	token := s.TokenFromRequest(r)
+	if token == "" {
+		return nil
+	}
+	return s.Delete(ctx, token)
+}
+
 // Cookie returns the session cookie holding token. HttpOnly keeps it from
 // script, SameSite=Lax keeps it out of cross-site form posts, and Path=/ is
 // required by a __Host- name. Max-Age is the TTL, so a browser closed for

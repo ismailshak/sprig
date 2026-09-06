@@ -90,13 +90,11 @@ func (d *devSignIn) start(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Deleting the previous session keeps a switch from leaving a row behind
-	// until the TTL takes it.
-	if old := d.sessions.TokenFromRequest(r); old != "" {
-		if err := d.sessions.Delete(ctx, old); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
+	// Switching to another person replaces the session rather than leaving the
+	// previous row live until its TTL.
+	if err := d.sessions.DeleteFromRequest(ctx, r); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 
 	token, _, err := d.sessions.Create(ctx, now, user.ID, membership.GardenID, nil, r.UserAgent())

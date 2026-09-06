@@ -479,6 +479,9 @@ type timezoneField struct {
 	// has not been posted yet and leave it off when re-rendering a post that was
 	// refused, so a zone somebody chose is not replaced.
 	Propose bool
+	// Error is the message shown under the select. It is empty when a zone was
+	// chosen.
+	Error string
 }
 
 // zoneOptions returns the options for the Timezone select, with the zone in

@@ -110,32 +110,39 @@ func ceremonyCookieName(secure bool) string {
 	return "sprig_ceremony"
 }
 
-// BeginRegistration starts enrolling a new device for user. It returns the
-// options to hand to navigator.credentials.create and the cookie that tells
-// FinishRegistration which challenge an answer is for.
-func (p *Passkeys) BeginRegistration(ctx context.Context, now time.Time, user store.AppUser, held []store.PasskeyCredential) (*protocol.CredentialCreation, *http.Cookie, error) {
-	account := webauthnUser{user: user, held: held}
-	creation, session, err := p.webauthn.BeginRegistration(account,
-		// A device that already holds one of these credentials refuses the
-		// prompt instead of registering a second one. go-webauthn does not read
-		// the account's credentials during a registration, so they are listed
-		// here.
-		webauthn.WithExclusions(descriptorsOf(account.WebAuthnCredentials())),
-		// Both are Required rather than Preferred. Sign-in names no credential
-		// to the browser, so a credential the device did not store could never
-		// sign in. User verification is the only check on who is at the device.
-		// Both are checked again on the response, because the request only
-		// asks. RequireResidentKey is the older name for ResidentKey, set for a
-		// browser that reads only that one.
+// registrationOptions returns the options every registration challenge is
+// built with, both for a new device on an existing account and for the first
+// device of an account being created.
+//
+// The resident key and user verification are Required rather than Preferred.
+// Sign-in names no credential to the browser, so a credential the device did
+// not store could never sign in. User verification is the only check on who is
+// at the device. Both are checked again on the response, because the request
+// only asks. RequireResidentKey is the older name for ResidentKey, set for a
+// browser that reads only that one. credProps is the only way the browser
+// reports whether the credential was stored on the device. Nothing in the
+// signed data says so.
+func registrationOptions() []webauthn.RegistrationOption {
+	return []webauthn.RegistrationOption{
 		webauthn.WithAuthenticatorSelection(protocol.AuthenticatorSelection{
 			ResidentKey:        protocol.ResidentKeyRequirementRequired,
 			RequireResidentKey: protocol.ResidentKeyRequired(),
 			UserVerification:   protocol.VerificationRequired,
 		}),
-		// credProps is the only way the browser reports whether the credential
-		// was stored on the device. Nothing in the signed data says so.
 		webauthn.WithExtensions(webauthn.WithExtensionCredProps()),
-	)
+	}
+}
+
+// BeginRegistration starts enrolling a new device for user. It returns the
+// options to hand to navigator.credentials.create and the cookie that tells
+// FinishRegistration which challenge an answer is for.
+func (p *Passkeys) BeginRegistration(ctx context.Context, now time.Time, user store.AppUser, held []store.PasskeyCredential) (*protocol.CredentialCreation, *http.Cookie, error) {
+	account := webauthnUser{user: user, held: held}
+	// A device that already holds one of these credentials refuses the prompt
+	// instead of registering a second one. go-webauthn does not read the
+	// account's credentials during a registration, so they are listed here.
+	options := append(registrationOptions(), webauthn.WithExclusions(descriptorsOf(account.WebAuthnCredentials())))
+	creation, session, err := p.webauthn.BeginRegistration(account, options...)
 	if err != nil {
 		return nil, nil, fmt.Errorf("begin the registration: %w", err)
 	}
@@ -166,6 +173,13 @@ func (p *Passkeys) FinishRegistration(ctx context.Context, now time.Time, r *htt
 	if row.UserID == nil || *row.UserID != user.ID {
 		return store.PasskeyCredential{}, ErrCeremonyGone
 	}
+	return p.saveRegistration(ctx, session, user, body, name)
+}
+
+// saveRegistration verifies the browser's answer to the challenge in session
+// and saves the credential for user under name. FinishRegistration and
+// FinishSetup call it once they have checked the ceremony.
+func (p *Passkeys) saveRegistration(ctx context.Context, session webauthn.SessionData, user store.AppUser, body io.Reader, name string) (store.PasskeyCredential, error) {
 	response, err := protocol.ParseCredentialCreationResponseBody(body)
 	if err != nil {
 		return store.PasskeyCredential{}, ErrBadCredential
@@ -206,6 +220,79 @@ func (p *Passkeys) FinishRegistration(ctx context.Context, now time.Time, r *htt
 		return store.PasskeyCredential{}, fmt.Errorf("save the passkey: %w", err)
 	}
 	return saved, nil
+}
+
+// BeginSetup starts enrolling the first device of an account that has no row
+// yet. user is the row the caller will write once the device answers. Its id,
+// handle and display name go to the browser now, because the browser stores
+// them with the passkey and a sign-in later finds the account by that id. The
+// ceremony row names no account, because the foreign key needs a row that
+// exists.
+func (p *Passkeys) BeginSetup(ctx context.Context, now time.Time, user store.AppUser) (*protocol.CredentialCreation, *http.Cookie, error) {
+	// No exclusions, because an account with no row has no credential to
+	// exclude.
+	creation, session, err := p.webauthn.BeginRegistration(webauthnUser{user: user}, registrationOptions()...)
+	if err != nil {
+		return nil, nil, fmt.Errorf("begin the registration: %w", err)
+	}
+
+	cookie, err := p.startCeremony(ctx, now, nil, session)
+	if err != nil {
+		return nil, nil, err
+	}
+	return creation, cookie, nil
+}
+
+// SetupCeremony is a registration challenge BeginSetup issued. TakeSetup
+// returns one.
+type SetupCeremony struct {
+	// AccountID is the id the browser was given for the account. The row the
+	// caller writes before FinishSetup has to have this id.
+	AccountID uuid.UUID
+	session   webauthn.SessionData
+}
+
+// TakeSetup reads and deletes the ceremony the request's cookie names, so the
+// caller can write the account's rows before FinishSetup verifies the answer.
+// A ceremony started by a signed-in account, and one that has expired, are both
+// ErrCeremonyGone. A sign-in ceremony names no account in its row either, so it
+// is refused on its session data instead: a setup stores the account's id
+// there and a sign-in stores nothing.
+func (p *Passkeys) TakeSetup(ctx context.Context, now time.Time, r *http.Request) (SetupCeremony, error) {
+	row, session, err := p.takeCeremony(ctx, now, r)
+	if err != nil {
+		return SetupCeremony{}, err
+	}
+	if row.UserID != nil {
+		return SetupCeremony{}, ErrCeremonyGone
+	}
+	if len(session.UserID) != len(uuid.UUID{}) {
+		return SetupCeremony{}, ErrCeremonyGone
+	}
+	return SetupCeremony{AccountID: uuid.UUID(session.UserID), session: session}, nil
+}
+
+// FinishSetup verifies the browser's answer to the challenge in ceremony and
+// saves the credential against user, the row the caller has written since
+// TakeSetup. A user whose id is not the one the browser was given is an error,
+// because the device stores the id it was given with the passkey and a sign-in
+// would then find no account under it. The other refusals are
+// FinishRegistration's, without ErrCeremonyGone, because TakeSetup has already
+// taken the ceremony.
+func (p *Passkeys) FinishSetup(ctx context.Context, ceremony SetupCeremony, user store.AppUser, body io.Reader, name string) (store.PasskeyCredential, error) {
+	if ceremony.AccountID != user.ID {
+		return store.PasskeyCredential{}, fmt.Errorf("the account written is %s and the ceremony was for %s", user.ID, ceremony.AccountID)
+	}
+	return p.saveRegistration(ctx, ceremony.session, user, body, name)
+}
+
+// WithQueries returns a copy of p that reads and writes through queries, so a
+// credential can be saved in the same transaction as the account it belongs
+// to.
+func (p *Passkeys) WithQueries(queries *store.Queries) *Passkeys {
+	copied := *p
+	copied.queries = queries
+	return &copied
 }
 
 // BeginAssertion starts a sign-in. It returns the options to hand to

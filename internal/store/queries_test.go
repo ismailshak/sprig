@@ -440,8 +440,10 @@ type namedQuery struct {
 }
 
 var (
-	queryName  = regexp.MustCompile(`(?m)^-- name: (\w+) :\w+$`)
-	queryTable = regexp.MustCompile(`(?i)\b(?:from|join|into|update)\s+([a-z_][a-z0-9_]*)`)
+	queryName = regexp.MustCompile(`(?m)^-- name: (\w+) :\w+$`)
+	// lock table is in the alternation so a query that does nothing but take a
+	// lock still names a table. A query naming none fails the scope test.
+	queryTable = regexp.MustCompile(`(?i)\b(?:from|join|into|update|lock table)\s+([a-z_][a-z0-9_]*)`)
 )
 
 func readQueries(t *testing.T) []namedQuery {

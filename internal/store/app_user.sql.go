@@ -11,22 +11,49 @@ import (
 	"uuid"
 )
 
+const anyUsers = `-- name: AnyUsers :one
+SELECT EXISTS (SELECT 1 FROM app_user)
+`
+
+// AnyUsers reports whether an account exists. Set up your garden is open on an
+// install with none, whatever SPRIG_SIGNUP_ENABLED says.
+func (q *Queries) AnyUsers(ctx context.Context) (bool, error) {
+	row := q.db.QueryRow(ctx, anyUsers)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const createUser = `-- name: CreateUser :one
-INSERT INTO app_user (display_name, handle, timezone)
-VALUES ($1, $2, $3)
+INSERT INTO app_user (id, display_name, handle, timezone)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (handle) DO NOTHING
 RETURNING id, display_name, handle, timezone, created_at
 `
 
 type CreateUserParams struct {
+	ID          uuid.UUID
 	DisplayName string
 	Handle      string
 	Timezone    string
 }
 
 // CreateUser inserts an account and returns the row. There is no default
-// timezone, so every caller chooses one.
+// timezone, so every caller chooses one. The caller chooses the id too,
+// because Set up your garden gives the id to the browser before the row is
+// written and the passkey is registered under it.
+//
+// A handle another account already holds inserts nothing and returns no row,
+// rather than raising a unique violation. The violation would end the
+// transaction the caller is in, and the caller tries the next candidate handle
+// in that same transaction.
 func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (AppUser, error) {
-	row := q.db.QueryRow(ctx, createUser, arg.DisplayName, arg.Handle, arg.Timezone)
+	row := q.db.QueryRow(ctx, createUser,
+		arg.ID,
+		arg.DisplayName,
+		arg.Handle,
+		arg.Timezone,
+	)
 	var i AppUser
 	err := row.Scan(
 		&i.ID,
@@ -88,6 +115,19 @@ func (q *Queries) ListUsers(ctx context.Context) ([]AppUser, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockUsers = `-- name: LockUsers :exec
+LOCK TABLE app_user IN SHARE ROW EXCLUSIVE MODE
+`
+
+// LockUsers blocks every other insert into app_user until the transaction
+// ends. With sign-up off, Set up your garden checks that no account exists and
+// then inserts one. Two of those running at once would both see an empty
+// table, so the lock makes the second wait and then see the first.
+func (q *Queries) LockUsers(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, lockUsers)
+	return err
 }
 
 const updateAccount = `-- name: UpdateAccount :exec
