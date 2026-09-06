@@ -1,42 +1,84 @@
 #!/usr/bin/env bash
-#MISE description="Run the Playwright suite against the built image and a throwaway Postgres"
+#MISE description="Run the Playwright suite against the built image, with one app and Postgres stack per worker"
 #USAGE arg "[args]..." var=#true help="Passed to playwright test, such as a file or --project"
-#USAGE flag "--ui" help="Open Playwright's UI mode on the stack instead of running headless"
+#USAGE flag "--ui" help="Open Playwright's UI mode on the stacks instead of running headless"
 #USAGE flag "--no-build" help="Start the app image already tagged sprig-app:dev rather than building one"
 set -euo pipefail
 
 cd "${MISE_PROJECT_ROOT:?}"
 
-# An empty host port has Docker pick a free one for each
+# One stack per worker. CI sets 4 for its four-core runners
+workers="${SPRIG_E2E_WORKERS:-6}"
+
+# An empty host port has Docker pick a free one for each container
 export DB_PORTS=127.0.0.1::5432
 export APP_PORTS=127.0.0.1::8080
 
-# A project per run keeps it clear of the dev stack, and the suite refuses to start without the prefix
+# A project per run keeps the stacks clear of the dev stack. The suite refuses to start without the prefix
 export COMPOSE_PROJECT_NAME="sprig-e2e-$$"
 export COMPOSE_PROFILES=app
 
+# stack runs a compose command in worker $1's project. That project is the run's project with the worker's index on
+# the end. Progress is off because six stacks starting and stopping at once print several screens of it. An error
+# still prints
+stack() {
+  COMPOSE_PROJECT_NAME="$COMPOSE_PROJECT_NAME-$1" docker compose --progress quiet "${@:2}"
+}
+
+# every runs a compose command in each worker's project at once and fails if any of them did
+every() {
+  local pids=()
+  for ((i = 0; i < workers; i++)); do
+    stack "$i" "$@" &
+    pids+=("$!")
+  done
+  for pid in "${pids[@]}"; do
+    wait "$pid"
+  done
+}
+
 cleanup() {
   status=$?
+  cd "$MISE_PROJECT_ROOT"
   if [ "$status" -ne 0 ]; then
-    # Print the logs before down removes the containers
-    docker compose logs app db || true
+    # The container logs go next to the traces, where CI keeps them and a person looks for a failure
+    mkdir -p e2e/test-results
+    for ((i = 0; i < workers; i++)); do
+      stack "$i" logs --no-color app db >"e2e/test-results/stack-$i.log" 2>&1 || true
+    done
+    echo "container logs are in e2e/test-results/stack-<worker>.log" >&2
   fi
-  docker compose down --volumes --remove-orphans
+  every down --volumes --remove-orphans
   exit "$status"
 }
 
 trap cleanup EXIT
 
-build=--build
-if [ "${usage_no_build:-false}" = "true" ]; then build=; fi
+# The harness runs the seed before every test. Built once here, because go run would link it again each time and the
+# link is 0.3s of a test that takes 1.4s. ./seed is in .gitignore
+go build -o seed ./cmd/seed
+export SPRIG_SEED_BINARY="$MISE_PROJECT_ROOT/seed"
 
-docker compose up -d $build --wait db app
-db_port=$(docker compose port db 5432)
-app_port=$(docker compose port app 8080)
+# Built once because every stack starts the same sprig-app:dev tag
+if [ "${usage_no_build:-false}" != "true" ]; then
+  docker compose build app
+fi
 
-export SPRIG_DATABASE_URL="postgres://sprig:sprig@127.0.0.1:${db_port##*:}/sprig?sslmode=disable"
-# localhost rather than 127.0.0.1, so the suite hits the same origin development uses
-export SPRIG_BASE_URL="http://localhost:${app_port##*:}"
+every up -d --wait --no-build db app
+
+base_urls=()
+database_urls=()
+for ((i = 0; i < workers; i++)); do
+  db_port=$(stack "$i" port db 5432)
+  app_port=$(stack "$i" port app 8080)
+  database_urls+=("postgres://sprig:sprig@127.0.0.1:${db_port##*:}/sprig?sslmode=disable")
+  # localhost rather than 127.0.0.1, so the suite hits the same origin development uses
+  base_urls+=("http://localhost:${app_port##*:}")
+done
+
+# One URL per stack, in worker order. The harness reads them back into pairs
+export SPRIG_DATABASE_URLS="${database_urls[*]}"
+export SPRIG_BASE_URLS="${base_urls[*]}"
 
 # usage hands the arguments over as one shell-escaped string
 eval "args=(${usage_args-})"

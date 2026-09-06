@@ -1,12 +1,12 @@
-import type { FullConfig } from '@playwright/test';
+import { stacks } from './database';
 
-// Waits for the app to listen. compose cannot do this itself, because the
-// distroless image has no shell or curl for a health check.
-export default async function globalSetup(config: FullConfig): Promise<void> {
-  const baseURL = config.projects[0]?.use.baseURL;
-  if (!baseURL) {
-    throw new Error('no project has a baseURL');
-  }
+// Waits for every stack's app to listen. compose cannot wait for the app
+// itself, because the distroless image has no shell or curl for a health check.
+export default async function globalSetup(): Promise<void> {
+  await Promise.all(stacks(process.env).map((stack) => waitForApp(stack.baseURL)));
+}
+
+async function waitForApp(baseURL: string): Promise<void> {
   const deadline = Date.now() + 30_000;
   while (Date.now() < deadline) {
     try {

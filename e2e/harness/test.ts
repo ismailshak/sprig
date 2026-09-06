@@ -10,7 +10,7 @@ import { PlantFormScreen } from '../screens/plant-form';
 import { PlantsScreen } from '../screens/plants';
 import { SheetScreen } from '../screens/sheet';
 import { TodayScreen } from '../screens/today';
-import { seed } from './database';
+import { seed, stacks, type Stack } from './database';
 
 type Screens = {
   account: AccountScreen;
@@ -19,18 +19,33 @@ type Screens = {
   more: MoreScreen;
   notifications: NotificationsScreen;
   passkeys: PasskeysScreen;
-  today: TodayScreen;
   plant: PlantScreen;
   plantForm: PlantFormScreen;
   plants: PlantsScreen;
   sheet: SheetScreen;
+  today: TodayScreen;
 };
 
-// Every test starts from a fresh seed, whatever the previous test wrote.
-export const test = base.extend<{ garden: void } & Screens>({
+export const test = base.extend<{ garden: void } & Screens, { stack: Stack }>({
+  // A worker keeps one stack for its whole life, picked by its index. Two
+  // workers never share a database.
+  stack: [
+    async ({}, use, workerInfo) => {
+      const stack = stacks(process.env)[workerInfo.parallelIndex];
+      if (!stack) {
+        throw new Error(`worker ${workerInfo.parallelIndex} has no stack: the suite runs one worker per stack`);
+      }
+      await use(stack);
+    },
+    { scope: 'worker' },
+  ],
+  baseURL: async ({ stack }, use) => {
+    await use(stack.baseURL);
+  },
+  // Every test starts from a fresh seed, whatever the previous test wrote.
   garden: [
-    async ({}, use) => {
-      await seed();
+    async ({ stack }, use) => {
+      await seed(stack.databaseURL);
       await use();
     },
     { auto: true },
@@ -53,9 +68,6 @@ export const test = base.extend<{ garden: void } & Screens>({
   passkeys: async ({ page }, use) => {
     await use(new PasskeysScreen(page));
   },
-  today: async ({ page }, use) => {
-    await use(new TodayScreen(page));
-  },
   plant: async ({ page }, use) => {
     await use(new PlantScreen(page));
   },
@@ -67,6 +79,9 @@ export const test = base.extend<{ garden: void } & Screens>({
   },
   sheet: async ({ page }, use) => {
     await use(new SheetScreen(page));
+  },
+  today: async ({ page }, use) => {
+    await use(new TodayScreen(page));
   },
 });
 

@@ -71,7 +71,10 @@ jobs:
           cache-to: type=gha,scope=e2e,mode=max
       - name: Run the suite
         run: mise run e2e --no-build
-      - name: Keep the traces of failed tests
+        env:
+          # One stack per worker, on a four-core runner
+          SPRIG_E2E_WORKERS: 4
+      - name: Keep the traces and container logs of a failed run
         if: failure()
         uses: actions/upload-artifact@v7
         with:
