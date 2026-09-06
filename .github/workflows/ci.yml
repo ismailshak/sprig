@@ -51,10 +51,10 @@ jobs:
           path: ~/.cache/ms-playwright
           # The lockfile pins the Playwright version, which pins the browser build
           key: ${{ runner.os }}-playwright-${{ hashFiles('e2e/pnpm-lock.yaml') }}
-      - name: Install the browser and its system libraries
+      - name: Install the browsers and their system libraries
         run: |
           pnpm --dir e2e install --frozen-lockfile
-          pnpm --dir e2e exec playwright install --with-deps webkit chromium
+          pnpm --dir e2e run browsers
       - name: Set up Buildx
         uses: docker/setup-buildx-action@v4
       # Built here rather than through compose because this action reads and writes the Actions layer cache
