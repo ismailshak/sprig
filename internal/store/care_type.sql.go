@@ -11,6 +11,76 @@ import (
 	"uuid"
 )
 
+const archiveCareType = `-- name: ArchiveCareType :one
+UPDATE care_type SET archived_at = now()
+WHERE garden_id = $1 AND id = $2 AND archived_at IS NULL
+RETURNING id, garden_id, name, slug, created_at, archived_at
+`
+
+// Turning a care type off takes it out of the scheduler and out of the sheet
+// and leaves every event recorded against it. Turning one off twice matches
+// nothing, the same result as for a type the garden does not have.
+func (q *Queries) ArchiveCareType(ctx context.Context, gardenID uuid.UUID, careTypeID uuid.UUID) (CareType, error) {
+	row := q.db.QueryRow(ctx, archiveCareType, gardenID, careTypeID)
+	var i CareType
+	err := row.Scan(
+		&i.ID,
+		&i.GardenID,
+		&i.Name,
+		&i.Slug,
+		&i.CreatedAt,
+		&i.ArchivedAt,
+	)
+	return i, err
+}
+
+const createCareType = `-- name: CreateCareType :one
+INSERT INTO care_type (garden_id, name, slug)
+VALUES ($1, $2, $3)
+RETURNING id, garden_id, name, slug, created_at, archived_at
+`
+
+type CreateCareTypeParams struct {
+	GardenID uuid.UUID
+	Name     string
+	Slug     string
+}
+
+func (q *Queries) CreateCareType(ctx context.Context, arg CreateCareTypeParams) (CareType, error) {
+	row := q.db.QueryRow(ctx, createCareType, arg.GardenID, arg.Name, arg.Slug)
+	var i CareType
+	err := row.Scan(
+		&i.ID,
+		&i.GardenID,
+		&i.Name,
+		&i.Slug,
+		&i.CreatedAt,
+		&i.ArchivedAt,
+	)
+	return i, err
+}
+
+const deleteUnusedCareType = `-- name: DeleteUnusedCareType :execrows
+DELETE FROM care_type
+WHERE care_type.garden_id = $1 AND care_type.id = $2
+  AND NOT EXISTS (
+        SELECT 1 FROM care_event
+        WHERE care_event.care_type_id = care_type.id
+          AND care_event.garden_id = care_type.garden_id)
+`
+
+// Only a care type nothing has ever been recorded against can be deleted, and
+// the check is in the statement rather than in a read before it so that an
+// event written at the same moment cannot slip past it. Deleting one deletes
+// the schedules that used it, which is the schema's ON DELETE CASCADE.
+func (q *Queries) DeleteUnusedCareType(ctx context.Context, gardenID uuid.UUID, careTypeID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteUnusedCareType, gardenID, careTypeID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getCareType = `-- name: GetCareType :one
 SELECT id, garden_id, name, slug, created_at, archived_at FROM care_type
 WHERE garden_id = $1 AND id = $2
@@ -33,13 +103,35 @@ func (q *Queries) GetCareType(ctx context.Context, gardenID uuid.UUID, careTypeI
 	return i, err
 }
 
+const getCareTypeBySlug = `-- name: GetCareTypeBySlug :one
+SELECT id, garden_id, name, slug, created_at, archived_at FROM care_type
+WHERE garden_id = $1 AND slug = $2
+`
+
+// The Garden page's rows are addressed by slug, and one that has been turned
+// off still has a row to open.
+func (q *Queries) GetCareTypeBySlug(ctx context.Context, gardenID uuid.UUID, slug string) (CareType, error) {
+	row := q.db.QueryRow(ctx, getCareTypeBySlug, gardenID, slug)
+	var i CareType
+	err := row.Scan(
+		&i.ID,
+		&i.GardenID,
+		&i.Name,
+		&i.Slug,
+		&i.CreatedAt,
+		&i.ArchivedAt,
+	)
+	return i, err
+}
+
 const listCareTypes = `-- name: ListCareTypes :many
 SELECT id, garden_id, name, slug, created_at, archived_at FROM care_type
 WHERE garden_id = $1 AND archived_at IS NULL
-ORDER BY created_at
+ORDER BY created_at, id
 `
 
-// Care types are listed in creation order.
+// Care types are listed in creation order. id breaks the tie, so two types
+// created in the same transaction keep a stable order.
 func (q *Queries) ListCareTypes(ctx context.Context, gardenID uuid.UUID) ([]CareType, error) {
 	rows, err := q.db.Query(ctx, listCareTypes, gardenID)
 	if err != nil {
@@ -65,4 +157,98 @@ func (q *Queries) ListCareTypes(ctx context.Context, gardenID uuid.UUID) ([]Care
 		return nil, err
 	}
 	return items, nil
+}
+
+const listCareTypesWithEvents = `-- name: ListCareTypesWithEvents :many
+SELECT care_type.id, care_type.garden_id, care_type.name, care_type.slug, care_type.created_at, care_type.archived_at, count(care_event.id) AS events
+FROM care_type
+LEFT JOIN care_event
+       ON care_event.care_type_id = care_type.id
+      AND care_event.garden_id = care_type.garden_id
+WHERE care_type.garden_id = $1
+GROUP BY care_type.id
+ORDER BY care_type.created_at, care_type.id
+`
+
+type ListCareTypesWithEventsRow struct {
+	CareType CareType
+	Events   int64
+}
+
+// The Garden page lists the types that have been turned off as well, and the
+// count decides whether a row offers Turn it off or Delete.
+func (q *Queries) ListCareTypesWithEvents(ctx context.Context, gardenID uuid.UUID) ([]ListCareTypesWithEventsRow, error) {
+	rows, err := q.db.Query(ctx, listCareTypesWithEvents, gardenID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListCareTypesWithEventsRow
+	for rows.Next() {
+		var i ListCareTypesWithEventsRow
+		if err := rows.Scan(
+			&i.CareType.ID,
+			&i.CareType.GardenID,
+			&i.CareType.Name,
+			&i.CareType.Slug,
+			&i.CareType.CreatedAt,
+			&i.CareType.ArchivedAt,
+			&i.Events,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const renameCareType = `-- name: RenameCareType :one
+UPDATE care_type SET name = $1
+WHERE garden_id = $2 AND id = $3
+RETURNING id, garden_id, name, slug, created_at, archived_at
+`
+
+type RenameCareTypeParams struct {
+	Name       string
+	GardenID   uuid.UUID
+	CareTypeID uuid.UUID
+}
+
+// The slug is left alone. Code refers to a care type by slug and events refer
+// to its row, so a rename changes the word and nothing else.
+func (q *Queries) RenameCareType(ctx context.Context, arg RenameCareTypeParams) (CareType, error) {
+	row := q.db.QueryRow(ctx, renameCareType, arg.Name, arg.GardenID, arg.CareTypeID)
+	var i CareType
+	err := row.Scan(
+		&i.ID,
+		&i.GardenID,
+		&i.Name,
+		&i.Slug,
+		&i.CreatedAt,
+		&i.ArchivedAt,
+	)
+	return i, err
+}
+
+const restoreCareType = `-- name: RestoreCareType :one
+UPDATE care_type SET archived_at = NULL
+WHERE garden_id = $1 AND id = $2 AND archived_at IS NOT NULL
+RETURNING id, garden_id, name, slug, created_at, archived_at
+`
+
+func (q *Queries) RestoreCareType(ctx context.Context, gardenID uuid.UUID, careTypeID uuid.UUID) (CareType, error) {
+	row := q.db.QueryRow(ctx, restoreCareType, gardenID, careTypeID)
+	var i CareType
+	err := row.Scan(
+		&i.ID,
+		&i.GardenID,
+		&i.Name,
+		&i.Slug,
+		&i.CreatedAt,
+		&i.ArchivedAt,
+	)
+	return i, err
 }
