@@ -1,4 +1,4 @@
-// Command seed writes the prototype's garden into the development database.
+// Command seed writes the seed gardens into the development database.
 //
 // Every timestamp is an offset from one reference instant, midnight today in
 // the garden's timezone, computed once per run. Two runs on the same day write
