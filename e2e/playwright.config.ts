@@ -10,8 +10,12 @@ export default defineConfig({
   globalSetup: './harness/global-setup.ts',
   workers,
   fullyParallel: true,
-  // The slowest test takes 6s. A test still running at 15s is stuck.
-  timeout: 15_000,
+  // The timeout covers the reseed, the new page and the sign-in that run before
+  // the test's first line. That setup takes about 1s. A worker's first test
+  // launches the browser as well and takes about 3s. On CI four browsers and
+  // eight containers share a four-core runner. The setup alone has run past 15s
+  // there.
+  timeout: process.env.CI ? 30_000 : 15_000,
   // Only CI retries because WebKit aborts a navigation with an internal error
   // on the Linux runners.
   retries: process.env.CI ? 2 : 0,
