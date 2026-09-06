@@ -32,9 +32,9 @@ export class PlantFormScreen {
     await this.page.waitForLoadState();
   }
 
-  // dontSchedule closes the row and returns once the row shows Not scheduled.
-  // With JavaScript the close is a swap. A form posted before it lands still
-  // carries the open row's fields.
+  // dontSchedule clicks Don't schedule and waits for the row to show Not
+  // scheduled. With JavaScript the click is a swap. A form posted before the
+  // swap has replaced the row still carries the open row's fields.
   async dontSchedule(care: string): Promise<void> {
     await this.row(care).getByRole('button', { name: "Don't schedule" }).click();
     await this.row(care).getByRole('button', { name: 'Not scheduled' }).waitFor();

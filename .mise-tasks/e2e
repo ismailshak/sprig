@@ -7,7 +7,7 @@ set -euo pipefail
 
 cd "${MISE_PROJECT_ROOT:?}"
 
-# One stack per worker. CI sets 4 for its four-core runners
+# One stack per worker
 workers="${SPRIG_E2E_WORKERS:-6}"
 
 # An empty host port has Docker pick a free one for each container
@@ -18,9 +18,8 @@ export APP_PORTS=127.0.0.1::8080
 export COMPOSE_PROJECT_NAME="sprig-e2e-$$"
 export COMPOSE_PROFILES=app
 
-# stack runs a compose command in worker $1's project. That project is the run's project with the worker's index on
-# the end. Progress is off because six stacks starting and stopping at once print several screens of it. An error
-# still prints
+# stack runs a compose command in worker $1's project. Progress is off because six stacks starting at once print
+# several screens of it
 stack() {
   COMPOSE_PROJECT_NAME="$COMPOSE_PROJECT_NAME-$1" docker compose --progress quiet "${@:2}"
 }
@@ -41,7 +40,7 @@ cleanup() {
   status=$?
   cd "$MISE_PROJECT_ROOT"
   if [ "$status" -ne 0 ]; then
-    # The container logs go next to the traces, where CI keeps them and a person looks for a failure
+    # The container logs go in e2e/test-results, next to the traces. CI uploads that directory when the run fails
     mkdir -p e2e/test-results
     for ((i = 0; i < workers; i++)); do
       stack "$i" logs --no-color app db >"e2e/test-results/stack-$i.log" 2>&1 || true
@@ -54,8 +53,8 @@ cleanup() {
 
 trap cleanup EXIT
 
-# The harness runs the seed before every test. Built once here, because go run would link it again each time and the
-# link is 0.3s of a test that takes 1.4s. ./seed is in .gitignore
+# The seed the harness runs before every test. go run would link it again before each one, and the link is 0.3s of
+# a test that takes 1.4s. ./seed is in .gitignore
 go build -o seed ./cmd/seed
 export SPRIG_SEED_BINARY="$MISE_PROJECT_ROOT/seed"
 

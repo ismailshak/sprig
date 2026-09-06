@@ -29,8 +29,7 @@ type Screens = {
 };
 
 export const test = base.extend<{ seededGarden: void } & Screens, { stack: Stack }>({
-  // A worker keeps one stack for its whole life, picked by its index. Two
-  // workers never share a database.
+  // A worker keeps one stack for its whole life, picked by its index.
   stack: [
     async ({}, use, workerInfo) => {
       const stack = stacks(process.env)[workerInfo.parallelIndex];
