@@ -12,7 +12,7 @@
 <p class="note">This is the only time they are shown — sprig keeps a hash of each one and nothing else. Put them somewhere that is not the phone you sign in with.</p>
 </div>
 <p class="note">Each code works once. Using one lets a new device register a passkey; it does not sign you in on its own, and the device it enrols appears on your Passkeys page afterwards.</p>
-<a class="wide-action" href="/more/account">Done</a>
+<a class="wide-action" href="{{.Bar.Href}}">Done</a>
 {{else}}
 <p class="lead">A recovery code is how you get back in with no working passkey and nobody to send you a new invite. It does not sign you in — it lets a new device register a passkey, and you sign in with that.</p>
 {{if .Live}}
@@ -27,11 +27,10 @@
 {{/* The warning is above the button rather than in a dialog after it, because
      creating a set invalidates codes somebody has already written down. */}}
 <p class="note">Creating a new set destroys this one. Whatever you wrote down stops working the moment the new codes appear, so replace it in the same sitting rather than meaning to later.</p>
-{{/* No route makes a batch yet, so this button does nothing. */}}
-<button class="wide-action">Create new codes</button>
+<form method="post" action="{{.Action}}"><button class="wide-action">Create new codes</button></form>
 {{else}}
 {{if .Prompted}}<p class="note">You are holding none. Anybody may have codes and only an owner is prompted for them: everybody else can be sent a new link by whoever runs their garden, and you are the person with nobody above you to ask.</p>{{end}}
-<button class="wide-action">Create codes</button>
+<form method="post" action="{{.Action}}"><button class="wide-action">Create codes</button></form>
 {{end}}
 {{end}}
 </div>

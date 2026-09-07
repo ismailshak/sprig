@@ -47,6 +47,8 @@ func routes(logger *slog.Logger, sessions *auth.Sessions, passkeys *auth.Passkey
 	moreHandler := &more{logger: logger, sessions: sessions, queries: queries, templates: templates, build: build.Read(), now: time.Now, pushKey: pushKey, wake: wake}
 	setupHandler := &setup{logger: logger, passkeys: passkeys, sessions: sessions, resolver: resolver, queries: queries, templates: templates, now: time.Now, enabled: signupEnabled, wake: wake}
 	invitedHandler := &invited{logger: logger, passkeys: passkeys, sessions: sessions, resolver: resolver, queries: queries, templates: templates, now: time.Now, wake: wake}
+	recoverHandler := &recoverAccount{logger: logger, passkeys: passkeys, queries: queries, templates: templates, now: time.Now}
+	recoverLimit := newRecoverLimits(trustedIPHeader)
 	base := []route{
 		{pattern: "GET /healthz", handler: http.HandlerFunc(handleHealthz)},
 		{pattern: assetPattern, handler: assets.handler()},
@@ -79,6 +81,7 @@ func routes(logger *slog.Logger, sessions *auth.Sessions, passkeys *auth.Passkey
 		{pattern: "GET " + accountPath, handler: http.HandlerFunc(moreHandler.account)},
 		{pattern: "POST " + accountPath, handler: http.HandlerFunc(moreHandler.saveAccount)},
 		{pattern: "GET " + recoveryPath, handler: http.HandlerFunc(moreHandler.recovery)},
+		{pattern: "POST " + recoveryPath, handler: http.HandlerFunc(moreHandler.createCodes)},
 		{pattern: "GET " + passkeysPath, handler: http.HandlerFunc(moreHandler.passkeys)},
 		{pattern: "POST " + passkeysPath + "/{key}/remove", handler: http.HandlerFunc(moreHandler.removePasskey)},
 		{pattern: "POST " + registerPath, handler: http.HandlerFunc(passkeyHandler.registerChallenge)},
@@ -94,6 +97,10 @@ func routes(logger *slog.Logger, sessions *auth.Sessions, passkeys *auth.Passkey
 		{pattern: "GET " + invitedPattern, handler: http.HandlerFunc(invitedHandler.show)},
 		{pattern: "POST " + invitedPattern + "/challenge", limits: inviteLimits(trustedIPHeader, http.HandlerFunc(tooManyChallenges)), handler: http.HandlerFunc(invitedHandler.challenge)},
 		{pattern: "POST " + invitedPattern, limits: inviteLimits(trustedIPHeader, http.HandlerFunc(invitedHandler.tooManyAnswers)), handler: http.HandlerFunc(invitedHandler.redeem)},
+		{pattern: "GET " + recoverPath, handler: http.HandlerFunc(recoverHandler.show)},
+		{pattern: "POST " + recoverPath, limits: recoverLimit.around(http.HandlerFunc(recoverHandler.tooManyCodes)), handler: http.HandlerFunc(recoverHandler.check)},
+		{pattern: "POST " + recoverChallengePath, limits: recoverLimit.around(http.HandlerFunc(tooManyRecoveryChallenges)), handler: http.HandlerFunc(recoverHandler.challenge)},
+		{pattern: "POST " + recoverPasskeyPath, limits: recoverLimit.around(http.HandlerFunc(recoverHandler.tooManyCodes)), handler: http.HandlerFunc(recoverHandler.register)},
 		{pattern: "GET " + acceptPattern, withoutGarden: true, handler: http.HandlerFunc(invitedHandler.showAccept)},
 		{pattern: "POST " + acceptPattern, withoutGarden: true, handler: http.HandlerFunc(invitedHandler.accept)},
 		{pattern: "GET " + notificationsPath, handler: http.HandlerFunc(moreHandler.notifications)},
@@ -187,6 +194,13 @@ var publicRoutes = map[string]bool{
 	"GET " + invitedPattern:                 true,
 	"POST " + invitedPattern + "/challenge": true,
 	"POST " + invitedPattern:                true,
+	// A recovery code is for somebody with no working passkey, so the page,
+	// the post that checks a code, the challenge and the post that saves the
+	// passkey are all public. None of them starts a session.
+	"GET " + recoverPath:           true,
+	"POST " + recoverPath:          true,
+	"POST " + recoverChallengePath: true,
+	"POST " + recoverPasskeyPath:   true,
 }
 
 // New builds sprig's handler. The middleware order matters. RequestID runs

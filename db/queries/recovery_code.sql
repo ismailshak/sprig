@@ -11,3 +11,26 @@ SELECT count(*)                                AS size,
 FROM recovery_code
 WHERE user_id = @user_id
 HAVING count(*) > 0;
+
+-- Writes one batch of codes for an account, all with the same generated_at.
+-- The caller has deleted the previous batch in the same transaction.
+-- name: CreateRecoveryBatch :exec
+INSERT INTO recovery_code (user_id, code_hash, generated_at)
+SELECT @user_id, unnest(@code_hashes::text[]), @generated_at::timestamptz;
+
+-- name: DeleteRecoveryCodes :exec
+DELETE FROM recovery_code WHERE user_id = @user_id;
+
+-- Finds the account an unused code belongs to. The lookup is by hash across
+-- every account, so the Recover an account page never asks whose code it is.
+-- A used code and a code nobody made both return no row.
+-- name: GetLiveRecoveryCode :one
+SELECT user_id FROM recovery_code
+WHERE code_hash = @code_hash AND used_at IS NULL;
+
+-- Marks an unused code used and returns the account it belongs to. The query
+-- returns no row when the code is already used or was never made.
+-- name: RedeemRecoveryCode :one
+UPDATE recovery_code SET used_at = @now::timestamptz
+WHERE code_hash = @code_hash AND used_at IS NULL
+RETURNING user_id;

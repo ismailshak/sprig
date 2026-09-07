@@ -351,6 +351,15 @@ func TestAccount_TheRecoveryCodesRowSaysNoneYetUntilABatchExists(t *testing.T) {
 	}
 }
 
+func TestAccount_TheRecoveryCodesRowSaysNoneLeftWhenEveryCodeHasBeenUsed(t *testing.T) {
+	f := moreGarden(t)
+	f.exec(t, "INSERT INTO recovery_code (user_id, code_hash, used_at) VALUES ($1, 'spent-one', $2), ($1, 'spent-two', $2)", moreUserID, thursday)
+
+	if got := noteOn(t, f.page(t, f.handler.account, accountPath), "Recovery codes"); got != accountCodesNoneLeftNote {
+		t.Errorf("with every code used the row says %q, want %q", got, accountCodesNoneLeftNote)
+	}
+}
+
 func TestAccount_AMemberIsNotToldTheyHaveNoRecoveryCodes(t *testing.T) {
 	f := moreGarden(t)
 	f.principal.Capabilities = auth.Capabilities{auth.TokenManage: true}

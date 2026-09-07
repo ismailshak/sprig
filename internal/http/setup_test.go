@@ -152,12 +152,7 @@ func (f *setupFixture) principalOf(t *testing.T, token string) auth.Principal {
 
 func (f *setupFixture) count(t *testing.T, table string) int {
 	t.Helper()
-
-	var n int
-	if err := f.tx.QueryRow(t.Context(), "SELECT count(*) FROM "+table).Scan(&n); err != nil {
-		t.Fatalf("counting %s: %v", table, err)
-	}
-	return n
+	return countRows(t, f.tx, table)
 }
 
 // nothingWritten fails the test if any of the rows a setup creates exists.

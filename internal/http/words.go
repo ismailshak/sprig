@@ -261,10 +261,10 @@ func hourLabel(hour int16) string {
 }
 
 // codesNote is the note on More's Account row, "No recovery codes" when the
-// reader has none. It names recovery codes because the row itself is only
-// labelled Account.
-func codesNote(missing bool) string {
-	if missing {
+// reader holds no unused code. It names recovery codes because the row itself
+// is only labelled Account.
+func codesNote(noneLeft bool) string {
+	if noneLeft {
 		return "No recovery codes"
 	}
 	return ""
@@ -274,6 +274,11 @@ func codesNote(missing bool) string {
 // has none. It does not repeat "recovery codes" because the row is labelled
 // with them.
 const accountCodesNote = "None yet"
+
+// accountCodesNoneLeftNote is the note on Account's Recovery codes row when
+// every code in the batch has been used. It differs from "None yet" because a
+// batch does exist.
+const accountCodesNoneLeftNote = "None left"
 
 // codesLeftWord is the first line of the batch on Recovery codes, "8 of 10
 // left".

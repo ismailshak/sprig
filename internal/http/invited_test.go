@@ -195,12 +195,7 @@ func (f *invitedFixture) sessionOf(t *testing.T, rec *httptest.ResponseRecorder,
 
 func (f *invitedFixture) count(t *testing.T, table string) int {
 	t.Helper()
-
-	var n int
-	if err := f.tx.QueryRow(t.Context(), "SELECT count(*) FROM "+table).Scan(&n); err != nil {
-		t.Fatalf("counting %s: %v", table, err)
-	}
-	return n
+	return countRows(t, f.tx, table)
 }
 
 // redeemedAt returns when the invite for token was redeemed, or nil.
