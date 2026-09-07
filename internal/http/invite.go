@@ -15,6 +15,12 @@ const defaultInviteRole = "sitter"
 // renders the field as plain text.
 const untilUnusable = "Give the last day as a date, or leave it empty."
 
+// untilPassed is the message under the Until field when the day posted has
+// already begun in the inviter's timezone. Access ends when the chosen day
+// begins, so a link made with today's date would be refused the moment it is
+// opened.
+const untilPassed = "Pick a day after today. Access ends when the day you pick begins."
+
 // invitePage is the Invite someone page. It is two steps in one page: the form
 // until the link is created, then the link in place of it. The second step is
 // not a page of its own, because only a hash of the link is stored and the link
@@ -37,6 +43,11 @@ type invitePage struct {
 	// is empty by default, because a date the app filled in is a date nobody
 	// chose.
 	Until string
+	// UntilMin is the earliest day the end date field offers: tomorrow in the
+	// inviter's timezone, in the format a date input reads. The browser greys
+	// out the days before it. The post refuses them as well, because the
+	// attribute is only a hint and a date can be typed.
+	UntilMin string
 	// UntilError is shown under the end date, empty when the field is fine.
 	UntilError string
 	// Made is the paragraph under the link, saying what it does and how long it
@@ -51,7 +62,16 @@ type invitePage struct {
 // has to survive that.
 func (h *more) invite(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
-	h.templates.render(w, r, view{page: "invite"}, newInvitePage(query.Get("role"), query.Get("until"), ""))
+	h.templates.render(w, r, view{page: "invite"}, newInvitePage(query.Get("role"), query.Get("until"), "", h.earliestAccessEnd(r)))
+}
+
+// earliestAccessEnd is the first day an invite made now can end access on:
+// tomorrow in the reader's timezone, in the format a date input reads. Today
+// is excluded because access ends when the chosen day begins, and today has
+// begun.
+func (h *more) earliestAccessEnd(r *http.Request) string {
+	today := h.now().In(locationFor(PrincipalFrom(r).User))
+	return today.AddDate(0, 0, 1).Format(accessEndLayout)
 }
 
 // createInviteLink handles POST /more/people/invite. It renders the link
@@ -74,8 +94,15 @@ func (h *more) createInviteLink(w http.ResponseWriter, r *http.Request) {
 	var ends *time.Time
 	if posted != "" {
 		at, err := parseAccessEnd(posted, locationFor(PrincipalFrom(r).User))
-		if err != nil {
-			page := newInvitePage(role, posted, untilUnusable)
+		message := ""
+		switch {
+		case err != nil:
+			message = untilUnusable
+		case !at.After(h.now()):
+			message = untilPassed
+		}
+		if message != "" {
+			page := newInvitePage(role, posted, message, h.earliestAccessEnd(r))
 			h.templates.render(w, r, view{page: "invite", status: http.StatusUnprocessableEntity}, page)
 			return
 		}
@@ -91,8 +118,9 @@ func (h *more) createInviteLink(w http.ResponseWriter, r *http.Request) {
 }
 
 // newInvitePage builds the page with the form on it. role is the chip pressed,
-// until the date field's value, and message the error under that field.
-func newInvitePage(role, until, message string) invitePage {
+// until the date field's value, message the error under that field, and
+// earliest the first day the field offers.
+func newInvitePage(role, until, message, earliest string) invitePage {
 	if !slices.Contains(offeredRoles, role) {
 		role = defaultInviteRole
 	}
@@ -102,6 +130,7 @@ func newInvitePage(role, until, message string) invitePage {
 		Chosen:     role,
 		What:       roleWhat[role],
 		Until:      until,
+		UntilMin:   earliest,
 		UntilError: message,
 	}
 	for _, offered := range offeredRoles {
