@@ -166,7 +166,10 @@ CREATE TABLE push_subscription (
 
 CREATE INDEX push_subscription_user_id_idx ON push_subscription (user_id);
 
--- A table for the same reason role is: two columns below reference a kind.
+-- Every kind of notification the app sends, one row each. The two tables below
+-- reference this one, so the list of kinds is written here and not repeated in
+-- each of them. A kind is inserted in the same change as the code that sends
+-- it, so no kind here is one the app cannot send.
 CREATE TABLE notification_kind (
     name text PRIMARY KEY COLLATE "C"
 );
@@ -177,27 +180,32 @@ INSERT INTO notification_kind (name) VALUES
     -- Sent when someone else in the garden logs care.
     ('activity');
 
+-- One row per membership per kind that has a switch on the Notifications page.
 -- Per membership rather than per user, because a person may want a digest for
 -- their own garden and nothing from one they are sitting.
 CREATE TABLE notification_preference (
     membership_id uuid NOT NULL REFERENCES membership (id) ON DELETE CASCADE,
     kind          text COLLATE "C" NOT NULL REFERENCES notification_kind (name),
     -- No default. The initial value for each kind is a product decision made in
-    -- the handler that inserts both rows.
+    -- the handler that inserts the rows.
     enabled       boolean NOT NULL,
     PRIMARY KEY (membership_id, kind)
 );
 
--- One row per digest sent. The primary key makes the digest exactly-once per
--- member per day across restarts, redeploys and clock changes. Only the digest
--- writes here, since activity notifications are sent per event.
+-- One row per notification a background job has sent. The job inserts the row
+-- before it sends, so a second attempt after a restart hits the primary key
+-- and sends nothing. A notification sent from a request handler, such as when
+-- somebody logs care, is sent once per request and writes no row here.
 CREATE TABLE notification_send (
     membership_id uuid NOT NULL REFERENCES membership (id) ON DELETE CASCADE,
     kind          text COLLATE "C" NOT NULL REFERENCES notification_kind (name),
-    -- The date in the member's own timezone.
-    local_date    date NOT NULL,
+    -- Identifies which send of this kind the row is for. The job builds the
+    -- string: the date in the member's timezone for a digest, the schedule and
+    -- the due time for a reminder, the token and the threshold for an expiry
+    -- warning. Text rather than a date because only the digest is once a day.
+    send_key      text COLLATE "C" NOT NULL,
     sent_at       timestamptz NOT NULL DEFAULT now(),
-    PRIMARY KEY (membership_id, kind, local_date)
+    PRIMARY KEY (membership_id, kind, send_key)
 );
 
 -- +goose Down

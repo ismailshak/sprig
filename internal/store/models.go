@@ -115,7 +115,7 @@ type NotificationPreference struct {
 type NotificationSend struct {
 	MembershipID uuid.UUID
 	Kind         string
-	LocalDate    time.Time
+	SendKey      string
 	SentAt       time.Time
 }
 
