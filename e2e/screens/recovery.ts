@@ -16,4 +16,15 @@ export class RecoveryScreen {
   back(): Locator {
     return this.page.getByRole('link', { name: 'Account' });
   }
+
+  // The codes in the box on the response that made them. The box is the only
+  // list on that page.
+  codes(): Locator {
+    return this.page.getByRole('listitem');
+  }
+
+  // The link under the box. It goes back to Account.
+  done(): Locator {
+    return this.page.getByRole('link', { name: 'Done' });
+  }
 }

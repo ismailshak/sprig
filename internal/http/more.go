@@ -82,11 +82,11 @@ type linkRow struct {
 type moreState struct {
 	notificationsOn bool
 	waitingInvites  int
-	// noCodes is true when the signed-in person manages the garden's people and
-	// has no recovery codes. Anyone can have codes. Only someone who manages
-	// people is prompted for them, because there is nobody above them to send a
-	// new invite.
-	noCodes bool
+	// noCodesLeft is true when the signed-in person manages the garden's people
+	// and holds no unused recovery code. Only someone who manages people is
+	// prompted for codes, because there is nobody above them to send a new
+	// invite.
+	noCodesLeft bool
 }
 
 func (h *more) show(w http.ResponseWriter, r *http.Request) {
@@ -116,21 +116,21 @@ func (h *more) state(ctx context.Context, principal auth.Principal) (moreState, 
 		}
 		state.waitingInvites = int(waiting)
 
-		_, live, err := h.recoveryBatch(ctx, principal.User.ID)
+		batch, live, err := h.recoveryBatch(ctx, principal.User.ID)
 		if err != nil {
 			return moreState{}, err
 		}
-		state.noCodes = !live
+		state.noCodesLeft = !live || batch.Unused == 0
 	}
 	return state, nil
 }
 
 // newMorePage builds the index. A row the reader's role cannot use is left out
 // rather than shown and refused when pressed, so a sitter gets the first three
-// rows and the foot.
+// rows and the links below them.
 func newMorePage(principal auth.Principal, state moreState, info build.Info) morePage {
 	rows := []linkRow{
-		{Label: "Account", Href: accountPath, Note: codesNote(state.noCodes)},
+		{Label: "Account", Href: accountPath, Note: codesNote(state.noCodesLeft)},
 		{Label: "Passkeys", Href: passkeysPath},
 		{Label: "Notifications", Href: notificationsPath, Note: offNote(state.notificationsOn)},
 	}

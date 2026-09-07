@@ -5,11 +5,6 @@ import (
 	"strings"
 )
 
-// recoverPath is the URL of the Recover an account page, linked from the note
-// under the sign-in button. No route serves it yet, so a visitor with no
-// session is redirected back to the sign-in page.
-const recoverPath = "/recover"
-
 // nextField is the name of the query parameter on the sign-in page's URL and
 // of the hidden input on its form. Both hold the path to redirect to after
 // signing in. The invite page sets it, so somebody who already has an account

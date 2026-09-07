@@ -15,6 +15,7 @@ import { PeopleScreen } from '../screens/people';
 import { PlantScreen } from '../screens/plant';
 import { PlantFormScreen } from '../screens/plant-form';
 import { PlantsScreen } from '../screens/plants';
+import { RecoverScreen } from '../screens/recover';
 import { RecoveryScreen } from '../screens/recovery';
 import { SetupScreen } from '../screens/setup';
 import { SheetScreen } from '../screens/sheet';
@@ -40,6 +41,7 @@ type Screens = {
   plant: PlantScreen;
   plantForm: PlantFormScreen;
   plants: PlantsScreen;
+  recover: RecoverScreen;
   recovery: RecoveryScreen;
   setup: SetupScreen;
   sheet: SheetScreen;
@@ -135,6 +137,9 @@ export const test = base.extend<{ seededGarden: void; cspViolations: void } & Sc
   },
   plants: async ({ page }, use) => {
     await use(new PlantsScreen(page));
+  },
+  recover: async ({ page }, use) => {
+    await use(new RecoverScreen(page));
   },
   recovery: async ({ page }, use) => {
     await use(new RecoveryScreen(page));

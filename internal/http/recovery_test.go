@@ -2,10 +2,11 @@ package http
 
 import (
 	"net/http"
-	"net/http/httptest"
+	"net/url"
 	"regexp"
 	"strings"
 	"testing"
+	"uuid"
 
 	"github.com/ismailshak/sprig/internal/auth"
 )
@@ -83,28 +84,89 @@ func TestRecovery_AnotherAccountsCodesAreNotShownAsThisAccountsBatch(t *testing.
 	}
 }
 
-// No handler makes a batch yet, and plaintext codes only exist on the response
-// that made them, so this renders the template directly.
-func TestRecovery_ABatchIsListedInTheBoxThatSaysItIsTheOnlyTimeTheyAreShown(t *testing.T) {
+func TestRecovery_CreatingCodesShowsTenOnceAndStoresOnlyTheirHashes(t *testing.T) {
 	f := moreGarden(t)
-	codes := []string{"k4rt-9wme-3xqd", "h72p-vc8n-md4s"}
 
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, recoveryPath, nil)
-	f.handler.templates.render(rec, req, view{page: "recovery"}, recoveryPage{Codes: codes})
+	rec := f.post(t, f.handler.createCodes, recoveryPath, url.Values{})
 
-	box := secretSection.FindStringSubmatch(rec.Body.String())
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusOK, text(rec.Body.String()))
+	}
+	page := rec.Body.String()
+	box := secretSection.FindStringSubmatch(page)
 	if box == nil {
-		t.Fatalf("the page has no box for the codes:\n%s", rec.Body.String())
+		t.Fatalf("the page has no box for the codes:\n%s", text(page))
 	}
-	var listed []string
+	var codes []string
 	for _, m := range secretCode.FindAllStringSubmatch(box[1], -1) {
-		listed = append(listed, m[1])
+		codes = append(codes, m[1])
 	}
-	if strings.Join(listed, " ") != strings.Join(codes, " ") {
-		t.Errorf("the box lists %v, want %v", listed, codes)
+	if len(codes) != 10 {
+		t.Fatalf("the box lists %d codes, want 10:\n%s", len(codes), box[1])
 	}
 	if !strings.Contains(box[1], "This is the only time they are shown") {
 		t.Errorf("the box does not say the codes are shown once:\n%s", box[1])
+	}
+	if !strings.Contains(page, `<a class="wide-action" href="`+accountPath+`">Done</a>`) {
+		t.Errorf("the page has no Done link back to Account:\n%s", text(page))
+	}
+	for _, code := range codes {
+		if canonical, ok := auth.CanonicalRecoveryCode(code); !ok || canonical != code {
+			t.Errorf("the code %q is not shown in the form it is looked up in", code)
+		}
+		var owner uuid.UUID
+		if err := f.tx.QueryRow(t.Context(), "SELECT user_id FROM recovery_code WHERE code_hash = $1 AND used_at IS NULL AND generated_at = $2", auth.HashToken(code), thursday).Scan(&owner); err != nil {
+			t.Errorf("the code %q has no live row made now: %v", code, err)
+		} else if owner != moreUserID {
+			t.Errorf("the code %q belongs to %s, want the reader", code, owner)
+		}
+		var stored int
+		if err := f.tx.QueryRow(t.Context(), "SELECT count(*) FROM recovery_code WHERE code_hash = $1", code).Scan(&stored); err != nil || stored != 0 {
+			t.Errorf("the code %q is stored in the clear", code)
+		}
+	}
+
+	again := f.page(t, f.handler.recovery, recoveryPath)
+	if secretSection.MatchString(again) {
+		t.Errorf("the next request shows the codes again:\n%s", text(again))
+	}
+	line := recoveryLine.FindStringSubmatch(again)
+	if line == nil {
+		t.Fatalf("the page has no row for the batch:\n%s", text(again))
+	}
+	if got, want := text(settingName.FindStringSubmatch(line[1])[1]), "10 of 10 left"; got != want {
+		t.Errorf("the batch reads %q, want %q", got, want)
+	}
+}
+
+func TestRecovery_CreatingANewSetDeletesTheOldOneAndLeavesAnotherAccountsAlone(t *testing.T) {
+	f := moreGarden(t)
+	f.exec(t, `INSERT INTO recovery_code (user_id, code_hash, generated_at, used_at)
+		VALUES ($1, 'old-used', $2, $2), ($1, 'old-live', $2, NULL), ($3, 'someone-elses', $2, NULL)`,
+		moreUserID, thursday.AddDate(0, 0, -31), otherUserID)
+
+	rec := f.post(t, f.handler.createCodes, recoveryPath, url.Values{})
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusOK, text(rec.Body.String()))
+	}
+	var old, mine, theirs int
+	if err := f.tx.QueryRow(t.Context(), "SELECT count(*) FROM recovery_code WHERE code_hash IN ('old-used', 'old-live')").Scan(&old); err != nil {
+		t.Fatalf("counting the old codes: %v", err)
+	}
+	if err := f.tx.QueryRow(t.Context(), "SELECT count(*) FROM recovery_code WHERE user_id = $1 AND generated_at = $2", moreUserID, thursday).Scan(&mine); err != nil {
+		t.Fatalf("counting the new codes: %v", err)
+	}
+	if err := f.tx.QueryRow(t.Context(), "SELECT count(*) FROM recovery_code WHERE user_id = $1 AND code_hash = 'someone-elses'", otherUserID).Scan(&theirs); err != nil {
+		t.Fatalf("counting the other account's codes: %v", err)
+	}
+	if old != 0 {
+		t.Errorf("%d codes of the old batch are still there, want none", old)
+	}
+	if mine != 10 {
+		t.Errorf("the reader holds %d codes made now, want 10", mine)
+	}
+	if theirs != 1 {
+		t.Error("the other account's code was deleted")
 	}
 }

@@ -141,8 +141,9 @@ var routeAccess = map[string]access{
 	"POST /more/account": {anyMember: true},
 	// Recovery codes belong to an account rather than to a garden, so every
 	// member reaches the page.
-	"GET /more/account/recovery": {},
-	"GET /more/passkeys":         {},
+	"GET /more/account/recovery":  {},
+	"POST /more/account/recovery": {anyMember: true},
+	"GET /more/passkeys":          {},
 	// A passkey belongs to an account rather than to a garden, so every member
 	// may add one to their own.
 	"POST /more/passkeys/challenge": {anyMember: true},
@@ -173,6 +174,14 @@ var routeAccess = map[string]access{
 	"GET /invite/{token}":            {public: true, path: invitedPath("no-such-token")},
 	"POST /invite/{token}/challenge": {public: true, path: invitedChallengePath("no-such-token")},
 	"POST /invite/{token}":           {public: true, path: invitedPath("no-such-token")},
+	// A recovery code is presented before any session exists, so the page,
+	// the check, the challenge and the post that saves the passkey are all
+	// public. A post with no body names no code and is refused before it
+	// writes.
+	"GET /recover":            {public: true},
+	"POST /recover":           {public: true},
+	"POST /recover/challenge": {public: true},
+	"POST /recover/passkey":   {public: true},
 	// The garden an invite is for is the one the account is joining, so there
 	// is no other garden's token to refuse. Both paths use a token nobody
 	// issued. The 404 they get is the page for a link that cannot be used.

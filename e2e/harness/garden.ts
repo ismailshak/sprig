@@ -43,8 +43,15 @@ export const invites = {
   sitter: { token: 'development-sitter-invite' },
 } as const;
 
-// The recovery codes the seed gives Ellie: ten made, two of them used.
-export const recoveryBatch = { left: 8, size: 10 } as const;
+// The recovery codes the seed gives Ellie: ten made, two of them used. unused
+// and used are the plaintext of two of the ten, so a test can post a code the
+// seed hashed.
+export const recoveryBatch = {
+  left: 8,
+  size: 10,
+  unused: 'b9xa-3fkt-7rjw',
+  used: 'k4rt-9wme-3xqd',
+} as const;
 
 // The care types the garden records against, in the order the Garden page
 // lists them. Mist was tried and turned off, and its row is still there.

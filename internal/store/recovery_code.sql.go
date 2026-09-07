@@ -12,6 +12,48 @@ import (
 	"uuid"
 )
 
+const createRecoveryBatch = `-- name: CreateRecoveryBatch :exec
+INSERT INTO recovery_code (user_id, code_hash, generated_at)
+SELECT $1, unnest($2::text[]), $3::timestamptz
+`
+
+type CreateRecoveryBatchParams struct {
+	UserID      uuid.UUID
+	CodeHashes  []string
+	GeneratedAt time.Time
+}
+
+// Writes one batch of codes for an account, all with the same generated_at.
+// The caller has deleted the previous batch in the same transaction.
+func (q *Queries) CreateRecoveryBatch(ctx context.Context, arg CreateRecoveryBatchParams) error {
+	_, err := q.db.Exec(ctx, createRecoveryBatch, arg.UserID, arg.CodeHashes, arg.GeneratedAt)
+	return err
+}
+
+const deleteRecoveryCodes = `-- name: DeleteRecoveryCodes :exec
+DELETE FROM recovery_code WHERE user_id = $1
+`
+
+func (q *Queries) DeleteRecoveryCodes(ctx context.Context, userID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteRecoveryCodes, userID)
+	return err
+}
+
+const getLiveRecoveryCode = `-- name: GetLiveRecoveryCode :one
+SELECT user_id FROM recovery_code
+WHERE code_hash = $1 AND used_at IS NULL
+`
+
+// Finds the account an unused code belongs to. The lookup is by hash across
+// every account, so the Recover an account page never asks whose code it is.
+// A used code and a code nobody made both return no row.
+func (q *Queries) GetLiveRecoveryCode(ctx context.Context, codeHash string) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getLiveRecoveryCode, codeHash)
+	var user_id uuid.UUID
+	err := row.Scan(&user_id)
+	return user_id, err
+}
+
 const getRecoveryBatch = `-- name: GetRecoveryBatch :one
 SELECT count(*)                                AS size,
        count(*) FILTER (WHERE used_at IS NULL) AS unused,
@@ -38,4 +80,19 @@ func (q *Queries) GetRecoveryBatch(ctx context.Context, userID uuid.UUID) (GetRe
 	var i GetRecoveryBatchRow
 	err := row.Scan(&i.Size, &i.Unused, &i.MadeAt)
 	return i, err
+}
+
+const redeemRecoveryCode = `-- name: RedeemRecoveryCode :one
+UPDATE recovery_code SET used_at = $1::timestamptz
+WHERE code_hash = $2 AND used_at IS NULL
+RETURNING user_id
+`
+
+// Marks an unused code used and returns the account it belongs to. The query
+// returns no row when the code is already used or was never made.
+func (q *Queries) RedeemRecoveryCode(ctx context.Context, now time.Time, codeHash string) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, redeemRecoveryCode, now, codeHash)
+	var user_id uuid.UUID
+	err := row.Scan(&user_id)
+	return user_id, err
 }

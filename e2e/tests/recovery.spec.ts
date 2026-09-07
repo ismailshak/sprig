@@ -34,3 +34,20 @@ test('the back link on recovery codes lands on the account page', async ({ accou
 
   await expect(account.handle()).toHaveValue(people.ellie.handle);
 });
+
+test('creating codes shows ten once, and the page then reads 10 of 10 left', async ({ account, page, recovery }) => {
+  await recovery.open();
+  await recovery.create().click();
+
+  await expect(recovery.codes()).toHaveCount(recoveryBatch.size);
+  await expect(page.getByText('This is the only time they are shown')).toBeVisible();
+  await expect(recovery.create()).toHaveCount(0);
+
+  await recovery.done().click();
+  await expect(account.handle()).toHaveValue(people.ellie.handle);
+
+  await account.recoveryCodes().click();
+  await expect(page.getByText('This is the only time they are shown')).toHaveCount(0);
+  await expect(page.getByText(`${recoveryBatch.size} of ${recoveryBatch.size} left`)).toBeVisible();
+  await expect(recovery.create()).toHaveText('Create new codes');
+});
