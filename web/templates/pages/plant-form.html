@@ -13,11 +13,33 @@
 <h1 class="topbar__title">{{.Title}}</h1>
 <a class="topbar__cancel" href="{{.Back}}">Cancel</a>
 </header>
-<form class="app__body app__body--form" method="post" action="{{.Action}}" novalidate>
+{{/* multipart/form-data so the photo can be posted as a file. The server
+     parses a post with no photo the same way. */}}
+<form class="app__body app__body--form" method="post" action="{{.Action}}" enctype="multipart/form-data" novalidate>
 {{/* Enter in a text field submits through the form's first submit button.
      Without this hidden one, that would be a schedule row's button, and Enter
      would close the row instead of saving the plant. */}}
 <button type="submit" hidden></button>
+{{/* The photo field, rendered hidden. The page's script shows it once it has
+     checked the browser can resize an image, and then fills the two file
+     inputs: the resized photo under photo and its 192 pixel square under
+     photo-square. */}}
+<div class="photo-field" id="photo-field" hidden>
+<input id="photo" name="photo" type="file" accept="image/*" hidden>
+<input id="photo-square" name="photo-square" type="file" hidden>
+<button class="photo-field__empty" id="photo-add" type="button">{{template "icon-camera"}}<span>Add a photo</span></button>
+{{/* A post refused for another field is rendered again with an empty file
+     input, because a server cannot fill one. */}}
+{{if .PhotoNeedsChoosing}}<p class="field__error" id="photo-again">The photo needs choosing again.</p>{{end}}
+<div id="photo-chosen" hidden>
+<img class="photo-field__pic" id="photo-preview" alt="Chosen photo">
+<div class="photo-field__actions">
+<button class="care care--outline care--small" id="photo-replace" type="button">Replace</button>
+<button class="sched__cancel" id="photo-remove" type="button">Remove</button>
+</div>
+</div>
+<p class="field__error" id="photo-error" hidden>That file could not be read as a photo.</p>
+</div>
 {{/* The error goes under the group, because none of the three names is
      required on its own but at least one is required. Nickname is not the
      required one because someone who does not name their plants would have to
@@ -105,4 +127,5 @@
 
 {{define "nav"}}{{template "tabs" "Plants"}}{{end}}
 
-{{define "script"}}<script src="{{asset "room-combobox.js"}}" defer></script>{{end}}
+{{define "script"}}<script src="{{asset "photo-field.js"}}" defer></script>
+<script src="{{asset "room-combobox.js"}}" defer></script>{{end}}
