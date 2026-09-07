@@ -70,6 +70,19 @@ func Authenticate(logger *slog.Logger, sessions *auth.Sessions, resolver Resolve
 	}
 }
 
+// hasLiveSession reports whether the request has a session cookie that resolves
+// to an account with a membership of the garden the session is on that has not
+// ended. A request with no cookie costs no lookup, so a public route may call
+// this.
+func hasLiveSession(r *http.Request, sessions *auth.Sessions, resolver *auth.Resolver, now time.Time) bool {
+	token := sessions.TokenFromRequest(r)
+	if token == "" {
+		return false
+	}
+	_, err := resolver.Resolve(r.Context(), now, token)
+	return err == nil
+}
+
 // writeAccessEnded responds to a signed-in user whose membership has ended.
 // The status is 403 rather than 404 because the 404 rule is for an object a
 // request named, and this request named none.

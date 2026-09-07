@@ -1,0 +1,25 @@
+{{define "title"}}sprig — set up your garden{{end}}
+
+{{define "app-class"}}app app--bare{{end}}
+
+{{/* The page an account that is already signed in sets up a garden of its own
+     on. It has no tab bar, because it is about a garden the session is not on
+     yet.
+
+     novalidate turns the browser's own validation off, so an empty field is
+     reported by the server as the message under it. */}}
+{{define "main"}}
+<div class="app__body app__body--bare">
+<h1 class="bare__title">Set up a garden as {{.Name}}?</h1>
+<p class="lead">Name the garden. You&rsquo;ll own it, and you can invite people to it afterwards.</p>
+<form method="post" action="{{.Action}}" novalidate>
+<div class="field">
+<label class="field__label" for="garden">Garden name <span class="field__hint">it can be changed later</span></label>
+<input class="input" id="garden" name="garden" type="text" value="{{.Garden}}" autocomplete="off" spellcheck="false">
+{{with .GardenError}}<p class="field__error">{{.}}</p>{{end}}
+</div>
+<button class="wide-action" type="submit">Create the garden</button>
+</form>
+<p class="note">Nothing about your account changes: your name, your passkeys, everything you have logged and your place in {{.Current}} stay as they are. Not {{.Name}}? <a href="{{.SignIn}}">Sign in as somebody else</a>.</p>
+</div>
+{{end}}

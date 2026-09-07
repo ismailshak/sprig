@@ -90,6 +90,31 @@ func TestSeed_RunningItTwiceWritesTheSameRows(t *testing.T) {
 	}
 }
 
+// An e2e test can give a seeded person a garden of their own. The next reseed
+// then fails to delete the person while that membership exists.
+func TestSeed_AGardenASeededPersonJoinedBetweenRunsIsDeletedByTheNextRun(t *testing.T) {
+	pool := seeded(t)
+	var gardenID uuid.UUID
+	if err := pool.QueryRow(t.Context(), "INSERT INTO garden (name) VALUES ('Greenhouse') RETURNING id").Scan(&gardenID); err != nil {
+		t.Fatalf("adding a garden: %v", err)
+	}
+	if _, err := pool.Exec(t.Context(), "INSERT INTO membership (garden_id, user_id, role, digest_hour) VALUES ($1, $2, 'owner', 8)", gardenID, sam.id); err != nil {
+		t.Fatalf("adding %s's membership: %v", sam.handle, err)
+	}
+
+	if _, err := seed(t.Context(), pool, testReference(t)); err != nil {
+		t.Fatalf("seeding a second time: %v", err)
+	}
+
+	var gardens int
+	if err := pool.QueryRow(t.Context(), "SELECT count(*) FROM garden WHERE id = $1", gardenID).Scan(&gardens); err != nil {
+		t.Fatalf("counting the garden: %v", err)
+	}
+	if gardens != 0 {
+		t.Error("the garden added between runs is still there")
+	}
+}
+
 // The seed places a cadence's newest event one interval before its dueIn, so
 // Today shows the same three sections as the prototype. Postgres does the date
 // arithmetic here rather than the seed's own advance function, so a mistake in

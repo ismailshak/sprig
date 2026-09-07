@@ -156,6 +156,10 @@ func seed(ctx context.Context, pool *pgxpool.Pool, ref time.Time) (counts, error
 // clear deletes what a previous run wrote, table by table. care_event
 // references care_type with ON DELETE RESTRICT, so a cascade from garden would
 // fail or succeed depending on which of an event's foreign keys fired first.
+//
+// A garden a seeded person joined since the last run is deleted along with the
+// seeded gardens. Without that, deleting the person fails, because membership
+// references app_user with ON DELETE RESTRICT.
 func clear(ctx context.Context, tx pgx.Tx, gardens []garden, people []*person) error {
 	gardenIDs := make([]uuid.UUID, 0, len(gardens))
 	for i := range gardens {
@@ -165,6 +169,15 @@ func clear(ctx context.Context, tx pgx.Tx, gardens []garden, people []*person) e
 	for _, p := range people {
 		userIDs = append(userIDs, p.id)
 	}
+	joined, err := tx.Query(ctx, "SELECT DISTINCT garden_id FROM membership WHERE user_id = ANY($1) AND NOT garden_id = ANY($2)", userIDs, gardenIDs)
+	if err != nil {
+		return fmt.Errorf("clearing: %w", err)
+	}
+	more, err := pgx.CollectRows(joined, pgx.RowTo[uuid.UUID])
+	if err != nil {
+		return fmt.Errorf("clearing: %w", err)
+	}
+	gardenIDs = append(gardenIDs, more...)
 
 	byGarden := []string{
 		"DELETE FROM care_event WHERE garden_id = ANY($1)",

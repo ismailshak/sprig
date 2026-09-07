@@ -235,23 +235,11 @@ func (h *invited) show(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	token := r.PathValue("token")
-	if !open.reenrol() && h.signedIn(r) {
+	if !open.reenrol() && hasLiveSession(r, h.sessions, h.resolver, h.now()) {
 		http.Redirect(w, r, acceptPath(token), http.StatusSeeOther)
 		return
 	}
 	h.templates.render(w, r, view{page: "invited"}, newInvitedPage(token, open, freshJoinForm(open), true))
-}
-
-// signedIn reports whether the request has a session cookie that resolves
-// to an account with a live membership. A cookie that resolves to nothing, or
-// to a membership that has ended, counts as signed out.
-func (h *invited) signedIn(r *http.Request) bool {
-	token := h.sessions.TokenFromRequest(r)
-	if token == "" {
-		return false
-	}
-	_, err := h.resolver.Resolve(r.Context(), h.now(), token)
-	return err == nil
 }
 
 // freshJoinForm is the join form before anybody has posted it. The timezone is

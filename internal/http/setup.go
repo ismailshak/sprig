@@ -1,6 +1,7 @@
 package http
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -96,13 +97,20 @@ type setupPage struct {
 	// is rendered on the input and again as the form's data-field, so the
 	// script does not have the name written into it.
 	Field string
+	// SignIn is the URL the "Sign in to set up a garden as yourself" link
+	// under the form points at. Signing in there redirects to the page for
+	// setting up a garden as the account signed in. It is empty with sign-up
+	// off. The template renders no link then, because that page is a 404 on
+	// such an install.
+	SignIn string
 }
 
 // newSetupPage fills the page from form. propose is true on a form nobody has
 // posted yet, so the page's script selects the browser's own zone. It is
 // false when re-rendering a refused post, so the zone the person chose stays.
-func newSetupPage(form setupForm, propose bool) setupPage {
-	return setupPage{
+// signupOn is SPRIG_SIGNUP_ENABLED.
+func newSetupPage(form setupForm, propose, signupOn bool) setupPage {
+	page := setupPage{
 		Garden:    form.garden,
 		Name:      form.name,
 		Zone:      timezoneField{Zones: zoneOptions(form.zone), Propose: propose},
@@ -110,15 +118,24 @@ func newSetupPage(form setupForm, propose bool) setupPage {
 		Challenge: setupChallengePath,
 		Field:     credentialField,
 	}
+	if signupOn {
+		page.SignIn = signInToSetUpPath
+	}
+	return page
 }
 
 // setup serves Set up your garden: the page, the registration challenge its
 // script asks for, and the post that creates the account, the garden, the
-// owner's membership, the three care types and the passkey, then signs in.
+// owner's membership, the three care types and the passkey, then signs in. It
+// also serves /setup/signed-in, where an account that is already signed in
+// sets up a garden of its own.
 type setup struct {
-	logger    *slog.Logger
-	passkeys  *auth.Passkeys
-	sessions  *auth.Sessions
+	logger   *slog.Logger
+	passkeys *auth.Passkeys
+	sessions *auth.Sessions
+	// resolver reads the session cookie on a request, so GET /setup can tell a
+	// signed-in browser from a stranger.
+	resolver  *auth.Resolver
 	queries   *store.Queries
 	templates *Templates
 	// now supplies the current time, so a test can fix the day.
@@ -128,11 +145,11 @@ type setup struct {
 	enabled bool
 }
 
-// open reports whether the three routes are served. They are when sign-up is
-// on, and on an install with no account whatever the flag says, because a new
-// install with sign-up off would otherwise have no way to make its first
-// account. A closed route is a 404, so the response gives nothing away about
-// the install.
+// open reports whether the three public setup routes are served. They are when
+// sign-up is on, and on an install with no account whatever the flag says,
+// because a new install with sign-up off would otherwise have no way to make
+// its first account. A closed route is a 404, so the response gives nothing
+// away about the install.
 func (h *setup) open(r *http.Request) (bool, error) {
 	if h.enabled {
 		return true, nil
@@ -141,7 +158,9 @@ func (h *setup) open(r *http.Request) (bool, error) {
 	return !any, err
 }
 
-// show handles GET /setup.
+// show handles GET /setup. A browser that opens the page while signed in is
+// redirected to /setup/signed-in, because the form here would make a second
+// account for a person who has one.
 func (h *setup) show(w http.ResponseWriter, r *http.Request) {
 	if open, err := h.open(r); err != nil {
 		serverError(h.logger, w, r, "open the setup page", err)
@@ -150,7 +169,11 @@ func (h *setup) show(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	h.templates.render(w, r, view{page: "setup"}, newSetupPage(setupForm{}, true))
+	if hasLiveSession(r, h.sessions, h.resolver, h.now()) {
+		http.Redirect(w, r, setupSignedInPath, http.StatusSeeOther)
+		return
+	}
+	h.templates.render(w, r, view{page: "setup"}, newSetupPage(setupForm{}, true, h.enabled))
 }
 
 // challenge handles POST /setup/challenge and returns the options for
@@ -215,7 +238,7 @@ func (h *setup) create(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "the form did not offer that", http.StatusBadRequest)
 		return
 	}
-	page := newSetupPage(form, false)
+	page := newSetupPage(form, false, h.enabled)
 	page.GardenError, page.NameError, page.Zone.Error = form.errors()
 	if !form.valid() {
 		h.templates.render(w, r, view{page: "setup", status: http.StatusUnprocessableEntity}, page)
@@ -260,18 +283,9 @@ func (h *setup) create(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return err
 		}
-		garden, err := q.CreateGarden(ctx, form.garden)
+		_, membership, err = createGardenOwnedBy(ctx, q, form.garden, user.ID)
 		if err != nil {
 			return err
-		}
-		membership, err = createMembership(ctx, q, newMembership{GardenID: garden.ID, UserID: user.ID, Role: "owner"})
-		if err != nil {
-			return err
-		}
-		for _, care := range seededCareTypes {
-			if _, err := q.CreateCareType(ctx, store.CreateCareTypeParams{GardenID: garden.ID, Name: care.name, Slug: care.slug}); err != nil {
-				return err
-			}
 		}
 		passkey, err = h.passkeys.WithQueries(q).FinishSetup(ctx, ceremony, user, body, name)
 		return err
@@ -299,6 +313,25 @@ func (h *setup) create(w http.ResponseWriter, r *http.Request) {
 	}
 	http.SetCookie(w, h.sessions.Cookie(token))
 	http.Redirect(w, r, "/", http.StatusSeeOther)
+}
+
+// createGardenOwnedBy writes a garden named name, an owner membership of it
+// for userID, and the three care types every garden starts with.
+func createGardenOwnedBy(ctx context.Context, q *store.Queries, name string, userID uuid.UUID) (store.Garden, store.Membership, error) {
+	garden, err := q.CreateGarden(ctx, name)
+	if err != nil {
+		return store.Garden{}, store.Membership{}, err
+	}
+	membership, err := createMembership(ctx, q, newMembership{GardenID: garden.ID, UserID: userID, Role: "owner"})
+	if err != nil {
+		return store.Garden{}, store.Membership{}, err
+	}
+	for _, care := range seededCareTypes {
+		if _, err := q.CreateCareType(ctx, store.CreateCareTypeParams{GardenID: garden.ID, Name: care.name, Slug: care.slug}); err != nil {
+			return store.Garden{}, store.Membership{}, err
+		}
+	}
+	return garden, membership, nil
 }
 
 // refuse renders the page again as a 422, with the fields as they were posted

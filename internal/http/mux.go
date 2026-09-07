@@ -40,7 +40,7 @@ func routes(logger *slog.Logger, sessions *auth.Sessions, passkeys *auth.Passkey
 	resolver := auth.NewResolver(sessions, queries)
 	passkeyHandler := &passkeyCeremony{logger: logger, passkeys: passkeys, sessions: sessions, resolver: resolver, queries: queries, templates: templates, now: time.Now}
 	moreHandler := &more{logger: logger, sessions: sessions, queries: queries, templates: templates, build: build.Read(), now: time.Now}
-	setupHandler := &setup{logger: logger, passkeys: passkeys, sessions: sessions, queries: queries, templates: templates, now: time.Now, enabled: signupEnabled}
+	setupHandler := &setup{logger: logger, passkeys: passkeys, sessions: sessions, resolver: resolver, queries: queries, templates: templates, now: time.Now, enabled: signupEnabled}
 	invitedHandler := &invited{logger: logger, passkeys: passkeys, sessions: sessions, resolver: resolver, queries: queries, templates: templates, now: time.Now}
 	base := []route{
 		{pattern: "GET /healthz", handler: http.HandlerFunc(handleHealthz)},
@@ -82,6 +82,8 @@ func routes(logger *slog.Logger, sessions *auth.Sessions, passkeys *auth.Passkey
 		{pattern: "GET " + setupPath, handler: http.HandlerFunc(setupHandler.show)},
 		{pattern: "POST " + setupChallengePath, handler: http.HandlerFunc(setupHandler.challenge)},
 		{pattern: "POST " + setupPath, handler: http.HandlerFunc(setupHandler.create)},
+		{pattern: "GET " + setupSignedInPath, handler: http.HandlerFunc(setupHandler.showSignedIn)},
+		{pattern: "POST " + setupSignedInPath, handler: http.HandlerFunc(setupHandler.createSignedIn)},
 		{pattern: "GET " + invitedPattern, handler: http.HandlerFunc(invitedHandler.show)},
 		{pattern: "POST " + invitedPattern + "/challenge", limits: inviteLimits(trustedIPHeader, http.HandlerFunc(tooManyChallenges)), handler: http.HandlerFunc(invitedHandler.challenge)},
 		{pattern: "POST " + invitedPattern, limits: inviteLimits(trustedIPHeader, http.HandlerFunc(invitedHandler.tooManyAnswers)), handler: http.HandlerFunc(invitedHandler.redeem)},

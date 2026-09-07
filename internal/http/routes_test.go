@@ -147,6 +147,11 @@ var routeAccess = map[string]access{
 	"GET /setup":            {public: true},
 	"POST /setup/challenge": {public: true},
 	"POST /setup":           {public: true},
+	// The two routes an account that is already signed in uses to set up a
+	// garden of its own. Neither names a capability, because the garden the
+	// post writes is a new one of the caller's own.
+	"GET /setup/signed-in":  {},
+	"POST /setup/signed-in": {anyMember: true},
 	// An invite link is opened before any session exists. The token here was
 	// never issued, so the handler renders the page for a link that cannot be
 	// redeemed. There is no foreign path, because the token is what says which
