@@ -18,6 +18,7 @@
 <p class="field__error" id="passkey-error" role="alert">{{.Refusal}}</p>
 <form method="post" action="{{.Action}}" data-passkey="get" data-challenge="{{.Challenge}}" data-field="{{.Field}}" data-message="passkey-error" data-note="passkey-noscript">
 <input type="hidden" name="{{.Field}}">
+{{with .Next}}<input type="hidden" name="{{$.NextField}}" value="{{.}}">{{end}}
 <button class="wide-action" type="submit" disabled>Sign in with a passkey</button>
 <p class="note" id="passkey-noscript">Signing in needs JavaScript and a browser that supports passkeys.</p>
 </form>

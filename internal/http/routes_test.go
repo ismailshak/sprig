@@ -154,6 +154,11 @@ var routeAccess = map[string]access{
 	"GET /invite/{token}":            {public: true, path: invitedPath("no-such-token")},
 	"POST /invite/{token}/challenge": {public: true, path: invitedChallengePath("no-such-token")},
 	"POST /invite/{token}":           {public: true, path: invitedPath("no-such-token")},
+	// The garden an invite is for is the one the account is joining, so there
+	// is no other garden's token to refuse. Both paths use a token nobody
+	// issued. The 404 they get is the page for a link that cannot be used.
+	"GET /invite/{token}/accept":  {path: acceptPath("no-such-token"), foreign: acceptPath("no-such-token")},
+	"POST /invite/{token}/accept": {anyMember: true, path: acceptPath("no-such-token"), foreign: acceptPath("no-such-token")},
 	// A passkey and a push subscription belong to an account rather than to a
 	// garden, so the foreign row here is another person's rather than another
 	// garden's. Both routes answer 404 for one.

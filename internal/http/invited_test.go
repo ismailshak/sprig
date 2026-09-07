@@ -88,12 +88,14 @@ func invitedGarden(t *testing.T) *invitedFixture {
 	if err != nil {
 		t.Fatalf("building the passkeys: %v", err)
 	}
+	sessions := auth.NewSessions(queries, testTTL, cookie)
 	return &invitedFixture{
 		moreFixture: f,
 		handler: &invited{
 			logger:    testLogger,
 			passkeys:  passkeys,
-			sessions:  auth.NewSessions(queries, testTTL, cookie),
+			sessions:  sessions,
+			resolver:  auth.NewResolver(sessions, queries),
 			queries:   queries,
 			templates: testTemplates(),
 			now:       func() time.Time { return thursday },

@@ -118,6 +118,10 @@ type invitedPage struct {
 	// Joining is the sentence under the join form. It names the role, what the
 	// role can do, and the day access ends when the invite sets one.
 	Joining string
+	// SignInToJoin is the URL the "Sign in to join as yourself" link points at.
+	// It goes to the sign-in page. Signing in there redirects to the page that
+	// accepts this invite as the account signed in.
+	SignInToJoin string
 }
 
 func unusableInvitePage() invitedPage {
@@ -141,13 +145,11 @@ func newInvitedPage(token string, open openInvite, form joinForm, propose bool) 
 		Field:     credentialField,
 	}
 	if !page.Reenrol {
-		page.Joining = "You'll join as a " + invite.Role + ". " + roleWhat[invite.Role]
-		if invite.MembershipExpiresAt != nil {
-			// The date is read in the inviter's zone, because that is the
-			// zone it was chosen in and the person joining has no account
-			// to read it in yet.
-			page.Joining += " Your access ends on " + dateWord(*invite.MembershipExpiresAt, locationFor(open.row.AppUser)) + "."
-		}
+		page.SignInToJoin = signInToAcceptPath(token)
+		// The date is read in the inviter's zone, because that is the zone it
+		// was chosen in and the person joining has no account to read it in
+		// yet.
+		page.Joining = joiningSentence(invite.Role, invite.MembershipExpiresAt, locationFor(open.row.AppUser))
 	}
 	return page
 }
@@ -159,9 +161,13 @@ func newInvitedPage(token string, open openInvite, form joinForm, propose bool) 
 // passkey to the account it names and redirects to Today. Both sign the device
 // in.
 type invited struct {
-	logger    *slog.Logger
-	passkeys  *auth.Passkeys
-	sessions  *auth.Sessions
+	logger   *slog.Logger
+	passkeys *auth.Passkeys
+	sessions *auth.Sessions
+	// resolver turns the session cookie a browser opens a join link with into
+	// the account behind it, so the page can send that account to accept the
+	// invite as itself.
+	resolver  *auth.Resolver
 	queries   *store.Queries
 	templates *Templates
 	// now supplies the current time, so a test can fix the day.
@@ -169,13 +175,18 @@ type invited struct {
 }
 
 // open looks up the token in the path and reports whether the link can be
-// redeemed. It cannot be when it was never issued or has been revoked, has
-// expired, has been redeemed, is a join invite whose membership would already
-// have ended, or is a re-enrolment for somebody who is no longer a member of
-// the garden. The caller renders the same page for all of them.
+// redeemed.
 func (h *invited) open(r *http.Request) (openInvite, bool, error) {
-	now := h.now()
-	row, err := h.queries.GetInviteByTokenHash(r.Context(), auth.HashToken(r.PathValue("token")))
+	return openInviteToken(r.Context(), h.queries, h.now(), r.PathValue("token"))
+}
+
+// openInviteToken looks up the invite for token and reports whether the link
+// can be redeemed. It cannot be when it was never issued or has been revoked,
+// has expired, has been redeemed, is a join invite whose membership would
+// already have ended, or is a re-enrolment for somebody who is no longer a
+// member of the garden. The caller renders the same page for all of them.
+func openInviteToken(ctx context.Context, queries *store.Queries, now time.Time, token string) (openInvite, bool, error) {
+	row, err := queries.GetInviteByTokenHash(ctx, auth.HashToken(token))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return openInvite{}, false, nil
 	}
@@ -195,7 +206,7 @@ func (h *invited) open(r *http.Request) (openInvite, bool, error) {
 
 	// A re-enrolment link is issued from a member's row. That membership may
 	// have been deleted or ended since, and the link is then unusable.
-	member, err := h.queries.GetMembershipWithUserAndGarden(r.Context(), invite.GardenID, *invite.UserID)
+	member, err := queries.GetMembershipWithUserAndGarden(ctx, invite.GardenID, *invite.UserID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return openInvite{}, false, nil
 	}
@@ -208,7 +219,11 @@ func (h *invited) open(r *http.Request) (openInvite, bool, error) {
 	return openInvite{row: row, member: member.AppUser}, true, nil
 }
 
-// show handles GET /invite/{token}.
+// show handles GET /invite/{token}. A browser that opens a join link while
+// signed in is redirected to the page that accepts the invite as that
+// account, because the form here would make a second account for a person
+// who has one. The route is public and the session is only read when the
+// browser sent a cookie.
 func (h *invited) show(w http.ResponseWriter, r *http.Request) {
 	open, usable, err := h.open(r)
 	if err != nil {
@@ -219,7 +234,24 @@ func (h *invited) show(w http.ResponseWriter, r *http.Request) {
 		h.renderUnusable(w, r)
 		return
 	}
-	h.templates.render(w, r, view{page: "invited"}, newInvitedPage(r.PathValue("token"), open, freshJoinForm(open), true))
+	token := r.PathValue("token")
+	if !open.reenrol() && h.signedIn(r) {
+		http.Redirect(w, r, acceptPath(token), http.StatusSeeOther)
+		return
+	}
+	h.templates.render(w, r, view{page: "invited"}, newInvitedPage(token, open, freshJoinForm(open), true))
+}
+
+// signedIn reports whether the request has a session cookie that resolves
+// to an account with a live membership. A cookie that resolves to nothing, or
+// to a membership that has ended, counts as signed out.
+func (h *invited) signedIn(r *http.Request) bool {
+	token := h.sessions.TokenFromRequest(r)
+	if token == "" {
+		return false
+	}
+	_, err := h.resolver.Resolve(r.Context(), h.now(), token)
+	return err == nil
 }
 
 // freshJoinForm is the join form before anybody has posted it. The timezone is
@@ -355,7 +387,7 @@ func (h *invited) join(r *http.Request, open openInvite, form joinForm) (store.A
 	)
 	err = h.queries.InTx(r.Context(), func(q *store.Queries) error {
 		ctx := r.Context()
-		if err := h.markRedeemed(ctx, q, invite); err != nil {
+		if err := markRedeemed(ctx, q, h.now(), invite); err != nil {
 			return err
 		}
 		var err error
@@ -387,7 +419,7 @@ func (h *invited) addDevice(r *http.Request, open openInvite) (store.AppUser, st
 	var passkey store.PasskeyCredential
 	err := h.queries.InTx(r.Context(), func(q *store.Queries) error {
 		ctx := r.Context()
-		if err := h.markRedeemed(ctx, q, open.row.Invite); err != nil {
+		if err := markRedeemed(ctx, q, h.now(), open.row.Invite); err != nil {
 			return err
 		}
 		var err error
@@ -401,8 +433,8 @@ func (h *invited) addDevice(r *http.Request, open openInvite) (store.AppUser, st
 // the row was already redeemed or has run out. It runs first in the
 // transaction, so the second of two posts waits on the row lock and then
 // writes nothing.
-func (h *invited) markRedeemed(ctx context.Context, q *store.Queries, invite store.Invite) error {
-	n, err := q.RedeemInvite(ctx, store.RedeemInviteParams{Now: h.now(), GardenID: invite.GardenID, InviteID: invite.ID})
+func markRedeemed(ctx context.Context, q *store.Queries, now time.Time, invite store.Invite) error {
+	n, err := q.RedeemInvite(ctx, store.RedeemInviteParams{Now: now, GardenID: invite.GardenID, InviteID: invite.ID})
 	if err != nil {
 		return err
 	}
