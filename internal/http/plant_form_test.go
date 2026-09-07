@@ -1,7 +1,9 @@
 package http
 
 import (
+	"bytes"
 	"context"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -50,6 +52,41 @@ func (f *formFixture) add(t *testing.T, values url.Values) *httptest.ResponseRec
 	ctx := context.WithValue(t.Context(), principalKey, f.principal)
 	req := httptest.NewRequestWithContext(ctx, http.MethodPost, newPlantPath, strings.NewReader(values.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	f.handler.create(rec, req)
+	return rec
+}
+
+// addMultipart posts the add form as multipart/form-data, the encoding the
+// form uses to post a photo. An empty filename gives the photo part a browser
+// sends when nothing was chosen.
+func (f *formFixture) addMultipart(t *testing.T, values url.Values, filename string) *httptest.ResponseRecorder {
+	t.Helper()
+
+	var body bytes.Buffer
+	form := multipart.NewWriter(&body)
+	for name, held := range values {
+		for _, v := range held {
+			if err := form.WriteField(name, v); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	part, err := form.CreateFormFile("photo", filename)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if filename != "" {
+		if _, err := part.Write([]byte("the resized bytes")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := form.Close(); err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.WithValue(t.Context(), principalKey, f.principal)
+	req := httptest.NewRequestWithContext(ctx, http.MethodPost, newPlantPath, &body)
+	req.Header.Set("Content-Type", form.FormDataContentType())
 	rec := httptest.NewRecorder()
 	f.handler.create(rec, req)
 	return rec
@@ -184,7 +221,7 @@ var (
 	formArea   = regexp.MustCompile(`(?s)<textarea[^>]*id="([^"]+)"[^>]*>(.*?)</textarea>`)
 	formSelect = regexp.MustCompile(`(?s)<select[^>]*id="([^"]+)"[^>]*>(.*?)</select>`)
 	formPicked = regexp.MustCompile(`<option value="([^"]+)" selected>`)
-	formError  = regexp.MustCompile(`<p class="field__error">(.*?)</p>`)
+	formError  = regexp.MustCompile(`<p class="field__error"([^>]*)>(.*?)</p>`)
 	formRow    = regexp.MustCompile(`<li class="sched sched--(editing|add)" id="sched-([a-z]+)"`)
 	formRooms  = regexp.MustCompile(`(?s)<datalist id="rooms">(.*?)</datalist>`)
 	formRoom   = regexp.MustCompile(`<option value="([^"]*)">`)
@@ -263,10 +300,16 @@ func closedRows(page string) []string {
 	return closed
 }
 
+// errorsOn returns the error lines the page shows. A <p> with the hidden
+// attribute is left out because the server renders it whatever was posted and
+// only the page's script shows it.
 func errorsOn(page string) []string {
 	var lines []string
 	for _, m := range formError.FindAllStringSubmatch(page, -1) {
-		lines = append(lines, text(m[1]))
+		if strings.Contains(m[1], "hidden") {
+			continue
+		}
+		lines = append(lines, text(m[2]))
 	}
 	return lines
 }
@@ -365,6 +408,69 @@ func TestPlantForm_OnePostCreatesThePlantAndItsSchedules(t *testing.T) {
 	}
 	if got := len(f.schedulesOf(t, plant.ID)); got != 2 {
 		t.Errorf("the plant arrived with %d schedules, want the two the form opened", got)
+	}
+}
+
+func TestPlantForm_AMultipartPostWithNoPhotoCreatesThePlant(t *testing.T) {
+	f := plantFormOn(t)
+	values := addValues()
+	values.Set("nickname", "Ada")
+	values.Set("where", "Study")
+
+	plant := f.created(t, f.addMultipart(t, values, ""))
+
+	if plant.DisplayName() != "Ada" || value(plant.Location) != "Study" {
+		t.Errorf("the plant reads %+v, want Ada in the study", plant)
+	}
+}
+
+func TestPlantForm_APostOverTheBodyCapIsRefusedInEitherEncoding(t *testing.T) {
+	f := plantFormOn(t)
+	values := addValues()
+	values.Set("nickname", "Ada")
+	values.Set("notes", strings.Repeat("x", plantFormMaxBytes+1))
+	before := f.countPlants(t)
+
+	for name, rec := range map[string]*httptest.ResponseRecorder{
+		"query string": f.add(t, values),
+		"multipart":    f.addMultipart(t, values, "photo.jpg"),
+	} {
+		if rec.Code != http.StatusRequestEntityTooLarge {
+			t.Errorf("%s: status = %d, want %d", name, rec.Code, http.StatusRequestEntityTooLarge)
+		}
+	}
+	if after := f.countPlants(t); after != before {
+		t.Errorf("the garden has %d plants, want the %d it started with", after, before)
+	}
+}
+
+func TestPlantForm_ARefusedPostWithAPhotoSaysThePhotoNeedsChoosingAgain(t *testing.T) {
+	f := plantFormOn(t)
+	values := addValues()
+	values.Set("where", "Study")
+
+	rec := f.addMultipart(t, values, "monstera.jpg")
+
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusUnprocessableEntity)
+	}
+	if got := errorsOn(rec.Body.String()); !slices.Contains(got, "The photo needs choosing again.") {
+		t.Errorf("the refused form says %v, want the line about the photo", got)
+	}
+}
+
+func TestPlantForm_ARefusedPostWithNoPhotoDoesNotAskForOne(t *testing.T) {
+	f := plantFormOn(t)
+	values := addValues()
+	values.Set("where", "Study")
+
+	rec := f.addMultipart(t, values, "")
+
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusUnprocessableEntity)
+	}
+	if got := errorsOn(rec.Body.String()); slices.Contains(got, "The photo needs choosing again.") {
+		t.Errorf("the refused form says %v, and no photo was chosen", got)
 	}
 }
 

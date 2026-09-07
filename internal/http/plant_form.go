@@ -29,6 +29,10 @@ func archivePlantPath(plantID uuid.UUID) string {
 	return plantPath(plantID) + "/archive"
 }
 
+// plantFormMaxBytes is the largest plant form post accepted, the two photo
+// files included.
+const plantFormMaxBytes = 10 << 20
+
 // waterSlug is the schedule row the add form opens with, since every plant is
 // watered and no other care is that common.
 const waterSlug = "water"
@@ -181,6 +185,39 @@ func (f plantFields) update(gardenID, plantID uuid.UUID) store.UpdatePlantParams
 	}
 }
 
+// readPlantForm parses a plant form post into r.PostForm, whether it is
+// encoded as multipart/form-data or as a query string. It writes the response
+// itself and returns false when the body was over the size cap or did not
+// parse.
+func readPlantForm(w http.ResponseWriter, r *http.Request) bool {
+	r.Body = http.MaxBytesReader(w, r.Body, plantFormMaxBytes)
+	// ParseForm runs first because ParseMultipartForm discards its error and
+	// returns ErrNotMultipart when the post is a query string.
+	err := r.ParseForm()
+	if err == nil {
+		if err = r.ParseMultipartForm(plantFormMaxBytes); errors.Is(err, http.ErrNotMultipart) {
+			err = nil
+		}
+	}
+	var tooLarge *http.MaxBytesError
+	switch {
+	case errors.As(err, &tooLarge):
+		http.Error(w, "the form is too large", http.StatusRequestEntityTooLarge)
+		return false
+	case err != nil:
+		http.Error(w, "the form did not parse", http.StatusBadRequest)
+		return false
+	}
+	return true
+}
+
+// photoPosted reports whether the post had a photo file. Go parses a part
+// with an empty filename as a form value rather than a file, so the part a
+// browser sends for a file input with nothing chosen does not count.
+func photoPosted(r *http.Request) bool {
+	return r.MultipartForm != nil && len(r.MultipartForm.File["photo"]) > 0
+}
+
 // set converts a text field to its column value. An empty field is null, since
 // an empty string in the column would count as a value.
 func set(s string) *string {
@@ -257,6 +294,10 @@ type plantFormPage struct {
 	AcquiredError string
 	// Reference is true when the Reference disclosure starts open.
 	Reference bool
+	// PhotoNeedsChoosing is true when a refused post had a photo. The form is
+	// rendered again with an empty file input, because a server cannot fill
+	// one.
+	PhotoNeedsChoosing bool
 }
 
 type factField struct {
@@ -419,8 +460,7 @@ func (h *plants) newPlant(w http.ResponseWriter, r *http.Request) {
 // transaction.
 func (h *plants) create(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
-	if err := r.ParseForm(); err != nil {
-		http.Error(w, "the form did not parse", http.StatusBadRequest)
+	if !readPlantForm(w, r) {
 		return
 	}
 	cares, err := h.queries.ListCareTypes(r.Context(), principal.Garden.ID)
@@ -450,6 +490,7 @@ func (h *plants) create(w http.ResponseWriter, r *http.Request) {
 		page.Schedules[i].Error = messages[page.Schedules[i].Slug]
 	}
 	if refused || page.NameError != "" || page.AcquiredError != "" {
+		page.PhotoNeedsChoosing = photoPosted(r)
 		h.templates.render(w, r, view{page: plantFormPageName, status: http.StatusUnprocessableEntity}, page)
 		return
 	}
@@ -520,8 +561,7 @@ func (h *plants) update(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if err := r.ParseForm(); err != nil {
-		http.Error(w, "the form did not parse", http.StatusBadRequest)
+	if !readPlantForm(w, r) {
 		return
 	}
 	now := h.now().In(locationFor(principal.User))
@@ -540,6 +580,7 @@ func (h *plants) update(w http.ResponseWriter, r *http.Request) {
 	page.Rooms = rooms
 	page.NameError, page.AcquiredError = fields.refuse()
 	if page.NameError != "" || page.AcquiredError != "" {
+		page.PhotoNeedsChoosing = photoPosted(r)
 		h.templates.render(w, r, view{page: plantFormPageName, status: http.StatusUnprocessableEntity}, page)
 		return
 	}
