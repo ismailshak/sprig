@@ -1,4 +1,4 @@
-import { test as base } from '@playwright/test';
+import { expect, test as base } from '@playwright/test';
 import { AcceptScreen } from '../screens/accept';
 import { AccountScreen } from '../screens/account';
 import { ActivityScreen } from '../screens/activity';
@@ -44,7 +44,7 @@ type Screens = {
   tokens: TokensScreen;
 };
 
-export const test = base.extend<{ seededGarden: void } & Screens, { stack: Stack }>({
+export const test = base.extend<{ seededGarden: void; cspViolations: void } & Screens, { stack: Stack }>({
   // A worker keeps one stack for its whole life, picked by its index.
   stack: [
     async ({}, use, workerInfo) => {
@@ -64,6 +64,23 @@ export const test = base.extend<{ seededGarden: void } & Screens, { stack: Stack
     async ({ stack }, use) => {
       await seed(stack.databaseURL);
       await use();
+    },
+    { auto: true },
+  ],
+  // The browser reports a blocked script or style as a console error and shows
+  // nothing on the page, so without this fixture a test passes while a swap or
+  // the undo bar is broken. Chromium and WebKit both put "Content Security
+  // Policy" in the message.
+  cspViolations: [
+    async ({ page }, use) => {
+      const violations: string[] = [];
+      page.on('console', (message) => {
+        if (message.type() === 'error' && message.text().includes('Content Security Policy')) {
+          violations.push(message.text());
+        }
+      });
+      await use();
+      expect(violations).toEqual([]);
     },
     { auto: true },
   ],
