@@ -29,39 +29,77 @@ import (
 )
 
 func main() {
-	// A subcommand needs no configuration and no database, so it runs before
-	// either is read.
-	if len(os.Args) > 1 {
-		if err := subcommand(os.Args[1:], os.Stdout); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
-		}
-		return
-	}
-
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	if err := run(ctx, os.Getenv, os.Stdout); err != nil {
+	var err error
+	if len(os.Args) > 1 {
+		err = subcommand(ctx, os.Args[1:], os.Getenv, os.Stdout)
+	} else {
+		err = run(ctx, os.Getenv, os.Stdout)
+	}
+	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }
 
-// subcommand runs the command named by args. The only command is vapid: it
-// prints a new VAPID key pair as the two environment variables that hold it.
-// SPRIG_VAPID_SUBJECT is not printed, because that is a contact address the
-// operator chooses.
-func subcommand(args []string, stdout io.Writer) error {
-	if len(args) != 1 || args[0] != "vapid" {
-		return fmt.Errorf("unknown command %q: vapid is the only command, and the server runs with none", strings.Join(args, " "))
+func subcommand(ctx context.Context, args []string, getenv func(string) string, stdout io.Writer) error {
+	switch {
+	case len(args) == 1 && args[0] == "vapid":
+		return vapid(stdout)
+	case len(args) == 1 && args[0] == "sweep":
+		return sweep(ctx, getenv, stdout)
+	default:
+		return fmt.Errorf("unknown command %q: the commands are vapid and sweep, and the server runs with none", strings.Join(args, " "))
 	}
+}
+
+// vapid prints a new VAPID key pair as the two environment variables that
+// hold it. SPRIG_VAPID_SUBJECT is not printed, because that is a contact
+// address the operator chooses.
+func vapid(stdout io.Writer) error {
 	keys, err := push.GenerateKeys()
 	if err != nil {
 		return err
 	}
 	_, err = fmt.Fprintf(stdout, "SPRIG_VAPID_PUBLIC_KEY=%s\nSPRIG_VAPID_PRIVATE_KEY=%s\n", keys.Public, keys.Private)
 	return err
+}
+
+// sweep runs one pass over the photo directory and the photo rows and prints
+// what it finds. It does not run the migrations, because the server that
+// wrote the rows has already applied them. A row with no file makes it return
+// an error, so the exit status is non-zero.
+func sweep(ctx context.Context, getenv func(string) string, stdout io.Writer) error {
+	cfg, err := loadConfig(getenv)
+	if err != nil {
+		return err
+	}
+	// photo.NewStore creates the directory when it is missing. The sweep
+	// stats it first, because a mount that did not come up would otherwise
+	// look like a directory whose files have all been deleted.
+	if _, err := os.Stat(cfg.photoDir); err != nil {
+		return err
+	}
+	pool, err := store.Open(ctx, cfg.databaseURL)
+	if err != nil {
+		return err
+	}
+	defer pool.Close()
+
+	photos, err := photo.NewStore(cfg.photoDir, cfg.photoQuota)
+	if err != nil {
+		return err
+	}
+	report, err := photos.Sweep(ctx, store.New(pool), stdout)
+	if err != nil {
+		return err
+	}
+	if report.Missing > 0 {
+		return fmt.Errorf("%d photo rows have no file under %s", report.Missing, cfg.photoDir)
+	}
+	return nil
 }
 
 // shutdownGrace is how long in-flight requests get to finish after the process

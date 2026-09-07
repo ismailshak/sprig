@@ -91,6 +91,45 @@ func (q *Queries) GetPhoto(ctx context.Context, gardenID uuid.UUID, photoID uuid
 	return i, err
 }
 
+const listPhotoFiles = `-- name: ListPhotoFiles :many
+SELECT id, plant_id, path, square_bytes FROM photo
+ORDER BY path
+`
+
+type ListPhotoFilesRow struct {
+	ID          uuid.UUID
+	PlantID     uuid.UUID
+	Path        string
+	SquareBytes *int64
+}
+
+// Every photo row, for the sweep that compares them with the files on disk.
+// It takes no garden id, because the sweep covers every garden at once.
+func (q *Queries) ListPhotoFiles(ctx context.Context) ([]ListPhotoFilesRow, error) {
+	rows, err := q.db.Query(ctx, listPhotoFiles)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPhotoFilesRow
+	for rows.Next() {
+		var i ListPhotoFilesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.PlantID,
+			&i.Path,
+			&i.SquareBytes,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const sumPhotoBytes = `-- name: SumPhotoBytes :one
 SELECT coalesce(sum(bytes + coalesce(square_bytes, 0)), 0)::bigint
 FROM photo
