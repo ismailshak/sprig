@@ -1,6 +1,7 @@
 package http
 
 import (
+	"context"
 	"errors"
 	"io"
 	"math"
@@ -220,10 +221,18 @@ func photoPosted(r *http.Request) bool {
 	return r.MultipartForm != nil && len(r.MultipartForm.File["photo"]) > 0
 }
 
+// canSetPicture reports whether the member may use the plant form's photo
+// field. The field stores a photo and makes it the plant's profile picture, so
+// it takes both capabilities.
+func canSetPicture(principal auth.Principal) bool {
+	return principal.Can(auth.PhotoAdd) && principal.Can(auth.PhotoSetProfile)
+}
+
 // postedPhoto builds an upload for the plant from the posted photo file and
-// the square variant when one was posted too. closeFiles closes whatever was
-// opened and is never nil. A part that will not open gets a 400 written here,
-// and false returned.
+// its square variant. closeFiles closes whatever was opened and is never nil.
+// A part that will not open gets a 400 written here, and false returned. A
+// post with no square gets the same 400, because every list shows the picture
+// as its square and the form's script always posts both files.
 func postedPhoto(w http.ResponseWriter, r *http.Request, principal auth.Principal, plantID uuid.UUID) (upload photo.Upload, closeFiles func(), ok bool) {
 	var opened []io.Closer
 	closeFiles = func() {
@@ -232,6 +241,10 @@ func postedPhoto(w http.ResponseWriter, r *http.Request, principal auth.Principa
 		}
 	}
 	upload = photo.Upload{GardenID: principal.Garden.ID, PlantID: plantID, UploadedBy: principal.User.ID}
+	if len(r.MultipartForm.File["photo-square"]) == 0 {
+		http.Error(w, "the photo needs its square variant", http.StatusBadRequest)
+		return upload, closeFiles, false
+	}
 	file, header, err := r.FormFile("photo")
 	if err != nil {
 		http.Error(w, "the photo did not parse", http.StatusBadRequest)
@@ -239,16 +252,32 @@ func postedPhoto(w http.ResponseWriter, r *http.Request, principal auth.Principa
 	}
 	opened = append(opened, file)
 	upload.File, upload.Size = file, header.Size
-	if len(r.MultipartForm.File["photo-square"]) > 0 {
-		square, header, err := r.FormFile("photo-square")
-		if err != nil {
-			http.Error(w, "the photo did not parse", http.StatusBadRequest)
-			return upload, closeFiles, false
-		}
-		opened = append(opened, square)
-		upload.Square, upload.SquareSize = square, header.Size
+	square, header, err := r.FormFile("photo-square")
+	if err != nil {
+		http.Error(w, "the photo did not parse", http.StatusBadRequest)
+		return upload, closeFiles, false
 	}
+	opened = append(opened, square)
+	upload.Square, upload.SquareSize = square, header.Size
 	return upload, closeFiles, true
+}
+
+// savePicture stores the photo and makes it the plant's profile picture. Both
+// writes go through q, so they join the caller's transaction.
+func (h *plants) savePicture(ctx context.Context, q *store.Queries, upload photo.Upload) error {
+	row, err := h.photos.Save(ctx, q, upload)
+	if err != nil {
+		return err
+	}
+	_, err = q.SetProfilePhoto(ctx, store.SetProfilePhotoParams{PhotoID: &row.ID, GardenID: upload.GardenID, PlantID: upload.PlantID})
+	return err
+}
+
+// pictureRemoved reports whether the post asks for the plant's profile picture
+// to be cleared. Only the page's script sets the flag, because the photo field
+// stays hidden without JavaScript.
+func pictureRemoved(r *http.Request) bool {
+	return r.PostForm.Get("photo-removed") == "1"
 }
 
 // photoQuotaFull is the message shown under the photo field when the garden
@@ -361,9 +390,17 @@ type plantFormPage struct {
 	// PhotoFull is the message shown under the photo field when the garden has
 	// no room for the photo. It is empty otherwise.
 	PhotoFull string
-	// PhotoField is whether the form renders the photo field. It is true for a
-	// member who may add photos.
+	// PhotoField is whether the form renders the photo field. It is true only
+	// for a member who may set the plant's profile picture.
 	PhotoField bool
+	// Picture is the URL of the plant's current profile picture, shown in the
+	// photo field with Replace and Remove. Empty on the add form and for a
+	// plant with no picture.
+	Picture string
+	// PictureRemoved is true when the post being rendered again had Remove
+	// pressed. The form renders the hidden photo-removed input set to 1, so
+	// saving again still removes the picture.
+	PictureRemoved bool
 }
 
 type factField struct {
@@ -396,22 +433,23 @@ func addPlantPage(principal auth.Principal, f plantFields, rows []scheduleDraft,
 	page.Action = newPlantPath
 	page.Back = plantsPath
 	page.Submit = "Add plant"
-	page.PhotoField = principal.Can(auth.PhotoAdd)
+	page.PhotoField = canSetPicture(principal)
 	for _, row := range rows {
 		page.Schedules = append(page.Schedules, newScheduleField(row, newPlantPath, now))
 	}
 	return page
 }
 
-func editPlantPage(principal auth.Principal, f plantFields, plantID uuid.UUID, now time.Time) plantFormPage {
+func editPlantPage(principal auth.Principal, f plantFields, plant store.Plant, now time.Time) plantFormPage {
 	page := newPlantFormPage(f, now)
 	page.Title = "Edit plant"
-	page.Action = editPlantPath(plantID)
-	page.Back = plantPath(plantID)
+	page.Action = editPlantPath(plant.ID)
+	page.Back = plantPath(plant.ID)
 	page.Submit = "Save changes"
-	page.PhotoField = principal.Can(auth.PhotoAdd)
+	page.PhotoField = canSetPicture(principal)
+	page.Picture = picturePath(plant)
 	if principal.Can(auth.PlantArchive) {
-		page.Archive = archivePlantPath(plantID)
+		page.Archive = archivePlantPath(plant.ID)
 	}
 	return page
 }
@@ -531,9 +569,10 @@ func (h *plants) create(w http.ResponseWriter, r *http.Request) {
 	if !readPlantForm(w, r) {
 		return
 	}
-	// Adding a photo is its own capability. The route admits anyone who may
-	// add a plant, so a post with a photo is checked here.
-	if photoPosted(r) && !principal.Can(auth.PhotoAdd) {
+	// The route admits anyone who may add a plant. A posted photo becomes the
+	// plant's profile picture, so the post is checked for the two capabilities
+	// that takes.
+	if photoPosted(r) && !canSetPicture(principal) {
 		http.NotFound(w, r)
 		return
 	}
@@ -591,9 +630,7 @@ func (h *plants) create(w http.ResponseWriter, r *http.Request) {
 			if !ok {
 				return errResponded
 			}
-			if _, err := h.photos.Save(r.Context(), q, upload); err != nil {
-				return err
-			}
+			return h.savePicture(r.Context(), q, upload)
 		}
 		return nil
 	})
@@ -645,7 +682,7 @@ func (h *plants) edit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	now := h.now().In(locationFor(principal.User))
-	page := editPlantPage(principal, plantFieldsOf(plant), plant.ID, now)
+	page := editPlantPage(principal, plantFieldsOf(plant), plant, now)
 	page.Rooms = rooms
 	h.templates.render(w, r, view{page: plantFormPageName}, page)
 }
@@ -662,7 +699,7 @@ func (h *plants) update(w http.ResponseWriter, r *http.Request) {
 	if !readPlantForm(w, r) {
 		return
 	}
-	if photoPosted(r) && !principal.Can(auth.PhotoAdd) {
+	if (photoPosted(r) || pictureRemoved(r)) && !canSetPicture(principal) {
 		http.NotFound(w, r)
 		return
 	}
@@ -678,28 +715,36 @@ func (h *plants) update(w http.ResponseWriter, r *http.Request) {
 	}
 	fields.location = canonicalRoom(rooms, fields.location)
 
-	page := editPlantPage(principal, fields, plant.ID, now)
+	page := editPlantPage(principal, fields, plant, now)
 	page.Rooms = rooms
 	page.NameError, page.AcquiredError = fields.refuse()
+	if pictureRemoved(r) {
+		page.Picture = ""
+		page.PictureRemoved = true
+	}
 	if page.NameError != "" || page.AcquiredError != "" {
 		page.PhotoNeedsChoosing = photoPosted(r)
 		h.templates.render(w, r, view{page: plantFormPageName, status: http.StatusUnprocessableEntity}, page)
 		return
 	}
 
+	// A posted photo becomes the picture. Remove clears profile_photo_id and
+	// keeps the photo row as one of the plant's photos.
 	err := h.queries.InTx(r.Context(), func(q *store.Queries) error {
 		if _, err := q.UpdatePlant(r.Context(), fields.update(principal.Garden.ID, plant.ID)); err != nil {
 			return err
 		}
-		if photoPosted(r) {
+		switch {
+		case photoPosted(r):
 			upload, closeFiles, ok := postedPhoto(w, r, principal, plant.ID)
 			defer closeFiles()
 			if !ok {
 				return errResponded
 			}
-			if _, err := h.photos.Save(r.Context(), q, upload); err != nil {
-				return err
-			}
+			return h.savePicture(r.Context(), q, upload)
+		case pictureRemoved(r):
+			_, err := q.SetProfilePhoto(r.Context(), store.SetProfilePhotoParams{GardenID: principal.Garden.ID, PlantID: plant.ID})
+			return err
 		}
 		return nil
 	})

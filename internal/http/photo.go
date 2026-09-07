@@ -6,6 +6,8 @@ import (
 	"uuid"
 
 	"github.com/jackc/pgx/v5"
+
+	"github.com/ismailshak/sprig/internal/store"
 )
 
 // photoFullPath is the URL of a photo's file at its uploaded size.
@@ -16,6 +18,26 @@ func photoFullPath(plantID, photoID uuid.UUID) string {
 // photoSquarePath is the URL of a photo's square variant.
 func photoSquarePath(plantID, photoID uuid.UUID) string {
 	return plantPath(plantID) + "/photos/" + photoID.String() + "/square"
+}
+
+// picturePath is the URL of the plant's profile picture at its uploaded size.
+// Empty for a plant with no picture.
+func picturePath(plant store.Plant) string {
+	if plant.ProfilePhotoID == nil {
+		return ""
+	}
+	return photoFullPath(plant.ID, *plant.ProfilePhotoID)
+}
+
+// squarePicturePath is the URL of the square variant of the plant's profile
+// picture, shown beside its name in a row. Empty for a plant with no picture.
+// A picture always has a square, because a photo without one cannot be set as
+// the picture.
+func squarePicturePath(plant store.Plant) string {
+	if plant.ProfilePhotoID == nil {
+		return ""
+	}
+	return photoSquarePath(plant.ID, *plant.ProfilePhotoID)
 }
 
 // photoFull handles GET /plants/{plant}/photos/{photo}/full.

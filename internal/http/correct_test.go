@@ -116,7 +116,7 @@ func (f *logFixture) restore(t *testing.T, plantID, eventID uuid.UUID, form url.
 }
 
 var (
-	hiddenInput  = regexp.MustCompile(`<input type="hidden"[^>]*>`)
+	hiddenInput  = regexp.MustCompile(`<input[^>]*\stype="hidden"[^>]*>`)
 	attribute    = regexp.MustCompile(`([a-z-]+)="([^"]*)"`)
 	recordedLead = regexp.MustCompile(`<p class="sheet__record">([^<]*)</p>`)
 )

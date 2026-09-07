@@ -148,23 +148,24 @@ type Photo struct {
 }
 
 type Plant struct {
-	ID            uuid.UUID
-	GardenID      uuid.UUID
-	Nickname      *string
-	CommonName    *string
-	BotanicalName *string
-	Location      *string
-	Sun           *string
-	WaterNeeds    *string
-	FeedNeeds     *string
-	Soil          *string
-	Climate       *string
-	Pot           *string
-	Notes         *string
-	AcquiredYear  *int16
-	AcquiredMonth *int16
-	CreatedAt     time.Time
-	ArchivedAt    *time.Time
+	ID             uuid.UUID
+	GardenID       uuid.UUID
+	Nickname       *string
+	CommonName     *string
+	BotanicalName  *string
+	Location       *string
+	Sun            *string
+	WaterNeeds     *string
+	FeedNeeds      *string
+	Soil           *string
+	Climate        *string
+	Pot            *string
+	Notes          *string
+	AcquiredYear   *int16
+	AcquiredMonth  *int16
+	CreatedAt      time.Time
+	ArchivedAt     *time.Time
+	ProfilePhotoID *uuid.UUID
 }
 
 type PushSubscription struct {

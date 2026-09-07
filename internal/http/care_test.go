@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -847,5 +848,28 @@ func TestUndo_TheFeedNoLongerShowsTheDeletedCare(t *testing.T) {
 	undone := f.undo(t, dorisID, event.ID, "water", true).Body.String()
 	if strings.Contains(undone, undoFormPath(dorisID, event.ID)) {
 		t.Errorf("the feed still carries the watering that was taken back:\n%s", undone)
+	}
+}
+
+func TestSheet_TheHeadingShowsThePlantsPictureAsItsSquare(t *testing.T) {
+	f := rosewood(t)
+	photoID := givePicture(t, f.tx, bigFellaID)
+
+	body := f.sheet(t, sheetPath(bigFellaID, "water"), true).Body.String()
+
+	if got, want := images(body), []string{photoSquarePath(bigFellaID, photoID)}; !slices.Equal(got, want) {
+		t.Errorf("the sheet's images are %v, want the square at %v", got, want)
+	}
+}
+
+func TestLog_TheLoggedRowStillShowsThePlantsPicture(t *testing.T) {
+	f := rosewood(t)
+	photoID := givePicture(t, f.tx, dorisID)
+
+	rec := f.post(t, dorisID.String(), url.Values{"row": {"water"}, "care": {"water"}, "when": {"now"}}, true)
+
+	row := rowElement.FindString(rec.Body.String())
+	if got, want := images(row), []string{photoSquarePath(dorisID, photoID)}; !slices.Equal(got, want) {
+		t.Errorf("the logged row's images are %v, want the square at %v", got, want)
 	}
 }

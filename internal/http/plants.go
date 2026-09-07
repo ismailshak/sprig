@@ -91,6 +91,9 @@ type plantRow struct {
 	// Standing is the overdue text, empty unless a care is overdue. A care due
 	// today is not mentioned because Today already says so.
 	Standing string
+	// Picture is the URL of the plant's profile picture as a square, empty for
+	// a plant with no picture.
+	Picture string
 }
 
 func newPlantsPage(principal auth.Principal, list []store.Plant, lines []schedule.Line, now time.Time) plantsPage {
@@ -144,6 +147,7 @@ func newPlantRow(plant store.Plant, lines []schedule.Line, now time.Time) plantR
 		Href:      plantPath(plant.ID),
 		Name:      plant.DisplayName(),
 		Botanical: plant.BotanicalOnly(),
+		Picture:   squarePicturePath(plant),
 	}
 	row.Sub, row.SubBotanical = plant.OtherName()
 	if late := mostOverdue(lines); late != nil {

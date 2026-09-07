@@ -26,7 +26,17 @@ export class PlantsScreen {
   // another plant's second line, as Golden pothos does under Trail Mix. An
   // unanchored match would find both rows.
   row(plant: Plant): Locator {
-    return this.page.getByRole('link', { name: new RegExp(`^${escapePattern(plant.name)}(\\s|$)`) });
+    return this.rowNamed(plant.name);
+  }
+
+  rowNamed(name: string): Locator {
+    return this.page.getByRole('link', { name: new RegExp(`^${escapePattern(name)}(\\s|$)`) });
+  }
+
+  // The picture in the row's circle, found by tag because the image has no alt
+  // text of its own.
+  picture(name: string): Locator {
+    return this.rowNamed(name).locator('img');
   }
 }
 

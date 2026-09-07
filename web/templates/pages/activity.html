@@ -63,9 +63,8 @@
 
 {{/* A row is headed by whichever of the plant and the care differs from row to
      row. On the whole garden's log that is the plant, so the row shows its name
-     and its photo (row__avatar, empty until photos are built). Filtered to one
-     plant the name would repeat down the page, so the row shows the care and
-     the care's icon instead.
+     and its picture. Filtered to one plant the name would repeat down the
+     page, so the row shows the care and the care's icon instead.
 
      The row opens the sheet that corrects the event. It is a plain <li> with no
      link for a reader who may not correct it, and for the four seconds after a
@@ -83,7 +82,7 @@
      screen until the next page load. */}}
 {{define "event-row"}}<li class="row row--event{{if .Deleted}} row--done{{end}}" id="{{.ID}}"{{if .Deleted}} style="--grace:{{.Grace}}ms" hx-get="{{.Settled}}" hx-trigger="load delay:{{.Grace}}ms" hx-target="#log-body" hx-swap="outerHTML settle:0ms"{{end}}>
 {{if .Href}}<a class="row__open" href="{{.Href}}" hx-get="{{.Href}}" hx-target="#sheet" hx-swap="outerHTML">{{else}}<span class="row__open">{{end}}
-{{if .Act}}<span class="row__node{{if .Skipped}} row__node--skip{{end}}">{{template "care-icon" .Slug}}</span>{{else}}<span class="row__avatar"></span>{{end}}
+{{if .Act}}<span class="row__node{{if .Skipped}} row__node--skip{{end}}">{{template "care-icon" .Slug}}</span>{{else}}{{template "avatar" .Picture}}{{end}}
 <span class="row__text">
 {{if .Act}}<span class="row__act">{{.Act}}</span>{{else}}<span class="row__name{{if .Botanical}} row__name--sp{{end}}">{{.Name}}</span>{{end}}
 <span class="row__meta">{{if .Deleted}}<span class="row__part row__said row__said--gone">Deleted</span>{{else}}<span class="row__part">{{.Who}}{{with .Did}} {{.}}{{end}}</span><span class="dot">&middot;</span><span class="row__part">{{.When}}</span>{{end}}</span>

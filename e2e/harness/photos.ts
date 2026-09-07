@@ -30,6 +30,13 @@ export function heldCount(input: Locator): Promise<number> {
   return input.evaluate((element: HTMLInputElement) => element.files?.length ?? 0);
 }
 
+// loaded reports whether the browser fetched and decoded the image at img's
+// src. A src that 404s leaves a visible element with nothing in it, so
+// toBeVisible passes on an image that never loaded.
+export function loaded(img: Locator): Promise<boolean> {
+  return img.evaluate((element: HTMLImageElement) => element.complete && element.naturalWidth > 0);
+}
+
 // A JPEG is a run of segments after the two-byte start-of-image marker. Each
 // begins with 0xFF and a marker byte. All but the restart markers then have a
 // two-byte length that counts itself. The walk stops at the start-of-scan

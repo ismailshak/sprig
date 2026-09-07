@@ -85,7 +85,7 @@ func (q *Queries) DeleteCareSchedule(ctx context.Context, arg DeleteCareSchedule
 }
 
 const listCareSchedules = `-- name: ListCareSchedules :many
-SELECT care_schedule.id, care_schedule.garden_id, care_schedule.plant_id, care_schedule.care_type_id, care_schedule.interval_count, care_schedule.interval_unit, care_schedule.anchor_date, care_schedule.anchor_precision, care_schedule.season_start_month, care_schedule.season_end_month, care_schedule.set_at, plant.id, plant.garden_id, plant.nickname, plant.common_name, plant.botanical_name, plant.location, plant.sun, plant.water_needs, plant.feed_needs, plant.soil, plant.climate, plant.pot, plant.notes, plant.acquired_year, plant.acquired_month, plant.created_at, plant.archived_at, care_type.id, care_type.garden_id, care_type.name, care_type.slug, care_type.created_at, care_type.archived_at
+SELECT care_schedule.id, care_schedule.garden_id, care_schedule.plant_id, care_schedule.care_type_id, care_schedule.interval_count, care_schedule.interval_unit, care_schedule.anchor_date, care_schedule.anchor_precision, care_schedule.season_start_month, care_schedule.season_end_month, care_schedule.set_at, plant.id, plant.garden_id, plant.nickname, plant.common_name, plant.botanical_name, plant.location, plant.sun, plant.water_needs, plant.feed_needs, plant.soil, plant.climate, plant.pot, plant.notes, plant.acquired_year, plant.acquired_month, plant.created_at, plant.archived_at, plant.profile_photo_id, care_type.id, care_type.garden_id, care_type.name, care_type.slug, care_type.created_at, care_type.archived_at
 FROM care_schedule
 JOIN plant ON plant.id = care_schedule.plant_id AND plant.garden_id = care_schedule.garden_id
 JOIN care_type ON care_type.id = care_schedule.care_type_id AND care_type.garden_id = care_schedule.garden_id
@@ -142,6 +142,7 @@ func (q *Queries) ListCareSchedules(ctx context.Context, gardenID uuid.UUID) ([]
 			&i.Plant.AcquiredMonth,
 			&i.Plant.CreatedAt,
 			&i.Plant.ArchivedAt,
+			&i.Plant.ProfilePhotoID,
 			&i.CareType.ID,
 			&i.CareType.GardenID,
 			&i.CareType.Name,

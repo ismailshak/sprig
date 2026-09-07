@@ -1,5 +1,5 @@
 import { people, plants as seeded, rooms } from '../harness/garden';
-import { dimensions, hasExif, heldCount, heldFile, photos } from '../harness/photos';
+import { dimensions, hasExif, heldCount, heldFile, loaded, photos } from '../harness/photos';
 import { signIn } from '../harness/signin';
 import { expect, test } from '../harness/test';
 
@@ -355,4 +355,42 @@ test('a form refused for having no name says the photo needs choosing again @js'
   await expect(page.getByText('The photo needs choosing again.')).toBeVisible();
   await expect(plantForm.addPhoto()).toBeVisible();
   await expect(plantForm.photoPreview()).toBeHidden();
+});
+
+test('a plant added with a photo shows it on its page and beside its name on Plants @js', async ({
+  plantForm,
+  plant,
+  plants,
+}) => {
+  await plantForm.openNew();
+  await plantForm.field('Nickname').fill('Ada');
+  await plantForm.choosePhoto('Add a photo', photos.gpsTagged);
+  await expect(plantForm.photoPreview()).toBeVisible();
+
+  await plantForm.submit('Add plant');
+
+  await expect(plant.heading()).toHaveText('Ada');
+  await expect(plant.picture()).toHaveAccessibleName('Picture of Ada');
+  await expect.poll(() => loaded(plant.picture())).toBe(true);
+  await plants.open();
+  await expect.poll(() => loaded(plants.picture('Ada'))).toBe(true);
+});
+
+test("Remove on the edit form takes the picture off the plant's page @js", async ({ plantForm, plant }) => {
+  await plantForm.openNew();
+  await plantForm.field('Nickname').fill('Ada');
+  await plantForm.choosePhoto('Add a photo', photos.gpsTagged);
+  await expect(plantForm.photoPreview()).toBeVisible();
+  await plantForm.submit('Add plant');
+  await expect.poll(() => loaded(plant.picture())).toBe(true);
+
+  await plant.edit();
+  await expect.poll(() => loaded(plantForm.currentPicture())).toBe(true);
+  await expect(plantForm.addPhoto()).toBeHidden();
+  await plantForm.removePhoto();
+  await expect(plantForm.addPhoto()).toBeVisible();
+  await plantForm.submit('Save changes');
+
+  await expect(plant.heading()).toHaveText('Ada');
+  await expect(plant.picture()).toHaveCount(0);
 });

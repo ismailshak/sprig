@@ -14,7 +14,7 @@ import (
 const archivePlant = `-- name: ArchivePlant :one
 UPDATE plant SET archived_at = now()
 WHERE garden_id = $1 AND id = $2 AND archived_at IS NULL
-RETURNING id, garden_id, nickname, common_name, botanical_name, location, sun, water_needs, feed_needs, soil, climate, pot, notes, acquired_year, acquired_month, created_at, archived_at
+RETURNING id, garden_id, nickname, common_name, botanical_name, location, sun, water_needs, feed_needs, soil, climate, pot, notes, acquired_year, acquired_month, created_at, archived_at, profile_photo_id
 `
 
 // Archiving an already archived plant matches nothing, the same result as for
@@ -40,6 +40,7 @@ func (q *Queries) ArchivePlant(ctx context.Context, gardenID uuid.UUID, plantID 
 		&i.AcquiredMonth,
 		&i.CreatedAt,
 		&i.ArchivedAt,
+		&i.ProfilePhotoID,
 	)
 	return i, err
 }
@@ -65,7 +66,7 @@ INSERT INTO plant (garden_id, nickname, common_name, botanical_name, location,
 VALUES ($1, $2, $3, $4, $5,
         $6, $7, $8, $9, $10, $11, $12,
         $13, $14)
-RETURNING id, garden_id, nickname, common_name, botanical_name, location, sun, water_needs, feed_needs, soil, climate, pot, notes, acquired_year, acquired_month, created_at, archived_at
+RETURNING id, garden_id, nickname, common_name, botanical_name, location, sun, water_needs, feed_needs, soil, climate, pot, notes, acquired_year, acquired_month, created_at, archived_at, profile_photo_id
 `
 
 type CreatePlantParams struct {
@@ -123,12 +124,13 @@ func (q *Queries) CreatePlant(ctx context.Context, arg CreatePlantParams) (Plant
 		&i.AcquiredMonth,
 		&i.CreatedAt,
 		&i.ArchivedAt,
+		&i.ProfilePhotoID,
 	)
 	return i, err
 }
 
 const getPlant = `-- name: GetPlant :one
-SELECT id, garden_id, nickname, common_name, botanical_name, location, sun, water_needs, feed_needs, soil, climate, pot, notes, acquired_year, acquired_month, created_at, archived_at FROM plant
+SELECT id, garden_id, nickname, common_name, botanical_name, location, sun, water_needs, feed_needs, soil, climate, pot, notes, acquired_year, acquired_month, created_at, archived_at, profile_photo_id FROM plant
 WHERE garden_id = $1 AND id = $2
 `
 
@@ -153,12 +155,13 @@ func (q *Queries) GetPlant(ctx context.Context, gardenID uuid.UUID, plantID uuid
 		&i.AcquiredMonth,
 		&i.CreatedAt,
 		&i.ArchivedAt,
+		&i.ProfilePhotoID,
 	)
 	return i, err
 }
 
 const listPlants = `-- name: ListPlants :many
-SELECT id, garden_id, nickname, common_name, botanical_name, location, sun, water_needs, feed_needs, soil, climate, pot, notes, acquired_year, acquired_month, created_at, archived_at FROM plant
+SELECT id, garden_id, nickname, common_name, botanical_name, location, sun, water_needs, feed_needs, soil, climate, pot, notes, acquired_year, acquired_month, created_at, archived_at, profile_photo_id FROM plant
 WHERE garden_id = $1 AND archived_at IS NULL
 ORDER BY location NULLS LAST, coalesce(nickname, common_name, botanical_name), id
 `
@@ -192,6 +195,7 @@ func (q *Queries) ListPlants(ctx context.Context, gardenID uuid.UUID) ([]Plant, 
 			&i.AcquiredMonth,
 			&i.CreatedAt,
 			&i.ArchivedAt,
+			&i.ProfilePhotoID,
 		); err != nil {
 			return nil, err
 		}
@@ -237,6 +241,52 @@ func (q *Queries) ListRooms(ctx context.Context, gardenID uuid.UUID) ([]string, 
 	return items, nil
 }
 
+const setProfilePhoto = `-- name: SetProfilePhoto :one
+UPDATE plant SET profile_photo_id = $1
+WHERE plant.garden_id = $2 AND plant.id = $3 AND plant.archived_at IS NULL
+  AND ($1::uuid IS NULL
+       OR EXISTS (SELECT 1 FROM photo
+                  WHERE photo.id = $1
+                    AND photo.garden_id = $2 AND photo.plant_id = $3
+                    AND photo.square_bytes IS NOT NULL))
+RETURNING id, garden_id, nickname, common_name, botanical_name, location, sun, water_needs, feed_needs, soil, climate, pot, notes, acquired_year, acquired_month, created_at, archived_at, profile_photo_id
+`
+
+type SetProfilePhotoParams struct {
+	PhotoID  *uuid.UUID
+	GardenID uuid.UUID
+	PlantID  uuid.UUID
+}
+
+// Sets the plant's profile picture, or clears it when photo_id is null. The
+// update matches no row when the photo belongs to another plant or has no
+// square variant, because every list shows the picture as its square.
+func (q *Queries) SetProfilePhoto(ctx context.Context, arg SetProfilePhotoParams) (Plant, error) {
+	row := q.db.QueryRow(ctx, setProfilePhoto, arg.PhotoID, arg.GardenID, arg.PlantID)
+	var i Plant
+	err := row.Scan(
+		&i.ID,
+		&i.GardenID,
+		&i.Nickname,
+		&i.CommonName,
+		&i.BotanicalName,
+		&i.Location,
+		&i.Sun,
+		&i.WaterNeeds,
+		&i.FeedNeeds,
+		&i.Soil,
+		&i.Climate,
+		&i.Pot,
+		&i.Notes,
+		&i.AcquiredYear,
+		&i.AcquiredMonth,
+		&i.CreatedAt,
+		&i.ArchivedAt,
+		&i.ProfilePhotoID,
+	)
+	return i, err
+}
+
 const updatePlant = `-- name: UpdatePlant :one
 UPDATE plant
 SET nickname = $1, common_name = $2, botanical_name = $3,
@@ -244,7 +294,7 @@ SET nickname = $1, common_name = $2, botanical_name = $3,
     soil = $8, climate = $9, pot = $10, notes = $11,
     acquired_year = $12, acquired_month = $13
 WHERE garden_id = $14 AND id = $15 AND archived_at IS NULL
-RETURNING id, garden_id, nickname, common_name, botanical_name, location, sun, water_needs, feed_needs, soil, climate, pot, notes, acquired_year, acquired_month, created_at, archived_at
+RETURNING id, garden_id, nickname, common_name, botanical_name, location, sun, water_needs, feed_needs, soil, climate, pot, notes, acquired_year, acquired_month, created_at, archived_at, profile_photo_id
 `
 
 type UpdatePlantParams struct {
@@ -304,6 +354,7 @@ func (q *Queries) UpdatePlant(ctx context.Context, arg UpdatePlantParams) (Plant
 		&i.AcquiredMonth,
 		&i.CreatedAt,
 		&i.ArchivedAt,
+		&i.ProfilePhotoID,
 	)
 	return i, err
 }

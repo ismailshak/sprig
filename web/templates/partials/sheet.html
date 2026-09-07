@@ -8,7 +8,7 @@
 {{/* The heading links to the plant's page. On that page itself it is a plain
      block. */}}
 {{if .Plant.Href}}<a class="sheet__plant" href="{{.Plant.Href}}">{{else}}<div class="sheet__plant">{{end}}
-<span class="row__avatar"></span>
+{{template "avatar" .Plant.Picture}}
 <span class="row__text">
 <span class="row__name{{if .Plant.Botanical}} row__name--sp{{end}}">{{.Plant.Name}}</span>
 <span class="row__meta"><span class="row__part">{{with .Plant.Sub}}{{if $s.Plant.Italic}}<i>{{.}}</i>{{else}}{{.}}{{end}}{{end}}{{if and .Plant.Sub .Plant.Location}} &middot; {{end}}{{.Plant.Location}}</span></span>

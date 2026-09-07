@@ -340,3 +340,14 @@ func TestPlants_ASitterInAnEmptyGardenSeesNoAddPlantLink(t *testing.T) {
 		t.Errorf("a sitter was offered the add form:\n%s", text(page))
 	}
 }
+
+func TestPlants_ARowShowsThePlantsPictureAsItsSquare(t *testing.T) {
+	f := rosewoodPlants(t)
+	photoID := givePicture(t, f.tx, bigFellaID)
+
+	page := f.show(t)
+
+	if got, want := images(page), []string{photoSquarePath(bigFellaID, photoID)}; !slices.Equal(got, want) {
+		t.Errorf("the list's images are %v, want Big Fella's square at %v and none on the other six rows", got, want)
+	}
+}

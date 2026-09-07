@@ -12,6 +12,12 @@ export class PlantScreen {
     return this.page.getByRole('heading', { level: 1 });
   }
 
+  // The profile picture at the top of the page. A plant with no picture has an
+  // icon in its place, so there is no image to match.
+  picture(): Locator {
+    return this.page.getByRole('img', { name: /^Picture of / });
+  }
+
   section(title: 'Schedule' | 'Reference' | 'Photos' | 'Recent'): Locator {
     return this.page.getByRole('region', { name: title });
   }
