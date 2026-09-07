@@ -1,5 +1,4 @@
-import type { Page } from '@playwright/test';
-import { aWorkingDevice, attach, type Device } from '../harness/authenticator';
+import { aWorkingDevice, withDevice } from '../harness/authenticator';
 import { devices, people } from '../harness/garden';
 import { signIn } from '../harness/signin';
 import { expect, test } from '../harness/test';
@@ -18,18 +17,6 @@ test('the last passkey offers no Remove and the page says why', async ({ page, p
   await expect(passkeys.removeOn(devices.phone)).toHaveCount(0);
   await expect(page.getByText('This is the only way you can sign in')).toBeVisible();
 });
-
-// withDevice runs press with device plugged into the browser. The
-// authenticator is removed afterwards so nothing it registered is offered to
-// the next test.
-async function withDevice(page: Page, device: Device, press: () => Promise<void>) {
-  const detach = await attach(page, device);
-  try {
-    await press();
-  } finally {
-    await detach();
-  }
-}
 
 test('adding a passkey puts the device on the list @passkey', async ({ page, passkeys }) => {
   await passkeys.open();

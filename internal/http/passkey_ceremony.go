@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"uuid"
 
 	"github.com/ismailshak/sprig/internal/auth"
 	"github.com/ismailshak/sprig/internal/store"
@@ -148,7 +149,9 @@ func (h *passkeyCeremony) signInChallenge(w http.ResponseWriter, r *http.Request
 }
 
 // signIn handles POST /signin and starts a session for the account the passkey
-// proves, on its oldest live membership.
+// proves. The session opens on the garden the account last switched to, or on
+// its oldest live membership. It redirects to the path in the form's next
+// field. A field that is empty or names another site redirects to Today.
 func (h *passkeyCeremony) signIn(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "the form did not parse", http.StatusBadRequest)
@@ -164,17 +167,32 @@ func (h *passkeyCeremony) signIn(w http.ResponseWriter, r *http.Request) {
 	}
 
 	now := h.now()
+	next := returnPath(r.PostForm.Get(nextField))
+	// gardenID is the garden the session starts on.
+	var gardenID uuid.UUID
 	membership, err := h.resolver.StartingMembership(r.Context(), now, user.ID)
-	if errors.Is(err, auth.ErrNoLiveMembership) {
-		// The passkey is valid and the account is in no garden, so there is
-		// nothing to open a session on. A sitter whose membership ran out is
-		// the case this covers. The status is 403 rather than 404 because the
-		// 404 rule is for an object a request named, and this request named
-		// none.
-		h.renderSignIn(w, r, http.StatusForbidden, "That passkey signed in, and the account behind it is in no garden. Ask whoever runs the garden to invite you again.")
-		return
-	}
-	if err != nil {
+	switch {
+	case err == nil:
+		gardenID = membership.GardenID
+	case errors.Is(err, auth.ErrNoLiveMembership):
+		// The passkey is valid and the account is in no garden. A sitter whose
+		// membership ran out or was removed is the case this covers. When the
+		// sign-in came from an invite link, the invite is taken here and the
+		// session starts on its garden. Otherwise there is nothing to open a
+		// session on. The status is 403 rather than 404 because the 404 rule
+		// is for an object a request named, and this request named none.
+		joined, accepted, err := h.acceptInvite(r, next, user)
+		if err != nil {
+			serverError(h.logger, w, r, "accept the invite", err)
+			return
+		}
+		if !accepted {
+			h.renderSignIn(w, r, http.StatusForbidden, "That passkey signed in, and the account behind it is in no garden. Ask whoever runs the garden to invite you again.")
+			return
+		}
+		gardenID = joined
+		next = todayPath
+	default:
 		serverError(h.logger, w, r, "find the garden", err)
 		return
 	}
@@ -185,13 +203,25 @@ func (h *passkeyCeremony) signIn(w http.ResponseWriter, r *http.Request) {
 		serverError(h.logger, w, r, "end the previous session", err)
 		return
 	}
-	token, _, err := h.sessions.Create(r.Context(), now, user.ID, membership.GardenID, &passkey.ID, r.UserAgent())
+	token, _, err := h.sessions.Create(r.Context(), now, user.ID, gardenID, &passkey.ID, r.UserAgent())
 	if err != nil {
 		serverError(h.logger, w, r, "start the session", err)
 		return
 	}
 	http.SetCookie(w, h.sessions.Cookie(token))
-	http.Redirect(w, r, "/", http.StatusSeeOther)
+	//nolint:gosec // returnPath passes on only a path on this site
+	http.Redirect(w, r, next, http.StatusSeeOther)
+}
+
+// acceptInvite takes the invite an accept page's path names for user, and
+// returns the garden it joined. It returns false when next is not an accept
+// page's path or the invite cannot be taken.
+func (h *passkeyCeremony) acceptInvite(r *http.Request, next string, user store.AppUser) (uuid.UUID, bool, error) {
+	token, ok := acceptTokenOf(next)
+	if !ok {
+		return uuid.UUID{}, false, nil
+	}
+	return acceptAtSignIn(r.Context(), h.queries, h.now(), token, user)
 }
 
 // refuseSignIn renders the sign-in page again as a 401, with the reason the

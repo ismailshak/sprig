@@ -63,3 +63,21 @@ func createMembership(ctx context.Context, q *store.Queries, m newMembership) (s
 	}
 	return membership, nil
 }
+
+// renewMembership sets the role, the inviter and the end date on the
+// membership row for the garden and account m names. The row keeps its id and
+// its digest hour. Notification preferences are rows against the membership
+// id, so they survive as well.
+func renewMembership(ctx context.Context, q *store.Queries, m newMembership) (store.Membership, error) {
+	membership, err := q.RenewMembership(ctx, store.RenewMembershipParams{
+		GardenID:  m.GardenID,
+		UserID:    m.UserID,
+		Role:      m.Role,
+		InvitedBy: m.InvitedBy,
+		ExpiresAt: m.ExpiresAt,
+	})
+	if err != nil {
+		return store.Membership{}, fmt.Errorf("renewing the membership: %w", err)
+	}
+	return membership, nil
+}

@@ -141,7 +141,7 @@ func invitesInGarden(t *testing.T, f *moreFixture) int {
 	return count
 }
 
-var untilElement = regexp.MustCompile(`<input class="input input--narrow" id="until" name="until" type="date" value="([^"]*)">`)
+var untilElement = regexp.MustCompile(`<input class="input input--narrow" id="until" name="until" type="date" min="[^"]*" value="([^"]*)">`)
 
 // chipPressed returns the word on the one chip that is pressed.
 func chipPressed(page string) string {
@@ -159,4 +159,63 @@ func endDateField(t *testing.T, page string) string {
 		t.Fatalf("no end date field on:\n%s", page)
 	}
 	return m[1]
+}
+
+func TestInvite_TheEndDateFieldOffersNothingBeforeTomorrowInTheInvitersZone(t *testing.T) {
+	f := peopleGarden(t)
+	// The fixture's clock is 08:00 UTC on Thursday 3 September. In Honolulu
+	// that is still Wednesday evening, so tomorrow there is the 3rd.
+	f.principal.User.Timezone = "Pacific/Honolulu"
+
+	page := f.page(t, f.handler.invite, invitePath)
+
+	if !strings.Contains(page, `type="date" min="2026-09-03"`) {
+		t.Errorf("the end date field does not start on tomorrow in the inviter's zone:\n%s", page)
+	}
+}
+
+func TestInvite_AnEndDateThatHasAlreadyBegunIsRefusedAndTomorrowIsNot(t *testing.T) {
+	cases := []struct {
+		zone    string
+		posted  string
+		refused bool
+	}{
+		// 08:00 UTC on the 3rd is the 3rd in London, so the 3rd has begun
+		// there and the 4th has not.
+		{"Europe/London", "2026-09-03", true},
+		{"Europe/London", "2026-09-02", true},
+		{"Europe/London", "2026-09-04", false},
+		// In Honolulu it is still the 2nd, so the 3rd is tomorrow.
+		{"Pacific/Honolulu", "2026-09-03", false},
+		{"Pacific/Honolulu", "2026-09-02", true},
+	}
+	for _, c := range cases {
+		t.Run(c.zone+" "+c.posted, func(t *testing.T) {
+			f := peopleGarden(t)
+			f.principal.User.Timezone = c.zone
+			before := invitesInGarden(t, f)
+
+			rec := f.do(t, f.handler.createInviteLink, invitePath, url.Values{"role": {"sitter"}, "until": {c.posted}})
+
+			if !c.refused {
+				if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "/invite/") {
+					t.Fatalf("status = %d, want %d with the link on the page:\n%s", rec.Code, http.StatusOK, text(rec.Body.String()))
+				}
+				return
+			}
+			if rec.Code != http.StatusUnprocessableEntity {
+				t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusUnprocessableEntity, text(rec.Body.String()))
+			}
+			page := rec.Body.String()
+			if !strings.Contains(page, untilPassed) {
+				t.Errorf("the message under the end date is missing:\n%s", text(page))
+			}
+			if !strings.Contains(page, `value="`+c.posted+`"`) {
+				t.Errorf("the field lost the date that was typed:\n%s", page)
+			}
+			if invitesInGarden(t, f) != before {
+				t.Error("a refused date wrote an invite")
+			}
+		})
+	}
 }

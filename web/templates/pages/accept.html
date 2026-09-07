@@ -1,0 +1,29 @@
+{{define "title"}}sprig — join a garden{{end}}
+
+{{define "app-class"}}app app--bare{{end}}
+
+{{/* The page a signed-in account accepts an invite on. It has no tab bar,
+     because it is about a garden the session is not on. */}}
+{{define "main"}}
+<div class="app__body app__body--bare">
+{{if .Unusable}}
+<h1 class="bare__title">This link cannot be used</h1>
+<p class="bare__line">An invite link works once and stops working after 7 days. Ask whoever sent it for a new one.</p>
+<a class="wide-action" href="/">Back to {{.Current}}</a>
+{{else if .AlreadyIn}}
+<h1 class="bare__title">You&rsquo;re already in {{.Garden}}</h1>
+<p class="bare__line">This account is already in {{.Garden}}, so there is nothing to join. The link has not been used.</p>
+<form method="post" action="{{.Switch}}">
+<input type="hidden" name="{{.Field}}" value="{{.GardenID}}">
+<button class="wide-action" type="submit">Open {{.Garden}}</button>
+</form>
+{{else}}
+<h1 class="bare__title">Join {{.Garden}} as {{.Name}}?</h1>
+<p class="lead">{{.By}} invited you to {{.Garden}}. {{.Joining}}</p>
+<form method="post" action="{{.Action}}">
+<button class="wide-action" type="submit">Join {{.Garden}}</button>
+</form>
+<p class="note">Nothing about your account changes: your name, your passkeys and everything you have logged stay as they are. Not {{.Name}}? <a href="{{.SignIn}}">Sign in as somebody else</a>.</p>
+{{end}}
+</div>
+{{end}}

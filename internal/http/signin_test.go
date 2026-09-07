@@ -6,6 +6,10 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+
+	"github.com/go-webauthn/webauthn/protocol"
+
+	"github.com/ismailshak/sprig/internal/auth/passkeytest"
 )
 
 // signInLabel is the label on the sign-in page's submit button.
@@ -145,4 +149,80 @@ func TestSignIn_AnAnswerPastTheBudgetIsThePageWithTheRateLimitLine(t *testing.T)
 	// The response is the page rather than the plain status text, so the line
 	// is read above the button it is about.
 	buttonNamed(t, rec.Body.String(), signInLabel)
+}
+
+// signInWithNext signs in with device and posts next in the form's next field.
+func (f *moreFixture) signInWithNext(t *testing.T, h *passkeyCeremony, device *passkeytest.Authenticator, next string) *httptest.ResponseRecorder {
+	t.Helper()
+
+	var assertion protocol.CredentialAssertion
+	cookie := f.challengeJSON(t, h.signInChallenge, challengePath, &assertion)
+	return f.post(t, h.signIn, signInPath, url.Values{credentialField: {device.Assert(&assertion)}, nextField: {next}}, cookie)
+}
+
+func TestSignIn_ASignInWithANextPathLandsOnThatPath(t *testing.T) {
+	f := moreGarden(t)
+	h := ceremonyOn(t, f)
+	device := aDevice()
+	f.enrolDevice(t, h, device)
+	next := acceptPath("join-as-a-sitter")
+
+	rec := httptest.NewRecorder()
+	h.showSignIn(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, signInPath+"?"+nextField+"="+url.QueryEscape(next), nil))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), `<input type="hidden" name="`+nextField+`" value="`+next+`">`) {
+		t.Errorf("the form has no hidden input for %s:\n%s", next, rec.Body.String())
+	}
+
+	rec = f.signInWithNext(t, h, device, next)
+
+	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != next {
+		t.Errorf("status = %d, Location = %q, want %d to %s", rec.Code, rec.Header().Get("Location"), http.StatusSeeOther, next)
+	}
+	if cookieNamed(t, rec, "__Host-sprig_session") == nil {
+		t.Error("the sign-in set no session cookie")
+	}
+}
+
+func TestSignIn_ANextPathOnAnotherSiteIsRefusedAndTheSignInLandsOnToday(t *testing.T) {
+	// A browser strips a tab or a newline from a URL before parsing it, so
+	// "/\t/example.com/" would arrive as "//example.com/".
+	for _, next := range []string{"https://example.com/", "//example.com/", "/\\example.com/", "example.com", "", "/\t/example.com/", "/\n//example.com"} {
+		t.Run(next, func(t *testing.T) {
+			f := moreGarden(t)
+			h := ceremonyOn(t, f)
+			device := aDevice()
+			f.enrolDevice(t, h, device)
+
+			rec := httptest.NewRecorder()
+			h.showSignIn(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, signInPath+"?"+nextField+"="+url.QueryEscape(next), nil))
+			if strings.Contains(rec.Body.String(), `name="`+nextField+`"`) {
+				t.Errorf("the form has a hidden input for %q:\n%s", next, rec.Body.String())
+			}
+
+			rec = f.signInWithNext(t, h, device, next)
+
+			if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != todayPath {
+				t.Errorf("status = %d, Location = %q, want %d to %s", rec.Code, rec.Header().Get("Location"), http.StatusSeeOther, todayPath)
+			}
+		})
+	}
+}
+
+func TestSignIn_ARefusedSignInKeepsTheNextPathOnTheForm(t *testing.T) {
+	f := moreGarden(t)
+	h := ceremonyOn(t, f)
+	next := acceptPath("join-as-a-sitter")
+
+	rec := f.post(t, h.signIn, signInPath, url.Values{credentialField: {"{}"}, nextField: {next}}, &http.Cookie{Name: "__Host-sprig_ceremony", Value: "gone"})
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusUnauthorized, text(rec.Body.String()))
+	}
+	if !strings.Contains(rec.Body.String(), `<input type="hidden" name="`+nextField+`" value="`+next+`">`) {
+		t.Errorf("the form lost %s:\n%s", next, rec.Body.String())
+	}
 }

@@ -46,3 +46,15 @@ export async function attach(page: Page, device: Device): Promise<() => Promise<
     await client.detach();
   };
 }
+
+// withDevice runs press with device plugged into the browser. The
+// authenticator is removed afterwards so nothing it registered is offered to
+// the next test.
+export async function withDevice(page: Page, device: Device, press: () => Promise<void>): Promise<void> {
+  const detach = await attach(page, device);
+  try {
+    await press();
+  } finally {
+    await detach();
+  }
+}

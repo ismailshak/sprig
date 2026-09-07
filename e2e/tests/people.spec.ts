@@ -130,6 +130,27 @@ test('an invite made with an end date is shown once and waits on People afterwar
   await expect(page.getByText(/expires in \d+ days/)).toBeVisible();
 });
 
+// todayFor is today's date where the seeded owner is, in the format a date
+// input reads. The owner's timezone is Europe/London, so the day is read
+// there rather than where the test runs.
+function todayFor(): string {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/London' });
+}
+
+test('an end date of today is refused, because access would end before the link is opened', async ({
+  invite,
+  page,
+}) => {
+  await invite.open();
+
+  await invite.until().fill(todayFor());
+  await invite.create().click();
+
+  await expect(page.getByText('Pick a day after today. Access ends when the day you pick begins.')).toBeVisible();
+  await expect(invite.link()).toHaveCount(0);
+  await expect(invite.until()).toHaveValue(todayFor());
+});
+
 // Without a hidden default submit button, Enter would fire the first role chip
 // and reload the form with a different role pressed.
 test('pressing Enter in the end date creates the link', async ({ invite, page }) => {

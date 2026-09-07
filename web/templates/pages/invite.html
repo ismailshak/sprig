@@ -31,7 +31,7 @@
 </div>
 <div class="field">
 <label class="field__label" for="until">Until <span class="field__hint">optional</span></label>
-<input class="input input--narrow" id="until" name="until" type="date" value="{{.Until}}">
+<input class="input input--narrow" id="until" name="until" type="date" min="{{.UntilMin}}" value="{{.Until}}">
 {{with .UntilError}}<p class="field__error">{{.}}</p>{{end}}
 <p class="note">Leave it empty unless their access should stop on a day you already know. It can be set or changed later.</p>
 </div>

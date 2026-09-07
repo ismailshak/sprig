@@ -300,6 +300,47 @@ func (q *Queries) ListMembershipsWithGardensForUser(ctx context.Context, userID 
 	return items, nil
 }
 
+const renewMembership = `-- name: RenewMembership :one
+UPDATE membership
+SET role = $1, invited_by = $2, expires_at = $3
+WHERE garden_id = $4 AND user_id = $5
+RETURNING id, garden_id, user_id, role, invited_by, created_at, expires_at, digest_hour
+`
+
+type RenewMembershipParams struct {
+	Role      string
+	InvitedBy *uuid.UUID
+	ExpiresAt *time.Time
+	GardenID  uuid.UUID
+	UserID    uuid.UUID
+}
+
+// Accepting an invite as an account whose membership of the garden has ended
+// updates that row rather than inserting one, because membership is unique on
+// (garden_id, user_id). The row keeps its digest hour and its notification
+// preferences.
+func (q *Queries) RenewMembership(ctx context.Context, arg RenewMembershipParams) (Membership, error) {
+	row := q.db.QueryRow(ctx, renewMembership,
+		arg.Role,
+		arg.InvitedBy,
+		arg.ExpiresAt,
+		arg.GardenID,
+		arg.UserID,
+	)
+	var i Membership
+	err := row.Scan(
+		&i.ID,
+		&i.GardenID,
+		&i.UserID,
+		&i.Role,
+		&i.InvitedBy,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+		&i.DigestHour,
+	)
+	return i, err
+}
+
 const setDigestHour = `-- name: SetDigestHour :exec
 UPDATE membership SET digest_hour = $1
 WHERE garden_id = $2 AND user_id = $3

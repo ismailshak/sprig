@@ -305,3 +305,14 @@ func inviteExpiryWord(expiresAt, now time.Time) string {
 	}
 	return "expires in " + daysWord(days)
 }
+
+// joiningSentence is the sentence under the join form and on the page that
+// accepts an invite. It names the role the invite grants, what that role can
+// do, and the day access ends when endsAt is set.
+func joiningSentence(role string, endsAt *time.Time, location *time.Location) string {
+	sentence := "You'll join as a " + role + ". " + roleWhat[role]
+	if endsAt != nil {
+		sentence += " Your access ends on " + dateWord(*endsAt, location) + "."
+	}
+	return sentence
+}
