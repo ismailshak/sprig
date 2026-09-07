@@ -98,7 +98,7 @@ func rosewood(t *testing.T) *todayFixture {
 		User:         store.AppUser{ID: readerID, DisplayName: "Ellie", Handle: "ellie", Timezone: "Europe/London"},
 		Garden:       store.Garden{ID: rosewoodID, Name: "Rosewood"},
 		Membership:   store.Membership{Role: "owner"},
-		Capabilities: auth.Capabilities{auth.CareLog: true, auth.PlantCreate: true, auth.PlantEdit: true, auth.PlantArchive: true, auth.ScheduleEdit: true, auth.PhotoAdd: true},
+		Capabilities: auth.Capabilities{auth.CareLog: true, auth.PlantCreate: true, auth.PlantEdit: true, auth.PlantArchive: true, auth.ScheduleEdit: true, auth.PhotoAdd: true, auth.PhotoSetProfile: true},
 	}
 	handler := &today{logger: testLogger, queries: queries, templates: testTemplates(), now: func() time.Time { return thursday }}
 	return &todayFixture{handler: handler, tx: tx, principal: principal}
@@ -793,5 +793,16 @@ func TestToday_TheLogCareSheetPageKeepsTheSwitchIconAndTheOwnerLine(t *testing.T
 	}
 	if m := ownerLine.FindStringSubmatch(page); m == nil || text(m[1]) != "Jo's garden" {
 		t.Errorf("the sheet page's line under the name is %v, want Jo's garden", m)
+	}
+}
+
+func TestToday_ARowShowsThePlantsPictureAsItsSquare(t *testing.T) {
+	f := rosewood(t)
+	photoID := givePicture(t, f.tx, bigFellaID)
+
+	page := f.show(t)
+
+	if got, want := images(page), []string{photoSquarePath(bigFellaID, photoID)}; !slices.Equal(got, want) {
+		t.Errorf("the page's images are %v, want Big Fella's square at %v and none on the other rows", got, want)
 	}
 }

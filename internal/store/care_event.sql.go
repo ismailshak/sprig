@@ -104,7 +104,7 @@ func (q *Queries) DeleteCareEvent(ctx context.Context, arg DeleteCareEventParams
 }
 
 const getCareEvent = `-- name: GetCareEvent :one
-SELECT care_event.id, care_event.garden_id, care_event.plant_id, care_event.care_type_id, care_event.performed_by, care_event.performed_at, care_event.recorded_at, care_event.done, care_event.note, care_event.override_interval_days, plant.id, plant.garden_id, plant.nickname, plant.common_name, plant.botanical_name, plant.location, plant.sun, plant.water_needs, plant.feed_needs, plant.soil, plant.climate, plant.pot, plant.notes, plant.acquired_year, plant.acquired_month, plant.created_at, plant.archived_at, care_type.id, care_type.garden_id, care_type.name, care_type.slug, care_type.created_at, care_type.archived_at, app_user.display_name AS performed_by_name
+SELECT care_event.id, care_event.garden_id, care_event.plant_id, care_event.care_type_id, care_event.performed_by, care_event.performed_at, care_event.recorded_at, care_event.done, care_event.note, care_event.override_interval_days, plant.id, plant.garden_id, plant.nickname, plant.common_name, plant.botanical_name, plant.location, plant.sun, plant.water_needs, plant.feed_needs, plant.soil, plant.climate, plant.pot, plant.notes, plant.acquired_year, plant.acquired_month, plant.created_at, plant.archived_at, plant.profile_photo_id, care_type.id, care_type.garden_id, care_type.name, care_type.slug, care_type.created_at, care_type.archived_at, app_user.display_name AS performed_by_name
 FROM care_event
 JOIN plant ON plant.id = care_event.plant_id AND plant.garden_id = care_event.garden_id
 JOIN care_type ON care_type.id = care_event.care_type_id AND care_type.garden_id = care_event.garden_id
@@ -159,6 +159,7 @@ func (q *Queries) GetCareEvent(ctx context.Context, arg GetCareEventParams) (Get
 		&i.Plant.AcquiredMonth,
 		&i.Plant.CreatedAt,
 		&i.Plant.ArchivedAt,
+		&i.Plant.ProfilePhotoID,
 		&i.CareType.ID,
 		&i.CareType.GardenID,
 		&i.CareType.Name,
@@ -171,7 +172,7 @@ func (q *Queries) GetCareEvent(ctx context.Context, arg GetCareEventParams) (Get
 }
 
 const listCareEventLog = `-- name: ListCareEventLog :many
-SELECT care_event.id, care_event.garden_id, care_event.plant_id, care_event.care_type_id, care_event.performed_by, care_event.performed_at, care_event.recorded_at, care_event.done, care_event.note, care_event.override_interval_days, plant.id, plant.garden_id, plant.nickname, plant.common_name, plant.botanical_name, plant.location, plant.sun, plant.water_needs, plant.feed_needs, plant.soil, plant.climate, plant.pot, plant.notes, plant.acquired_year, plant.acquired_month, plant.created_at, plant.archived_at, care_type.id, care_type.garden_id, care_type.name, care_type.slug, care_type.created_at, care_type.archived_at, app_user.display_name AS performed_by_name
+SELECT care_event.id, care_event.garden_id, care_event.plant_id, care_event.care_type_id, care_event.performed_by, care_event.performed_at, care_event.recorded_at, care_event.done, care_event.note, care_event.override_interval_days, plant.id, plant.garden_id, plant.nickname, plant.common_name, plant.botanical_name, plant.location, plant.sun, plant.water_needs, plant.feed_needs, plant.soil, plant.climate, plant.pot, plant.notes, plant.acquired_year, plant.acquired_month, plant.created_at, plant.archived_at, plant.profile_photo_id, care_type.id, care_type.garden_id, care_type.name, care_type.slug, care_type.created_at, care_type.archived_at, app_user.display_name AS performed_by_name
 FROM care_event
 JOIN plant ON plant.id = care_event.plant_id AND plant.garden_id = care_event.garden_id
 JOIN care_type ON care_type.id = care_event.care_type_id AND care_type.garden_id = care_event.garden_id
@@ -251,6 +252,7 @@ func (q *Queries) ListCareEventLog(ctx context.Context, arg ListCareEventLogPara
 			&i.Plant.AcquiredMonth,
 			&i.Plant.CreatedAt,
 			&i.Plant.ArchivedAt,
+			&i.Plant.ProfilePhotoID,
 			&i.CareType.ID,
 			&i.CareType.GardenID,
 			&i.CareType.Name,
@@ -374,7 +376,7 @@ func (q *Queries) ListPlantCareEvents(ctx context.Context, arg ListPlantCareEven
 }
 
 const listRecentCareEvents = `-- name: ListRecentCareEvents :many
-SELECT care_event.id, care_event.garden_id, care_event.plant_id, care_event.care_type_id, care_event.performed_by, care_event.performed_at, care_event.recorded_at, care_event.done, care_event.note, care_event.override_interval_days, plant.id, plant.garden_id, plant.nickname, plant.common_name, plant.botanical_name, plant.location, plant.sun, plant.water_needs, plant.feed_needs, plant.soil, plant.climate, plant.pot, plant.notes, plant.acquired_year, plant.acquired_month, plant.created_at, plant.archived_at, care_type.id, care_type.garden_id, care_type.name, care_type.slug, care_type.created_at, care_type.archived_at, app_user.display_name AS performed_by_name
+SELECT care_event.id, care_event.garden_id, care_event.plant_id, care_event.care_type_id, care_event.performed_by, care_event.performed_at, care_event.recorded_at, care_event.done, care_event.note, care_event.override_interval_days, plant.id, plant.garden_id, plant.nickname, plant.common_name, plant.botanical_name, plant.location, plant.sun, plant.water_needs, plant.feed_needs, plant.soil, plant.climate, plant.pot, plant.notes, plant.acquired_year, plant.acquired_month, plant.created_at, plant.archived_at, plant.profile_photo_id, care_type.id, care_type.garden_id, care_type.name, care_type.slug, care_type.created_at, care_type.archived_at, app_user.display_name AS performed_by_name
 FROM care_event
 JOIN plant ON plant.id = care_event.plant_id AND plant.garden_id = care_event.garden_id
 JOIN care_type ON care_type.id = care_event.care_type_id AND care_type.garden_id = care_event.garden_id
@@ -430,6 +432,7 @@ func (q *Queries) ListRecentCareEvents(ctx context.Context, gardenID uuid.UUID, 
 			&i.Plant.AcquiredMonth,
 			&i.Plant.CreatedAt,
 			&i.Plant.ArchivedAt,
+			&i.Plant.ProfilePhotoID,
 			&i.CareType.ID,
 			&i.CareType.GardenID,
 			&i.CareType.Name,

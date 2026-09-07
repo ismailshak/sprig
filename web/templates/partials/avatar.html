@@ -1,0 +1,4 @@
+{{/* The circle beside a plant's name in a row. The argument is the URL of the
+     plant's profile picture as a square, empty for a plant with no picture. The
+     image has no alt text because the row names the plant beside it. */}}
+{{define "avatar"}}{{if .}}<span class="row__avatar"><img src="{{.}}" alt=""></span>{{else}}<span class="row__avatar row__avatar--none">{{template "icon-plant"}}</span>{{end}}{{end}}

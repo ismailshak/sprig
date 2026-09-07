@@ -361,6 +361,46 @@ func TestListPlants_AnEmptyGardenReturnsNoRowsAndNoError(t *testing.T) {
 	}
 }
 
+// insertPhoto inserts a photo of the plant and returns its id. A nil
+// squareBytes stores the photo with no square variant.
+func insertPhoto(t *testing.T, tx pgx.Tx, plantID uuid.UUID, squareBytes *int64) uuid.UUID {
+	t.Helper()
+
+	var id uuid.UUID
+	err := tx.QueryRow(t.Context(),
+		`INSERT INTO photo (garden_id, plant_id, uploaded_by, kind, path, width, height, bytes, square_bytes)
+		 VALUES ($1, $2, $3, 'image/jpeg', $4, 2048, 1536, 400, $5) RETURNING id`,
+		testGardenID, plantID, testUserID, plantID.String()+".jpg", squareBytes).Scan(&id)
+	if err != nil {
+		t.Fatalf("inserting the photo: %v", err)
+	}
+	return id
+}
+
+func TestSetProfilePhoto_APhotoWithNoSquareVariantIsRefusedAndThePictureIsUnchanged(t *testing.T) {
+	ctx := t.Context()
+	queries, tx := seedTwoGardens(t)
+	squareBytes := int64(40)
+	picture := insertPhoto(t, tx, montyID, &squareBytes)
+	if _, err := queries.SetProfilePhoto(ctx, SetProfilePhotoParams{PhotoID: &picture, GardenID: testGardenID, PlantID: montyID}); err != nil {
+		t.Fatalf("setting the picture: %v", err)
+	}
+	squareless := insertPhoto(t, tx, montyID, nil)
+
+	_, err := queries.SetProfilePhoto(ctx, SetProfilePhotoParams{PhotoID: &squareless, GardenID: testGardenID, PlantID: montyID})
+
+	if !errors.Is(err, pgx.ErrNoRows) {
+		t.Errorf("the update returned %v, want %v", err, pgx.ErrNoRows)
+	}
+	monty, err := queries.GetPlant(ctx, testGardenID, montyID)
+	if err != nil {
+		t.Fatalf("reading Monty: %v", err)
+	}
+	if monty.ProfilePhotoID == nil || *monty.ProfilePhotoID != picture {
+		t.Errorf("Monty's picture is %v, want the photo with a square, %s", monty.ProfilePhotoID, picture)
+	}
+}
+
 // Every query on a table with a garden_id column takes the garden as a
 // parameter, so there is no unscoped read for a handler to call. A query that
 // reads more than one scoped table must scope each of them, because scoping

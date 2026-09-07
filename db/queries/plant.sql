@@ -37,6 +37,19 @@ SET nickname = @nickname, common_name = @common_name, botanical_name = @botanica
 WHERE garden_id = @garden_id AND id = @plant_id AND archived_at IS NULL
 RETURNING *;
 
+-- Sets the plant's profile picture, or clears it when photo_id is null. The
+-- update matches no row when the photo belongs to another plant or has no
+-- square variant, because every list shows the picture as its square.
+-- name: SetProfilePhoto :one
+UPDATE plant SET profile_photo_id = sqlc.narg('photo_id')
+WHERE plant.garden_id = @garden_id AND plant.id = @plant_id AND plant.archived_at IS NULL
+  AND (sqlc.narg('photo_id')::uuid IS NULL
+       OR EXISTS (SELECT 1 FROM photo
+                  WHERE photo.id = sqlc.narg('photo_id')
+                    AND photo.garden_id = @garden_id AND photo.plant_id = @plant_id
+                    AND photo.square_bytes IS NOT NULL))
+RETURNING *;
+
 -- Archiving an already archived plant matches nothing, the same result as for
 -- a plant the garden does not have.
 -- name: ArchivePlant :one

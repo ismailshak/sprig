@@ -31,10 +31,18 @@ CREATE TABLE photo (
     square_bytes bigint,
 
     FOREIGN KEY (plant_id, garden_id) REFERENCES plant (id, garden_id) ON DELETE CASCADE,
-    -- The id alone is already unique. This pair is here so a plant's profile
-    -- photo can reference it and be kept in the same garden as the plant.
-    UNIQUE (id, garden_id)
+    -- The id alone is already unique. This pair is the target of the foreign
+    -- key from plant.profile_photo_id, so a plant's picture is always one of
+    -- its own photos.
+    UNIQUE (id, plant_id)
 );
+
+-- The photo shown at the top of the plant's page and beside its name in every
+-- list, NULL for a plant with no picture. Deleting the photo nulls only
+-- profile_photo_id, because the default would null the plant's own id with it.
+ALTER TABLE plant ADD COLUMN profile_photo_id uuid;
+ALTER TABLE plant ADD FOREIGN KEY (profile_photo_id, id) REFERENCES photo (id, plant_id)
+    ON DELETE SET NULL (profile_photo_id);
 
 -- A plant's photos are listed newest first.
 CREATE INDEX photo_plant_id_uploaded_at_idx ON photo (plant_id, uploaded_at DESC);
@@ -43,4 +51,5 @@ CREATE INDEX photo_plant_id_uploaded_at_idx ON photo (plant_id, uploaded_at DESC
 CREATE INDEX photo_garden_id_idx ON photo (garden_id);
 
 -- +goose Down
+ALTER TABLE plant DROP COLUMN profile_photo_id;
 DROP TABLE photo;

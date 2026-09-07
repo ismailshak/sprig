@@ -18,6 +18,9 @@
   const replace = document.getElementById('photo-replace');
   const remove = document.getElementById('photo-remove');
   const error = document.getElementById('photo-error');
+  // removeFlag is the hidden input the server reads to clear the plant's
+  // stored profile picture.
+  const removeFlag = document.getElementById('photo-removed');
   // again is the "The photo needs choosing again." line the server renders
   // when a post with a photo was refused for another field. Choosing a photo
   // removes it.
@@ -124,6 +127,8 @@
     if (previewURL) URL.revokeObjectURL(previewURL);
     previewURL = URL.createObjectURL(photo);
     preview.src = previewURL;
+    preview.alt = 'Chosen photo';
+    removeFlag.value = '';
     add.hidden = true;
     chosen.hidden = false;
   };
@@ -157,6 +162,7 @@
   replace.addEventListener('click', () => input.click());
   remove.addEventListener('click', () => {
     error.hidden = true;
+    removeFlag.value = '1';
     clear();
   });
 })();

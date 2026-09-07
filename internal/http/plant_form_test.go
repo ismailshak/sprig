@@ -1229,7 +1229,9 @@ func TestPlantForm_APlantAddedWithAPhotoHasTheFileAndTheRow(t *testing.T) {
 	}
 }
 
-func TestPlantForm_APhotoPostedWithNoSquareIsStoredWithNoSquareVariant(t *testing.T) {
+// Every list shows a plant's picture as its square, and the form's script
+// posts both files. A post with no square did not come from the form.
+func TestPlantForm_APhotoPostedWithoutItsSquareIsRefusedAndNothingIsWritten(t *testing.T) {
 	f := plantFormOn(t)
 	values := addValues()
 	values.Set("nickname", "Big Fella")
@@ -1237,15 +1239,21 @@ func TestPlantForm_APhotoPostedWithNoSquareIsStoredWithNoSquareVariant(t *testin
 
 	rec := f.postPhoto(t, &id, values, testJPEG(t, 30, 20), nil)
 
-	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != plantPath(bigFellaID) {
-		t.Fatalf("status = %d to %q, want %d to the plant's page", rec.Code, rec.Header().Get("Location"), http.StatusSeeOther)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusBadRequest)
 	}
-	row := f.photoOf(t, bigFellaID)
-	if row.SquareBytes != nil {
-		t.Errorf("square_bytes = %d, want none for a post with no square", *row.SquareBytes)
+	if n := countRows(t, f.tx, "photo"); n != 0 {
+		t.Errorf("the garden has %d photos, want none", n)
 	}
-	if got := f.storedFiles(t); len(got) != 1 || got[0] != row.Path {
-		t.Errorf("the directory holds %v, want the one file at %s", got, row.Path)
+	if got := f.storedFiles(t); len(got) != 0 {
+		t.Errorf("the directory holds %v, want nothing", got)
+	}
+	plant, err := store.New(f.tx).GetPlant(t.Context(), rosewoodID, bigFellaID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plant.ProfilePhotoID != nil {
+		t.Errorf("the plant's picture is %s, want none", *plant.ProfilePhotoID)
 	}
 }
 
@@ -1277,7 +1285,7 @@ func TestPlantForm_APhotoOverTheFileLimitIsRefusedAndNothingIsWritten(t *testing
 	image := append(testJPEG(t, 30, 20), make([]byte, photo.MaxBytes)...)
 	before := f.countPlants(t)
 
-	rec := f.postPhoto(t, nil, values, image, nil)
+	rec := f.postPhoto(t, nil, values, image, testJPEG(t, 8, 8))
 
 	if rec.Code != http.StatusRequestEntityTooLarge {
 		t.Errorf("status = %d, want %d", rec.Code, http.StatusRequestEntityTooLarge)
@@ -1290,17 +1298,24 @@ func TestPlantForm_APhotoOverTheFileLimitIsRefusedAndNothingIsWritten(t *testing
 	}
 }
 
-func TestPlantForm_APhotoFromAMemberWhoMayNotAddPhotosIs404(t *testing.T) {
+// The photo becomes the plant's profile picture, so adding photos is not enough
+// on its own.
+func TestPlantForm_APhotoFromAMemberWhoMayNotSetThePictureIs404(t *testing.T) {
 	f := plantFormOn(t)
-	f.principal.Capabilities = auth.Capabilities{auth.PlantCreate: true, auth.PlantEdit: true}
+	f.principal.Capabilities = auth.Capabilities{auth.PlantCreate: true, auth.PlantEdit: true, auth.PhotoAdd: true}
 	values := addValues()
 	values.Set("nickname", "Ada")
 	before := f.countPlants(t)
 	id := bigFellaID
+	photoID := givePicture(t, f.tx, bigFellaID)
+	removing := addValues()
+	removing.Set("nickname", "Big Fella")
+	removing.Set("photo-removed", "1")
 
 	for name, rec := range map[string]*httptest.ResponseRecorder{
-		"add":  f.postPhoto(t, nil, values, testJPEG(t, 30, 20), nil),
-		"edit": f.postPhoto(t, &id, values, testJPEG(t, 30, 20), nil),
+		"add":    f.postPhoto(t, nil, values, testJPEG(t, 30, 20), testJPEG(t, 8, 8)),
+		"edit":   f.postPhoto(t, &id, values, testJPEG(t, 30, 20), testJPEG(t, 8, 8)),
+		"remove": f.save(t, bigFellaID, removing),
 	} {
 		if rec.Code != http.StatusNotFound {
 			t.Errorf("%s: status = %d, want %d", name, rec.Code, http.StatusNotFound)
@@ -1309,23 +1324,145 @@ func TestPlantForm_APhotoFromAMemberWhoMayNotAddPhotosIs404(t *testing.T) {
 	if after := f.countPlants(t); after != before {
 		t.Errorf("the garden has %d plants, want the %d it started with", after, before)
 	}
-	if n := countRows(t, f.tx, "photo"); n != 0 {
-		t.Errorf("the garden has %d photos, want none", n)
+	if n := countRows(t, f.tx, "photo"); n != 1 {
+		t.Errorf("the garden has %d photos, want the one it started with", n)
+	}
+	if got := f.pictureOf(t, bigFellaID); got == nil || *got != photoID {
+		t.Errorf("Big Fella's picture is %v, want the one the post could not remove", got)
 	}
 }
 
-func TestPlantForm_ThePhotoFieldIsRenderedOnlyForAMemberWhoMayAddPhotos(t *testing.T) {
+func TestPlantForm_ThePhotoFieldIsRenderedOnlyForAMemberWhoMaySetThePicture(t *testing.T) {
 	f := plantFormOn(t)
 
 	with := f.open(t, newPlantPath, false).Body.String()
-	f.principal.Capabilities = auth.Capabilities{auth.PlantCreate: true}
+	f.principal.Capabilities = auth.Capabilities{auth.PlantCreate: true, auth.PhotoAdd: true}
 	without := f.open(t, newPlantPath, false).Body.String()
 
 	if !strings.Contains(with, `id="photo-field"`) {
-		t.Error("a member who may add photos got a form with no photo field")
+		t.Error("a member who may set the picture got a form with no photo field")
 	}
 	if strings.Contains(without, `id="photo-field"`) {
-		t.Error("a member who may not add photos got a form with the photo field")
+		t.Error("a member who may add photos but not set the picture got a form with the photo field")
+	}
+}
+
+// pictureOf returns the plant's profile_photo_id, nil for no picture.
+func (f *formFixture) pictureOf(t *testing.T, plantID uuid.UUID) *uuid.UUID {
+	t.Helper()
+
+	plant, err := store.New(f.tx).GetPlant(t.Context(), rosewoodID, plantID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return plant.ProfilePhotoID
+}
+
+func TestPlantForm_APlantAddedWithAPhotoHasItAsItsPicture(t *testing.T) {
+	f := plantFormOn(t)
+	values := addValues()
+	values.Set("nickname", "Ada")
+
+	plant := f.created(t, f.postPhoto(t, nil, values, testJPEG(t, 30, 20), testJPEG(t, 8, 8)))
+
+	row := f.photoOf(t, plant.ID)
+	if plant.ProfilePhotoID == nil || *plant.ProfilePhotoID != row.ID {
+		t.Errorf("the plant's picture is %v, want the photo posted, %s", plant.ProfilePhotoID, row.ID)
+	}
+}
+
+func TestPlantForm_APhotoSavedOnEditBecomesThePictureAndTheOldOneStaysAPhoto(t *testing.T) {
+	f := plantFormOn(t)
+	old := givePicture(t, f.tx, bigFellaID)
+	values := addValues()
+	values.Set("nickname", "Big Fella")
+	id := bigFellaID
+
+	rec := f.postPhoto(t, &id, values, testJPEG(t, 30, 20), testJPEG(t, 8, 8))
+
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusSeeOther, rec.Body.String())
+	}
+	got := f.pictureOf(t, bigFellaID)
+	if got == nil || *got == old {
+		t.Errorf("the plant's picture is %v, want the new photo", got)
+	}
+	if n := countRows(t, f.tx, "photo"); n != 2 {
+		t.Errorf("the garden has %d photos, want both", n)
+	}
+}
+
+func TestPlantForm_ASaveWithNoPhotoKeepsThePicture(t *testing.T) {
+	f := plantFormOn(t)
+	photoID := givePicture(t, f.tx, bigFellaID)
+	values := addValues()
+	values.Set("nickname", "Big Fella")
+
+	if rec := f.save(t, bigFellaID, values); rec.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusSeeOther)
+	}
+
+	if got := f.pictureOf(t, bigFellaID); got == nil || *got != photoID {
+		t.Errorf("the plant's picture is %v, want %s still", got, photoID)
+	}
+}
+
+func TestPlantForm_RemoveTakesThePictureOffThePlantAndKeepsThePhoto(t *testing.T) {
+	f := plantFormOn(t)
+	givePicture(t, f.tx, bigFellaID)
+	values := addValues()
+	values.Set("nickname", "Big Fella")
+	values.Set("photo-removed", "1")
+
+	if rec := f.save(t, bigFellaID, values); rec.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusSeeOther)
+	}
+
+	if got := f.pictureOf(t, bigFellaID); got != nil {
+		t.Errorf("the plant's picture is %s, want none", *got)
+	}
+	if n := countRows(t, f.tx, "photo"); n != 1 {
+		t.Errorf("the garden has %d photos, want the removed picture kept as one", n)
+	}
+}
+
+func TestPlantForm_TheEditFormShowsTheCurrentPictureAndTheAddFormShowsNone(t *testing.T) {
+	f := plantFormOn(t)
+	photoID := givePicture(t, f.tx, bigFellaID)
+
+	edit := f.editForm(t, bigFellaID).Body.String()
+	add := f.open(t, newPlantPath, false).Body.String()
+
+	if got, want := images(edit), []string{photoFullPath(bigFellaID, photoID)}; !slices.Equal(got, want) {
+		t.Errorf("the edit form's images are %v, want the picture at %v", got, want)
+	}
+	if !strings.Contains(edit, `alt="Current picture"`) {
+		t.Error("the edit form does not say the picture is the current one")
+	}
+	if got := images(add); len(got) != 0 {
+		t.Errorf("the add form's images are %v, want none", got)
+	}
+}
+
+func TestPlantForm_ARefusedSaveThatRemovedThePictureShowsNoPictureAndLeavesItStored(t *testing.T) {
+	f := plantFormOn(t)
+	photoID := givePicture(t, f.tx, bigFellaID)
+	values := addValues()
+	values.Set("photo-removed", "1")
+
+	rec := f.save(t, bigFellaID, values)
+
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusUnprocessableEntity)
+	}
+	if got := images(rec.Body.String()); len(got) != 0 {
+		t.Errorf("the form's images are %v, want none after Remove", got)
+	}
+	if got := hiddenFields(rec.Body.String()).Get("photo-removed"); got != "1" {
+		t.Errorf("photo-removed = %q, want 1, so the next save removes the picture", got)
+	}
+	if got := f.pictureOf(t, bigFellaID); got == nil || *got != photoID {
+		t.Errorf("the plant's picture is %v, want %s, since the save was refused", got, photoID)
 	}
 }
 
@@ -1354,7 +1491,7 @@ func TestPlantForm_AWebPPhotoIsStoredWithTheWebPKindAndExtension(t *testing.T) {
 	values.Set("nickname", "Ada")
 	image := testWebP(2048, 1536)
 
-	plant := f.created(t, f.postPhoto(t, nil, values, image, nil))
+	plant := f.created(t, f.postPhoto(t, nil, values, image, testWebP(192, 192)))
 
 	row := f.photoOf(t, plant.ID)
 	if row.Kind != "image/webp" || row.Width != 2048 || row.Height != 1536 {
@@ -1376,7 +1513,7 @@ func TestPlantForm_APhotoOfExactlyTheFileLimitIsStored(t *testing.T) {
 	image := testJPEG(t, 30, 20)
 	image = append(image, make([]byte, photo.MaxBytes-len(image))...)
 
-	plant := f.created(t, f.postPhoto(t, nil, values, image, nil))
+	plant := f.created(t, f.postPhoto(t, nil, values, image, testJPEG(t, 8, 8)))
 
 	if row := f.photoOf(t, plant.ID); row.Bytes != photo.MaxBytes {
 		t.Errorf("the row counts %d bytes, want the %d posted", row.Bytes, photo.MaxBytes)
@@ -1404,7 +1541,7 @@ func TestPlantForm_APhotoTheGardenHasNoRoomForIsRefusedWithTheReasonUnderThePhot
 	f.photosWithRoomFor(t, len(image)-1)
 	before := f.countPlants(t)
 
-	rec := f.postPhoto(t, nil, values, image, nil)
+	rec := f.postPhoto(t, nil, values, image, testJPEG(t, 8, 8))
 
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusUnprocessableEntity, rec.Body.String())
@@ -1461,7 +1598,7 @@ func TestPlantForm_AnEditWithAPhotoTheGardenHasNoRoomForLeavesThePlantUnchanged(
 	f.photosWithRoomFor(t, len(image)-1)
 	id := bigFellaID
 
-	rec := f.postPhoto(t, &id, values, image, nil)
+	rec := f.postPhoto(t, &id, values, image, testJPEG(t, 8, 8))
 
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusUnprocessableEntity)

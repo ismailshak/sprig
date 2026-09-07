@@ -86,6 +86,12 @@ export class PlantFormScreen {
     return this.page.getByRole('img', { name: 'Chosen photo' });
   }
 
+  // The plant's stored picture, shown in the photo field when the edit form
+  // opens on a plant that has one.
+  currentPicture(): Locator {
+    return this.page.getByRole('img', { name: 'Current picture' });
+  }
+
   async choosePhoto(button: 'Add a photo' | 'Replace', file: ChosenFile): Promise<void> {
     const chooser = this.page.waitForEvent('filechooser');
     await this.page.getByRole('button', { name: button }).click();

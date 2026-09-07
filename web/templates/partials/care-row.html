@@ -1,8 +1,7 @@
 {{/* One <li> under one id, so a swap can target the whole row. The form is
      beside the link rather than inside it because a link cannot contain a
      button. A row due today shows only the location, since the interval is a
-     setting and not something needed while watering. The avatar is empty until
-     photos are implemented.
+     setting and not something needed while watering.
 
      A logged row fetches "/" when its grace window ends, not a route of its
      own, because the response is either the day header or the whole day body.
@@ -13,7 +12,7 @@
      htmx-swapping to zero height. */}}
 {{define "care-row"}}<li class="row{{if .Done}} row--done{{end}}" id="{{.ID}}"{{if .Done}} style="--grace:{{.Grace}}ms" hx-get="/" hx-trigger="load delay:{{.Grace}}ms" hx-swap="delete swap:{{.Collapse}}ms settle:0ms"{{end}}>
 {{if .Done}}<span class="row__open">{{else}}<a class="row__open" href="{{.Href}}" hx-get="{{.Href}}" hx-target="#sheet" hx-swap="outerHTML">{{end}}
-<span class="row__avatar"></span>
+{{template "avatar" .Picture}}
 <span class="row__text">
 <span class="row__name{{if .Botanical}} row__name--sp{{end}}">{{.Name}}</span>
 <span class="row__meta">{{if .Done}}<span class="row__part row__said">{{.Said}}</span>{{else}}{{if .Location}}<span class="row__part">{{.Location}}</span>{{end}}{{if and .Location (or .Late .When)}}<span class="dot">&middot;</span>{{end}}{{if .Late}}<span class="row__part"><span class="late">{{.Late}}</span></span>{{else if .When}}<span class="row__part">{{.Care}} {{.When}}</span>{{end}}{{end}}</span>

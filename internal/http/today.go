@@ -262,6 +262,9 @@ type careRow struct {
 	// Botanical is true when Name is the botanical name, shown in italics.
 	Botanical bool
 	Location  string
+	// Picture is the URL of the plant's profile picture as a square, empty for
+	// a plant with no picture.
+	Picture string
 	// Late is the overdue text, empty on a row that is not overdue.
 	Late string
 	// When is the due text on a row that is coming up, empty otherwise. When
@@ -397,6 +400,7 @@ func newCareRow(row schedule.Row, now time.Time) careRow {
 		Path:      logPath(row.Plant.ID),
 		Name:      row.Plant.DisplayName(),
 		Botanical: row.Plant.BotanicalOnly(),
+		Picture:   squarePicturePath(row.Plant),
 		Care:      row.Care.CareType.Name,
 		Slug:      row.Care.CareType.Slug,
 	}

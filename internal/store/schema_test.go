@@ -229,3 +229,63 @@ func seedGardenAndUser(t *testing.T, conn DBTX) (gardenID, userID uuid.UUID) {
 	}
 	return testGardenID, testUserID
 }
+
+// seedPlantWithPhoto inserts a plant in the garden and one photo of it, and
+// returns both ids.
+func seedPlantWithPhoto(t *testing.T, conn DBTX, gardenID, userID uuid.UUID) (plantID, photoID uuid.UUID) {
+	t.Helper()
+
+	ctx := t.Context()
+	err := conn.QueryRow(ctx, "INSERT INTO plant (garden_id, nickname) VALUES ($1, 'Big Fella') RETURNING id", gardenID).Scan(&plantID)
+	if err != nil {
+		t.Fatalf("inserting the plant: %v", err)
+	}
+	err = conn.QueryRow(ctx,
+		`INSERT INTO photo (garden_id, plant_id, uploaded_by, kind, path, width, height, bytes, square_bytes)
+		 VALUES ($1, $2, $3, 'image/jpeg', 'a.jpg', 3, 2, 100, 40) RETURNING id`,
+		gardenID, plantID, userID).Scan(&photoID)
+	if err != nil {
+		t.Fatalf("inserting the photo: %v", err)
+	}
+	return plantID, photoID
+}
+
+func TestSchema_DeletingAPlantsPictureClearsThePictureAndKeepsThePlant(t *testing.T) {
+	ctx := t.Context()
+	pool := migratedPool(t)
+	garden, user := seedGardenAndUser(t, pool)
+	plant, photo := seedPlantWithPhoto(t, pool, garden, user)
+	if _, err := pool.Exec(ctx, "UPDATE plant SET profile_photo_id = $1 WHERE id = $2", photo, plant); err != nil {
+		t.Fatalf("setting the picture: %v", err)
+	}
+
+	if _, err := pool.Exec(ctx, "DELETE FROM photo WHERE id = $1", photo); err != nil {
+		t.Fatalf("deleting the photo: %v", err)
+	}
+
+	var gardenAfter *uuid.UUID
+	var picture *uuid.UUID
+	if err := pool.QueryRow(ctx, "SELECT garden_id, profile_photo_id FROM plant WHERE id = $1", plant).Scan(&gardenAfter, &picture); err != nil {
+		t.Fatalf("reading the plant: %v", err)
+	}
+	if picture != nil {
+		t.Errorf("profile_photo_id = %s, want NULL", *picture)
+	}
+	if gardenAfter == nil || *gardenAfter != garden {
+		t.Errorf("garden_id = %v, want %s: the delete nulled more than the picture", gardenAfter, garden)
+	}
+}
+
+func TestSchema_AnotherPlantsPhotoIsRefusedAsAPlantsPicture(t *testing.T) {
+	ctx := t.Context()
+	pool := migratedPool(t)
+	garden, user := seedGardenAndUser(t, pool)
+	plant, _ := seedPlantWithPhoto(t, pool, garden, user)
+	_, othersPhoto := seedPlantWithPhoto(t, pool, garden, user)
+
+	_, err := pool.Exec(ctx, "UPDATE plant SET profile_photo_id = $1 WHERE id = $2", othersPhoto, plant)
+
+	if err == nil {
+		t.Error("another plant's photo was accepted as this plant's picture")
+	}
+}

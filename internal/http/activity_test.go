@@ -756,3 +756,14 @@ func TestActivity_ASwapAimedAtTheLogBodyGetsTheListAndNotTheWholePage(t *testing
 		t.Errorf("the log body holds %d rows, want the garden's 7", got)
 	}
 }
+
+func TestActivity_ARowShowsThePlantsPictureAsItsSquare(t *testing.T) {
+	f := rosewoodLog(t)
+	photoID := givePicture(t, f.tx, bigFellaID)
+
+	page := f.show(t)
+
+	if got, want := images(page), []string{photoSquarePath(bigFellaID, photoID)}; !slices.Equal(got, want) {
+		t.Errorf("the log's images are %v, want Big Fella's square at %v and none on Doris's row", got, want)
+	}
+}

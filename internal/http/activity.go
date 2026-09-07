@@ -287,6 +287,10 @@ type eventRow struct {
 	Name    string
 	// Botanical is true when Name is the plant's botanical name.
 	Botanical bool
+	// Picture is the URL of the plant's profile picture as a square, empty for
+	// a plant with no picture. The row shows it only when Act is empty, in
+	// place of the care icon.
+	Picture string
 	// Who and Did make up "Sam watered". Did is empty on a filtered row, where
 	// Act has already said what was done.
 	Who string
@@ -465,6 +469,7 @@ func newEventRow(principal auth.Principal, q logQuery, e store.ListCareEventLogR
 		Href:      correctHref(principal, q, e.CareEvent),
 		Name:      e.Plant.DisplayName(),
 		Botanical: e.Plant.BotanicalOnly(),
+		Picture:   squarePicturePath(e.Plant),
 		When:      clockWord(e.CareEvent.PerformedAt, now),
 		Extra:     eventExtra(e.CareEvent),
 	}

@@ -11,8 +11,7 @@
      reuses this markup. */}}
 <div class="app__body app__body--plant">
 <div class="hero">
-{{/* Empty until photos are implemented. */}}
-<span class="hero__pic"></span>
+{{if .Picture}}<img class="hero__pic" src="{{.Picture}}" alt="Picture of {{.Name}}">{{else}}<span class="hero__pic hero__pic--none">{{template "icon-plant"}}</span>{{end}}
 <h1 class="hero__name{{if .Botanical}} hero__name--sp{{end}}">{{.Name}}</h1>
 {{with .Names}}<p class="hero__meta">{{range $i, $name := .}}{{if $i}} &middot; {{end}}{{if $name.Italic}}<i>{{$name.Text}}</i>{{else}}{{$name.Text}}{{end}}{{end}}</p>{{end}}
 {{/* The room is on its own line rather than as a third item in the names line

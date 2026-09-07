@@ -8,6 +8,10 @@
 
 *, *::before, *::after { box-sizing: border-box; }
 
+/* !important, because the browser's own rule for the hidden attribute loses to
+   any class below that sets display. */
+[hidden] { display: none !important; }
+
 html, body {
   margin: 0;
   height: 100%;
@@ -213,7 +217,14 @@ button {
   border: var(--avatar-ring);
 }
 
-.row__avatar svg { display: block; width: 100%; height: 100%; }
+.row__avatar svg, .row__avatar img { display: block; width: 100%; height: 100%; }
+
+/* object-fit crops an image that is not square instead of squashing it. */
+.row__avatar img { object-fit: cover; }
+
+/* A plant with no picture shows a leaf in the circle. */
+.row__avatar--none { display: grid; place-items: center; color: var(--ink-3); }
+.row__avatar--none svg { width: 22px; height: 22px; }
 
 .row__text { flex: 1; min-width: 0; }
 
@@ -818,6 +829,13 @@ a.foot-link { text-decoration: none; color: var(--ink-2); }
 }
 
 .hero__pic > svg { width: 62%; max-width: 260px; height: auto; }
+
+/* A photo of any shape is cropped to the 5:3 box rather than squashed. */
+img.hero__pic { object-fit: cover; }
+
+/* A plant with no picture shows a leaf in the box. */
+.hero__pic--none { color: var(--ink-3); }
+.hero__pic--none > svg { width: 64px; height: 64px; }
 
 .hero__zoom {
   position: absolute;

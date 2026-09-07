@@ -13,6 +13,8 @@ import (
 	"time"
 	"uuid"
 
+	"github.com/jackc/pgx/v5"
+
 	"github.com/ismailshak/sprig/internal/auth"
 	"github.com/ismailshak/sprig/internal/store"
 )
@@ -601,5 +603,57 @@ func TestPlant_APlantTheGardenDoesNotHaveIs404(t *testing.T) {
 	}
 	if rec := f.post(t, stranger.String(), url.Values{"over": {overPlant}, "care": {"water"}}, false); rec.Code != http.StatusNotFound {
 		t.Errorf("the post answered %d, want %d", rec.Code, http.StatusNotFound)
+	}
+}
+
+// givePicture inserts a photo of the plant, with a square variant, and makes it
+// the plant's profile picture. It returns the photo's id.
+func givePicture(t *testing.T, tx pgx.Tx, plantID uuid.UUID) uuid.UUID {
+	t.Helper()
+
+	var photoID uuid.UUID
+	err := tx.QueryRow(t.Context(),
+		`INSERT INTO photo (garden_id, plant_id, uploaded_by, kind, path, width, height, bytes, square_bytes)
+		 VALUES ($1, $2, $3, 'image/jpeg', $4, 3, 2, 100, 40) RETURNING id`,
+		rosewoodID, plantID, readerID, plantID.String()+".jpg").Scan(&photoID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(t.Context(), "UPDATE plant SET profile_photo_id = $1 WHERE id = $2", photoID, plantID); err != nil {
+		t.Fatal(err)
+	}
+	return photoID
+}
+
+// images returns the src of every <img> in the markup.
+func images(markup string) []string {
+	var srcs []string
+	for _, m := range imgSrc.FindAllStringSubmatch(markup, -1) {
+		srcs = append(srcs, m[1])
+	}
+	return srcs
+}
+
+var imgSrc = regexp.MustCompile(`<img[^>]*\ssrc="([^"]*)"`)
+
+func TestPlant_APlantWithAPictureShowsItAtTheTop(t *testing.T) {
+	f := rosewoodPlant(t)
+	photoID := givePicture(t, f.tx, bigFellaID)
+
+	page := f.page(t, bigFellaID)
+
+	if got, want := images(page), []string{photoFullPath(bigFellaID, photoID)}; !slices.Equal(got, want) {
+		t.Errorf("the page's images are %v, want the picture at %v", got, want)
+	}
+	if !strings.Contains(page, `alt="Picture of Big Fella"`) {
+		t.Error("the picture does not say whose it is")
+	}
+}
+
+func TestPlant_APlantWithNoPictureHasNoImage(t *testing.T) {
+	page := rosewoodPlant(t).page(t, bigFellaID)
+
+	if got := images(page); len(got) != 0 {
+		t.Errorf("the page's images are %v, want none", got)
 	}
 }

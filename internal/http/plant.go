@@ -92,6 +92,9 @@ type plantPage struct {
 	// Botanical is true when the heading is the botanical name, which is shown
 	// in italics.
 	Botanical bool
+	// Picture is the URL of the plant's profile picture at its uploaded size,
+	// empty for a plant with no picture.
+	Picture string
 	// Names is the plant's other names, the common name before the botanical.
 	Names    []plantName
 	Room     string
@@ -164,6 +167,7 @@ func newPlantPage(principal auth.Principal, d plantDetail) plantPage {
 	page := plantPage{
 		Name:      plant.DisplayName(),
 		Botanical: plant.BotanicalOnly(),
+		Picture:   picturePath(plant),
 		Names:     otherNames(plant),
 		Schedule:  scheduleRows(principal, d),
 		Reference: newPlantReference(plant),

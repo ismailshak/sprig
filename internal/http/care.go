@@ -302,6 +302,9 @@ type sheetPlant struct {
 	Sub      string
 	Italic   bool
 	Location string
+	// Picture is the URL of the plant's profile picture as a square, empty for
+	// a plant with no picture.
+	Picture string
 }
 
 func newSheet(plant store.Plant, offers []offer, care offer, d draft, now time.Time) *sheet {
@@ -408,6 +411,7 @@ func newSheetPlant(plant store.Plant) sheetPlant {
 		Href:      "/plants/" + plant.ID.String(),
 		Name:      plant.DisplayName(),
 		Botanical: plant.BotanicalOnly(),
+		Picture:   squarePicturePath(plant),
 	}
 	if plant.Location != nil {
 		p.Location = *plant.Location
@@ -822,6 +826,7 @@ func loggedRow(plant store.Plant, lines []schedule.Line, d draft, careType store
 		Path:      logPath(plant.ID),
 		Name:      plant.DisplayName(),
 		Botanical: plant.BotanicalOnly(),
+		Picture:   squarePicturePath(plant),
 		Care:      rowType.Name,
 		Slug:      rowType.Slug,
 		Done:      true,

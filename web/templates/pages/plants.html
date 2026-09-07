@@ -35,10 +35,9 @@
 </section>
 {{end}}
 
-{{/* row__avatar is empty until photos are implemented. */}}
 {{define "plant-row"}}<li>
 <a class="row row--link" href="{{.Href}}">
-<span class="row__avatar"></span>
+{{template "avatar" .Picture}}
 <span class="row__text">
 <span class="row__name{{if .Botanical}} row__name--sp{{end}}">{{.Name}}</span>
 {{with .Sub}}<span class="row__meta"><span class="row__part">{{if $.SubBotanical}}<i>{{.}}</i>{{else}}{{.}}{{end}}</span></span>{{end}}

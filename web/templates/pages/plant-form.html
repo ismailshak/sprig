@@ -20,14 +20,18 @@
      Without this hidden one, that would be a schedule row's button, and Enter
      would close the row instead of saving the plant. */}}
 <button type="submit" hidden></button>
-{{/* The photo field is rendered only for a member who may add photos, and
-     starts hidden. The page's script shows it once it has checked the browser
-     can resize an image, then fills the two file inputs: the resized photo
-     under photo and its 192 pixel square under photo-square. */}}
+{{/* The photo posted here becomes the plant's profile picture. The field is
+     rendered only for a member who may set one, and starts hidden. The page's
+     script shows it once it has checked the browser can resize an image, then
+     fills the two file inputs: the resized photo under photo and its 192 pixel
+     square under photo-square. */}}
 {{if .PhotoField}}<div class="photo-field" id="photo-field" hidden>
 <input id="photo" name="photo" type="file" accept="image/*" hidden>
 <input id="photo-square" name="photo-square" type="file" hidden>
-<button class="photo-field__empty" id="photo-add" type="button">{{template "icon-camera"}}<span>Add a photo</span></button>
+{{/* The save reads this input to clear the plant's profile picture. The
+     page's script sets it to 1 when Remove is pressed. */}}
+<input id="photo-removed" name="photo-removed" type="hidden" value="{{if .PictureRemoved}}1{{end}}">
+<button class="photo-field__empty" id="photo-add" type="button"{{if .Picture}} hidden{{end}}>{{template "icon-camera"}}<span>Add a photo</span></button>
 {{/* A post refused for another field is rendered again with an empty file
      input, because a server cannot fill one. */}}
 {{if .PhotoNeedsChoosing}}<p class="field__error" id="photo-again">The photo needs choosing again.</p>{{end}}
@@ -35,8 +39,8 @@
      script that clears the line above by id leaves this one alone. Choosing
      another photo does not make room. */}}
 {{with .PhotoFull}}<p class="field__error">{{.}}</p>{{end}}
-<div id="photo-chosen" hidden>
-<img class="photo-field__pic" id="photo-preview" alt="Chosen photo">
+<div id="photo-chosen"{{if not .Picture}} hidden{{end}}>
+<img class="photo-field__pic" id="photo-preview"{{if .Picture}} src="{{.Picture}}" alt="Current picture"{{else}} alt="Chosen photo"{{end}}>
 <div class="photo-field__actions">
 <button class="care care--outline care--small" id="photo-replace" type="button">Replace</button>
 <button class="sched__cancel" id="photo-remove" type="button">Remove</button>
