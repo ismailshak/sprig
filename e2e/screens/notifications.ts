@@ -26,15 +26,14 @@ export class NotificationsScreen {
     return this.page.getByRole('button', { name: 'Save changes' });
   }
 
-  // saveChanges clicks Save changes and waits for the GET the post redirects
-  // to. The click returns before the post is sent, so a test that navigates
-  // straight afterwards would cancel it.
+  // saveChanges clicks Save changes and waits for the page the post redirects
+  // to to finish loading. The click returns before the post is sent, and the
+  // redirect is still navigating when its response arrives, so a test that
+  // opens a page after either would cancel the navigation under way.
   async saveChanges(): Promise<void> {
-    const reloaded = this.page.waitForResponse(
-      (response) => response.request().method() === 'GET' && new URL(response.url()).pathname === path,
-    );
+    const loaded = this.page.waitForEvent('load');
     await this.save().click();
-    await reloaded;
+    await loaded;
   }
 
   // The line the page's script writes the browser's refusal into.
