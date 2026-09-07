@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -88,7 +89,7 @@ func TestServe_ShutsDownGracefullyOnContextCancel(t *testing.T) {
 func TestSubcommand_VapidPrintsAPairAsTheTwoVariables(t *testing.T) {
 	var stdout bytes.Buffer
 
-	if err := subcommand([]string{"vapid"}, &stdout); err != nil {
+	if err := subcommand(t.Context(), []string{"vapid"}, noEnv, &stdout); err != nil {
 		t.Fatalf("vapid: %v", err)
 	}
 
@@ -109,7 +110,35 @@ func TestSubcommand_VapidPrintsAPairAsTheTwoVariables(t *testing.T) {
 func TestSubcommand_AnUnknownCommandIsRefused(t *testing.T) {
 	var stdout bytes.Buffer
 
-	if err := subcommand([]string{"serve"}, &stdout); err == nil {
+	if err := subcommand(t.Context(), []string{"serve"}, noEnv, &stdout); err == nil {
 		t.Error("an unknown command ran without an error")
 	}
 }
+
+func TestSubcommand_SweepWithoutADatabaseURLNamesTheMissingVariable(t *testing.T) {
+	var stdout bytes.Buffer
+
+	err := subcommand(t.Context(), []string{"sweep"}, noEnv, &stdout)
+
+	if err == nil || !strings.Contains(err.Error(), "SPRIG_DATABASE_URL") {
+		t.Errorf("err = %v, want one naming SPRIG_DATABASE_URL", err)
+	}
+}
+
+func TestSubcommand_SweepWithAMissingPhotoDirectoryNamesIt(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "photos")
+	env := map[string]string{
+		"SPRIG_DATABASE_URL": "postgres://example/db",
+		"SPRIG_BASE_URL":     "https://sprig.example.com",
+		"SPRIG_PHOTO_DIR":    dir,
+	}
+	var stdout bytes.Buffer
+
+	err := subcommand(t.Context(), []string{"sweep"}, func(k string) string { return env[k] }, &stdout)
+
+	if err == nil || !strings.Contains(err.Error(), dir) {
+		t.Errorf("err = %v, want one naming %s", err, dir)
+	}
+}
+
+func noEnv(string) string { return "" }

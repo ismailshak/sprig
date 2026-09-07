@@ -469,6 +469,11 @@ func TestQueries_EveryQueryOnAGardenScopedTableBindsTheGarden(t *testing.T) {
 		if query.name == "ListDigestMembers" && slices.Equal(touched, []string{"membership"}) {
 			continue
 		}
+		// The sweep command compares every photo row with the files on disk.
+		// It runs from the command line and never from a request.
+		if query.name == "ListPhotoFiles" && slices.Equal(touched, []string{"photo"}) {
+			continue
+		}
 		if !strings.Contains(query.sql, "@garden_id") {
 			t.Errorf("%s reads %s and takes no @garden_id, so it can return another garden's rows",
 				query.name, strings.Join(touched, ", "))

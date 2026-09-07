@@ -14,3 +14,9 @@ WHERE garden_id = @garden_id AND id = @photo_id;
 SELECT coalesce(sum(bytes + coalesce(square_bytes, 0)), 0)::bigint
 FROM photo
 WHERE garden_id = @garden_id;
+
+-- Every photo row, for the sweep that compares them with the files on disk.
+-- It takes no garden id, because the sweep covers every garden at once.
+-- name: ListPhotoFiles :many
+SELECT id, plant_id, path, square_bytes FROM photo
+ORDER BY path;
