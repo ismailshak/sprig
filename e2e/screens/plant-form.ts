@@ -1,6 +1,9 @@
 import type { Locator, Page } from '@playwright/test';
 import type { Plant } from '../harness/garden';
 
+// The file to give the picker: a path on disk, or bytes made up in the test.
+type ChosenFile = string | { name: string; mimeType: string; buffer: Buffer };
+
 // One screen object for two routes, because adding a plant and editing one are
 // the same fields in the same order.
 export class PlantFormScreen {
@@ -71,6 +74,32 @@ export class PlantFormScreen {
 
   date(care: string, part: 'day' | 'month' | 'year'): Locator {
     return this.page.getByLabel(`${care} ${part}`);
+  }
+
+  // The Add a photo button. The server renders it hidden and the page's
+  // script shows it, so with JavaScript off it stays hidden.
+  addPhoto(): Locator {
+    return this.page.getByRole('button', { name: 'Add a photo' });
+  }
+
+  photoPreview(): Locator {
+    return this.page.getByRole('img', { name: 'Chosen photo' });
+  }
+
+  async choosePhoto(button: 'Add a photo' | 'Replace', file: ChosenFile): Promise<void> {
+    const chooser = this.page.waitForEvent('filechooser');
+    await this.page.getByRole('button', { name: button }).click();
+    await (await chooser).setFiles(file);
+  }
+
+  async removePhoto(): Promise<void> {
+    await this.page.getByRole('button', { name: 'Remove' }).click();
+  }
+
+  // The hidden file input the form posts under that name. photo holds the
+  // resized photo and photo-square its 192 pixel square.
+  photoInput(name: 'photo' | 'photo-square'): Locator {
+    return this.page.locator(`input[name="${name}"]`);
   }
 
   async submit(button: 'Add plant' | 'Save changes'): Promise<void> {

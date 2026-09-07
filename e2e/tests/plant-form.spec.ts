@@ -1,4 +1,5 @@
 import { people, plants as seeded, rooms } from '../harness/garden';
+import { dimensions, hasExif, heldCount, heldFile, photos } from '../harness/photos';
 import { signIn } from '../harness/signin';
 import { expect, test } from '../harness/test';
 
@@ -242,4 +243,116 @@ test('a room typed in a different case adds the plant to the room the garden alr
     rooms.windowsill,
     rooms.noRoom,
   ]);
+});
+
+// The photo field is shown by the page's script, because the resize happens
+// in the browser.
+test('with no JavaScript there is no Add a photo button and the plant is still added @nojs', async ({
+  plantForm,
+  plant,
+}) => {
+  await plantForm.openNew();
+  await plantForm.field('Nickname').fill('Ada');
+
+  await expect(plantForm.addPhoto()).toBeHidden();
+  await plantForm.submit('Add plant');
+
+  await expect(plant.heading()).toHaveText('Ada');
+});
+
+test('a chosen photo is resized to 2048 pixels on its long edge with its EXIF block gone @js', async ({
+  plantForm,
+}) => {
+  await plantForm.openNew();
+
+  await plantForm.choosePhoto('Add a photo', photos.gpsTagged);
+
+  await expect(plantForm.photoPreview()).toBeVisible();
+  const posted = await heldFile(plantForm.photoInput('photo'));
+  expect(dimensions(posted)).toEqual({ width: 2048, height: 1365 });
+  expect(hasExif(posted)).toBe(false);
+});
+
+test('a photo stored sideways with an orientation tag is upright after the resize @js', async ({ plantForm }) => {
+  await plantForm.openNew();
+
+  await plantForm.choosePhoto('Add a photo', photos.sideways);
+
+  await expect(plantForm.photoPreview()).toBeVisible();
+  expect(dimensions(await heldFile(plantForm.photoInput('photo')))).toEqual({ width: 800, height: 1200 });
+});
+
+test('a chosen photo puts a 192 pixel square in the photo-square input @js', async ({ plantForm }) => {
+  await plantForm.openNew();
+
+  await plantForm.choosePhoto('Add a photo', photos.gpsTagged);
+
+  await expect(plantForm.photoPreview()).toBeVisible();
+  const square = await heldFile(plantForm.photoInput('photo-square'));
+  expect(dimensions(square)).toEqual({ width: 192, height: 192 });
+  expect(hasExif(square)).toBe(false);
+});
+
+test('Remove after choosing a photo leaves the form with no photo to post @js', async ({ plantForm }) => {
+  await plantForm.openNew();
+  await plantForm.choosePhoto('Add a photo', photos.gpsTagged);
+  await expect(plantForm.photoPreview()).toBeVisible();
+
+  await plantForm.removePhoto();
+
+  await expect(plantForm.addPhoto()).toBeVisible();
+  await expect(plantForm.photoPreview()).toBeHidden();
+  expect(await heldCount(plantForm.photoInput('photo'))).toBe(0);
+  expect(await heldCount(plantForm.photoInput('photo-square'))).toBe(0);
+});
+
+test('a plant added with a photo chosen lands on its page @js', async ({ plantForm, plant }) => {
+  await plantForm.openNew();
+  await plantForm.field('Nickname').fill('Ada');
+  await plantForm.choosePhoto('Add a photo', photos.gpsTagged);
+  await expect(plantForm.photoPreview()).toBeVisible();
+
+  await plantForm.submit('Add plant');
+
+  await expect(plant.heading()).toHaveText('Ada');
+});
+
+test('a second photo chosen through Replace is the one the form posts @js', async ({ plantForm }) => {
+  await plantForm.openNew();
+  await plantForm.choosePhoto('Add a photo', photos.gpsTagged);
+  await expect(plantForm.photoPreview()).toBeVisible();
+
+  await plantForm.choosePhoto('Replace', photos.sideways);
+
+  await expect(plantForm.photoPreview()).toBeVisible();
+  expect(dimensions(await heldFile(plantForm.photoInput('photo')))).toEqual({ width: 800, height: 1200 });
+  expect(dimensions(await heldFile(plantForm.photoInput('photo-square')))).toEqual({ width: 192, height: 192 });
+});
+
+test('a file that is not a photo reads "That file could not be read as a photo." @js', async ({ page, plantForm }) => {
+  await plantForm.openNew();
+
+  await plantForm.choosePhoto('Add a photo', {
+    name: 'notes.txt',
+    mimeType: 'text/plain',
+    buffer: Buffer.from('not a photo'),
+  });
+
+  await expect(page.getByText('That file could not be read as a photo.')).toBeVisible();
+  await expect(plantForm.addPhoto()).toBeVisible();
+  expect(await heldCount(plantForm.photoInput('photo'))).toBe(0);
+  expect(await heldCount(plantForm.photoInput('photo-square'))).toBe(0);
+});
+
+test('a form refused for having no name says the photo needs choosing again @js', async ({ page, plantForm }) => {
+  await plantForm.openNew();
+  await plantForm.choosePhoto('Add a photo', photos.gpsTagged);
+  await expect(plantForm.photoPreview()).toBeVisible();
+
+  await plantForm.submit('Add plant');
+
+  await expect(page.getByText('Give it at least one name. Any of the three will do.')).toBeVisible();
+  await expect(page.getByText('The photo needs choosing again.')).toBeVisible();
+  await expect(plantForm.addPhoto()).toBeVisible();
+  await expect(plantForm.photoPreview()).toBeHidden();
 });
