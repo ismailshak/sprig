@@ -41,9 +41,8 @@ type gardenRow struct {
 }
 
 // liveGardens returns the account's memberships that have not ended, each with
-// its garden. An ended membership is left out because switching the session to
-// that garden would sign the account out. Resolving the next request deletes a
-// session whose membership has ended.
+// its garden. An ended membership is left out because the next request would
+// move the session straight off that garden again.
 func liveGardens(ctx context.Context, queries *store.Queries, userID uuid.UUID, now time.Time) ([]store.ListMembershipsWithGardensForUserRow, error) {
 	all, err := queries.ListMembershipsWithGardensForUser(ctx, userID)
 	if err != nil {
@@ -141,7 +140,7 @@ func (h *today) switchGarden(w http.ResponseWriter, r *http.Request) {
 	// The garden is recorded on the account as well, so the next session
 	// starts there.
 	err = h.queries.InTx(r.Context(), func(q *store.Queries) error {
-		if _, err := q.SetSessionGarden(r.Context(), gardenID, principal.Session.TokenHash); err != nil {
+		if _, err := q.SetSessionGarden(r.Context(), &gardenID, principal.Session.TokenHash); err != nil {
 			return err
 		}
 		return q.SetLastGarden(r.Context(), &gardenID, principal.User.ID)

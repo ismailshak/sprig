@@ -175,6 +175,7 @@ test('a removed sitter signing in from a join link is back in the garden as the 
   browser,
   baseURL,
   page,
+  accept,
   account,
   invited,
   passkeys,
@@ -209,12 +210,41 @@ test('a removed sitter signing in from a join link is back in the garden as the 
     await invited.signInToJoin().click();
     await signin.signIn().click();
 
+    // The sign-in lands on the accept page as Jo with no garden. Join is what
+    // puts the account back in the garden.
+    await expect(page).toHaveURL(AcceptScreen.pathOf(invites.sitter.token));
+    await expect(page.getByRole('heading', { name: `Join ${gardens.home.name} as ${people.jo.name}?` })).toBeVisible();
+    await accept.join(gardens.home.name).click();
+
     await expect(page).toHaveURL('/');
     await expect(page.getByRole('heading', { name: gardens.home.name })).toBeVisible();
     await expect(today.switchGarden()).toHaveCount(0);
     await account.open();
     await expect(account.name()).toHaveValue(people.jo.name);
   });
+});
+
+test('an account in no garden opening a join link joins as itself and lands on Today', async ({
+  page,
+  accept,
+  account,
+  invited,
+  noGarden,
+}) => {
+  await signIn(page, people.clare.handle);
+  await expect(noGarden.heading()).toBeVisible();
+
+  await invited.open(invites.sitter.token);
+
+  await expect(page).toHaveURL(AcceptScreen.pathOf(invites.sitter.token));
+  await expect(page.getByRole('heading', { name: `Join ${gardens.home.name} as ${people.clare.name}?` })).toBeVisible();
+
+  await accept.join(gardens.home.name).click();
+
+  await expect(page).toHaveURL('/');
+  await expect(page.getByRole('heading', { name: gardens.home.name })).toBeVisible();
+  await account.open();
+  await expect(account.name()).toHaveValue(people.clare.name);
 });
 
 test('a link made on Invite someone joins a new person from another browser @passkey', async ({

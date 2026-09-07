@@ -3,7 +3,6 @@ package http
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"time"
@@ -47,15 +46,10 @@ func Authenticate(logger *slog.Logger, sessions *auth.Sessions, resolver Resolve
 			}
 
 			principal, err := resolver.Resolve(r.Context(), time.Now(), token)
-			var ended *auth.MembershipEndedError
 			switch {
 			case errors.Is(err, auth.ErrNoSession):
 				http.SetCookie(w, sessions.ClearedCookie())
 				http.Redirect(w, r, signInPath, http.StatusSeeOther)
-				return
-			case errors.As(err, &ended):
-				http.SetCookie(w, sessions.ClearedCookie())
-				writeAccessEnded(w, ended)
 				return
 			case err != nil:
 				logger.ErrorContext(r.Context(), "resolve the session", slog.Any("error", err))
@@ -70,14 +64,55 @@ func Authenticate(logger *slog.Logger, sessions *auth.Sessions, resolver Resolve
 	}
 }
 
-// writeAccessEnded responds to a signed-in user whose membership has ended.
-// The status is 403 rather than 404 because the 404 rule is for an object a
-// request named, and this request named none.
-func writeAccessEnded(w http.ResponseWriter, ended *auth.MembershipEndedError) {
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	w.WriteHeader(http.StatusForbidden)
-	// A failed write means the browser hung up, which nothing here can act on.
-	_, _ = fmt.Fprintf(w, "Your access to %s ended on %s.\n", ended.Garden.Name, ended.EndedAt.In(locationFor(ended.User)).Format("2 January 2006"))
+// hasSession reports whether the request's session cookie resolves to a
+// signed-in account. The account need not be in a garden. A request with no
+// cookie costs no lookup, so a public route may call this.
+func hasSession(r *http.Request, sessions *auth.Sessions, resolver *auth.Resolver, now time.Time) bool {
+	token := sessions.TokenFromRequest(r)
+	if token == "" {
+		return false
+	}
+	_, err := resolver.Resolve(r.Context(), now, token)
+	return err == nil
+}
+
+// noGardenPage is the data for the "You're in no garden" page. Every route
+// that needs a garden renders it for an account in no garden.
+type noGardenPage struct {
+	// Name is the display name of the account signed in.
+	Name string
+	// SetUp is the URL of the page that sets up a garden for the account. It
+	// is empty when sign-up is off.
+	SetUp string
+	// SignOut is the URL the Sign out button posts to.
+	SignOut string
+}
+
+// requireGarden wraps a route that needs a garden. For an account in no
+// garden it renders the "You're in no garden" page in place of the route,
+// with a 200, because the request named no object to refuse. signupEnabled is
+// SPRIG_SIGNUP_ENABLED. It decides whether the page offers to set up a
+// garden.
+func requireGarden(templates *Templates, signupEnabled bool, h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		principal := PrincipalFrom(r)
+		if principal.InGarden() {
+			h.ServeHTTP(w, r)
+			return
+		}
+		// This page is a whole document, and htmx would swap the response
+		// into the element the request targeted. HX-Redirect loads Today
+		// instead, where the same check renders the page.
+		if isHTMX(r) {
+			w.Header().Set("HX-Redirect", todayPath)
+			return
+		}
+		page := noGardenPage{Name: principal.User.DisplayName, SignOut: signOutPath}
+		if signupEnabled {
+			page.SetUp = setupSignedInPath
+		}
+		templates.render(w, r, view{page: "no-garden"}, page)
+	})
 }
 
 // locationFor returns the timezone a user's dates are shown in. The account

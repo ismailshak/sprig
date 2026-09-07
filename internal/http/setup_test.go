@@ -44,11 +44,13 @@ func setupOn(t *testing.T, enabled bool) *setupFixture {
 	if err != nil {
 		t.Fatalf("building the passkeys: %v", err)
 	}
+	sessions := auth.NewSessions(queries, testTTL, cookie)
 	return &setupFixture{
 		handler: &setup{
 			logger:    testLogger,
 			passkeys:  passkeys,
-			sessions:  auth.NewSessions(queries, testTTL, cookie),
+			sessions:  sessions,
+			resolver:  auth.NewResolver(sessions, queries),
 			queries:   queries,
 			templates: testTemplates(),
 			now:       func() time.Time { return thursday },
@@ -569,7 +571,6 @@ func TestSetup_APersonWhoSignsUpAndIsThenInvitedElsewhereSignsInToTheirOwnGarden
 		logger:    testLogger,
 		passkeys:  f.handler.passkeys,
 		sessions:  f.handler.sessions,
-		resolver:  auth.NewResolver(f.handler.sessions, f.queries),
 		queries:   f.queries,
 		templates: testTemplates(),
 		now:       f.handler.now,

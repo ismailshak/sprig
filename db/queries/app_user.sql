@@ -44,6 +44,10 @@ SELECT EXISTS (SELECT 1 FROM app_user);
 -- name: LockUsers :exec
 LOCK TABLE app_user IN SHARE ROW EXCLUSIVE MODE;
 
+-- name: GetUser :one
+SELECT * FROM app_user
+WHERE id = @id;
+
 -- Switching gardens records the garden on the account, so the next session
 -- starts there.
 -- name: SetLastGarden :exec

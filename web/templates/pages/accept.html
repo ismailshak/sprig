@@ -9,7 +9,7 @@
 {{if .Unusable}}
 <h1 class="bare__title">This link cannot be used</h1>
 <p class="bare__line">An invite link works once and stops working after 7 days. Ask whoever sent it for a new one.</p>
-<a class="wide-action" href="/">Back to {{.Current}}</a>
+<a class="wide-action" href="/">{{if .Current}}Back to {{.Current}}{{else}}Back{{end}}</a>
 {{else if .AlreadyIn}}
 <h1 class="bare__title">You&rsquo;re already in {{.Garden}}</h1>
 <p class="bare__line">This account is already in {{.Garden}}, so there is nothing to join. The link has not been used.</p>

@@ -4,6 +4,8 @@
 
 // Jo and Clare are sitters. Jo's access ends in eight days and Clare's ended
 // twelve days ago, the two states a membership with no end date has not got.
+// Clare is in no other garden, so signing in as Clare lands on the "You're in
+// no garden" page.
 export const people = {
   ellie: { name: 'Ellie', handle: 'ellie' },
   sam: { name: 'Sam', handle: 'sam' },

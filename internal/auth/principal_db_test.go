@@ -45,7 +45,7 @@ func resolverOnTx(t *testing.T, endsAt *time.Time) (*Resolver, pgx.Tx) {
 
 func signIn(t *testing.T, r *Resolver, userID, gardenID uuid.UUID) string {
 	t.Helper()
-	token, _, err := r.sessions.Create(t.Context(), signedInAt, userID, gardenID, nil, "")
+	token, _, err := r.sessions.Create(t.Context(), signedInAt, userID, &gardenID, nil, "")
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
@@ -134,7 +134,16 @@ func TestResolver_GardenComesFromTheSessionRow(t *testing.T) {
 	}
 }
 
-func TestResolver_AnEndedMembershipIsRefusedAndTheSessionDeleted(t *testing.T) {
+func sessionGarden(t *testing.T, tx pgx.Tx, token string) *uuid.UUID {
+	t.Helper()
+	var id *uuid.UUID
+	if err := tx.QueryRow(t.Context(), "SELECT garden_id FROM session WHERE token_hash = $1", HashToken(token)).Scan(&id); err != nil {
+		t.Fatalf("reading the session's garden: %v", err)
+	}
+	return id
+}
+
+func TestResolver_AnEndedMembershipMovesTheSessionToTheAccountsOtherLiveGarden(t *testing.T) {
 	ctx := t.Context()
 	endsAt := signedInAt.AddDate(0, 0, 7)
 	r, tx := resolverOnTx(t, &endsAt)
@@ -144,24 +153,118 @@ func TestResolver_AnEndedMembershipIsRefusedAndTheSessionDeleted(t *testing.T) {
 		t.Fatalf("Resolve a second before the end: %v", err)
 	}
 
-	_, err := r.Resolve(ctx, endsAt, token)
-	var ended *MembershipEndedError
-	if !errors.As(err, &ended) {
-		t.Fatalf("Resolve at the end = %v, want a *MembershipEndedError", err)
-	}
-	if ended.User.Handle != "noor" || ended.Garden.Name != "Rosewood" || !ended.EndedAt.Equal(endsAt) {
-		t.Errorf("the error names %s on %s ending %s, want noor on Rosewood ending %s", ended.User.Handle, ended.Garden.Name, ended.EndedAt, endsAt)
+	// Noor's Rosewood membership has ended and the Fairview one is live.
+	principal, err := r.Resolve(ctx, endsAt, token)
+	if err != nil {
+		t.Fatalf("Resolve at the end: %v", err)
 	}
 
-	var left int
-	if err := tx.QueryRow(ctx, "SELECT count(*) FROM session WHERE token_hash = $1", HashToken(token)).Scan(&left); err != nil {
-		t.Fatalf("counting the row: %v", err)
+	if !principal.InGarden() || principal.Garden.ID != otherGardenID || principal.Membership.Role != "owner" || !principal.Can(PlantCreate) {
+		t.Errorf("resolved to %s as %s, want Fairview as owner", principal.Garden.Name, principal.Membership.Role)
 	}
-	if left != 0 {
-		t.Error("the session behind the ended membership is still there")
+	if got := sessionGarden(t, tx, token); got == nil || *got != otherGardenID {
+		t.Errorf("the session row is on %v, want Fairview", got)
 	}
-	if _, err := r.Resolve(ctx, endsAt.Add(time.Minute), token); !errors.Is(err, ErrNoSession) {
-		t.Errorf("Resolve after the sign-out = %v, want ErrNoSession", err)
+}
+
+func endEveryMembership(t *testing.T, tx pgx.Tx, userID uuid.UUID, endsAt time.Time) {
+	t.Helper()
+	if _, err := tx.Exec(t.Context(), "UPDATE membership SET expires_at = $1 WHERE user_id = $2", endsAt, userID); err != nil {
+		t.Fatalf("ending the memberships: %v", err)
+	}
+}
+
+func TestResolver_AnAccountWithNoLiveMembershipIsResolvedOnNoGarden(t *testing.T) {
+	ctx := t.Context()
+	endsAt := signedInAt.AddDate(0, 0, 7)
+	r, tx := resolverOnTx(t, &endsAt)
+	token := signIn(t, r, otherUserID, testGardenID)
+	endEveryMembership(t, tx, otherUserID, endsAt)
+
+	principal, err := r.Resolve(ctx, endsAt.Add(time.Minute), token)
+	if err != nil {
+		t.Fatalf("Resolve with every membership ended: %v", err)
+	}
+
+	if principal.InGarden() || principal.Garden.ID != (uuid.UUID{}) || principal.Membership.Role != "" || len(principal.Capabilities) != 0 {
+		t.Errorf("resolved to %+v, want an account in no garden with no capabilities", principal)
+	}
+	if principal.User.Handle != "noor" || principal.Session.UserID != otherUserID {
+		t.Errorf("resolved to %s, want noor with her session", principal.User.Handle)
+	}
+	if got := sessionGarden(t, tx, token); got != nil {
+		t.Errorf("the session row is on %v, want no garden", got)
+	}
+}
+
+func TestResolver_ARenewedMembershipPutsTheSessionBackOnTheGardenWithNoSignIn(t *testing.T) {
+	ctx := t.Context()
+	endsAt := signedInAt.AddDate(0, 0, 7)
+	r, tx := resolverOnTx(t, &endsAt)
+	token := signIn(t, r, otherUserID, testGardenID)
+	endEveryMembership(t, tx, otherUserID, endsAt)
+	if _, err := r.Resolve(ctx, endsAt.Add(time.Minute), token); err != nil {
+		t.Fatalf("Resolve with every membership ended: %v", err)
+	}
+
+	if _, err := tx.Exec(ctx, "UPDATE membership SET expires_at = NULL WHERE garden_id = $1 AND user_id = $2", otherGardenID, otherUserID); err != nil {
+		t.Fatalf("renewing Fairview: %v", err)
+	}
+	principal, err := r.Resolve(ctx, endsAt.Add(2*time.Minute), token)
+	if err != nil {
+		t.Fatalf("Resolve after the renewal: %v", err)
+	}
+
+	if !principal.InGarden() || principal.Garden.ID != otherGardenID {
+		t.Errorf("resolved to %q, want Fairview", principal.Garden.Name)
+	}
+	if got := sessionGarden(t, tx, token); got == nil || *got != otherGardenID {
+		t.Errorf("the session row is on %v, want Fairview", got)
+	}
+}
+
+func TestResolver_ASessionStartedOnNoGardenIsPutOnTheAccountsOldestLiveGarden(t *testing.T) {
+	ctx := t.Context()
+	r, tx := resolverOnTx(t, nil)
+	token, _, err := r.sessions.Create(ctx, signedInAt, otherUserID, nil, nil, "")
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	principal, err := r.Resolve(ctx, signedInAt.Add(time.Minute), token)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	// Fairview is Noor's oldest membership.
+	if !principal.InGarden() || principal.Garden.ID != otherGardenID || principal.Membership.Role != "owner" {
+		t.Errorf("resolved to %s as %s, want Fairview as owner", principal.Garden.Name, principal.Membership.Role)
+	}
+	if got := sessionGarden(t, tx, token); got == nil || *got != otherGardenID {
+		t.Errorf("the session row is on %v, want Fairview", got)
+	}
+}
+
+func TestResolver_AMembershipDeletedUnderASessionTakesTheSessionOffTheGarden(t *testing.T) {
+	ctx := t.Context()
+	r, tx := resolverOnTx(t, nil)
+	token := signIn(t, r, testUserID, testGardenID)
+	if _, err := r.Resolve(ctx, signedInAt.Add(time.Minute), token); err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+
+	if _, err := tx.Exec(ctx, "DELETE FROM membership WHERE garden_id = $1 AND user_id = $2", testGardenID, testUserID); err != nil {
+		t.Fatalf("removing Emma: %v", err)
+	}
+
+	if got := sessionGarden(t, tx, token); got != nil {
+		t.Errorf("the session row is on %v, want no garden", got)
+	}
+	principal, err := r.Resolve(ctx, signedInAt.Add(2*time.Minute), token)
+	if err != nil {
+		t.Fatalf("Resolve after the removal: %v", err)
+	}
+	if principal.InGarden() || principal.User.Handle != "emma" {
+		t.Errorf("resolved to %s on %q, want emma in no garden", principal.User.Handle, principal.Garden.Name)
 	}
 }
 
@@ -178,9 +281,9 @@ func TestResolver_StartingMembershipIsTheOldestLiveOne(t *testing.T) {
 	r, tx := resolverOnTx(t, &endsAt)
 
 	// Fairview is the older membership, so it is chosen while both are live.
-	got, err := r.StartingMembership(ctx, signedInAt, otherUserID)
+	got, err := r.startingMembership(ctx, signedInAt, otherUserID)
 	if err != nil {
-		t.Fatalf("StartingMembership: %v", err)
+		t.Fatalf("startingMembership: %v", err)
 	}
 	if got.GardenID != otherGardenID {
 		t.Errorf("picked garden %v, want Fairview %v", got.GardenID, otherGardenID)
@@ -189,16 +292,16 @@ func TestResolver_StartingMembershipIsTheOldestLiveOne(t *testing.T) {
 	if _, err := tx.Exec(ctx, "UPDATE membership SET expires_at = $1 WHERE garden_id = $2 AND user_id = $3", signedInAt.AddDate(0, 0, -1), otherGardenID, otherUserID); err != nil {
 		t.Fatalf("ending the Fairview membership: %v", err)
 	}
-	got, err = r.StartingMembership(ctx, signedInAt, otherUserID)
+	got, err = r.startingMembership(ctx, signedInAt, otherUserID)
 	if err != nil {
-		t.Fatalf("StartingMembership with Fairview ended: %v", err)
+		t.Fatalf("startingMembership with Fairview ended: %v", err)
 	}
 	if got.GardenID != testGardenID {
 		t.Errorf("picked garden %v, want Rosewood %v", got.GardenID, testGardenID)
 	}
 
-	if _, err := r.StartingMembership(ctx, endsAt, otherUserID); !errors.Is(err, ErrNoLiveMembership) {
-		t.Errorf("StartingMembership with both ended = %v, want ErrNoLiveMembership", err)
+	if _, err := r.startingMembership(ctx, endsAt, otherUserID); !errors.Is(err, ErrNoLiveMembership) {
+		t.Errorf("startingMembership with both ended = %v, want ErrNoLiveMembership", err)
 	}
 }
 
@@ -233,9 +336,9 @@ func TestResolver_StartingMembershipIsTheGardenLastSwitchedToWhileItIsLive(t *te
 	}
 
 	// Rosewood is the newer membership and the one last switched to.
-	got, err := r.StartingMembership(ctx, signedInAt, otherUserID)
+	got, err := r.startingMembership(ctx, signedInAt, otherUserID)
 	if err != nil {
-		t.Fatalf("StartingMembership: %v", err)
+		t.Fatalf("startingMembership: %v", err)
 	}
 	if got.GardenID != testGardenID {
 		t.Errorf("picked garden %v, want Rosewood %v", got.GardenID, testGardenID)
@@ -244,9 +347,9 @@ func TestResolver_StartingMembershipIsTheGardenLastSwitchedToWhileItIsLive(t *te
 	if _, err := tx.Exec(ctx, "UPDATE membership SET expires_at = $1 WHERE garden_id = $2 AND user_id = $3", signedInAt.AddDate(0, 0, -1), testGardenID, otherUserID); err != nil {
 		t.Fatalf("ending the Rosewood membership: %v", err)
 	}
-	got, err = r.StartingMembership(ctx, signedInAt, otherUserID)
+	got, err = r.startingMembership(ctx, signedInAt, otherUserID)
 	if err != nil {
-		t.Fatalf("StartingMembership with Rosewood ended: %v", err)
+		t.Fatalf("startingMembership with Rosewood ended: %v", err)
 	}
 	if got.GardenID != otherGardenID {
 		t.Errorf("picked garden %v, want Fairview %v", got.GardenID, otherGardenID)

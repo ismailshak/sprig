@@ -33,6 +33,7 @@
 <button class="wide-action" type="submit" disabled>Create the garden</button>
 <p class="note" id="passkey-noscript">Setting up needs JavaScript and a browser that supports passkeys.</p>
 </form>
+{{with .SignIn}}<p class="note">Already have a sprig account? <a href="{{.}}">Sign in to set up a garden as yourself</a>.</p>{{end}}
 </div>
 {{end}}
 

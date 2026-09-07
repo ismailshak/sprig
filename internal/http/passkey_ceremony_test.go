@@ -41,7 +41,6 @@ func ceremonyWithCookies(t *testing.T, f *moreFixture, cookie auth.CookieSetting
 		logger:    testLogger,
 		passkeys:  passkeys,
 		sessions:  auth.NewSessions(queries, testTTL, cookie),
-		resolver:  auth.NewResolver(auth.NewSessions(queries, testTTL, cookie), queries),
 		queries:   queries,
 		templates: testTemplates(),
 		now:       f.handler.now,
@@ -493,7 +492,7 @@ func TestSignIn_SigningInAgainEndsTheSessionTheBrowserAlreadyHad(t *testing.T) {
 	device := aDevice()
 	f.enrolDevice(t, h, device)
 	now := f.handler.now()
-	old, _, err := h.sessions.Create(t.Context(), now, moreUserID, moreGardenID, nil, "")
+	old, _, err := h.sessions.Create(t.Context(), now, moreUserID, &moreGardenID, nil, "")
 	if err != nil {
 		t.Fatalf("creating the first session: %v", err)
 	}

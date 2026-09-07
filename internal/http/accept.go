@@ -5,7 +5,6 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
-	"strings"
 	"time"
 	"uuid"
 
@@ -28,21 +27,6 @@ const acceptSuffix = "/accept"
 // account signed in. The form on it posts to the same URL.
 func acceptPath(token string) string { return invitedPath(token) + acceptSuffix }
 
-// acceptTokenOf returns the token in an accept page's path, and false for any
-// other path. Sign in reads the path in its next field with it, so that a
-// sign-in by an account with no garden can still take the invite.
-func acceptTokenOf(path string) (string, bool) {
-	token, found := strings.CutPrefix(path, "/invite/")
-	if !found {
-		return "", false
-	}
-	token, found = strings.CutSuffix(token, acceptSuffix)
-	if !found || token == "" || strings.Contains(token, "/") {
-		return "", false
-	}
-	return token, true
-}
-
 // signInToAcceptPath is the URL of the sign-in page with its next parameter
 // set to the accept page for token, so signing in there redirects to it.
 func signInToAcceptPath(token string) string {
@@ -56,8 +40,9 @@ type acceptPage struct {
 	// Unusable is true when the link cannot be redeemed, whatever the reason.
 	// The page is then a heading, one sentence and a link back to Today.
 	Unusable bool
-	// Current is the name of the garden the session is on. The link back to
-	// Today names it.
+	// Current is the name of the garden the session is on, and empty when the
+	// account is in no garden. The link back to Today reads "Back to" that
+	// name when it is set, and "Back" when it is not.
 	Current string
 	// AlreadyIn is true when the account has a live membership of the invite's
 	// garden. The page then offers Open in place of Join. The invite is not
@@ -143,7 +128,7 @@ func (h *invited) accept(w http.ResponseWriter, r *http.Request) {
 		// The session moves onto the new garden, the same write the garden
 		// sheet makes. The garden is recorded on the account as well, so the
 		// next session starts there.
-		if _, err := q.SetSessionGarden(ctx, invite.GardenID, principal.Session.TokenHash); err != nil {
+		if _, err := q.SetSessionGarden(ctx, &invite.GardenID, principal.Session.TokenHash); err != nil {
 			return err
 		}
 		return q.SetLastGarden(ctx, &invite.GardenID, principal.User.ID)
@@ -195,40 +180,6 @@ func writeAcceptance(ctx context.Context, q *store.Queries, now time.Time, invit
 		ExpiresAt: invite.MembershipExpiresAt,
 	})
 	return err
-}
-
-// acceptAtSignIn takes the join invite for token for user, whose passkey has
-// just signed in and who has no live membership to start a session on. It
-// returns the id of the garden joined, for the session to start on, and false
-// when the link cannot be taken: it is unusable or is a re-enrolment link.
-//
-// The Join page is not shown first, because a session has to be on a
-// membership and this account has none. The invite page named the garden and
-// the role before the person chose to sign in, so the sign-in is taken as the
-// acceptance.
-func acceptAtSignIn(ctx context.Context, queries *store.Queries, now time.Time, token string, user store.AppUser) (uuid.UUID, bool, error) {
-	open, usable, err := openInviteToken(ctx, queries, now, token)
-	if err != nil || !usable || open.reenrol() {
-		return uuid.UUID{}, false, err
-	}
-	invite := open.row.Invite
-	existing, live, err := existingMembership(ctx, queries, now, invite.GardenID, user.ID)
-	if err != nil || live {
-		return uuid.UUID{}, false, err
-	}
-	err = queries.InTx(ctx, func(q *store.Queries) error {
-		if err := writeAcceptance(ctx, q, now, invite, existing, user.ID); err != nil {
-			return err
-		}
-		return q.SetLastGarden(ctx, &invite.GardenID, user.ID)
-	})
-	if errors.Is(err, errInviteUsed) {
-		return uuid.UUID{}, false, nil
-	}
-	if err != nil {
-		return uuid.UUID{}, false, err
-	}
-	return invite.GardenID, true, nil
 }
 
 // existingMembership returns the membership userID already holds on gardenID,

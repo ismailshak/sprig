@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"strings"
 	"time"
-	"uuid"
 
 	"github.com/ismailshak/sprig/internal/auth"
 	"github.com/ismailshak/sprig/internal/store"
@@ -34,7 +33,6 @@ type passkeyCeremony struct {
 	logger    *slog.Logger
 	passkeys  *auth.Passkeys
 	sessions  *auth.Sessions
-	resolver  *auth.Resolver
 	queries   *store.Queries
 	templates *Templates
 	// now supplies the current time, so a test can fix the day.
@@ -149,9 +147,14 @@ func (h *passkeyCeremony) signInChallenge(w http.ResponseWriter, r *http.Request
 }
 
 // signIn handles POST /signin and starts a session for the account the passkey
-// proves. The session opens on the garden the account last switched to, or on
-// its oldest live membership. It redirects to the path in the form's next
-// field. A field that is empty or names another site redirects to Today.
+// proves. It redirects to the path in the form's next field. A field that is
+// empty or names another site redirects to Today.
+//
+// The session starts with no garden. The next request sets it to the garden
+// the account last switched to, or to the account's oldest live membership. An
+// account with no live membership is left without a garden and gets the
+// "You're in no garden" page, so somebody whose access ended can still sign in
+// to set up a garden of their own or accept an invite.
 func (h *passkeyCeremony) signIn(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "the form did not parse", http.StatusBadRequest)
@@ -166,62 +169,21 @@ func (h *passkeyCeremony) signIn(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	now := h.now()
-	next := returnPath(r.PostForm.Get(nextField))
-	// gardenID is the garden the session starts on.
-	var gardenID uuid.UUID
-	membership, err := h.resolver.StartingMembership(r.Context(), now, user.ID)
-	switch {
-	case err == nil:
-		gardenID = membership.GardenID
-	case errors.Is(err, auth.ErrNoLiveMembership):
-		// The passkey is valid and the account is in no garden. A sitter whose
-		// membership ran out or was removed is the case this covers. When the
-		// sign-in came from an invite link, the invite is taken here and the
-		// session starts on its garden. Otherwise there is nothing to open a
-		// session on. The status is 403 rather than 404 because the 404 rule
-		// is for an object a request named, and this request named none.
-		joined, accepted, err := h.acceptInvite(r, next, user)
-		if err != nil {
-			serverError(h.logger, w, r, "accept the invite", err)
-			return
-		}
-		if !accepted {
-			h.renderSignIn(w, r, http.StatusForbidden, "That passkey signed in, and the account behind it is in no garden. Ask whoever runs the garden to invite you again.")
-			return
-		}
-		gardenID = joined
-		next = todayPath
-	default:
-		serverError(h.logger, w, r, "find the garden", err)
-		return
-	}
-
 	// A browser that was already signed in gets a new session in place of the
 	// one it arrived with.
 	if err := h.sessions.DeleteFromRequest(r.Context(), r); err != nil {
 		serverError(h.logger, w, r, "end the previous session", err)
 		return
 	}
-	token, _, err := h.sessions.Create(r.Context(), now, user.ID, gardenID, &passkey.ID, r.UserAgent())
+	token, _, err := h.sessions.Create(r.Context(), h.now(), user.ID, nil, &passkey.ID, r.UserAgent())
 	if err != nil {
 		serverError(h.logger, w, r, "start the session", err)
 		return
 	}
 	http.SetCookie(w, h.sessions.Cookie(token))
+	next := returnPath(r.PostForm.Get(nextField))
 	//nolint:gosec // returnPath passes on only a path on this site
 	http.Redirect(w, r, next, http.StatusSeeOther)
-}
-
-// acceptInvite takes the invite an accept page's path names for user, and
-// returns the garden it joined. It returns false when next is not an accept
-// page's path or the invite cannot be taken.
-func (h *passkeyCeremony) acceptInvite(r *http.Request, next string, user store.AppUser) (uuid.UUID, bool, error) {
-	token, ok := acceptTokenOf(next)
-	if !ok {
-		return uuid.UUID{}, false, nil
-	}
-	return acceptAtSignIn(r.Context(), h.queries, h.now(), token, user)
 }
 
 // refuseSignIn renders the sign-in page again as a 401, with the reason the

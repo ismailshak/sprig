@@ -116,7 +116,7 @@ func TestPasskeys_RemovingAPasskeyEndsTheSessionsItSignedInAndNoOther(t *testing
 		t.Fatalf("signing in: status = %d, want %d:\n%s", rec.Code, http.StatusSeeOther, rec.Body.String())
 	}
 	byPasskey := cookieNamed(t, rec, "__Host-sprig_session").Value
-	byDevSignIn, _, err := h.sessions.Create(t.Context(), now, moreUserID, moreGardenID, nil, "")
+	byDevSignIn, _, err := h.sessions.Create(t.Context(), now, moreUserID, &moreGardenID, nil, "")
 	if err != nil {
 		t.Fatalf("starting a session with no passkey: %v", err)
 	}

@@ -72,7 +72,7 @@ func TestSessions_ATokenResolvesFromTheTableAlone(t *testing.T) {
 	ctx := t.Context()
 	sessions, tx := sessionsOnTx(t)
 
-	token, created, err := sessions.Create(ctx, signedInAt, testUserID, testGardenID, nil, "Safari on iPhone")
+	token, created, err := sessions.Create(ctx, signedInAt, testUserID, &testGardenID, nil, "Safari on iPhone")
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
@@ -82,7 +82,7 @@ func TestSessions_ATokenResolvesFromTheTableAlone(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Lookup through a second Sessions: %v", err)
 	}
-	if got.ID != created.ID || got.UserID != testUserID || got.GardenID != testGardenID {
+	if got.ID != created.ID || got.UserID != testUserID || got.GardenID == nil || *got.GardenID != testGardenID {
 		t.Errorf("Lookup resolved session %v for user %v on garden %v, want %v for %v on %v",
 			got.ID, got.UserID, got.GardenID, created.ID, testUserID, testGardenID)
 	}
@@ -107,7 +107,7 @@ func TestSessions_LookupMovesTheDeadlineForward(t *testing.T) {
 	ctx := t.Context()
 	sessions, _ := sessionsOnTx(t)
 
-	token, _, err := sessions.Create(ctx, signedInAt, testUserID, testGardenID, nil, "")
+	token, _, err := sessions.Create(ctx, signedInAt, testUserID, &testGardenID, nil, "")
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
@@ -135,7 +135,7 @@ func TestSessions_AClockEarlierThanTheRowDoesNotMoveTheDeadlineBack(t *testing.T
 	ctx := t.Context()
 	sessions, _ := sessionsOnTx(t)
 
-	token, _, err := sessions.Create(ctx, signedInAt, testUserID, testGardenID, nil, "")
+	token, _, err := sessions.Create(ctx, signedInAt, testUserID, &testGardenID, nil, "")
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
@@ -152,7 +152,7 @@ func TestSessions_AnExpiredSessionIsRefusedAndItsRowDeleted(t *testing.T) {
 	ctx := t.Context()
 	sessions, tx := sessionsOnTx(t)
 
-	token, _, err := sessions.Create(ctx, signedInAt, testUserID, testGardenID, nil, "")
+	token, _, err := sessions.Create(ctx, signedInAt, testUserID, &testGardenID, nil, "")
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
@@ -179,7 +179,7 @@ func TestSessions_DeleteEndsTheSessionServerSide(t *testing.T) {
 	ctx := t.Context()
 	sessions, _ := sessionsOnTx(t)
 
-	token, _, err := sessions.Create(ctx, signedInAt, testUserID, testGardenID, nil, "")
+	token, _, err := sessions.Create(ctx, signedInAt, testUserID, &testGardenID, nil, "")
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
@@ -200,11 +200,11 @@ func TestSessions_DeleteEndsOneSessionAndLeavesTheOthers(t *testing.T) {
 	ctx := t.Context()
 	sessions, _ := sessionsOnTx(t)
 
-	phone, _, err := sessions.Create(ctx, signedInAt, testUserID, testGardenID, nil, "Safari on iPhone")
+	phone, _, err := sessions.Create(ctx, signedInAt, testUserID, &testGardenID, nil, "Safari on iPhone")
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
-	laptop, _, err := sessions.Create(ctx, signedInAt, testUserID, testGardenID, nil, "Firefox on macOS")
+	laptop, _, err := sessions.Create(ctx, signedInAt, testUserID, &testGardenID, nil, "Firefox on macOS")
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}

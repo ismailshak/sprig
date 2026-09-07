@@ -340,7 +340,7 @@ func TestPeople_TheRemoveQuestionNamesThePersonAndWhatTheyKeep(t *testing.T) {
 	}
 }
 
-func TestPeople_RemovingAMemberEndsTheirSessionsOnThatGardenOnly(t *testing.T) {
+func TestPeople_RemovingAMemberTakesTheirSessionsOffThatGardenOnly(t *testing.T) {
 	f := peopleGarden(t)
 	f.exec(t, `INSERT INTO session (token_hash, user_id, garden_id) VALUES
 		('rosewood', $1, $2), ('fairview', $1, $3)`, otherUserID, moreGardenID, otherGardenID)
@@ -350,21 +350,22 @@ func TestPeople_RemovingAMemberEndsTheirSessionsOnThatGardenOnly(t *testing.T) {
 		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusSeeOther, rec.Body.String())
 	}
 
-	var live []string
-	rows, err := f.tx.Query(t.Context(), "SELECT token_hash FROM session WHERE user_id = $1", otherUserID)
+	gardens := map[string]*uuid.UUID{}
+	rows, err := f.tx.Query(t.Context(), "SELECT token_hash, garden_id FROM session WHERE user_id = $1", otherUserID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer rows.Close()
 	for rows.Next() {
 		var hash string
-		if err := rows.Scan(&hash); err != nil {
+		var garden *uuid.UUID
+		if err := rows.Scan(&hash, &garden); err != nil {
 			t.Fatal(err)
 		}
-		live = append(live, hash)
+		gardens[hash] = garden
 	}
-	if !slices.Equal(live, []string{"fairview"}) {
-		t.Errorf("Sam's sessions are %v, want only the one on the garden they are still in", live)
+	if len(gardens) != 2 || gardens["rosewood"] != nil || gardens["fairview"] == nil || *gardens["fairview"] != otherGardenID {
+		t.Errorf("Sam's sessions are %v, want both still there, with the Rosewood one on no garden and the Fairview one where it was", gardens)
 	}
 }
 

@@ -169,31 +169,96 @@ func TestAuthenticate_AValidSessionReachesTheHandlerAndExtendsTheCookie(t *testi
 	}
 }
 
-func TestAuthenticate_AnEndedMembershipGetsA403AndIsSignedOut(t *testing.T) {
-	sitter := sitterPrincipal()
-	ended := &auth.MembershipEndedError{
-		User:   sitter.User,
-		Garden: sitter.Garden,
-		// 13:00 UTC on the 14th is already the 15th in Auckland.
-		EndedAt: time.Date(2026, time.September, 14, 13, 0, 0, 0, time.UTC),
-	}
-	handler, _ := protected(t, failEveryToken(ended))
+// noGardenPrincipal is the principal Resolve returns for an account with no
+// live membership. Only Session and User are set.
+func noGardenPrincipal() auth.Principal {
+	p := sitterPrincipal()
+	return auth.Principal{Session: store.Session{UserID: p.User.ID}, User: p.User}
+}
+
+// gated returns a handler under requireGarden and a flag the wrapped route
+// sets when it runs. Every request is made with principal on its context.
+func gated(t *testing.T, principal auth.Principal, signupEnabled bool) (http.Handler, *bool) {
+	t.Helper()
+	ran := false
+	inner := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		ran = true
+		w.WriteHeader(http.StatusNoContent)
+	})
+	h := requireGarden(testTemplates(), signupEnabled, inner)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), principalKey, principal)))
+	}), &ran
+}
+
+func TestRequireGarden_ASessionInAGardenReachesTheRoute(t *testing.T) {
+	handler, ran := gated(t, sitterPrincipal(), false)
 
 	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, signedIn(httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/plants", nil)))
-	if rec.Code != http.StatusForbidden {
-		t.Errorf("status = %d, want %d", rec.Code, http.StatusForbidden)
+	handler.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/plants", nil))
+
+	if !*ran || rec.Code != http.StatusNoContent {
+		t.Errorf("the route ran = %v with status %d, want it to run", *ran, rec.Code)
 	}
-	if rec.Header().Get("Location") != "" {
-		t.Errorf("redirected to %q, want the person told rather than sent to a sign-in they could complete", rec.Header().Get("Location"))
+}
+
+// onNoGardenPage reports whether body is the "You're in no garden" page.
+func onNoGardenPage(body string) bool {
+	return strings.Contains(body, "You&rsquo;re in no garden")
+}
+
+func TestRequireGarden_ASessionOnNoGardenIsToldSoAndIsOfferedSetUpOnlyWhenSignUpIsOn(t *testing.T) {
+	for _, signupEnabled := range []bool{true, false} {
+		t.Run(map[bool]string{true: "sign-up on", false: "sign-up off"}[signupEnabled], func(t *testing.T) {
+			handler, ran := gated(t, noGardenPrincipal(), signupEnabled)
+
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/plants", nil))
+
+			if *ran {
+				t.Error("the route ran for a session on no garden")
+			}
+			if rec.Code != http.StatusOK {
+				t.Errorf("status = %d, want %d", rec.Code, http.StatusOK)
+			}
+			page := rec.Body.String()
+			if !onNoGardenPage(page) {
+				t.Errorf("the page does not say the account is in no garden:\n%s", page)
+			}
+			for _, want := range []string{"You are signed in as Ellie", `<form method="post" action="` + signOutPath + `">`} {
+				if !strings.Contains(page, want) {
+					t.Errorf("the page lacks %s:\n%s", want, page)
+				}
+			}
+			buttonNamed(t, page, "Sign out")
+			for _, tab := range []string{plantsPath, morePath} {
+				if strings.Contains(page, `href="`+tab+`"`) {
+					t.Errorf("the page links to %s, and there is no garden to open", tab)
+				}
+			}
+			if linkTo(page, setupSignedInPath, "Set up a garden of your own") != signupEnabled {
+				t.Errorf("the page offers to set up a garden = %v, want %v", !signupEnabled, signupEnabled)
+			}
+		})
 	}
-	body := rec.Body.String()
-	if !strings.Contains(body, "Rosewood") || !strings.Contains(body, "15 September 2026") {
-		t.Errorf("body = %q, want it to name Rosewood and the date in the sitter's own timezone", body)
+}
+
+func TestRequireGarden_AnHtmxRequestOnNoGardenLoadsTodayInsteadOfSwapping(t *testing.T) {
+	handler, ran := gated(t, noGardenPrincipal(), true)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, logPath(rosewoodPlantID), nil)
+	req.Header.Set("HX-Request", "true")
+	handler.ServeHTTP(rec, req)
+
+	if *ran {
+		t.Error("the route ran for a session on no garden")
 	}
-	cookie := cookieNamed(t, rec, "__Host-sprig_session")
-	if cookie == nil || cookie.MaxAge >= 0 {
-		t.Errorf("Set-Cookie = %v, want the session cookie cleared", cookie)
+	if got := rec.Header().Get("HX-Redirect"); got != todayPath {
+		t.Errorf("HX-Redirect = %q, want %s", got, todayPath)
+	}
+	if rec.Body.Len() != 0 {
+		t.Errorf("the response has a body, and htmx would swap it into the element the request targeted:\n%s", rec.Body.String())
 	}
 }
 

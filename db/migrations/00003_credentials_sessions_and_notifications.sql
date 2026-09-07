@@ -35,9 +35,11 @@ CREATE INDEX passkey_credential_user_id_idx ON passkey_credential (user_id);
 CREATE TABLE session (
     id                    uuid PRIMARY KEY DEFAULT uuidv7(),
     token_hash            text COLLATE "C" NOT NULL UNIQUE,
-    user_id               uuid NOT NULL,
+    user_id               uuid NOT NULL REFERENCES app_user (id) ON DELETE CASCADE,
     -- The garden this session is on. This is why URLs need no garden segment.
-    garden_id             uuid NOT NULL,
+    -- NULL when the account has no live membership, and when a session has
+    -- just started and no request has picked a garden for it yet.
+    garden_id             uuid,
     -- The passkey this session was signed in with. Removing the passkey
     -- deletes the session, so the device it was on is signed out then rather
     -- than when the session expires. NULL for a session the development
@@ -47,9 +49,11 @@ CREATE TABLE session (
     created_at            timestamptz NOT NULL DEFAULT now(),
     last_seen_at          timestamptz NOT NULL DEFAULT now(),
 
-    -- Deleting a membership deletes its sessions, so a removed member is signed
-    -- out immediately rather than on the next page they load.
-    FOREIGN KEY (garden_id, user_id) REFERENCES membership (garden_id, user_id) ON DELETE CASCADE,
+    -- Deleting a membership sets garden_id to NULL on its sessions rather
+    -- than deleting them, so a removed member stays signed in and can accept
+    -- an invite or set up a garden of their own. Without an action here the
+    -- delete would be refused while a session referenced the row.
+    FOREIGN KEY (garden_id, user_id) REFERENCES membership (garden_id, user_id) ON DELETE SET NULL (garden_id),
 
     -- Both columns, so a session cannot name a passkey that belongs to another
     -- account. MATCH SIMPLE, the default, lets a row with no passkey insert

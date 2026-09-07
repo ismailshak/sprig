@@ -9,7 +9,9 @@ import (
 
 	"github.com/go-webauthn/webauthn/protocol"
 
+	"github.com/ismailshak/sprig/internal/auth"
 	"github.com/ismailshak/sprig/internal/auth/passkeytest"
+	"github.com/ismailshak/sprig/internal/store"
 )
 
 // signInLabel is the label on the sign-in page's submit button.
@@ -96,7 +98,7 @@ func TestSignIn_APasskeyRemovedFromTheAccountIsRefusedOnThePage(t *testing.T) {
 	}
 }
 
-func TestSignIn_AnAccountInNoGardenIsRefusedAndAskedToGetAnotherInvite(t *testing.T) {
+func TestSignIn_AnAccountInNoGardenGetsASessionOnNoGarden(t *testing.T) {
 	f := moreGarden(t)
 	h := ceremonyOn(t, f)
 	device := aDevice()
@@ -105,14 +107,20 @@ func TestSignIn_AnAccountInNoGardenIsRefusedAndAskedToGetAnotherInvite(t *testin
 
 	rec := f.signInWith(t, h, device)
 
-	if rec.Code != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusForbidden, text(rec.Body.String()))
+	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != todayPath {
+		t.Fatalf("status = %d, Location = %q, want %d to %s:\n%s", rec.Code, rec.Header().Get("Location"), http.StatusSeeOther, todayPath, text(rec.Body.String()))
 	}
-	if !strings.Contains(rec.Body.String(), "That passkey signed in, and the account behind it is in no garden. Ask whoever runs the garden to invite you again.") {
-		t.Errorf("the page does not say the account is in no garden:\n%s", text(rec.Body.String()))
+	session := cookieNamed(t, rec, "__Host-sprig_session")
+	if session == nil {
+		t.Fatal("the sign-in set no session cookie")
 	}
-	if cookieNamed(t, rec, "__Host-sprig_session") != nil {
-		t.Error("a sign-in with no garden set a session cookie")
+	resolver := auth.NewResolver(h.sessions, store.New(f.tx))
+	principal, err := resolver.Resolve(t.Context(), thursday, session.Value)
+	if err != nil {
+		t.Fatalf("resolving the session: %v", err)
+	}
+	if principal.InGarden() || principal.User.ID != moreUserID {
+		t.Errorf("the session is %s on %q, want Ellie in no garden", principal.User.DisplayName, principal.Garden.Name)
 	}
 }
 

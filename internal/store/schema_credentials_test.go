@@ -11,9 +11,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// Removing someone from a garden must end their session immediately, not on
-// the next page they load.
-func TestSchema_DeletingAMembershipDeletesItsSessions(t *testing.T) {
+// Removing someone from a garden must clear garden_id on their sessions at
+// once, not on the next page they load. The session row stays, so the account
+// can still sign out, accept an invite or set up a garden of its own.
+func TestSchema_DeletingAMembershipTakesItsSessionsOffTheGarden(t *testing.T) {
 	ctx := t.Context()
 	pool := migratedPool(t)
 	garden, user := seedGardenAndUser(t, pool)
@@ -29,16 +30,20 @@ func TestSchema_DeletingAMembershipDeletesItsSessions(t *testing.T) {
 		t.Fatalf("deleting the membership: %v", err)
 	}
 
-	rows, err := pool.Query(ctx, "SELECT token_hash FROM session WHERE user_id = $1 ORDER BY token_hash", user)
+	rows, err := pool.Query(ctx, "SELECT token_hash, garden_id FROM session WHERE user_id = $1 ORDER BY token_hash", user)
 	if err != nil {
 		t.Fatalf("reading the sessions back: %v", err)
 	}
-	got, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	type row struct {
+		TokenHash string
+		GardenID  *uuid.UUID
+	}
+	got, err := pgx.CollectRows(rows, pgx.RowToStructByPos[row])
 	if err != nil {
 		t.Fatalf("reading the sessions back: %v", err)
 	}
-	if want := []string{"elsewhere"}; !slices.Equal(got, want) {
-		t.Errorf("sessions left = %v, want %v", got, want)
+	if len(got) != 2 || got[0].TokenHash != "elsewhere" || got[0].GardenID == nil || *got[0].GardenID != other || got[1].TokenHash != "here" || got[1].GardenID != nil {
+		t.Errorf("sessions = %+v, want elsewhere still on Elsewhere and here on no garden", got)
 	}
 }
 

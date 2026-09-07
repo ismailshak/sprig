@@ -380,7 +380,7 @@ func TestMore_SigningOutDeletesTheSessionAndClearsTheCookie(t *testing.T) {
 	queries := store.New(f.tx)
 	sessions := auth.NewSessions(queries, testTTL, auth.CookieSettings{Name: "__Host-sprig_session", Secure: true})
 	f.handler.sessions = sessions
-	token, _, err := sessions.Create(t.Context(), thursday, moreUserID, moreGardenID, nil, "a browser")
+	token, _, err := sessions.Create(t.Context(), thursday, moreUserID, &moreGardenID, nil, "a browser")
 	if err != nil {
 		t.Fatalf("starting the session: %v", err)
 	}
