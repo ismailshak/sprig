@@ -12,8 +12,16 @@
 <link rel="stylesheet" href="{{asset "app.css"}}">
 <script src="{{asset "vendor/htmx-2.0.10.min.js"}}" defer></script>
 {{/* htmx does not swap a 4xx response by default. A 422 is a form re-rendered
-     with an error message, so it has to swap. */}}
-<meta name="htmx-config" content='{"responseHandling":[{"code":"204","swap":false},{"code":"[23]..","swap":true},{"code":"422","swap":true},{"code":"[45]..","swap":false,"error":true}]}'>
+     with an error message, so it has to swap.
+
+     allowEval is off because the Content-Security-Policy has no 'unsafe-eval'.
+     No template asks htmx to evaluate anything. One that started to would log
+     htmx:evalDisallowedError instead of running.
+
+     includeIndicatorStyles is off because htmx otherwise inserts a style
+     element for its request indicator. The policy allows no inline style
+     element. No page uses the indicator. */}}
+<meta name="htmx-config" content='{"allowEval":false,"includeIndicatorStyles":false,"responseHandling":[{"code":"204","swap":false},{"code":"[23]..","swap":true},{"code":"422","swap":true},{"code":"[45]..","swap":false,"error":true}]}'>
 </head>
 <body>
 {{/* A page with no tab bar overrides this block to add a modifier class that

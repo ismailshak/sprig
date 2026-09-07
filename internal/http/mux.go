@@ -176,10 +176,12 @@ var publicRoutes = map[string]bool{
 }
 
 // New builds sprig's handler. The middleware order matters. RequestID runs
-// outermost so the id is set before anything logs. Logging wraps Recover so a
-// recovered panic's 500 still gets a request line. The cross-origin check is
-// inside both so a refused request is logged like any other. Authentication is
-// inside that so a cross-site post is refused before it costs a session lookup.
+// outermost so the id is set before anything logs. SecurityHeaders is outside
+// Recover so the 500 a panic produces has the security headers too. Logging
+// wraps Recover so a recovered panic's 500 still gets a request line. The
+// cross-origin check is inside Logging and Recover so a refused request is
+// logged like any other. Authentication is inside that so a cross-site post is
+// refused before it costs a session lookup.
 func New(logger *slog.Logger, sessions *auth.Sessions, passkeys *auth.Passkeys, resolver Resolver, queries *store.Queries, templates *Templates, assets *Assets, trustedIPHeader string, signupEnabled bool) http.Handler {
 	mux := http.NewServeMux()
 	for _, r := range routes(logger, sessions, passkeys, queries, templates, assets, trustedIPHeader, signupEnabled) {
@@ -205,6 +207,7 @@ func New(logger *slog.Logger, sessions *auth.Sessions, passkeys *auth.Passkeys, 
 	handler = crossOrigin().Handler(handler)
 	handler = Recover(logger)(handler)
 	handler = Logging(logger, mux)(handler)
+	handler = SecurityHeaders(handler)
 	handler = RequestID(handler)
 	return handler
 }
