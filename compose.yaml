@@ -45,6 +45,13 @@ services:
       # On, so the e2e suite can reach Set up your garden on a database the
       # seed has already put an account in. A deployment leaves it off.
       SPRIG_SIGNUP_ENABLED: "true"
+      # On, so the Notifications page shows its form to the e2e suite. The
+      # pair is only for this stack and signs nothing: no test subscribes,
+      # because a browser under Playwright has no push service to reach.
+      SPRIG_PUSH_ENABLED: "true"
+      SPRIG_VAPID_PUBLIC_KEY: BIKy0ljeIkYXaxRwCtYWzL6mcXZ1uQRljQ9HlisKJLJiAWkvTHx6QKQNtjbZeP5AvsVqD6-lKh6RDeyszC8lu3A
+      SPRIG_VAPID_PRIVATE_KEY: NYvCfU2w94nee-zA8CqDtHNwV7z9nKVjO3JyESW9mcs
+      SPRIG_VAPID_SUBJECT: mailto:sprig@example.com
     ports:
       - "${APP_PORTS:-8080:8080}"
     depends_on:

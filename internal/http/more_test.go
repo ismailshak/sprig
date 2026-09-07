@@ -48,6 +48,7 @@ type moreFixture struct {
 // moreGarden sets up the account the four pages under More read: Ellie owns
 // Rosewood, has two passkeys and two subscribed browsers, gets the digest and
 // not the activity messages, and has one invite out that nobody has taken up.
+// Push is on, so the Notifications page has its form.
 // Sam is a second account in a second garden, so a row that belongs to
 // somebody else is in reach of every query the pages make.
 func moreGarden(t *testing.T) *moreFixture {
@@ -100,6 +101,7 @@ func moreGarden(t *testing.T) *moreFixture {
 			templates: testTemplates(),
 			build:     build.Info{Version: "0.1.0", Revision: "8f2c1a4d3b29e7c05a1"},
 			now:       func() time.Time { return thursday },
+			pushKey:   testPushKey,
 		},
 		todayHandler: &today{
 			logger:    testLogger,

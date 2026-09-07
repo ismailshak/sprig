@@ -15,6 +15,7 @@ import (
 
 var (
 	shellConstant = regexp.MustCompile(`(?m)^const SHELL = (\[.*\]);$`)
+	iconConstant  = regexp.MustCompile(`(?m)^const ICON = "(.*)";$`)
 	// hashedURL matches the content hash the static handler puts before a
 	// file's extension.
 	hashedURL = regexp.MustCompile(fmt.Sprintf(`\.[0-9a-f]{%d}\.[a-z0-9]+$`, hashLength))
@@ -114,10 +115,25 @@ func TestServiceWorker_EveryShellURLIsServed(t *testing.T) {
 	}
 }
 
+func TestServiceWorker_TheNotificationIconIsAURLTheServerServes(t *testing.T) {
+	assets := testAssets()
+	rec, _ := serveWorker(t)
+
+	match := iconConstant.FindStringSubmatch(rec.Body.String())
+	if match == nil || match[1] == "" {
+		t.Fatalf("the script declares no ICON:\n%s", rec.Body.String())
+	}
+	served := httptest.NewRecorder()
+	assets.handler().ServeHTTP(served, httptest.NewRequestWithContext(t.Context(), http.MethodGet, match[1], nil))
+	if served.Code != http.StatusOK {
+		t.Errorf("a notification is shown with %s and the server answers %d", match[1], served.Code)
+	}
+}
+
 func TestServiceWorker_ChangingAStaticFileChangesTheVersion(t *testing.T) {
 	templates := testTemplates()
-	before := fixtureAssets(t, map[string]string{serviceWorkerFile: "// worker", "app.css": "body{}"})
-	after := fixtureAssets(t, map[string]string{serviceWorkerFile: "// worker", "app.css": "body{margin:0}"})
+	before := fixtureAssets(t, map[string]string{serviceWorkerFile: "// worker", notificationIcon: "png", "app.css": "body{}"})
+	after := fixtureAssets(t, map[string]string{serviceWorkerFile: "// worker", notificationIcon: "png", "app.css": "body{margin:0}"})
 
 	if a, b := newServiceWorker(before, templates).etag, newServiceWorker(after, templates).etag; a == b {
 		t.Errorf("the version is %s before and after app.css changed", a)
@@ -125,7 +141,7 @@ func TestServiceWorker_ChangingAStaticFileChangesTheVersion(t *testing.T) {
 }
 
 func TestServiceWorker_ChangingATemplateChangesTheVersion(t *testing.T) {
-	assets := fixtureAssets(t, map[string]string{serviceWorkerFile: "// worker"})
+	assets := fixtureAssets(t, map[string]string{serviceWorkerFile: "// worker", notificationIcon: "png"})
 	before := &Templates{digest: "one"}
 	after := &Templates{digest: "two"}
 

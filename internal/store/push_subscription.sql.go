@@ -58,3 +58,38 @@ func (q *Queries) ListPushSubscriptions(ctx context.Context, userID uuid.UUID) (
 	}
 	return items, nil
 }
+
+const upsertPushSubscription = `-- name: UpsertPushSubscription :exec
+INSERT INTO push_subscription (user_id, endpoint, p256dh_key, auth_key, user_agent)
+VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (endpoint) DO UPDATE SET
+    user_id = EXCLUDED.user_id,
+    p256dh_key = EXCLUDED.p256dh_key,
+    auth_key = EXCLUDED.auth_key,
+    user_agent = EXCLUDED.user_agent,
+    created_at = CASE WHEN push_subscription.user_id = EXCLUDED.user_id THEN push_subscription.created_at ELSE now() END,
+    last_sent_at = CASE WHEN push_subscription.user_id = EXCLUDED.user_id THEN push_subscription.last_sent_at END
+`
+
+type UpsertPushSubscriptionParams struct {
+	UserID    uuid.UUID
+	Endpoint  string
+	P256dhKey string
+	AuthKey   string
+	UserAgent *string
+}
+
+// The endpoint identifies the browser, so a browser subscribing again updates
+// its row instead of adding one. A row that belonged to another account moves
+// to the account signed in now. Its created_at and last_sent_at are reset,
+// because those dates were the other account's.
+func (q *Queries) UpsertPushSubscription(ctx context.Context, arg UpsertPushSubscriptionParams) error {
+	_, err := q.db.Exec(ctx, upsertPushSubscription,
+		arg.UserID,
+		arg.Endpoint,
+		arg.P256dhKey,
+		arg.AuthKey,
+		arg.UserAgent,
+	)
+	return err
+}

@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/ismailshak/sprig/internal/push"
 )
 
 func TestLoadConfig_NamesEveryMissingRequiredVariable(t *testing.T) {
@@ -279,5 +281,80 @@ func TestLoadConfig_RefusesASetupNoBrowserWouldRunAPasskeyCeremonyUnder(t *testi
 				t.Errorf("error = %q, want it to name %s", err, c.want)
 			}
 		})
+	}
+}
+
+func TestLoadConfig_PushIsOffByDefaultAndNeedsNoKeys(t *testing.T) {
+	env := map[string]string{"SPRIG_DATABASE_URL": "postgres://example/db", "SPRIG_BASE_URL": "https://sprig.example.com"}
+	getenv := func(k string) string { return env[k] }
+
+	cfg, err := loadConfig(getenv)
+	if err != nil {
+		t.Fatalf("loadConfig returned an error: %v", err)
+	}
+	if cfg.pushEnabled {
+		t.Error("pushEnabled = true, want false, so a laptop does not subscribe to a real push service unless asked")
+	}
+}
+
+func TestLoadConfig_PushOnNamesEveryMissingVAPIDVariable(t *testing.T) {
+	env := map[string]string{"SPRIG_DATABASE_URL": "postgres://example/db", "SPRIG_BASE_URL": "https://sprig.example.com", "SPRIG_PUSH_ENABLED": "true"}
+	getenv := func(k string) string { return env[k] }
+
+	_, err := loadConfig(getenv)
+	if err == nil {
+		t.Fatal("expected an error for push on with no keys, got nil")
+	}
+	for _, want := range []string{"SPRIG_VAPID_PUBLIC_KEY", "SPRIG_VAPID_PRIVATE_KEY", "SPRIG_VAPID_SUBJECT"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q did not name %s", err.Error(), want)
+		}
+	}
+}
+
+func TestLoadConfig_PushOnReadsTheKeysAndSubject(t *testing.T) {
+	keys, err := push.GenerateKeys()
+	if err != nil {
+		t.Fatalf("GenerateKeys: %v", err)
+	}
+	env := map[string]string{
+		"SPRIG_DATABASE_URL":      "postgres://example/db",
+		"SPRIG_BASE_URL":          "https://sprig.example.com",
+		"SPRIG_PUSH_ENABLED":      "true",
+		"SPRIG_VAPID_PUBLIC_KEY":  keys.Public,
+		"SPRIG_VAPID_PRIVATE_KEY": keys.Private,
+		"SPRIG_VAPID_SUBJECT":     "mailto:sprig@example.com",
+	}
+	getenv := func(k string) string { return env[k] }
+
+	cfg, err := loadConfig(getenv)
+	if err != nil {
+		t.Fatalf("loadConfig returned an error: %v", err)
+	}
+	if !cfg.pushEnabled {
+		t.Error("pushEnabled = false, want true")
+	}
+	if cfg.push.Public != keys.Public || cfg.push.Private != keys.Private || cfg.push.Subject != "mailto:sprig@example.com" {
+		t.Errorf("push = %+v, want the keys and subject the environment gave", cfg.push)
+	}
+}
+
+func TestLoadConfig_APublicKeyFromAnotherPairIsRefusedAtStartup(t *testing.T) {
+	first, _ := push.GenerateKeys()
+	second, _ := push.GenerateKeys()
+	env := map[string]string{
+		"SPRIG_DATABASE_URL":      "postgres://example/db",
+		"SPRIG_BASE_URL":          "https://sprig.example.com",
+		"SPRIG_PUSH_ENABLED":      "true",
+		"SPRIG_VAPID_PUBLIC_KEY":  first.Public,
+		"SPRIG_VAPID_PRIVATE_KEY": second.Private,
+		"SPRIG_VAPID_SUBJECT":     "mailto:sprig@example.com",
+	}
+	getenv := func(k string) string { return env[k] }
+
+	_, err := loadConfig(getenv)
+
+	if err == nil || !strings.Contains(err.Error(), "does not belong") {
+		t.Errorf("a mismatched pair started with %v, want a startup error naming the mismatch", err)
 	}
 }

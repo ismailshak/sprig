@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -21,11 +22,22 @@ import (
 	"github.com/ismailshak/sprig/db"
 	"github.com/ismailshak/sprig/internal/auth"
 	sprighttp "github.com/ismailshak/sprig/internal/http"
+	"github.com/ismailshak/sprig/internal/push"
 	"github.com/ismailshak/sprig/internal/store"
 	"github.com/ismailshak/sprig/web"
 )
 
 func main() {
+	// A subcommand needs no configuration and no database, so it runs before
+	// either is read.
+	if len(os.Args) > 1 {
+		if err := subcommand(os.Args[1:], os.Stdout); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
+
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
@@ -33,6 +45,22 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+}
+
+// subcommand runs the command named by args. The only command is vapid: it
+// prints a new VAPID key pair as the two environment variables that hold it.
+// SPRIG_VAPID_SUBJECT is not printed, because that is a contact address the
+// operator chooses.
+func subcommand(args []string, stdout io.Writer) error {
+	if len(args) != 1 || args[0] != "vapid" {
+		return fmt.Errorf("unknown command %q: vapid is the only command, and the server runs with none", strings.Join(args, " "))
+	}
+	keys, err := push.GenerateKeys()
+	if err != nil {
+		return err
+	}
+	_, err = fmt.Fprintf(stdout, "SPRIG_VAPID_PUBLIC_KEY=%s\nSPRIG_VAPID_PRIVATE_KEY=%s\n", keys.Public, keys.Private)
+	return err
 }
 
 // shutdownGrace is how long in-flight requests get to finish after the process
@@ -87,7 +115,14 @@ func run(ctx context.Context, getenv func(string) string, stdout io.Writer) erro
 		return err
 	}
 
-	return serve(ctx, logger, listener, sprighttp.New(logger, sessions, passkeys, resolver, queries, templates, assets, cfg.trustedIPHeader, cfg.signupEnabled))
+	// The Notifications page gives this key to the browser to subscribe with.
+	// Empty means push is off.
+	pushKey := ""
+	if cfg.pushEnabled {
+		pushKey = cfg.push.Public
+	}
+
+	return serve(ctx, logger, listener, sprighttp.New(logger, sessions, passkeys, resolver, queries, templates, assets, cfg.trustedIPHeader, cfg.signupEnabled, pushKey))
 }
 
 // serve runs the server on listener until ctx is cancelled, then gives

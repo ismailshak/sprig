@@ -1,12 +1,19 @@
 package http
 
 import (
+	"context"
+	"crypto/ecdh"
+	"crypto/rand"
+	"encoding/base64"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"regexp"
 	"slices"
 	"strings"
 	"testing"
+	"time"
+	"uuid"
 )
 
 // The two User-Agent strings the seeded subscriptions carry. A real one names
@@ -24,7 +31,7 @@ var (
 	stackRow      = regexp.MustCompile(`(?s)<li class="row row--setting row--stack">(.*?)</li>`)
 	stackRowName  = regexp.MustCompile(`(?s)<span class="row__name">(.*?)</span>`)
 	stackRowMeta  = regexp.MustCompile(`(?s)<span class="row__part">(.*?)</span>`)
-	stackRowDrops = regexp.MustCompile(`<form method="post" action="([^"]+)"><button class="row__drop"`)
+	stackRowDrops = regexp.MustCompile(`<form method="post" action="([^"]+)"[^>]*><button class="row__drop"`)
 )
 
 type stackedRow struct {
@@ -263,5 +270,223 @@ func TestBrowserName_NamesTheDeviceAndTheBrowserTheSubscriptionCameFrom(t *testi
 	}
 	if got := browserName(nil); got != "Unknown browser" {
 		t.Errorf("a subscription with no user agent is %q, want %q", got, "Unknown browser")
+	}
+}
+
+// The form's two data attributes: the VAPID public key the script gives the
+// push API, and the URL it posts the subscription to.
+var (
+	pushKeyAttribute       = regexp.MustCompile(`<form method="post" action="/more/notifications"[^>]* data-key="([^"]*)"`)
+	pushSubscribeAttribute = regexp.MustCompile(`<form method="post" action="/more/notifications"[^>]* data-subscribe="([^"]*)"`)
+)
+
+func TestNotifications_ThePageHandsTheBrowserThePublicKeyToSubscribeUnder(t *testing.T) {
+	f := moreGarden(t)
+
+	page := f.page(t, f.handler.notifications, notificationsPath)
+
+	if got := pushKeyAttribute.FindStringSubmatch(page); got == nil || got[1] != testPushKey {
+		t.Errorf("the form's data-key is %v, want the configured public key", got)
+	}
+}
+
+// An empty data-subscribe would post the subscription to the page's own
+// action. That saves the form and turns both types off.
+func TestNotifications_ThePageGivesTheScriptTheURLToPostTheSubscriptionTo(t *testing.T) {
+	f := moreGarden(t)
+
+	page := f.page(t, f.handler.notifications, notificationsPath)
+
+	if got := pushSubscribeAttribute.FindStringSubmatch(page); got == nil || got[1] != subscribePath {
+		t.Errorf("the form's data-subscribe is %v, want %s", got, subscribePath)
+	}
+}
+
+func TestNotifications_WithPushOffThePageSaysNotificationsAreNotSetUpAndOffersNoSwitches(t *testing.T) {
+	f := moreGarden(t)
+	f.handler.pushKey = ""
+
+	page := f.page(t, f.handler.notifications, notificationsPath)
+
+	if !strings.Contains(text(page), "Notifications are not set up on this sprig") {
+		t.Errorf("the page does not say notifications are not set up:\n%s", page)
+	}
+	if checkedBox.MatchString(page) {
+		t.Errorf("push is off and the page still offers a switch:\n%s", page)
+	}
+	if len(stackedRowsOf(page)) != 0 {
+		t.Errorf("push is off and the page still lists browsers:\n%s", page)
+	}
+}
+
+// browserKeys returns a subscription's two keys in the form the push API
+// encodes them: a point on P-256 and a 16-byte secret, base64url without
+// padding. Each call returns a different pair.
+func browserKeys(t *testing.T) (p256dh, auth string) {
+	t.Helper()
+
+	key, err := ecdh.P256().GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("generating the browser's key: %v", err)
+	}
+	secret := make([]byte, 16)
+	if _, err := rand.Read(secret); err != nil {
+		t.Fatalf("generating the browser's secret: %v", err)
+	}
+	return base64.RawURLEncoding.EncodeToString(key.PublicKey().Bytes()), base64.RawURLEncoding.EncodeToString(secret)
+}
+
+func (f *moreFixture) subscribe(t *testing.T, endpoint, userAgent, p256dh, auth string) *httptest.ResponseRecorder {
+	t.Helper()
+
+	form := url.Values{"endpoint": {endpoint}, "p256dh": {p256dh}, "auth": {auth}}
+	ctx := context.WithValue(t.Context(), principalKey, f.principal)
+	req := httptest.NewRequestWithContext(ctx, http.MethodPost, subscribePath, strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	if userAgent != "" {
+		req.Header.Set("User-Agent", userAgent)
+	}
+	rec := httptest.NewRecorder()
+	f.handler.subscribeBrowser(rec, req)
+	return rec
+}
+
+// subscriptionRow is the push_subscription row for one endpoint, read back
+// after a post.
+type subscriptionRow struct {
+	userID    uuid.UUID
+	userAgent string
+	p256dh    string
+	neverSent bool
+}
+
+func subscriptionOf(t *testing.T, f *moreFixture, endpoint string) subscriptionRow {
+	t.Helper()
+
+	var row subscriptionRow
+	var userAgent *string
+	var lastSentAt *time.Time
+	err := f.tx.QueryRow(t.Context(), "SELECT user_id, user_agent, p256dh_key, last_sent_at FROM push_subscription WHERE endpoint = $1", endpoint).
+		Scan(&row.userID, &userAgent, &row.p256dh, &lastSentAt)
+	if err != nil {
+		t.Fatalf("reading the subscription for %s: %v", endpoint, err)
+	}
+	if userAgent != nil {
+		row.userAgent = *userAgent
+	}
+	row.neverSent = lastSentAt == nil
+	return row
+}
+
+func TestSubscribe_WritesTheBrowsersSubscriptionForTheSignedInAccount(t *testing.T) {
+	f := moreGarden(t)
+	p256dh, auth := browserKeys(t)
+
+	rec := f.subscribe(t, "https://push.example.com/send/new", chromeOnMac, p256dh, auth)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusNoContent, rec.Body.String())
+	}
+	got := subscriptionOf(t, f, "https://push.example.com/send/new")
+	want := subscriptionRow{userID: moreUserID, userAgent: chromeOnMac, p256dh: p256dh, neverSent: true}
+	if got != want {
+		t.Errorf("the row holds %+v, want %+v", got, want)
+	}
+}
+
+func TestSubscribe_TheSameBrowserAgainKeepsOneRowAndItsDatesAndTakesItsNewKeys(t *testing.T) {
+	f := moreGarden(t)
+	// A browser makes new keys when it subscribes again. A message encrypted
+	// to the old ones cannot be decrypted, so the row has to take the new
+	// pair.
+	p256dh, auth := browserKeys(t)
+
+	// The phone's row was last sent to today. Subscribing the same browser
+	// again keeps that date.
+	rec := f.subscribe(t, "https://push.invalid/phone", safariOniPhone, p256dh, auth)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusNoContent, rec.Body.String())
+	}
+	var count int
+	if err := f.tx.QueryRow(t.Context(), "SELECT count(*) FROM push_subscription WHERE user_id = $1", moreUserID).Scan(&count); err != nil {
+		t.Fatalf("counting the subscriptions: %v", err)
+	}
+	if count != 2 {
+		t.Errorf("the account has %d subscriptions, want the 2 it had", count)
+	}
+	got := subscriptionOf(t, f, "https://push.invalid/phone")
+	if got.neverSent {
+		t.Error("subscribing the same browser again forgot when it was last sent to")
+	}
+	if got.p256dh != p256dh {
+		t.Errorf("the row holds the p256dh key %s, want the one just posted, %s", got.p256dh, p256dh)
+	}
+}
+
+func TestSubscribe_ABrowserAnotherAccountSubscribedInMovesToTheSignedInAccount(t *testing.T) {
+	f := moreGarden(t)
+	f.exec(t, "UPDATE push_subscription SET last_sent_at = now() WHERE id = $1", strangerPushID)
+	p256dh, auth := browserKeys(t)
+
+	rec := f.subscribe(t, "https://push.invalid/stranger", chromeOnMac, p256dh, auth)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusNoContent, rec.Body.String())
+	}
+	got := subscriptionOf(t, f, "https://push.invalid/stranger")
+	if got.userID != moreUserID {
+		t.Errorf("the browser still belongs to %s, want the account signed in", got.userID)
+	}
+	if !got.neverSent {
+		t.Error("the browser carried the other account's last send over")
+	}
+	var others int
+	if err := f.tx.QueryRow(t.Context(), "SELECT count(*) FROM push_subscription WHERE user_id = $1", otherUserID).Scan(&others); err != nil {
+		t.Fatalf("counting the other account's subscriptions: %v", err)
+	}
+	if others != 0 {
+		t.Errorf("the other account still has %d subscriptions, want 0", others)
+	}
+}
+
+func TestSubscribe_AnEndpointOrKeyOfTheWrongFormIsRefusedAndWritesNoRow(t *testing.T) {
+	f := moreGarden(t)
+	p256dh, auth := browserKeys(t)
+	cases := []struct {
+		name string
+		form url.Values
+	}{
+		{"an http endpoint", url.Values{"endpoint": {"http://push.example.com/send"}, "p256dh": {p256dh}, "auth": {auth}}},
+		{"an endpoint that is not a URL", url.Values{"endpoint": {"push"}, "p256dh": {p256dh}, "auth": {auth}}},
+		{"a p256dh key of the wrong length", url.Values{"endpoint": {"https://push.example.com/send"}, "p256dh": {auth}, "auth": {auth}}},
+		{"a p256dh key that is 65 bytes and not a point", url.Values{"endpoint": {"https://push.example.com/send"}, "p256dh": {base64.RawURLEncoding.EncodeToString(make([]byte, 65))}, "auth": {auth}}},
+		{"an auth key that is not base64url", url.Values{"endpoint": {"https://push.example.com/send"}, "p256dh": {p256dh}, "auth": {"not/base64url!"}}},
+		{"no keys", url.Values{"endpoint": {"https://push.example.com/send"}}},
+	}
+	for _, c := range cases {
+		rec := f.do(t, f.handler.subscribeBrowser, subscribePath, c.form)
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("%s got %d, want %d", c.name, rec.Code, http.StatusBadRequest)
+		}
+	}
+	var count int
+	if err := f.tx.QueryRow(t.Context(), "SELECT count(*) FROM push_subscription WHERE user_id = $1", moreUserID).Scan(&count); err != nil {
+		t.Fatalf("counting the subscriptions: %v", err)
+	}
+	if count != 2 {
+		t.Errorf("a refused post wrote a row: the account has %d, want 2", count)
+	}
+}
+
+func TestSubscribe_WithPushOffTheRouteIsNotFound(t *testing.T) {
+	f := moreGarden(t)
+	f.handler.pushKey = ""
+	p256dh, auth := browserKeys(t)
+
+	rec := f.subscribe(t, "https://push.example.com/send/new", chromeOnMac, p256dh, auth)
+
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusNotFound)
 	}
 }
