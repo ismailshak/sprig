@@ -70,7 +70,7 @@ func (q *Queries) DeleteMembership(ctx context.Context, gardenID uuid.UUID, user
 }
 
 const getMemberByHandle = `-- name: GetMemberByHandle :one
-SELECT membership.id, membership.garden_id, membership.user_id, membership.role, membership.invited_by, membership.created_at, membership.expires_at, membership.digest_hour, app_user.id, app_user.display_name, app_user.handle, app_user.timezone, app_user.created_at
+SELECT membership.id, membership.garden_id, membership.user_id, membership.role, membership.invited_by, membership.created_at, membership.expires_at, membership.digest_hour, app_user.id, app_user.display_name, app_user.handle, app_user.timezone, app_user.created_at, app_user.last_garden_id
 FROM membership
 JOIN app_user ON app_user.id = membership.user_id
 WHERE membership.garden_id = $1 AND app_user.handle = $2
@@ -100,12 +100,13 @@ func (q *Queries) GetMemberByHandle(ctx context.Context, gardenID uuid.UUID, han
 		&i.AppUser.Handle,
 		&i.AppUser.Timezone,
 		&i.AppUser.CreatedAt,
+		&i.AppUser.LastGardenID,
 	)
 	return i, err
 }
 
 const getMembershipWithUserAndGarden = `-- name: GetMembershipWithUserAndGarden :one
-SELECT membership.id, membership.garden_id, membership.user_id, membership.role, membership.invited_by, membership.created_at, membership.expires_at, membership.digest_hour, app_user.id, app_user.display_name, app_user.handle, app_user.timezone, app_user.created_at, garden.id, garden.name, garden.created_at
+SELECT membership.id, membership.garden_id, membership.user_id, membership.role, membership.invited_by, membership.created_at, membership.expires_at, membership.digest_hour, app_user.id, app_user.display_name, app_user.handle, app_user.timezone, app_user.created_at, app_user.last_garden_id, garden.id, garden.name, garden.created_at
 FROM membership
 JOIN app_user ON app_user.id = membership.user_id
 JOIN garden ON garden.id = membership.garden_id
@@ -137,6 +138,7 @@ func (q *Queries) GetMembershipWithUserAndGarden(ctx context.Context, gardenID u
 		&i.AppUser.Handle,
 		&i.AppUser.Timezone,
 		&i.AppUser.CreatedAt,
+		&i.AppUser.LastGardenID,
 		&i.Garden.ID,
 		&i.Garden.Name,
 		&i.Garden.CreatedAt,
@@ -145,7 +147,7 @@ func (q *Queries) GetMembershipWithUserAndGarden(ctx context.Context, gardenID u
 }
 
 const listMembers = `-- name: ListMembers :many
-SELECT membership.id, membership.garden_id, membership.user_id, membership.role, membership.invited_by, membership.created_at, membership.expires_at, membership.digest_hour, app_user.id, app_user.display_name, app_user.handle, app_user.timezone, app_user.created_at
+SELECT membership.id, membership.garden_id, membership.user_id, membership.role, membership.invited_by, membership.created_at, membership.expires_at, membership.digest_hour, app_user.id, app_user.display_name, app_user.handle, app_user.timezone, app_user.created_at, app_user.last_garden_id
 FROM membership
 JOIN app_user ON app_user.id = membership.user_id
 WHERE membership.garden_id = $1
@@ -182,6 +184,7 @@ func (q *Queries) ListMembers(ctx context.Context, gardenID uuid.UUID) ([]ListMe
 			&i.AppUser.Handle,
 			&i.AppUser.Timezone,
 			&i.AppUser.CreatedAt,
+			&i.AppUser.LastGardenID,
 		); err != nil {
 			return nil, err
 		}
@@ -194,14 +197,15 @@ func (q *Queries) ListMembers(ctx context.Context, gardenID uuid.UUID) ([]ListMe
 }
 
 const listMembershipsForUser = `-- name: ListMembershipsForUser :many
-SELECT id, garden_id, user_id, role, invited_by, created_at, expires_at, digest_hour FROM membership
-WHERE user_id = $1
-ORDER BY created_at, id
+SELECT membership.id, membership.garden_id, membership.user_id, membership.role, membership.invited_by, membership.created_at, membership.expires_at, membership.digest_hour FROM membership
+JOIN app_user ON app_user.id = membership.user_id
+WHERE membership.user_id = $1
+ORDER BY membership.garden_id = app_user.last_garden_id DESC NULLS LAST, membership.created_at, membership.id
 `
 
-// A new session starts on the oldest membership. This takes no garden_id
-// because it is how the garden is found. Every row returned belongs to
-// @user_id.
+// A new session starts on the first live row: the garden the person last
+// switched to, then the oldest membership. This takes no garden_id because it
+// is how the garden is found. Every row returned belongs to @user_id.
 func (q *Queries) ListMembershipsForUser(ctx context.Context, userID uuid.UUID) ([]Membership, error) {
 	rows, err := q.db.Query(ctx, listMembershipsForUser, userID)
 	if err != nil {
@@ -220,6 +224,71 @@ func (q *Queries) ListMembershipsForUser(ctx context.Context, userID uuid.UUID) 
 			&i.CreatedAt,
 			&i.ExpiresAt,
 			&i.DigestHour,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMembershipsWithGardensForUser = `-- name: ListMembershipsWithGardensForUser :many
+SELECT membership.id, membership.garden_id, membership.user_id, membership.role, membership.invited_by, membership.created_at, membership.expires_at, membership.digest_hour, garden.id, garden.name, garden.created_at,
+    coalesce(owner.display_name, '')::text AS owner_name,
+    coalesce(owner.id = membership.user_id, false)::boolean AS reader_owns
+FROM membership
+JOIN garden ON garden.id = membership.garden_id
+LEFT JOIN LATERAL (
+    SELECT app_user.id, app_user.display_name
+    FROM membership o
+    JOIN app_user ON app_user.id = o.user_id
+    WHERE o.garden_id = garden.id AND o.role = 'owner'
+    ORDER BY o.created_at, o.id
+    LIMIT 1
+) AS owner ON true
+WHERE membership.user_id = $1
+ORDER BY membership.created_at, membership.id
+`
+
+type ListMembershipsWithGardensForUserRow struct {
+	Membership Membership
+	Garden     Garden
+	OwnerName  string
+	ReaderOwns bool
+}
+
+// Every garden the account is a member of, oldest membership first, with the
+// owner's display name. The owner is the oldest owner membership: the person
+// who created the garden, unless they have left it. owner_name is empty and
+// reader_owns is false when no owner is left. This takes no garden_id because
+// it is how the account's other gardens are found. Every row belongs to
+// @user_id.
+func (q *Queries) ListMembershipsWithGardensForUser(ctx context.Context, userID uuid.UUID) ([]ListMembershipsWithGardensForUserRow, error) {
+	rows, err := q.db.Query(ctx, listMembershipsWithGardensForUser, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListMembershipsWithGardensForUserRow
+	for rows.Next() {
+		var i ListMembershipsWithGardensForUserRow
+		if err := rows.Scan(
+			&i.Membership.ID,
+			&i.Membership.GardenID,
+			&i.Membership.UserID,
+			&i.Membership.Role,
+			&i.Membership.InvitedBy,
+			&i.Membership.CreatedAt,
+			&i.Membership.ExpiresAt,
+			&i.Membership.DigestHour,
+			&i.Garden.ID,
+			&i.Garden.Name,
+			&i.Garden.CreatedAt,
+			&i.OwnerName,
+			&i.ReaderOwns,
 		); err != nil {
 			return nil, err
 		}

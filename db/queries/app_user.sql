@@ -43,3 +43,9 @@ SELECT EXISTS (SELECT 1 FROM app_user);
 -- table, so the lock makes the second wait and then see the first.
 -- name: LockUsers :exec
 LOCK TABLE app_user IN SHARE ROW EXCLUSIVE MODE;
+
+-- Switching gardens records the garden on the account, so the next session
+-- starts there.
+-- name: SetLastGarden :exec
+UPDATE app_user SET last_garden_id = @garden_id
+WHERE id = @user_id;

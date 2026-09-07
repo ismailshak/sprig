@@ -7,13 +7,14 @@ JOIN app_user ON app_user.id = membership.user_id
 JOIN garden ON garden.id = membership.garden_id
 WHERE membership.garden_id = @garden_id AND membership.user_id = @user_id;
 
--- A new session starts on the oldest membership. This takes no garden_id
--- because it is how the garden is found. Every row returned belongs to
--- @user_id.
+-- A new session starts on the first live row: the garden the person last
+-- switched to, then the oldest membership. This takes no garden_id because it
+-- is how the garden is found. Every row returned belongs to @user_id.
 -- name: ListMembershipsForUser :many
-SELECT * FROM membership
-WHERE user_id = @user_id
-ORDER BY created_at, id;
+SELECT membership.* FROM membership
+JOIN app_user ON app_user.id = membership.user_id
+WHERE membership.user_id = @user_id
+ORDER BY membership.garden_id = app_user.last_garden_id DESC NULLS LAST, membership.created_at, membership.id;
 
 -- The hour the digest arrives, which is per membership: a person may want one
 -- for their own garden and nothing from a garden they are sitting.
@@ -60,3 +61,26 @@ WHERE garden_id = @garden_id AND user_id = @user_id;
 INSERT INTO membership (garden_id, user_id, role, invited_by, expires_at, digest_hour)
 VALUES (@garden_id, @user_id, @role, @invited_by, @expires_at, @digest_hour)
 RETURNING *;
+
+-- Every garden the account is a member of, oldest membership first, with the
+-- owner's display name. The owner is the oldest owner membership: the person
+-- who created the garden, unless they have left it. owner_name is empty and
+-- reader_owns is false when no owner is left. This takes no garden_id because
+-- it is how the account's other gardens are found. Every row belongs to
+-- @user_id.
+-- name: ListMembershipsWithGardensForUser :many
+SELECT sqlc.embed(membership), sqlc.embed(garden),
+    coalesce(owner.display_name, '')::text AS owner_name,
+    coalesce(owner.id = membership.user_id, false)::boolean AS reader_owns
+FROM membership
+JOIN garden ON garden.id = membership.garden_id
+LEFT JOIN LATERAL (
+    SELECT app_user.id, app_user.display_name
+    FROM membership o
+    JOIN app_user ON app_user.id = o.user_id
+    WHERE o.garden_id = garden.id AND o.role = 'owner'
+    ORDER BY o.created_at, o.id
+    LIMIT 1
+) AS owner ON true
+WHERE membership.user_id = @user_id
+ORDER BY membership.created_at, membership.id;

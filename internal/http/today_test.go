@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -554,5 +555,243 @@ func TestFeed_IsEmptyInAGardenWithNothingRecorded(t *testing.T) {
 
 	if page := f.show(t); !strings.Contains(page, `<div class="activity" id="activity"></div>`) {
 		t.Errorf("the page draws no empty feed for a swap to land on:\n%s", page)
+	}
+}
+
+var (
+	fairviewGardenID = uuid.MustParse("00000000-0000-7000-8000-000000000118")
+	// robinUserID is Robin, who owns Fairview. The name robinID is taken by
+	// the development sign-in tests.
+	robinUserID = uuid.MustParse("00000000-0000-7000-8000-000000000119")
+	// joUserID is Jo, given an owner membership of Rosewood dated before
+	// Ellie's in one test.
+	joUserID = uuid.MustParse("00000000-0000-7000-8000-000000000120")
+)
+
+// switchLink matches the link after the garden's name in Today's top bar and
+// captures its href.
+var switchLink = regexp.MustCompile(`<a class="topbar__switch" href="([^"]+)" aria-label="Switch garden"`)
+
+var gardenSheet = regexp.MustCompile(`(?s)<dialog open class="sheet" id="sheet" aria-labelledby="garden-sheet-title">(.*?)</dialog>`)
+
+var (
+	gardenRowName     = regexp.MustCompile(`(?s)<span class="row__name">(.*?)</span>\s*<span class="row__meta">`)
+	gardenRowMeta     = regexp.MustCompile(`(?s)<span class="row__meta">(.*?)</span>\s*</span>`)
+	gardenRowSwitch   = regexp.MustCompile(`<button class="row row--setting row--stack row--switch" type="submit">`)
+	sheetItem         = regexp.MustCompile(`(?s)<li>(.*?)</li>`)
+	gardenRowPosts    = regexp.MustCompile(`<input type="hidden" name="garden" value="([^"]+)">`)
+	currentGardenMark = regexp.MustCompile(`<span class="row__you">Current</span>`)
+)
+
+type renderedGardenRow struct {
+	name    string
+	meta    string
+	current bool
+	// button is true when the row is a button that posts the switch. The
+	// current garden's row is not one.
+	button bool
+	// posts is the garden id in the row's hidden input, and empty for the
+	// current garden.
+	posts string
+}
+
+// gardenSheetOf returns the rows of the open garden sheet, in page order. It
+// returns nil when the page has no open sheet.
+func gardenSheetOf(page string) []renderedGardenRow {
+	sheet := gardenSheet.FindStringSubmatch(page)
+	if sheet == nil {
+		return nil
+	}
+	var out []renderedGardenRow
+	for _, m := range sheetItem.FindAllStringSubmatch(sheet[1], -1) {
+		row := renderedGardenRow{current: currentGardenMark.MatchString(m[1])}
+		if name := gardenRowName.FindStringSubmatch(m[1]); name != nil {
+			row.name = text(currentGardenMark.ReplaceAllString(name[1], ""))
+		}
+		if meta := gardenRowMeta.FindStringSubmatch(m[1]); meta != nil {
+			row.meta = text(meta[1])
+		}
+		row.button = gardenRowSwitch.MatchString(m[1])
+		if posts := gardenRowPosts.FindStringSubmatch(m[1]); posts != nil {
+			row.posts = posts[1]
+		}
+		out = append(out, row)
+	}
+	return out
+}
+
+// gardens calls GET /gardens and returns the body. With hx set, the request
+// has the htmx headers that target the sheet, so the handler renders the sheet
+// alone.
+func (f *todayFixture) gardens(t *testing.T, hx bool) string {
+	t.Helper()
+
+	ctx := context.WithValue(t.Context(), principalKey, f.principal)
+	req := httptest.NewRequestWithContext(ctx, http.MethodGet, gardensPath, nil)
+	if hx {
+		req.Header.Set("HX-Request", "true")
+		req.Header.Set("HX-Target", "sheet")
+	}
+	rec := httptest.NewRecorder()
+	f.handler.gardenSheet(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	return rec.Body.String()
+}
+
+func (f *todayFixture) joinFairview(t *testing.T, expiresAt *time.Time) {
+	t.Helper()
+	f.exec(t, "INSERT INTO garden (id, name) VALUES ($1, 'Fairview')", fairviewGardenID)
+	f.exec(t, "INSERT INTO app_user (id, display_name, handle, timezone) VALUES ($1, 'Robin', 'robin', 'Europe/Lisbon')", robinUserID)
+	f.exec(t, "INSERT INTO membership (garden_id, user_id, role, digest_hour) VALUES ($1, $2, 'owner', 8)", fairviewGardenID, robinUserID)
+	f.exec(t, "INSERT INTO membership (garden_id, user_id, role, digest_hour, expires_at) VALUES ($1, $2, 'sitter', 8, $3)",
+		fairviewGardenID, readerID, expiresAt)
+}
+
+func TestToday_TheTopBarHasNoSwitchIconForAnAccountInOneGarden(t *testing.T) {
+	page := rosewood(t).show(t)
+
+	if m := switchLink.FindStringSubmatch(page); m != nil {
+		t.Errorf("the top bar has a switch icon linking to %s, and Ellie is in one garden", m[1])
+	}
+}
+
+func TestToday_TheSwitchIconOpensTheGardenSheetAndThePageLoadsWithoutIt(t *testing.T) {
+	f := rosewood(t)
+	f.joinFairview(t, nil)
+
+	page := f.show(t)
+
+	m := switchLink.FindStringSubmatch(page)
+	if m == nil {
+		t.Fatal("the top bar has no switch icon")
+	}
+	if m[1] != gardensPath {
+		t.Errorf("the icon links to %s, want %s", m[1], gardensPath)
+	}
+	if got := gardenSheetOf(page); got != nil {
+		t.Errorf("Today loaded with the garden sheet open: %+v", got)
+	}
+}
+
+// Ellie's membership of Fairview ends at 23:30 UTC on 7 September. That is
+// 00:30 on 8 September in Europe/London, so the row reads "until 8 Sep" only
+// when the date is formatted in the reader's timezone.
+func TestToday_TheGardenSheetListsEveryLiveGardenWithItsOwnerAndRoleAndMarksTheCurrentOne(t *testing.T) {
+	f := rosewood(t)
+	ends := time.Date(2026, time.September, 7, 23, 30, 0, 0, time.UTC)
+	f.joinFairview(t, &ends)
+
+	want := []renderedGardenRow{
+		{name: "Rosewood", meta: "Your garden · Owner", current: true},
+		{name: "Fairview", meta: "Robin's garden · Sitter · until 8 Sep", button: true, posts: fairviewGardenID.String()},
+	}
+	for _, hx := range []bool{false, true} {
+		page := f.gardens(t, hx)
+		if got := gardenSheetOf(page); !slices.Equal(got, want) {
+			t.Errorf("with htmx = %v the sheet is\n%+v\nwant\n%+v", hx, got, want)
+		}
+		hasHeading := strings.Contains(page, "<h1")
+		if hasHeading == hx {
+			t.Errorf("with htmx = %v the response has a page heading = %v, want %v", hx, hasHeading, !hx)
+		}
+	}
+}
+
+func TestToday_AnEndedSecondMembershipPutsNoSwitchIconInTheTopBar(t *testing.T) {
+	f := rosewood(t)
+	ended := thursday.AddDate(0, 0, -1)
+	f.joinFairview(t, &ended)
+
+	if m := switchLink.FindStringSubmatch(f.show(t)); m != nil {
+		t.Errorf("the top bar has a switch icon linking to %s, and the only other membership has ended", m[1])
+	}
+}
+
+// Robin owns Fairview and Ellie is not in it. A query that stopped filtering
+// on the signed-in account would list Fairview.
+func TestToday_AnotherAccountsGardenIsNotInTheGardenSheet(t *testing.T) {
+	f := rosewood(t)
+	f.exec(t, "INSERT INTO garden (id, name) VALUES ($1, 'Fairview')", fairviewGardenID)
+	f.exec(t, "INSERT INTO app_user (id, display_name, handle, timezone) VALUES ($1, 'Robin', 'robin', 'Europe/Lisbon')", robinUserID)
+	f.exec(t, "INSERT INTO membership (garden_id, user_id, role, digest_hour) VALUES ($1, $2, 'owner', 8)", fairviewGardenID, robinUserID)
+
+	want := []renderedGardenRow{{name: "Rosewood", meta: "Your garden · Owner", current: true}}
+	if got := gardenSheetOf(f.gardens(t, false)); !slices.Equal(got, want) {
+		t.Errorf("the sheet is\n%+v\nwant\n%+v", got, want)
+	}
+}
+
+// ownerLine matches the text under the garden's name in Today's top bar.
+var ownerLine = regexp.MustCompile(`<div class="topbar__owner">(.*?)</div>`)
+
+func TestToday_TheOwnersOwnGardenSaysNothingUnderItsName(t *testing.T) {
+	page := rosewood(t).show(t)
+
+	if m := ownerLine.FindStringSubmatch(page); m != nil {
+		t.Errorf("the top bar says %q under the name, and Ellie owns Rosewood", m[1])
+	}
+}
+
+// Robin's owner membership is dated before Ellie's, so Robin is the garden's
+// owner even though Ellie is an owner too. The line names whoever created the
+// garden, not the reader's role.
+func TestToday_AGardenAnotherPersonCreatedSaysWhoseItIsUnderItsNameEvenToASecondOwner(t *testing.T) {
+	f := rosewood(t)
+	f.exec(t, "INSERT INTO app_user (id, display_name, handle, timezone) VALUES ($1, 'Robin', 'robin', 'Europe/Lisbon')", robinUserID)
+	f.exec(t, "INSERT INTO membership (garden_id, user_id, role, digest_hour, created_at) VALUES ($1, $2, 'owner', 8, $3)",
+		rosewoodID, robinUserID, thursday.AddDate(-1, 0, 0))
+
+	page := f.show(t)
+
+	m := ownerLine.FindStringSubmatch(page)
+	if m == nil {
+		t.Fatal("the top bar has no line under the garden's name")
+	}
+	if got := text(m[1]); got != "Robin's garden" {
+		t.Errorf("the line under the name is %q, want %q", got, "Robin's garden")
+	}
+}
+
+func TestToday_AGardenWithNoOwnerLeftSaysNothingUnderItsName(t *testing.T) {
+	f := rosewood(t)
+	f.exec(t, "UPDATE membership SET role = 'member' WHERE garden_id = $1 AND user_id = $2", rosewoodID, readerID)
+	f.principal.Membership.Role = "member"
+
+	page := f.show(t)
+
+	if m := ownerLine.FindStringSubmatch(page); m != nil {
+		t.Errorf("the top bar says %q under the name, and nobody owns Rosewood", m[1])
+	}
+	if got := gardenSheetOf(f.gardens(t, false)); len(got) != 1 || got[0].meta != "Member" {
+		t.Errorf("the sheet is %+v, want one row reading Member with no owner", got)
+	}
+}
+
+// The log-care sheet renders the whole page around it without JavaScript, so
+// the top bar has to be loaded there too.
+func TestToday_TheLogCareSheetPageKeepsTheSwitchIconAndTheOwnerLine(t *testing.T) {
+	f := rosewood(t)
+	f.joinFairview(t, nil)
+	f.exec(t, "INSERT INTO app_user (id, display_name, handle, timezone) VALUES ($1, 'Jo', 'jo', 'Europe/London')", joUserID)
+	f.exec(t, "INSERT INTO membership (garden_id, user_id, role, digest_hour, created_at) VALUES ($1, $2, 'owner', 8, $3)",
+		rosewoodID, joUserID, thursday.AddDate(-1, 0, 0))
+
+	ctx := context.WithValue(t.Context(), principalKey, f.principal)
+	req := httptest.NewRequestWithContext(ctx, http.MethodGet, logPath(bigFellaID), nil)
+	req.SetPathValue("plant", bigFellaID.String())
+	rec := httptest.NewRecorder()
+	f.handler.sheet(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	page := rec.Body.String()
+
+	if switchLink.FindStringSubmatch(page) == nil {
+		t.Error("the sheet page has no switch icon in the top bar")
+	}
+	if m := ownerLine.FindStringSubmatch(page); m == nil || text(m[1]) != "Jo's garden" {
+		t.Errorf("the sheet page's line under the name is %v, want Jo's garden", m)
 	}
 }

@@ -1,10 +1,20 @@
 {{define "title"}}sprig — today{{end}}
 
+{{/* The top bar names the garden the session is on. The link after the name
+     opens the garden sheet. Without JavaScript it is a page navigation, and
+     with it htmx swaps the sheet into the placeholder, the same as a care row
+     opening the log-care sheet. "Robin's garden" under the name says whose
+     garden it is when the reader is not the owner. Neither the link nor that
+     line is rendered for an account in one garden it owns. */}}
 {{define "main"}}
 <header class="topbar">
 <div>
 <div class="topbar__date">{{.Date}}</div>
+<div class="topbar__name">
 <h1 class="topbar__title">{{.Garden}}</h1>
+{{with .Switch}}<a class="topbar__switch" href="{{.}}" aria-label="Switch garden" hx-get="{{.}}" hx-target="#sheet" hx-swap="outerHTML">{{template "icon-switch"}}</a>{{end}}
+</div>
+{{with .Owner}}<div class="topbar__owner">{{.}}</div>{{end}}
 </div>
 </header>
 {{template "day-body" .}}
@@ -12,4 +22,39 @@
 
 {{define "nav"}}{{template "tabs" "Today"}}{{end}}
 
-{{define "overlay"}}{{template "sheet" .}}{{end}}
+{{define "overlay"}}{{if .GardenSheet}}{{template "garden-sheet" .}}{{else}}{{template "sheet" .}}{{end}}{{end}}
+
+{{/* One row per garden the account is in, with whose garden it is and the
+     reader's role in it. The dialog has the log-care sheet's id, so a swap
+     replaces one sheet with the other. The scrim and Cancel are buttons in a
+     method="dialog" form, so they close the dialog without JavaScript. The
+     garden the session is on is text. Every other row is a button filling the
+     row, in a form of its own, that posts the switch. */}}
+{{define "garden-sheet"}}<dialog open class="sheet" id="sheet" aria-labelledby="garden-sheet-title">
+<form method="dialog"><button class="sheet__scrim" aria-label="Close"></button></form>
+<div class="sheet__panel">
+<div class="sheet__grip"></div>
+<h2 class="sheet__title" id="garden-sheet-title">Switch garden</h2>
+<ul class="list">
+{{range .Gardens}}<li>
+{{if .Current}}<span class="row row--setting row--stack">{{template "garden-sheet-row" .}}</span>
+{{else}}<form method="post" action="{{$.Action}}">
+<input type="hidden" name="{{$.Field}}" value="{{.ID}}">
+<button class="row row--setting row--stack row--switch" type="submit">{{template "garden-sheet-row" .}}</button>
+</form>
+{{end}}</li>
+{{end}}</ul>
+<form method="dialog"><button class="sheet__cancel">Cancel</button></form>
+</div>
+</dialog>{{end}}
+
+{{define "garden-sheet-row"}}<span class="row__text">
+<span class="row__name">{{.Name}}{{if .Current}} <span class="row__you">Current</span>{{end}}</span>
+<span class="row__meta">
+{{with .Owner}}<span class="row__part row__part--word">{{.}}</span>
+<span class="dot">&middot;</span>
+{{end}}<span class="row__part row__part--word">{{.Role}}</span>
+{{with .Until}}<span class="dot">&middot;</span>
+<span class="row__part">{{.}}</span>
+{{end}}</span>
+</span>{{end}}

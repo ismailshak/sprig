@@ -8,6 +8,31 @@ export class TodayScreen {
     await this.page.goto('/');
   }
 
+  // The link after the garden's name that opens the garden sheet. It is
+  // rendered only for an account in more than one garden.
+  switchGarden(): Locator {
+    return this.page.getByRole('link', { name: 'Switch garden' });
+  }
+
+  gardenSheet(): Locator {
+    return this.page.getByRole('dialog', { name: 'Switch garden' });
+  }
+
+  // A garden's row in the sheet, found by its name. The name is the first
+  // thing in the row, so the pattern is anchored to it.
+  gardenRow(name: string): Locator {
+    return this.gardenSheet()
+      .getByRole('listitem')
+      .filter({ has: this.page.getByText(new RegExp(`^${name}\\b`)) });
+  }
+
+  // The button that switches to a garden. The whole row is the button, so its
+  // accessible name starts with the garden's name and the rest of the row
+  // follows.
+  switchTo(name: string): Locator {
+    return this.gardenSheet().getByRole('button', { name });
+  }
+
   section(title: 'Overdue' | 'Due today' | 'Coming up'): Locator {
     return this.page.getByRole('region', { name: title });
   }

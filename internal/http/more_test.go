@@ -36,9 +36,13 @@ var (
 )
 
 type moreFixture struct {
-	handler   *more
-	tx        pgx.Tx
-	principal auth.Principal
+	handler *more
+	// todayHandler serves POST /gardens. The switch tests use this fixture
+	// because its seed already has two gardens: Ellie's Rosewood and Sam's
+	// Fairview.
+	todayHandler *today
+	tx           pgx.Tx
+	principal    auth.Principal
 }
 
 // moreGarden sets up the account the four pages under More read: Ellie owns
@@ -95,6 +99,12 @@ func moreGarden(t *testing.T) *moreFixture {
 			queries:   store.New(tx),
 			templates: testTemplates(),
 			build:     build.Info{Version: "0.1.0", Revision: "8f2c1a4d3b29e7c05a1"},
+			now:       func() time.Time { return thursday },
+		},
+		todayHandler: &today{
+			logger:    testLogger,
+			queries:   store.New(tx),
+			templates: testTemplates(),
 			now:       func() time.Time { return thursday },
 		},
 		tx:        tx,

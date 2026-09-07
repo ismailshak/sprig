@@ -28,7 +28,7 @@ const createUser = `-- name: CreateUser :one
 INSERT INTO app_user (id, display_name, handle, timezone)
 VALUES ($1, $2, $3, $4)
 ON CONFLICT (handle) DO NOTHING
-RETURNING id, display_name, handle, timezone, created_at
+RETURNING id, display_name, handle, timezone, created_at, last_garden_id
 `
 
 type CreateUserParams struct {
@@ -61,12 +61,13 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (AppUser
 		&i.Handle,
 		&i.Timezone,
 		&i.CreatedAt,
+		&i.LastGardenID,
 	)
 	return i, err
 }
 
 const getUserByHandle = `-- name: GetUserByHandle :one
-SELECT id, display_name, handle, timezone, created_at FROM app_user
+SELECT id, display_name, handle, timezone, created_at, last_garden_id FROM app_user
 WHERE handle = $1
 `
 
@@ -79,12 +80,13 @@ func (q *Queries) GetUserByHandle(ctx context.Context, handle string) (AppUser, 
 		&i.Handle,
 		&i.Timezone,
 		&i.CreatedAt,
+		&i.LastGardenID,
 	)
 	return i, err
 }
 
 const listUsers = `-- name: ListUsers :many
-SELECT id, display_name, handle, timezone, created_at FROM app_user
+SELECT id, display_name, handle, timezone, created_at, last_garden_id FROM app_user
 ORDER BY created_at, id
 `
 
@@ -106,6 +108,7 @@ func (q *Queries) ListUsers(ctx context.Context) ([]AppUser, error) {
 			&i.Handle,
 			&i.Timezone,
 			&i.CreatedAt,
+			&i.LastGardenID,
 		); err != nil {
 			return nil, err
 		}
@@ -127,6 +130,18 @@ LOCK TABLE app_user IN SHARE ROW EXCLUSIVE MODE
 // table, so the lock makes the second wait and then see the first.
 func (q *Queries) LockUsers(ctx context.Context) error {
 	_, err := q.db.Exec(ctx, lockUsers)
+	return err
+}
+
+const setLastGarden = `-- name: SetLastGarden :exec
+UPDATE app_user SET last_garden_id = $1
+WHERE id = $2
+`
+
+// Switching gardens records the garden on the account, so the next session
+// starts there.
+func (q *Queries) SetLastGarden(ctx context.Context, gardenID *uuid.UUID, userID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, setLastGarden, gardenID, userID)
 	return err
 }
 

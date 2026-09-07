@@ -103,7 +103,7 @@ func (q *Queries) DeleteWaitingInvite(ctx context.Context, gardenID uuid.UUID, i
 }
 
 const getInviteByTokenHash = `-- name: GetInviteByTokenHash :one
-SELECT invite.id, invite.garden_id, invite.token_hash, invite.role, invite.user_id, invite.created_by, invite.created_at, invite.expires_at, invite.redeemed_at, invite.membership_expires_at, garden.id, garden.name, garden.created_at, app_user.id, app_user.display_name, app_user.handle, app_user.timezone, app_user.created_at
+SELECT invite.id, invite.garden_id, invite.token_hash, invite.role, invite.user_id, invite.created_by, invite.created_at, invite.expires_at, invite.redeemed_at, invite.membership_expires_at, garden.id, garden.name, garden.created_at, app_user.id, app_user.display_name, app_user.handle, app_user.timezone, app_user.created_at, app_user.last_garden_id
 FROM invite
 JOIN garden ON garden.id = invite.garden_id
 JOIN app_user ON app_user.id = invite.created_by
@@ -142,6 +142,7 @@ func (q *Queries) GetInviteByTokenHash(ctx context.Context, tokenHash string) (G
 		&i.AppUser.Handle,
 		&i.AppUser.Timezone,
 		&i.AppUser.CreatedAt,
+		&i.AppUser.LastGardenID,
 	)
 	return i, err
 }

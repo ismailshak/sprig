@@ -18,6 +18,10 @@ import (
 	"github.com/ismailshak/sprig/internal/store"
 )
 
+// sheetID is the HTML id of the sheet, on the open dialog and on the empty
+// placeholder it swaps with. A request targeting it asks for the sheet alone.
+const sheetID = "sheet"
+
 // sheetFormID is the HTML id of the sheet's form. A What chip swaps this
 // element, not the whole dialog.
 const sheetFormID = "sheet-form"

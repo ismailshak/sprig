@@ -26,7 +26,8 @@ CREATE TABLE app_user (
     -- No default. Due dates are computed in this zone, and a zone nobody
     -- chose could be wrong by up to a day.
     timezone     text NOT NULL,
-    created_at   timestamptz NOT NULL DEFAULT now()
+    created_at   timestamptz NOT NULL DEFAULT now(),
+    last_garden_id uuid REFERENCES garden (id) ON DELETE SET NULL
 );
 
 CREATE TABLE role (

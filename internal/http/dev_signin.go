@@ -80,7 +80,7 @@ func (d *devSignIn) start(w http.ResponseWriter, r *http.Request) {
 	}
 
 	now := time.Now()
-	membership, err := d.resolver.OldestLiveMembership(ctx, now, user.ID)
+	membership, err := d.resolver.StartingMembership(ctx, now, user.ID)
 	if errors.Is(err, auth.ErrNoLiveMembership) {
 		http.Error(w, fmt.Sprintf("%s is in no garden, so there is nothing to start a session on", handle), http.StatusConflict)
 		return

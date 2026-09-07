@@ -9,6 +9,7 @@ export const people = {
   sam: { name: 'Sam', handle: 'sam' },
   jo: { name: 'Jo', handle: 'jo' },
   clare: { name: 'Clare', handle: 'clare' },
+  robin: { name: 'Robin', handle: 'robin' },
 } as const;
 
 // The devices Ellie has registered a passkey on, one row each on Passkeys.
@@ -25,8 +26,14 @@ export const browsers = {
   laptop: 'Mac · Chrome',
 } as const;
 
-// The garden the seed gives Ellie. Its name is the heading on Today.
-export const garden = { name: 'Home' } as const;
+// The two gardens in the seed. A garden's name is the heading on Today while
+// the session is on it. Ellie owns Home and is in no other garden. Robin owns
+// Upstairs. Sam is a member of Home and a sitter in Upstairs, so the switching
+// tests sign in as Sam.
+export const gardens = {
+  home: { name: 'Home' },
+  upstairs: { name: 'Upstairs' },
+} as const;
 
 // The one invite waiting on People: a sitter's, made two days ago. Its token
 // is the plaintext the seed hashes, so a test can open the link.

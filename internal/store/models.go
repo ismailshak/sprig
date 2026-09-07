@@ -24,11 +24,12 @@ type APIToken struct {
 }
 
 type AppUser struct {
-	ID          uuid.UUID
-	DisplayName string
-	Handle      string
-	Timezone    string
-	CreatedAt   time.Time
+	ID           uuid.UUID
+	DisplayName  string
+	Handle       string
+	Timezone     string
+	CreatedAt    time.Time
+	LastGardenID *uuid.UUID
 }
 
 type Capability struct {

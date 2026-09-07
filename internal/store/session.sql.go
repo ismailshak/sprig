@@ -85,6 +85,23 @@ func (q *Queries) GetSessionByTokenHash(ctx context.Context, tokenHash string) (
 	return i, err
 }
 
+const setSessionGarden = `-- name: SetSessionGarden :execrows
+UPDATE session
+SET garden_id = $1
+WHERE token_hash = $2
+`
+
+// Switching gardens updates the session row rather than creating a new one, so
+// the cookie stays as it is. The foreign key on (garden_id, user_id) rejects a
+// garden the session's user is not a member of.
+func (q *Queries) SetSessionGarden(ctx context.Context, gardenID uuid.UUID, tokenHash string) (int64, error) {
+	result, err := q.db.Exec(ctx, setSessionGarden, gardenID, tokenHash)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const touchSession = `-- name: TouchSession :one
 UPDATE session
 SET last_seen_at = $1
