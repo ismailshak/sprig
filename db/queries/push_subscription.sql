@@ -25,3 +25,19 @@ ON CONFLICT (endpoint) DO UPDATE SET
 -- name: SetPushSubscriptionSent :exec
 UPDATE push_subscription SET last_sent_at = @sent_at
 WHERE user_id = @user_id AND id = @subscription_id;
+
+-- The browsers to notify when @actor_id logs care in the garden: every push
+-- subscription of every other member whose membership has not ended and who
+-- has the activity notification on.
+-- name: ListActivitySubscriptions :many
+SELECT sqlc.embed(push_subscription), app_user.handle, garden.name AS garden_name
+FROM membership
+JOIN app_user ON app_user.id = membership.user_id
+JOIN garden ON garden.id = membership.garden_id
+JOIN notification_preference ON notification_preference.membership_id = membership.id
+    AND notification_preference.kind = 'activity' AND notification_preference.enabled
+JOIN push_subscription ON push_subscription.user_id = membership.user_id
+WHERE membership.garden_id = @garden_id
+  AND membership.user_id <> @actor_id
+  AND (membership.expires_at IS NULL OR membership.expires_at > @now::timestamptz)
+ORDER BY membership.created_at, membership.id, push_subscription.created_at, push_subscription.id;

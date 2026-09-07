@@ -1,15 +1,18 @@
 package http
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 	"time"
+	"uuid"
 
 	"golang.org/x/time/rate"
 
 	"github.com/ismailshak/sprig/internal/auth"
 	"github.com/ismailshak/sprig/internal/build"
 	"github.com/ismailshak/sprig/internal/photo"
+	"github.com/ismailshak/sprig/internal/push"
 	"github.com/ismailshak/sprig/internal/store"
 )
 
@@ -37,8 +40,8 @@ type middleware func(http.Handler) http.Handler
 // signupEnabled is SPRIG_SIGNUP_ENABLED, whether Set up your garden is served
 // on an install that already has an account. pushKey is the VAPID public key
 // the Notifications page gives the browser. It is empty when push is off.
-func routes(logger *slog.Logger, sessions *auth.Sessions, passkeys *auth.Passkeys, queries *store.Queries, photos *photo.Store, templates *Templates, assets *Assets, trustedIPHeader string, signupEnabled bool, pushKey string, wake func()) []route {
-	todayHandler := &today{logger: logger, queries: queries, templates: templates, now: time.Now}
+func routes(logger *slog.Logger, sessions *auth.Sessions, passkeys *auth.Passkeys, queries *store.Queries, photos *photo.Store, templates *Templates, assets *Assets, trustedIPHeader string, signupEnabled bool, pushKey string, wake func(), notify notifyActivity) []route {
+	todayHandler := &today{logger: logger, queries: queries, templates: templates, now: time.Now, notify: notify}
 	plantsHandler := &plants{logger: logger, queries: queries, photos: photos, templates: templates, now: time.Now}
 	activityHandler := &activity{logger: logger, queries: queries, templates: templates, now: time.Now}
 	// The setup and invite pages use the resolver to tell whether the browser
@@ -213,10 +216,12 @@ var publicRoutes = map[string]bool{
 // cross-origin check is inside Logging and Recover so a refused request is
 // logged like any other. Authentication is inside that so a cross-site post is
 // refused before it costs a session lookup. wake is called after a handler
-// commits a change to who gets a digest and when. It is nil when push is off.
-func New(logger *slog.Logger, sessions *auth.Sessions, passkeys *auth.Passkeys, resolver Resolver, queries *store.Queries, photos *photo.Store, templates *Templates, assets *Assets, trustedIPHeader string, signupEnabled bool, pushKey string, wake func()) http.Handler {
+// commits a change to who gets a digest and when. notify is called after a
+// handler records care, to send the garden's other members a push
+// notification about it. Both are nil when push is off.
+func New(logger *slog.Logger, sessions *auth.Sessions, passkeys *auth.Passkeys, resolver Resolver, queries *store.Queries, photos *photo.Store, templates *Templates, assets *Assets, trustedIPHeader string, signupEnabled bool, pushKey string, wake func(), notify func(ctx context.Context, gardenID, actorID uuid.UUID, n push.Notification)) http.Handler {
 	mux := http.NewServeMux()
-	for _, r := range routes(logger, sessions, passkeys, queries, photos, templates, assets, trustedIPHeader, signupEnabled, pushKey, wake) {
+	for _, r := range routes(logger, sessions, passkeys, queries, photos, templates, assets, trustedIPHeader, signupEnabled, pushKey, wake, notifyActivity(notify)) {
 		h := r.handler
 		if r.capability != "" {
 			h = require(r.capability, h)

@@ -21,7 +21,8 @@ type today struct {
 	queries   *store.Queries
 	templates *Templates
 	// now supplies the current time, so a test can fix the day.
-	now func() time.Time
+	now    func() time.Time
+	notify notifyActivity
 }
 
 func (h *today) show(w http.ResponseWriter, r *http.Request) {

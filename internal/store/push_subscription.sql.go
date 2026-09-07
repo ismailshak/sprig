@@ -25,6 +25,66 @@ func (q *Queries) DeletePushSubscription(ctx context.Context, userID uuid.UUID, 
 	return result.RowsAffected(), nil
 }
 
+const listActivitySubscriptions = `-- name: ListActivitySubscriptions :many
+SELECT push_subscription.id, push_subscription.user_id, push_subscription.endpoint, push_subscription.p256dh_key, push_subscription.auth_key, push_subscription.user_agent, push_subscription.created_at, push_subscription.last_sent_at, app_user.handle, garden.name AS garden_name
+FROM membership
+JOIN app_user ON app_user.id = membership.user_id
+JOIN garden ON garden.id = membership.garden_id
+JOIN notification_preference ON notification_preference.membership_id = membership.id
+    AND notification_preference.kind = 'activity' AND notification_preference.enabled
+JOIN push_subscription ON push_subscription.user_id = membership.user_id
+WHERE membership.garden_id = $1
+  AND membership.user_id <> $2
+  AND (membership.expires_at IS NULL OR membership.expires_at > $3::timestamptz)
+ORDER BY membership.created_at, membership.id, push_subscription.created_at, push_subscription.id
+`
+
+type ListActivitySubscriptionsParams struct {
+	GardenID uuid.UUID
+	ActorID  uuid.UUID
+	Now      time.Time
+}
+
+type ListActivitySubscriptionsRow struct {
+	PushSubscription PushSubscription
+	Handle           string
+	GardenName       string
+}
+
+// The browsers to notify when @actor_id logs care in the garden: every push
+// subscription of every other member whose membership has not ended and who
+// has the activity notification on.
+func (q *Queries) ListActivitySubscriptions(ctx context.Context, arg ListActivitySubscriptionsParams) ([]ListActivitySubscriptionsRow, error) {
+	rows, err := q.db.Query(ctx, listActivitySubscriptions, arg.GardenID, arg.ActorID, arg.Now)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListActivitySubscriptionsRow
+	for rows.Next() {
+		var i ListActivitySubscriptionsRow
+		if err := rows.Scan(
+			&i.PushSubscription.ID,
+			&i.PushSubscription.UserID,
+			&i.PushSubscription.Endpoint,
+			&i.PushSubscription.P256dhKey,
+			&i.PushSubscription.AuthKey,
+			&i.PushSubscription.UserAgent,
+			&i.PushSubscription.CreatedAt,
+			&i.PushSubscription.LastSentAt,
+			&i.Handle,
+			&i.GardenName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPushSubscriptions = `-- name: ListPushSubscriptions :many
 SELECT id, user_id, endpoint, p256dh_key, auth_key, user_agent, created_at, last_sent_at FROM push_subscription
 WHERE user_id = $1

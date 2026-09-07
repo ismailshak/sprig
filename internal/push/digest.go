@@ -2,7 +2,6 @@ package push
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -162,9 +161,7 @@ func (d *Digest) sendDue(ctx context.Context) (time.Time, error) {
 // the digest again on restart.
 //
 // An error from the push service is logged and the ledger row stays written:
-// nothing retries, so a second send would only fail the same way. A browser the
-// push service reports gone is deleted, because a failed send is the only way
-// the app learns of it.
+// nothing retries, so a second send would only fail the same way.
 func (d *Digest) send(ctx context.Context, member store.ListDigestMembersRow, loc *time.Location, key string, now time.Time) error {
 	return d.queries.InTx(ctx, func(q *store.Queries) error {
 		claimed, err := q.ClaimNotificationSend(ctx, store.ClaimNotificationSendParams{
@@ -199,38 +196,13 @@ func (d *Digest) send(ctx context.Context, member store.ListDigestMembersRow, lo
 		if err != nil {
 			return fmt.Errorf("listing the browsers: %w", err)
 		}
-		sent := 0
-		for _, subscription := range subscriptions {
-			switch err := d.sender.Send(ctx, subscription, notification); {
-			case errors.Is(err, ErrGone):
-				if _, err := q.DeletePushSubscription(ctx, member.UserID, subscription.ID); err != nil {
-					return fmt.Errorf("deleting the browser the push service dropped: %w", err)
-				}
-				d.logger.Info("browser gone", "user", member.Handle, "user_agent", userAgentOf(subscription))
-			case err != nil:
-				d.logger.Error("push failed", "user", member.Handle, "user_agent", userAgentOf(subscription), "err", err)
-			default:
-				err := q.SetPushSubscriptionSent(ctx, store.SetPushSubscriptionSentParams{
-					SentAt:         &now,
-					UserID:         member.UserID,
-					SubscriptionID: subscription.ID,
-				})
-				if err != nil {
-					return fmt.Errorf("recording the send on the browser: %w", err)
-				}
-				sent++
-			}
+		sent, err := deliver(ctx, d.logger, q, d.sender, member.UserID, member.Handle, subscriptions, notification, now)
+		if err != nil {
+			return err
 		}
 		d.logger.Info("digest sent", "user", member.Handle, "garden", member.GardenName, "date", key, "items", items, "browsers", sent)
 		return nil
 	})
-}
-
-func userAgentOf(subscription store.PushSubscription) string {
-	if subscription.UserAgent == nil {
-		return ""
-	}
-	return *subscription.UserAgent
 }
 
 // digestOf builds the notification for a garden: every care overdue or due

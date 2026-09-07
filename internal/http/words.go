@@ -123,14 +123,20 @@ func feedWhen(at, now time.Time) string {
 // whoDid returns the person and the action for an event line. The reader is
 // "You", and a skipped care reads "skipped".
 func whoDid(principal auth.Principal, performedBy string, e store.CareEvent, ct store.CareType) (who, did string) {
-	who, did = performedBy, carePast(ct)
+	who = performedBy
 	if e.PerformedBy == principal.User.ID {
 		who = "You"
 	}
-	if !e.Done {
-		did = "skipped"
+	return who, didWord(e.Done, ct)
+}
+
+// didWord returns "skipped" for a skipped care, and otherwise the care type in
+// the past tense, like "watered".
+func didWord(done bool, ct store.CareType) string {
+	if !done {
+		return "skipped"
 	}
-	return who, did
+	return carePast(ct)
 }
 
 // dayHeading formats the day for a marker on Activity. Today and yesterday are

@@ -78,7 +78,7 @@ func photosServedTo(t *testing.T, queries *store.Queries) servedPhotos {
 			t.Fatal(err)
 		}
 	}
-	f.handler = New(testLogger, testSessions(), testPasskeys(), acceptEveryToken(memberWith(everyCapability())), queries, photos, testTemplates(), testAssets(), "", false, testPushKey, nil)
+	f.handler = New(testLogger, testSessions(), testPasskeys(), acceptEveryToken(memberWith(everyCapability())), queries, photos, testTemplates(), testAssets(), "", false, testPushKey, nil, nil)
 	return f
 }
 

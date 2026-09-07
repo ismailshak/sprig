@@ -1,6 +1,7 @@
 package http
 
 import (
+	"context"
 	"errors"
 	"maps"
 	"net/http"
@@ -14,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/ismailshak/sprig/internal/auth"
+	"github.com/ismailshak/sprig/internal/push"
 	"github.com/ismailshak/sprig/internal/schedule"
 	"github.com/ismailshak/sprig/internal/store"
 )
@@ -646,6 +648,7 @@ func (h *today) log(w http.ResponseWriter, r *http.Request) {
 		serverError(h.logger, w, r, "record the care", err)
 		return
 	}
+	h.notify.call(r.Context(), principal, activityNotification(principal, plant, care.CareType, logged.Done))
 
 	if !isHTMX(r) {
 		http.Redirect(w, r, todayPath, http.StatusSeeOther)
@@ -713,11 +716,37 @@ func (h *today) logOnPlant(w http.ResponseWriter, r *http.Request, principal aut
 	}
 
 	params := careEventParams(principal, detail.plant.ID, care.CareType.ID, d, performedAt, detail.now)
-	if _, err := h.queries.CreateCareEvent(r.Context(), params); err != nil {
+	logged, err := h.queries.CreateCareEvent(r.Context(), params)
+	if err != nil {
 		serverError(h.logger, w, r, "record the care", err)
 		return
 	}
+	h.notify.call(r.Context(), principal, activityNotification(principal, detail.plant, care.CareType, logged.Done))
 	http.Redirect(w, r, plantPath(detail.plant.ID), http.StatusSeeOther)
+}
+
+// notifyActivity sends the other members of the garden a push notification
+// about care the principal has just logged. It is nil when push is off.
+type notifyActivity func(ctx context.Context, gardenID, actorID uuid.UUID, n push.Notification)
+
+func (f notifyActivity) call(ctx context.Context, principal auth.Principal, n push.Notification) {
+	if f != nil {
+		f(ctx, principal.Garden.ID, principal.User.ID, n)
+	}
+}
+
+// activityNotification returns the notification the garden's other members
+// get when the principal logs care. The body reads "Ellie watered Doris."
+func activityNotification(principal auth.Principal, plant store.Plant, ct store.CareType, done bool) push.Notification {
+	return push.Notification{
+		Title: principal.Garden.Name,
+		Body:  principal.User.DisplayName + " " + didWord(done, ct) + " " + plant.DisplayName() + ".",
+		URL:   plantPath(plant.ID),
+		// The recipient's browser fetches the icon itself, with their
+		// session cookie. The photo route reads the photo in the session's
+		// garden, so a recipient signed in to another garden sees no picture.
+		Icon: squarePicturePath(plant),
+	}
 }
 
 // careEventParams builds the care event a draft describes. recordedAt is the

@@ -24,6 +24,9 @@ type Notification struct {
 	Body  string `json:"body"`
 	// URL is the page the browser opens when the notification is pressed.
 	URL string `json:"url"`
+	// Icon is the URL of the image shown beside the title. When it is empty
+	// the service worker shows the app's icon.
+	Icon string `json:"icon,omitempty"`
 }
 
 // ErrGone is returned by Send when the push service responds 404 or 410,
