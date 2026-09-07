@@ -390,7 +390,7 @@ func TestRecover_AnAnswerWithNoCeremonyLeavesTheCodeLiveAndSaysToPressAgain(t *t
 // RemoteAddr.
 func recoverMux(t *testing.T, f *recoverFixture) http.Handler {
 	t.Helper()
-	return New(testLogger, testSessions(), f.handler.passkeys, rejectEveryToken, f.queries, testTemplates(), testAssets(), "", false, testPushKey, nil)
+	return New(testLogger, testSessions(), f.handler.passkeys, rejectEveryToken, f.queries, testPhotos(t), testTemplates(), testAssets(), "", false, testPushKey, nil)
 }
 
 func TestRecover_TheNinthCodePostedFromOneAddressInAMinuteIsRefusedWithTooManyTries(t *testing.T) {

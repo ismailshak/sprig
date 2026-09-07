@@ -132,6 +132,21 @@ type PasskeyCredential struct {
 	LastUsedAt   *time.Time
 }
 
+type Photo struct {
+	ID          uuid.UUID
+	GardenID    uuid.UUID
+	PlantID     uuid.UUID
+	UploadedBy  uuid.UUID
+	TakenAt     *time.Time
+	UploadedAt  time.Time
+	Kind        string
+	Path        string
+	Width       int32
+	Height      int32
+	Bytes       int64
+	SquareBytes *int64
+}
+
 type Plant struct {
 	ID            uuid.UUID
 	GardenID      uuid.UUID

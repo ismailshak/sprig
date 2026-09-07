@@ -2,6 +2,7 @@ package http
 
 import (
 	"errors"
+	"io"
 	"math"
 	"net/http"
 	"net/url"
@@ -12,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/ismailshak/sprig/internal/auth"
+	"github.com/ismailshak/sprig/internal/photo"
 	"github.com/ismailshak/sprig/internal/store"
 )
 
@@ -218,6 +220,52 @@ func photoPosted(r *http.Request) bool {
 	return r.MultipartForm != nil && len(r.MultipartForm.File["photo"]) > 0
 }
 
+// postedPhoto builds an upload for the plant from the posted photo file and
+// the square variant when one was posted too. closeFiles closes whatever was
+// opened and is never nil. A part that will not open gets a 400 written here,
+// and false returned.
+func postedPhoto(w http.ResponseWriter, r *http.Request, principal auth.Principal, plantID uuid.UUID) (upload photo.Upload, closeFiles func(), ok bool) {
+	var opened []io.Closer
+	closeFiles = func() {
+		for _, f := range opened {
+			_ = f.Close()
+		}
+	}
+	upload = photo.Upload{GardenID: principal.Garden.ID, PlantID: plantID, UploadedBy: principal.User.ID}
+	file, header, err := r.FormFile("photo")
+	if err != nil {
+		http.Error(w, "the photo did not parse", http.StatusBadRequest)
+		return upload, closeFiles, false
+	}
+	opened = append(opened, file)
+	upload.File, upload.Size = file, header.Size
+	if len(r.MultipartForm.File["photo-square"]) > 0 {
+		square, header, err := r.FormFile("photo-square")
+		if err != nil {
+			http.Error(w, "the photo did not parse", http.StatusBadRequest)
+			return upload, closeFiles, false
+		}
+		opened = append(opened, square)
+		upload.Square, upload.SquareSize = square, header.Size
+	}
+	return upload, closeFiles, true
+}
+
+// photoRefused writes a 413 for a photo over the size limit and a 400 for one
+// that is not a JPEG or a WebP. It reports whether err was one of those two.
+// The caller reports any other error itself.
+func photoRefused(w http.ResponseWriter, err error) bool {
+	switch {
+	case errors.Is(err, photo.ErrTooLarge):
+		http.Error(w, "the photo is too large", http.StatusRequestEntityTooLarge)
+	case errors.Is(err, photo.ErrNotImage):
+		http.Error(w, "the photo is not a JPEG or a WebP", http.StatusBadRequest)
+	default:
+		return false
+	}
+	return true
+}
+
 // set converts a text field to its column value. An empty field is null, since
 // an empty string in the column would count as a value.
 func set(s string) *string {
@@ -298,6 +346,9 @@ type plantFormPage struct {
 	// rendered again with an empty file input, because a server cannot fill
 	// one.
 	PhotoNeedsChoosing bool
+	// PhotoField is whether the form renders the photo field. It is true for a
+	// member who may add photos.
+	PhotoField bool
 }
 
 type factField struct {
@@ -324,12 +375,13 @@ func newPlantFormPage(f plantFields, now time.Time) plantFormPage {
 	return page
 }
 
-func addPlantPage(f plantFields, rows []scheduleDraft, now time.Time) plantFormPage {
+func addPlantPage(principal auth.Principal, f plantFields, rows []scheduleDraft, now time.Time) plantFormPage {
 	page := newPlantFormPage(f, now)
 	page.Title = "Add a plant"
 	page.Action = newPlantPath
 	page.Back = plantsPath
 	page.Submit = "Add plant"
+	page.PhotoField = principal.Can(auth.PhotoAdd)
 	for _, row := range rows {
 		page.Schedules = append(page.Schedules, newScheduleField(row, newPlantPath, now))
 	}
@@ -342,6 +394,7 @@ func editPlantPage(principal auth.Principal, f plantFields, plantID uuid.UUID, n
 	page.Action = editPlantPath(plantID)
 	page.Back = plantPath(plantID)
 	page.Submit = "Save changes"
+	page.PhotoField = principal.Can(auth.PhotoAdd)
 	if principal.Can(auth.PlantArchive) {
 		page.Archive = archivePlantPath(plantID)
 	}
@@ -432,7 +485,7 @@ func (h *plants) newPlant(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	page := addPlantPage(fields, rows, now)
+	page := addPlantPage(principal, fields, rows, now)
 
 	// An htmx request from one row gets that row back, since it is the only
 	// element that changes.
@@ -463,6 +516,12 @@ func (h *plants) create(w http.ResponseWriter, r *http.Request) {
 	if !readPlantForm(w, r) {
 		return
 	}
+	// Adding a photo is its own capability. The route admits anyone who may
+	// add a plant, so a post with a photo is checked here.
+	if photoPosted(r) && !principal.Can(auth.PhotoAdd) {
+		http.NotFound(w, r)
+		return
+	}
 	cares, err := h.queries.ListCareTypes(r.Context(), principal.Garden.ID)
 	if err != nil {
 		serverError(h.logger, w, r, "list the care types", err)
@@ -483,7 +542,7 @@ func (h *plants) create(w http.ResponseWriter, r *http.Request) {
 	fields.location = canonicalRoom(rooms, fields.location)
 
 	schedules, messages, refused := checkSchedules(rows, principal.Garden.ID)
-	page := addPlantPage(fields, rows, now)
+	page := addPlantPage(principal, fields, rows, now)
 	page.Rooms = rooms
 	page.NameError, page.AcquiredError = fields.refuse()
 	for i := range page.Schedules {
@@ -495,6 +554,10 @@ func (h *plants) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// The photo row is inserted in the same transaction as the plant, so a
+	// photo the store refuses rolls the plant back and a retry does not add
+	// the plant twice. The file is written before the row and stays on disk
+	// when the transaction fails.
 	var plant store.Plant
 	err = h.queries.InTx(r.Context(), func(q *store.Queries) error {
 		var err error
@@ -507,14 +570,34 @@ func (h *plants) create(w http.ResponseWriter, r *http.Request) {
 				return err
 			}
 		}
+		if photoPosted(r) {
+			upload, closeFiles, ok := postedPhoto(w, r, principal, plant.ID)
+			defer closeFiles()
+			if !ok {
+				return errResponded
+			}
+			if _, err := h.photos.Save(r.Context(), q, upload); err != nil {
+				return err
+			}
+		}
 		return nil
 	})
+	if errors.Is(err, errResponded) {
+		return
+	}
+	if photoRefused(w, err) {
+		return
+	}
 	if err != nil {
 		serverError(h.logger, w, r, "add the plant", err)
 		return
 	}
 	http.Redirect(w, r, plantPath(plant.ID), http.StatusSeeOther)
 }
+
+// errResponded is returned from inside a transaction when the response has
+// been written already, so the caller rolls back and writes nothing more.
+var errResponded = errors.New("the response has been written")
 
 // checkSchedules converts the open rows to care_schedule params. Invalid rows
 // get an error message instead, keyed by care type slug.
@@ -564,6 +647,10 @@ func (h *plants) update(w http.ResponseWriter, r *http.Request) {
 	if !readPlantForm(w, r) {
 		return
 	}
+	if photoPosted(r) && !principal.Can(auth.PhotoAdd) {
+		http.NotFound(w, r)
+		return
+	}
 	now := h.now().In(locationFor(principal.User))
 	fields, fieldsOK := readPlantFields(r.PostForm, now)
 	if !fieldsOK {
@@ -585,11 +672,33 @@ func (h *plants) update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := h.queries.UpdatePlant(r.Context(), fields.update(principal.Garden.ID, plant.ID)); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			http.NotFound(w, r)
-			return
+	err := h.queries.InTx(r.Context(), func(q *store.Queries) error {
+		if _, err := q.UpdatePlant(r.Context(), fields.update(principal.Garden.ID, plant.ID)); err != nil {
+			return err
 		}
+		if photoPosted(r) {
+			upload, closeFiles, ok := postedPhoto(w, r, principal, plant.ID)
+			defer closeFiles()
+			if !ok {
+				return errResponded
+			}
+			if _, err := h.photos.Save(r.Context(), q, upload); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if errors.Is(err, errResponded) {
+		return
+	}
+	if photoRefused(w, err) {
+		return
+	}
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		http.NotFound(w, r)
+		return
+	case err != nil:
 		serverError(h.logger, w, r, "save the plant", err)
 		return
 	}

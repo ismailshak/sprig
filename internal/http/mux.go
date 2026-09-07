@@ -9,6 +9,7 @@ import (
 
 	"github.com/ismailshak/sprig/internal/auth"
 	"github.com/ismailshak/sprig/internal/build"
+	"github.com/ismailshak/sprig/internal/photo"
 	"github.com/ismailshak/sprig/internal/store"
 )
 
@@ -36,9 +37,9 @@ type middleware func(http.Handler) http.Handler
 // signupEnabled is SPRIG_SIGNUP_ENABLED, whether Set up your garden is served
 // on an install that already has an account. pushKey is the VAPID public key
 // the Notifications page gives the browser. It is empty when push is off.
-func routes(logger *slog.Logger, sessions *auth.Sessions, passkeys *auth.Passkeys, queries *store.Queries, templates *Templates, assets *Assets, trustedIPHeader string, signupEnabled bool, pushKey string, wake func()) []route {
+func routes(logger *slog.Logger, sessions *auth.Sessions, passkeys *auth.Passkeys, queries *store.Queries, photos *photo.Store, templates *Templates, assets *Assets, trustedIPHeader string, signupEnabled bool, pushKey string, wake func()) []route {
 	todayHandler := &today{logger: logger, queries: queries, templates: templates, now: time.Now}
-	plantsHandler := &plants{logger: logger, queries: queries, templates: templates, now: time.Now}
+	plantsHandler := &plants{logger: logger, queries: queries, photos: photos, templates: templates, now: time.Now}
 	activityHandler := &activity{logger: logger, queries: queries, templates: templates, now: time.Now}
 	// The setup and invite pages use the resolver to tell whether the browser
 	// is already signed in.
@@ -67,6 +68,8 @@ func routes(logger *slog.Logger, sessions *auth.Sessions, passkeys *auth.Passkey
 		{pattern: "POST /plants/{plant}/schedule/{care}", capability: auth.ScheduleEdit, handler: http.HandlerFunc(plantsHandler.saveSchedule)},
 		{pattern: "GET /plants/{plant}/schedule/{care}/remove", capability: auth.ScheduleEdit, handler: http.HandlerFunc(plantsHandler.confirmRemoveSchedule)},
 		{pattern: "POST /plants/{plant}/schedule/{care}/remove", capability: auth.ScheduleEdit, handler: http.HandlerFunc(plantsHandler.removeSchedule)},
+		{pattern: "GET /plants/{plant}/photos/{photo}/full", handler: http.HandlerFunc(plantsHandler.photoFull)},
+		{pattern: "GET /plants/{plant}/photos/{photo}/square", handler: http.HandlerFunc(plantsHandler.photoSquare)},
 		{pattern: "GET /activity", handler: http.HandlerFunc(activityHandler.show)},
 		{pattern: "GET /plants/{plant}/log", capability: auth.CareLog, handler: http.HandlerFunc(todayHandler.sheet)},
 		{pattern: "POST /plants/{plant}/log", capability: auth.CareLog, handler: http.HandlerFunc(todayHandler.log)},
@@ -211,9 +214,9 @@ var publicRoutes = map[string]bool{
 // logged like any other. Authentication is inside that so a cross-site post is
 // refused before it costs a session lookup. wake is called after a handler
 // commits a change to who gets a digest and when. It is nil when push is off.
-func New(logger *slog.Logger, sessions *auth.Sessions, passkeys *auth.Passkeys, resolver Resolver, queries *store.Queries, templates *Templates, assets *Assets, trustedIPHeader string, signupEnabled bool, pushKey string, wake func()) http.Handler {
+func New(logger *slog.Logger, sessions *auth.Sessions, passkeys *auth.Passkeys, resolver Resolver, queries *store.Queries, photos *photo.Store, templates *Templates, assets *Assets, trustedIPHeader string, signupEnabled bool, pushKey string, wake func()) http.Handler {
 	mux := http.NewServeMux()
-	for _, r := range routes(logger, sessions, passkeys, queries, templates, assets, trustedIPHeader, signupEnabled, pushKey, wake) {
+	for _, r := range routes(logger, sessions, passkeys, queries, photos, templates, assets, trustedIPHeader, signupEnabled, pushKey, wake) {
 		h := r.handler
 		if r.capability != "" {
 			h = require(r.capability, h)

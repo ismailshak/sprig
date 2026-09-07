@@ -31,6 +31,7 @@ type config struct {
 	// templateDir is a directory of templates to re-read on every render, for
 	// development. Empty means the embedded templates, parsed once.
 	templateDir string
+	photoDir    string
 	logLevel    slog.Level
 	logFormat   string
 	// signupEnabled is whether a stranger can create an account and a garden of
@@ -73,6 +74,7 @@ func loadConfig(getenv func(string) string) (config, error) {
 		databaseURL:     require("SPRIG_DATABASE_URL"),
 		trustedIPHeader: strings.TrimSpace(getenv("SPRIG_TRUSTED_IP_HEADER")),
 		templateDir:     strings.TrimSpace(getenv("SPRIG_TEMPLATE_DIR")),
+		photoDir:        withDefault(strings.TrimSpace(getenv("SPRIG_PHOTO_DIR")), "./photos"),
 		logFormat:       withDefault(getenv("SPRIG_LOG_FORMAT"), "json"),
 	}
 

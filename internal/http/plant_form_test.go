@@ -3,10 +3,13 @@ package http
 import (
 	"bytes"
 	"context"
+	"io/fs"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
@@ -14,12 +17,16 @@ import (
 	"time"
 	"uuid"
 
+	"github.com/jackc/pgx/v5"
+
 	"github.com/ismailshak/sprig/internal/auth"
+	"github.com/ismailshak/sprig/internal/photo"
 	"github.com/ismailshak/sprig/internal/store"
 )
 
 type formFixture struct {
 	*plantFixture
+	photoDir string
 }
 
 // plantFormOn sets up the add and edit forms on the garden the plant page is
@@ -30,7 +37,13 @@ func plantFormOn(t *testing.T) *formFixture {
 
 	f := rosewoodPlant(t)
 	f.exec(t, "INSERT INTO care_type (id, garden_id, name, slug) VALUES ($1, $2, 'Repot', 'repot')", repotID, rosewoodID)
-	return &formFixture{plantFixture: f}
+	dir := t.TempDir()
+	photos, err := photo.NewStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.handler.photos = photos
+	return &formFixture{plantFixture: f, photoDir: dir}
 }
 
 func (f *formFixture) open(t *testing.T, path string, htmx bool) *httptest.ResponseRecorder {
@@ -90,6 +103,92 @@ func (f *formFixture) addMultipart(t *testing.T, values url.Values, filename str
 	rec := httptest.NewRecorder()
 	f.handler.create(rec, req)
 	return rec
+}
+
+// postPhoto posts values with the two photo parts filled, to the add form when
+// plantID is nil and to that plant's edit form otherwise. A nil square leaves
+// that part out.
+func (f *formFixture) postPhoto(t *testing.T, plantID *uuid.UUID, values url.Values, image, square []byte) *httptest.ResponseRecorder {
+	t.Helper()
+
+	var body bytes.Buffer
+	form := multipart.NewWriter(&body)
+	for name, held := range values {
+		for _, v := range held {
+			if err := form.WriteField(name, v); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	for name, file := range map[string][]byte{"photo": image, "photo-square": square} {
+		if file == nil {
+			continue
+		}
+		part, err := form.CreateFormFile(name, name+".jpg")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := part.Write(file); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := form.Close(); err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.WithValue(t.Context(), principalKey, f.principal)
+	rec := httptest.NewRecorder()
+	if plantID == nil {
+		req := httptest.NewRequestWithContext(ctx, http.MethodPost, newPlantPath, &body)
+		req.Header.Set("Content-Type", form.FormDataContentType())
+		f.handler.create(rec, req)
+		return rec
+	}
+	req := httptest.NewRequestWithContext(ctx, http.MethodPost, editPlantPath(*plantID), &body)
+	req.Header.Set("Content-Type", form.FormDataContentType())
+	req.SetPathValue("plant", plantID.String())
+	f.handler.update(rec, req)
+	return rec
+}
+
+// photoOf returns the one photo row on plantID, failing when there is not
+// exactly one.
+func (f *formFixture) photoOf(t *testing.T, plantID uuid.UUID) store.Photo {
+	t.Helper()
+
+	rows, err := f.tx.Query(t.Context(), "SELECT id FROM photo WHERE plant_id = $1", plantID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ids, err := pgx.CollectRows(rows, pgx.RowTo[uuid.UUID])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ids) != 1 {
+		t.Fatalf("the plant has %d photos, want 1", len(ids))
+	}
+	row, err := store.New(f.tx).GetPhoto(t.Context(), rosewoodID, ids[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	return row
+}
+
+// storedFiles lists every file under the photo directory, relative to it.
+func (f *formFixture) storedFiles(t *testing.T) []string {
+	t.Helper()
+
+	var files []string
+	err := filepath.WalkDir(f.photoDir, func(p string, d fs.DirEntry, err error) error {
+		if err == nil && !d.IsDir() {
+			rel, _ := filepath.Rel(f.photoDir, p)
+			files = append(files, filepath.ToSlash(rel))
+		}
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return files
 }
 
 func (f *formFixture) editForm(t *testing.T, plantID uuid.UUID) *httptest.ResponseRecorder {
@@ -1096,5 +1195,190 @@ func TestPlant_AnArchivedPlantHasNoEditOrArchiveButtons(t *testing.T) {
 
 	if strings.Contains(page, "Edit plant") || strings.Contains(page, "Archive") {
 		t.Errorf("an archived plant offers the foot:\n%s", text(page))
+	}
+}
+
+func TestPlantForm_APlantAddedWithAPhotoHasTheFileAndTheRow(t *testing.T) {
+	f := plantFormOn(t)
+	values := addValues()
+	values.Set("nickname", "Ada")
+	image, square := testJPEG(t, 30, 20), testJPEG(t, 8, 8)
+
+	plant := f.created(t, f.postPhoto(t, nil, values, image, square))
+
+	row := f.photoOf(t, plant.ID)
+	if row.Kind != "image/jpeg" || row.Width != 30 || row.Height != 20 {
+		t.Errorf("the row reads %s %d by %d, want image/jpeg 30 by 20", row.Kind, row.Width, row.Height)
+	}
+	if row.Bytes != int64(len(image)) || row.SquareBytes == nil || *row.SquareBytes != int64(len(square)) {
+		t.Errorf("the row counts %d and %v bytes, want %d and %d", row.Bytes, row.SquareBytes, len(image), len(square))
+	}
+	if row.UploadedBy != readerID || row.TakenAt != nil {
+		t.Errorf("the row was uploaded by %s at a taken time of %v, want the reader and no taken time", row.UploadedBy, row.TakenAt)
+	}
+	if want := photo.Path(rosewoodID, plant.ID, row.ID, photo.JPEG); row.Path != want {
+		t.Errorf("path = %q, want %q", row.Path, want)
+	}
+	stored, err := os.ReadFile(filepath.Join(f.photoDir, row.Path))
+	if err != nil || !bytes.Equal(stored, image) {
+		t.Errorf("the file at %s holds %d bytes, want the %d posted: %v", row.Path, len(stored), len(image), err)
+	}
+	storedSquare, err := os.ReadFile(filepath.Join(f.photoDir, photo.SquarePath(row.Path)))
+	if err != nil || !bytes.Equal(storedSquare, square) {
+		t.Errorf("the square at %s holds %d bytes, want the %d posted: %v", photo.SquarePath(row.Path), len(storedSquare), len(square), err)
+	}
+}
+
+func TestPlantForm_APhotoPostedWithNoSquareIsStoredWithNoSquareVariant(t *testing.T) {
+	f := plantFormOn(t)
+	values := addValues()
+	values.Set("nickname", "Big Fella")
+	id := bigFellaID
+
+	rec := f.postPhoto(t, &id, values, testJPEG(t, 30, 20), nil)
+
+	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != plantPath(bigFellaID) {
+		t.Fatalf("status = %d to %q, want %d to the plant's page", rec.Code, rec.Header().Get("Location"), http.StatusSeeOther)
+	}
+	row := f.photoOf(t, bigFellaID)
+	if row.SquareBytes != nil {
+		t.Errorf("square_bytes = %d, want none for a post with no square", *row.SquareBytes)
+	}
+	if got := f.storedFiles(t); len(got) != 1 || got[0] != row.Path {
+		t.Errorf("the directory holds %v, want the one file at %s", got, row.Path)
+	}
+}
+
+func TestPlantForm_APhotoThatIsNotAnImageIsRefusedAndNothingIsWritten(t *testing.T) {
+	f := plantFormOn(t)
+	values := addValues()
+	values.Set("nickname", "Ada")
+	before := f.countPlants(t)
+
+	rec := f.postPhoto(t, nil, values, []byte("the resized bytes"), nil)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusBadRequest)
+	}
+	if after := f.countPlants(t); after != before {
+		t.Errorf("the garden has %d plants, want the %d it started with", after, before)
+	}
+	if got := f.storedFiles(t); len(got) != 0 {
+		t.Errorf("the directory holds %v, want nothing", got)
+	}
+}
+
+func TestPlantForm_APhotoOverTheFileLimitIsRefusedAndNothingIsWritten(t *testing.T) {
+	f := plantFormOn(t)
+	values := addValues()
+	values.Set("nickname", "Ada")
+	// A valid JPEG padded past the limit, so the size is the only thing wrong
+	// with it.
+	image := append(testJPEG(t, 30, 20), make([]byte, photo.MaxBytes)...)
+	before := f.countPlants(t)
+
+	rec := f.postPhoto(t, nil, values, image, nil)
+
+	if rec.Code != http.StatusRequestEntityTooLarge {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusRequestEntityTooLarge)
+	}
+	if after := f.countPlants(t); after != before {
+		t.Errorf("the garden has %d plants, want the %d it started with", after, before)
+	}
+	if got := f.storedFiles(t); len(got) != 0 {
+		t.Errorf("the directory holds %v, want nothing", got)
+	}
+}
+
+func TestPlantForm_APhotoFromAMemberWhoMayNotAddPhotosIs404(t *testing.T) {
+	f := plantFormOn(t)
+	f.principal.Capabilities = auth.Capabilities{auth.PlantCreate: true, auth.PlantEdit: true}
+	values := addValues()
+	values.Set("nickname", "Ada")
+	before := f.countPlants(t)
+	id := bigFellaID
+
+	for name, rec := range map[string]*httptest.ResponseRecorder{
+		"add":  f.postPhoto(t, nil, values, testJPEG(t, 30, 20), nil),
+		"edit": f.postPhoto(t, &id, values, testJPEG(t, 30, 20), nil),
+	} {
+		if rec.Code != http.StatusNotFound {
+			t.Errorf("%s: status = %d, want %d", name, rec.Code, http.StatusNotFound)
+		}
+	}
+	if after := f.countPlants(t); after != before {
+		t.Errorf("the garden has %d plants, want the %d it started with", after, before)
+	}
+	if n := countRows(t, f.tx, "photo"); n != 0 {
+		t.Errorf("the garden has %d photos, want none", n)
+	}
+}
+
+func TestPlantForm_ThePhotoFieldIsRenderedOnlyForAMemberWhoMayAddPhotos(t *testing.T) {
+	f := plantFormOn(t)
+
+	with := f.open(t, newPlantPath, false).Body.String()
+	f.principal.Capabilities = auth.Capabilities{auth.PlantCreate: true}
+	without := f.open(t, newPlantPath, false).Body.String()
+
+	if !strings.Contains(with, `id="photo-field"`) {
+		t.Error("a member who may add photos got a form with no photo field")
+	}
+	if strings.Contains(without, `id="photo-field"`) {
+		t.Error("a member who may not add photos got a form with the photo field")
+	}
+}
+
+func TestPlantForm_APhotoWithASquareOfADifferentKindIsRefusedAndNothingIsWritten(t *testing.T) {
+	f := plantFormOn(t)
+	values := addValues()
+	values.Set("nickname", "Ada")
+	before := f.countPlants(t)
+
+	rec := f.postPhoto(t, nil, values, testJPEG(t, 30, 20), testWebP(8, 8))
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusBadRequest)
+	}
+	if after := f.countPlants(t); after != before {
+		t.Errorf("the garden has %d plants, want the %d it started with", after, before)
+	}
+	if got := f.storedFiles(t); len(got) != 0 {
+		t.Errorf("the directory holds %v, want nothing", got)
+	}
+}
+
+func TestPlantForm_AWebPPhotoIsStoredWithTheWebPKindAndExtension(t *testing.T) {
+	f := plantFormOn(t)
+	values := addValues()
+	values.Set("nickname", "Ada")
+	image := testWebP(2048, 1536)
+
+	plant := f.created(t, f.postPhoto(t, nil, values, image, nil))
+
+	row := f.photoOf(t, plant.ID)
+	if row.Kind != "image/webp" || row.Width != 2048 || row.Height != 1536 {
+		t.Errorf("the row reads %s %d by %d, want image/webp 2048 by 1536", row.Kind, row.Width, row.Height)
+	}
+	if !strings.HasSuffix(row.Path, ".webp") {
+		t.Errorf("path = %q, want it to end in .webp", row.Path)
+	}
+	stored, err := os.ReadFile(filepath.Join(f.photoDir, row.Path))
+	if err != nil || !bytes.Equal(stored, image) {
+		t.Errorf("the file at %s holds %d bytes, want the %d posted: %v", row.Path, len(stored), len(image), err)
+	}
+}
+
+func TestPlantForm_APhotoOfExactlyTheFileLimitIsStored(t *testing.T) {
+	f := plantFormOn(t)
+	values := addValues()
+	values.Set("nickname", "Ada")
+	image := testJPEG(t, 30, 20)
+	image = append(image, make([]byte, photo.MaxBytes-len(image))...)
+
+	plant := f.created(t, f.postPhoto(t, nil, values, image, nil))
+
+	if row := f.photoOf(t, plant.ID); row.Bytes != photo.MaxBytes {
+		t.Errorf("the row counts %d bytes, want the %d posted", row.Bytes, photo.MaxBytes)
 	}
 }

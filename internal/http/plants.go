@@ -13,6 +13,7 @@ import (
 	"uuid"
 
 	"github.com/ismailshak/sprig/internal/auth"
+	"github.com/ismailshak/sprig/internal/photo"
 	"github.com/ismailshak/sprig/internal/schedule"
 	"github.com/ismailshak/sprig/internal/store"
 )
@@ -30,6 +31,7 @@ const noRoom = "No room"
 type plants struct {
 	logger    *slog.Logger
 	queries   *store.Queries
+	photos    *photo.Store
 	templates *Templates
 	// now supplies the current time, so a test can fix the day.
 	now func() time.Time

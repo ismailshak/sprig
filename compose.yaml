@@ -52,6 +52,11 @@ services:
       SPRIG_VAPID_PUBLIC_KEY: BIKy0ljeIkYXaxRwCtYWzL6mcXZ1uQRljQ9HlisKJLJiAWkvTHx6QKQNtjbZeP5AvsVqD6-lKh6RDeyszC8lu3A
       SPRIG_VAPID_PRIVATE_KEY: NYvCfU2w94nee-zA8CqDtHNwV7z9nKVjO3JyESW9mcs
       SPRIG_VAPID_SUBJECT: mailto:sprig@example.com
+      # A tmpfs the app can write to. The image runs as nonroot, which cannot
+      # create the default ./photos at the container's root.
+      SPRIG_PHOTO_DIR: /photos
+    tmpfs:
+      - /photos
     ports:
       - "${APP_PORTS:-8080:8080}"
     depends_on:

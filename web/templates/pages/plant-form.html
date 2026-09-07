@@ -20,11 +20,11 @@
      Without this hidden one, that would be a schedule row's button, and Enter
      would close the row instead of saving the plant. */}}
 <button type="submit" hidden></button>
-{{/* The photo field, rendered hidden. The page's script shows it once it has
-     checked the browser can resize an image, and then fills the two file
-     inputs: the resized photo under photo and its 192 pixel square under
-     photo-square. */}}
-<div class="photo-field" id="photo-field" hidden>
+{{/* The photo field is rendered only for a member who may add photos, and
+     starts hidden. The page's script shows it once it has checked the browser
+     can resize an image, then fills the two file inputs: the resized photo
+     under photo and its 192 pixel square under photo-square. */}}
+{{if .PhotoField}}<div class="photo-field" id="photo-field" hidden>
 <input id="photo" name="photo" type="file" accept="image/*" hidden>
 <input id="photo-square" name="photo-square" type="file" hidden>
 <button class="photo-field__empty" id="photo-add" type="button">{{template "icon-camera"}}<span>Add a photo</span></button>
@@ -39,7 +39,7 @@
 </div>
 </div>
 <p class="field__error" id="photo-error" hidden>That file could not be read as a photo.</p>
-</div>
+</div>{{end}}
 {{/* The error goes under the group, because none of the three names is
      required on its own but at least one is required. Nickname is not the
      required one because someone who does not name their plants would have to
@@ -115,8 +115,8 @@
 </details>
 <button class="wide-action" type="submit">{{.Submit}}</button>
 {{/* A link rather than a button, because archiving asks for confirmation on
-     the plant's own page. It sits below Save rather than beside it because the
-     two are not equal choices. */}}
+     the plant's own page. It is placed below the submit button rather than
+     beside it, because the two are not equal choices. */}}
 {{with .Archive}}
 <div class="form__foot">
 <a class="plant__archive" href="{{.}}">Archive</a>
