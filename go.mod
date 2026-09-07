@@ -3,6 +3,7 @@ module github.com/ismailshak/sprig
 go 1.27.1
 
 require (
+	github.com/SherClockHolmes/webpush-go v1.4.0
 	github.com/go-webauthn/webauthn v0.18.0
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/pressly/goose/v3 v3.28.0
