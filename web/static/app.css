@@ -1355,6 +1355,9 @@ a.plant__archive { text-decoration: none; }
   aspect-ratio: 5 / 3;
   border-radius: var(--radius);
   overflow: hidden;
+  /* The plant form's preview <img> takes this class, so a photo of any shape
+     is cropped to the 5:3 box rather than squashed into it. */
+  object-fit: cover;
 }
 .photo-field__pic > svg { width: 62%; max-width: 260px; height: auto; }
 

@@ -18,6 +18,10 @@ import "net/http"
 // to the attribute and blocks it. The undo bar then drains over the
 // stylesheet's default 4000ms instead of the row's own window.
 //
+// img-src allows blob: so the plant form can show the photo the browser
+// resized before the form posts it. Only the page that created a blob: URL
+// can read it.
+//
 // frame-ancestors 'none' stops another site putting a page in a frame. Logging
 // a care, removing a member and revoking a token are each a single button, so
 // one click on a framed page could do any of them.
@@ -28,7 +32,7 @@ const contentSecurityPolicy = "default-src 'self'; " +
 	"script-src 'self'; " +
 	"style-src 'self'; " +
 	"style-src-attr 'unsafe-inline'; " +
-	"img-src 'self'; " +
+	"img-src 'self' blob:; " +
 	"connect-src 'self'; " +
 	"object-src 'none'; " +
 	"base-uri 'none'; " +
