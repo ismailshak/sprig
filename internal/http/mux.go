@@ -49,6 +49,8 @@ func routes(logger *slog.Logger, sessions *auth.Sessions, passkeys *auth.Passkey
 	base := []route{
 		{pattern: "GET /healthz", handler: http.HandlerFunc(handleHealthz)},
 		{pattern: assetPattern, handler: assets.handler()},
+		{pattern: "GET " + serviceWorkerPath, handler: http.HandlerFunc(newServiceWorker(assets, templates).serve)},
+		{pattern: "GET " + offlinePath, handler: offline(templates)},
 		{pattern: "GET /{$}", handler: http.HandlerFunc(todayHandler.show)},
 		{pattern: "GET /plants", handler: http.HandlerFunc(plantsHandler.show)},
 		{pattern: "GET /plants/new", capability: auth.PlantCreate, handler: http.HandlerFunc(plantsHandler.newPlant)},
@@ -162,6 +164,10 @@ func inviteLimits(trustedIPHeader string, refused http.Handler) []middleware {
 var publicRoutes = map[string]bool{
 	"GET /healthz": true,
 	assetPattern:   true,
+	// The sign-in page registers the worker too, so it is fetched with no
+	// session. The worker caches the offline page as it installs.
+	"GET " + serviceWorkerPath: true,
+	"GET " + offlinePath:       true,
 	// Signing in has to work with no session, so the page, the challenge and
 	// the post that signs in are all public.
 	"GET " + signInPath:     true,

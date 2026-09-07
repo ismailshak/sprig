@@ -37,12 +37,13 @@ export default defineConfig({
   // into an htmx swap. Without JavaScript the same submission is a post and a
   // redirect, and the no-JavaScript project runs only those tests. @js marks
   // behaviour that exists only with JavaScript on, and @nojs behaviour that
-  // exists only with it off.
+  // exists only with it off. @offline marks a test that cuts the network and
+  // reads what the service worker serves.
   projects: [
     {
       name: 'phone',
       use: { ...devices['iPhone 16'] },
-      grepInvert: /@nojs|@passkey/,
+      grepInvert: /@nojs|@passkey|@offline/,
     },
     {
       name: 'phone-nojs',
@@ -51,12 +52,14 @@ export default defineConfig({
     },
     // @passkey runs on Chromium alone, because Chrome DevTools' virtual
     // authenticator is the only way to register a passkey without a real
-    // device. It is a desktop Chrome, so this is also the only project running
-    // at a width where the pages take their wide layout.
+    // device. @offline runs here too, because WebKit under Playwright fails a
+    // navigation with no network even when a service worker has a response for
+    // it. It is a desktop Chrome, so this is also the only project running at a
+    // width where the pages take their wide layout.
     {
       name: 'desktop',
       use: { ...devices['Desktop Chrome'] },
-      grep: /@passkey/,
+      grep: /@passkey|@offline/,
     },
   ],
 });

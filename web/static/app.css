@@ -2194,3 +2194,16 @@ a.wide-action {
 .bare__line a { color: var(--ink); }
 
 .app__body--bare .wide-action { margin-top: 22px; }
+
+/* ------------------------------------------------------------------ offline */
+
+/* The line at the top of a page served from the service worker's cache. */
+.offline {
+  margin: 0;
+  padding: 8px 20px;
+  background: var(--surface-2);
+  color: var(--ink-2);
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: center;
+}

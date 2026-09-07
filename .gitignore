@@ -11,3 +11,5 @@
 /e2e/playwright-report/
 
 .env
+
+.DS_Store

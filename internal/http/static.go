@@ -9,6 +9,7 @@ import (
 	"mime"
 	"net/http"
 	"path"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -30,14 +31,20 @@ const (
 	hashLength = 12
 )
 
-// The built-in extension table has .css and .js but not .woff2, and the
-// distroless image has no mime.types file for the mime package to read.
-// Without the entry the container serves a font as application/octet-stream.
+// The built-in extension table has .css and .js but not .woff2 or
+// .webmanifest, and the distroless image has no mime.types file for the mime
+// package to read. Without the entries the container serves a font and the
+// web app manifest as application/octet-stream.
 func init() {
-	if err := mime.AddExtensionType(".woff2", "font/woff2"); err != nil {
-		panic(err)
+	for ext, typ := range map[string]string{".woff2": "font/woff2", ".webmanifest": "application/manifest+json"} {
+		if err := mime.AddExtensionType(ext, typ); err != nil {
+			panic(err)
+		}
 	}
 }
+
+// cssURL matches a url() in a stylesheet and captures the reference in it.
+var cssURL = regexp.MustCompile(`url\(\s*["']?([^"')]+)["']?\s*\)`)
 
 // Assets is web/static, read into memory at startup and served at two URLs
 // per file. No build step writes a manifest, so the hash is computed here.
@@ -104,6 +111,14 @@ func (a *Assets) Path(name string) (string, error) {
 		return "", fmt.Errorf("no static file named %q", name)
 	}
 	return url, nil
+}
+
+func (a *Assets) content(name string) ([]byte, bool) {
+	f, ok := a.files[assetPrefix+name]
+	if !ok {
+		return nil, false
+	}
+	return f.content, true
 }
 
 // handler serves the two URLs each file has and nothing else. A name that is

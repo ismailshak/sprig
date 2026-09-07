@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path"
-	"regexp"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -149,8 +148,6 @@ func TestAssets_APlainNameRevalidatesToNotModified(t *testing.T) {
 		t.Errorf("got %d, want %d", rec.Code, http.StatusNotModified)
 	}
 }
-
-var cssURL = regexp.MustCompile(`url\(\s*["']?([^"')]+)["']?\s*\)`)
 
 // Renaming a font would break the page, and nothing else would say so.
 func TestAssets_EveryFileTheStylesheetsReferenceIsServed(t *testing.T) {

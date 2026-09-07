@@ -9,6 +9,7 @@ import { InvitedScreen } from '../screens/invited';
 import { MoreScreen } from '../screens/more';
 import { NoGardenScreen } from '../screens/no-garden';
 import { NotificationsScreen } from '../screens/notifications';
+import { OfflinePageScreen } from '../screens/offline-page';
 import { PasskeysScreen } from '../screens/passkeys';
 import { PeopleScreen } from '../screens/people';
 import { PlantScreen } from '../screens/plant';
@@ -33,6 +34,7 @@ type Screens = {
   more: MoreScreen;
   noGarden: NoGardenScreen;
   notifications: NotificationsScreen;
+  offlinePage: OfflinePageScreen;
   passkeys: PasskeysScreen;
   people: PeopleScreen;
   plant: PlantScreen;
@@ -115,6 +117,9 @@ export const test = base.extend<{ seededGarden: void; cspViolations: void } & Sc
   },
   notifications: async ({ page }, use) => {
     await use(new NotificationsScreen(page));
+  },
+  offlinePage: async ({ page }, use) => {
+    await use(new OfflinePageScreen(page));
   },
   passkeys: async ({ page }, use) => {
     await use(new PasskeysScreen(page));
