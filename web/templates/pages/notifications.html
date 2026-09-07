@@ -16,9 +16,7 @@
 <a class="wide-action" href="{{.Install}}">Install sprig</a>
 </div>
 {{/* data-key is the VAPID public key this browser subscribes with, and
-     data-subscribe the URL the script posts the subscription to. The script
-     asks for permission on the tap that turns a type on, because a browser
-     only prompts inside a gesture. */}}
+     data-subscribe the URL the script posts the subscription to. */}}
 <form method="post" action="{{.Action}}" novalidate id="push-form" data-key="{{.Key}}" data-subscribe="{{.Subscribe}}">
 <div class="section">
 <div class="section__head"><h2 class="section__title">What to send</h2></div>
@@ -42,8 +40,8 @@
 </label>
 </li>
 </ul>
-{{/* The script writes the browser's refusal into this line: no permission
-     given, or a subscription that failed. */}}
+{{/* The script writes the browser's refusal into this line when a box is
+     checked and no permission is given. */}}
 <p class="field__error" id="push-error" role="alert"></p>
 </div>
 {{/* The hour is on the page only while the digest is on, since it is that
@@ -75,7 +73,7 @@
 {{end}}</ul>
 <p class="note">One for each browser you have allowed notifications in. Removing one stops them arriving there.</p>
 {{else}}
-<p class="note">No browser is subscribed yet, so nothing is being delivered. Turning a type on above asks this browser for permission.</p>
+<p class="note">No browser is subscribed yet, so nothing is being delivered. Saving with a type on asks this browser for permission.</p>
 {{end}}
 </div>
 {{end}}
