@@ -1,7 +1,7 @@
 /* The service worker, served at /service-worker.js with VERSION, SHELL,
-   OFFLINE, SIGN_IN and GARDENS declared above it. The copy under /static/ has
-   none of them and is not registered, because a worker's scope is the
-   directory it was loaded from.
+   OFFLINE, SIGN_IN, GARDENS and ICON declared above it. The copy under
+   /static/ has none of them and is not registered, because a worker's scope
+   is the directory it was loaded from.
 
    The shell cache is filled once at install from SHELL. The pages cache holds
    a copy of every page a navigation fetched, so a page can still be shown when
@@ -105,3 +105,34 @@ async function postFetchedAt(clientId, fetchedAt) {
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
 }
+
+// A push message is JSON with a title, a body and the URL to open. The server
+// sends the same three fields, so one added there is read here.
+self.addEventListener('push', (event) => {
+  const notification = event.data ? event.data.json() : {};
+  event.waitUntil(
+    self.registration.showNotification(notification.title || 'sprig', {
+      body: notification.body,
+      icon: ICON,
+      data: { url: notification.url },
+    }),
+  );
+});
+
+// Pressing the notification navigates a window sprig already has open to the
+// URL, or opens a new one.
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const url = event.notification.data && event.notification.data.url;
+  if (!url) return;
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window' }).then(async (windows) => {
+      if (windows.length > 0) {
+        const focused = await windows[0].focus();
+        await focused.navigate(url);
+        return;
+      }
+      await self.clients.openWindow(url);
+    }),
+  );
+});

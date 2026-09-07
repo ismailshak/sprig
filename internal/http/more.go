@@ -35,6 +35,10 @@ type more struct {
 	build     build.Info
 	// now supplies the current time, so a test can fix the day.
 	now func() time.Time
+	// pushKey is the VAPID public key the Notifications page gives the browser
+	// to subscribe with. It is empty when push is off, and the page then says
+	// notifications are not set up.
+	pushKey string
 }
 
 type morePage struct {

@@ -5,13 +5,27 @@
 {{define "main"}}
 {{template "more-topbar" .Bar}}
 <div class="app__body app__body--sub">
-<form method="post" action="{{.Action}}" novalidate>
+{{if not .Key}}
+<p class="lead">Notifications are not set up on this sprig, so there is nothing here to switch on.</p>
+{{else}}
+{{/* The script shows this block and hides the form in a browser with no push
+     API. On an iPhone that is a browser where sprig is not on the Home
+     Screen. */}}
+<div id="push-unavailable" hidden>
+<p class="lead">On an iPhone, notifications only work once sprig is on your Home Screen. Until it is there, there is nothing here to switch on — the browser has no notifications to give.</p>
+<a class="wide-action" href="{{.Install}}">Install sprig</a>
+</div>
+{{/* data-key is the VAPID public key this browser subscribes with, and
+     data-subscribe the URL the script posts the subscription to. The script
+     asks for permission on the tap that turns a type on, because a browser
+     only prompts inside a gesture. */}}
+<form method="post" action="{{.Action}}" novalidate id="push-form" data-key="{{.Key}}" data-subscribe="{{.Subscribe}}">
 <div class="section">
 <div class="section__head"><h2 class="section__title">What to send</h2></div>
 <ul class="list">
 <li class="row row--check">
 <label class="check" for="digest">
-<input type="checkbox" id="digest" name="digest"{{if .Digest}} checked{{end}}>
+<input type="checkbox" id="digest" name="digest" data-notify{{if .Digest}} checked{{end}}>
 <span class="row__text">
 <span class="row__name">What needs doing</span>
 <span class="row__meta"><span class="row__part">One digest a day, and nothing on a day with nothing due.</span></span>
@@ -20,7 +34,7 @@
 </li>
 <li class="row row--check">
 <label class="check" for="activity">
-<input type="checkbox" id="activity" name="activity"{{if .Activity}} checked{{end}}>
+<input type="checkbox" id="activity" name="activity" data-notify{{if .Activity}} checked{{end}}>
 <span class="row__text">
 <span class="row__name">When someone else logs care</span>
 <span class="row__meta"><span class="row__part">Your own watering is not news to you, so it is never sent.</span></span>
@@ -28,6 +42,9 @@
 </label>
 </li>
 </ul>
+{{/* The script writes the browser's refusal into this line: no permission
+     given, or a subscription that failed. */}}
+<p class="field__error" id="push-error" role="alert"></p>
 </div>
 {{/* The hour is on the page only while the digest is on, since it is that
      digest's hour and there is nothing else it could time. */}}
@@ -51,7 +68,9 @@
 <span class="row__name">{{.Name}}</span>
 <span class="row__meta"><span class="row__part">{{.Used}}</span></span>
 </span>
-<form method="post" action="{{.Remove}}"><button class="row__drop" type="submit">Remove</button></form>
+{{/* data-endpoint lets the script tell this browser's own row from the
+     others, so Remove on it unsubscribes the browser too. */}}
+<form method="post" action="{{.Remove}}" data-endpoint="{{.Endpoint}}"><button class="row__drop" type="submit">Remove</button></form>
 </li>
 {{end}}</ul>
 <p class="note">One for each browser you have allowed notifications in. Removing one stops them arriving there.</p>
@@ -59,7 +78,10 @@
 <p class="note">No browser is subscribed yet, so nothing is being delivered. Turning a type on above asks this browser for permission.</p>
 {{end}}
 </div>
+{{end}}
 </div>
 {{end}}
+
+{{define "script"}}<script src="{{asset "notifications.js"}}" defer></script>{{end}}
 
 {{define "nav"}}{{template "tabs" "More"}}{{end}}

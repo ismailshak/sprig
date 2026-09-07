@@ -609,7 +609,7 @@ func TestInvited_ABrowserAlreadySignedInGetsANewSessionInPlaceOfItsOld(t *testin
 // RemoteAddr.
 func invitedMux(t *testing.T, f *invitedFixture) http.Handler {
 	t.Helper()
-	return New(testLogger, f.handler.sessions, f.handler.passkeys, rejectEveryToken, f.queries, testTemplates(), testAssets(), "", false)
+	return New(testLogger, f.handler.sessions, f.handler.passkeys, rejectEveryToken, f.queries, testTemplates(), testAssets(), "", false, testPushKey)
 }
 
 // postFrom posts form to path from address through handler.

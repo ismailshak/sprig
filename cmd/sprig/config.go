@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/ismailshak/sprig/internal/auth"
+	"github.com/ismailshak/sprig/internal/push"
 )
 
 // config is every setting read from the environment, loaded once at startup.
@@ -36,6 +37,13 @@ type config struct {
 	// their own at /setup. When it is off, the page is served only on an
 	// install with no account yet. An invite is then the only other way in.
 	signupEnabled bool
+	// pushEnabled is whether the app offers notifications at all. With it
+	// false the VAPID variables are not read and the Notifications page says
+	// notifications are not set up.
+	pushEnabled bool
+	// push is the VAPID key pair and contact subject. It is empty when
+	// pushEnabled is false.
+	push push.Keys
 }
 
 // defaultBaseURL is the address the development server runs on, so a local run
@@ -126,6 +134,28 @@ func loadConfig(getenv func(string) string) (config, error) {
 		problems = append(problems, fmt.Sprintf("SPRIG_SIGNUP_ENABLED must be true or false, got %q", getenv("SPRIG_SIGNUP_ENABLED")))
 	}
 	cfg.signupEnabled = signup
+
+	pushEnabled, err := strconv.ParseBool(withDefault(getenv("SPRIG_PUSH_ENABLED"), "false"))
+	if err != nil {
+		problems = append(problems, fmt.Sprintf("SPRIG_PUSH_ENABLED must be true or false, got %q", getenv("SPRIG_PUSH_ENABLED")))
+	}
+	cfg.pushEnabled = pushEnabled
+	// The three variables are required only when push is on, so an install
+	// without notifications starts without them. A mismatched pair or a
+	// subject the push service would refuse is caught here rather than at the
+	// first send.
+	if pushEnabled {
+		cfg.push = push.Keys{
+			Public:  strings.TrimSpace(require("SPRIG_VAPID_PUBLIC_KEY")),
+			Private: strings.TrimSpace(require("SPRIG_VAPID_PRIVATE_KEY")),
+			Subject: strings.TrimSpace(require("SPRIG_VAPID_SUBJECT")),
+		}
+		if cfg.push.Public != "" && cfg.push.Private != "" && cfg.push.Subject != "" {
+			if err := cfg.push.Validate(); err != nil {
+				problems = append(problems, "SPRIG_VAPID_PUBLIC_KEY, SPRIG_VAPID_PRIVATE_KEY and SPRIG_VAPID_SUBJECT: "+err.Error())
+			}
+		}
+	}
 
 	level, err := parseLogLevel(withDefault(getenv("SPRIG_LOG_LEVEL"), "info"))
 	if err != nil {

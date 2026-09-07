@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/ismailshak/sprig/internal/push"
 )
 
 func TestRun_MissingRequiredConfigReturnsError(t *testing.T) {
@@ -80,5 +82,34 @@ func TestServe_ShutsDownGracefullyOnContextCancel(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("serve did not return within 2s of an already-cancelled context")
+	}
+}
+
+func TestSubcommand_VapidPrintsAPairAsTheTwoVariables(t *testing.T) {
+	var stdout bytes.Buffer
+
+	if err := subcommand([]string{"vapid"}, &stdout); err != nil {
+		t.Fatalf("vapid: %v", err)
+	}
+
+	lines := strings.Split(strings.TrimSpace(stdout.String()), "\n")
+	if len(lines) != 2 || !strings.HasPrefix(lines[0], "SPRIG_VAPID_PUBLIC_KEY=") || !strings.HasPrefix(lines[1], "SPRIG_VAPID_PRIVATE_KEY=") {
+		t.Fatalf("vapid printed:\n%s\nwant the two variables, one a line", stdout.String())
+	}
+	keys := push.Keys{
+		Public:  strings.TrimPrefix(lines[0], "SPRIG_VAPID_PUBLIC_KEY="),
+		Private: strings.TrimPrefix(lines[1], "SPRIG_VAPID_PRIVATE_KEY="),
+		Subject: "mailto:sprig@example.com",
+	}
+	if err := keys.Validate(); err != nil {
+		t.Errorf("the printed pair does not validate: %v", err)
+	}
+}
+
+func TestSubcommand_AnUnknownCommandIsRefused(t *testing.T) {
+	var stdout bytes.Buffer
+
+	if err := subcommand([]string{"serve"}, &stdout); err == nil {
+		t.Error("an unknown command ran without an error")
 	}
 }

@@ -23,18 +23,22 @@ const (
 	// offlinePath is the page the worker serves when a navigation fails and it
 	// has no cached copy.
 	offlinePath = "/offline"
+
+	// notificationIcon is the static file shown beside a push notification.
+	notificationIcon = "icons/icon-192.png"
 )
 
 // serviceWorker holds the script served at /service-worker.js: the file from
-// the static tree with five constants written above it.
+// the static tree with six constants written above it.
 //
 // The shell holds the plain URL of every file a stylesheet names with url()
 // as well as the hashed URLs, because a url() reference resolves to the plain
 // URL and no build step rewrites CSS. The version covers the templates too,
 // so editing a page installs a new worker.
 type serviceWorker struct {
-	// script is nil when the static tree has no service-worker.js. The tree is
-	// compiled into the binary, so that only happens in a broken build.
+	// script is nil when the static tree has no service-worker.js or no
+	// notification icon. The tree is compiled into the binary, so that only
+	// happens in a broken build.
 	script []byte
 	etag   string
 }
@@ -42,6 +46,10 @@ type serviceWorker struct {
 func newServiceWorker(assets *Assets, templates *Templates) *serviceWorker {
 	body, ok := assets.content(serviceWorkerFile)
 	if !ok {
+		return &serviceWorker{}
+	}
+	icon, err := assets.Path(notificationIcon)
+	if err != nil {
 		return &serviceWorker{}
 	}
 
@@ -63,7 +71,10 @@ func newServiceWorker(assets *Assets, templates *Templates) *serviceWorker {
 	fmt.Fprintf(&script, "const SHELL = %s;\n", shellJSON)
 	fmt.Fprintf(&script, "const OFFLINE = %q;\n", offlinePath)
 	fmt.Fprintf(&script, "const SIGN_IN = %q;\n", signInPath)
-	fmt.Fprintf(&script, "const GARDENS = %q;\n\n", gardensPath)
+	fmt.Fprintf(&script, "const GARDENS = %q;\n", gardensPath)
+	// The hashed URL is one the shell cache holds, so the icon is available
+	// with no network.
+	fmt.Fprintf(&script, "const ICON = %q;\n\n", icon)
 	script.Write(body)
 
 	return &serviceWorker{script: script.Bytes(), etag: `"` + version + `"`}

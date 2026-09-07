@@ -1,7 +1,10 @@
 package http
 
 import (
+	"crypto/ecdh"
+	"encoding/base64"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -16,6 +19,11 @@ const (
 	activityKind = "activity"
 )
 
+// subscribePath is the URL the page's script posts a new push subscription
+// to. There is no form for it, because only the browser's push API can make a
+// subscription.
+const subscribePath = notificationsPath + "/browsers"
+
 func removeBrowserPath(subscriptionID uuid.UUID) string {
 	return notificationsPath + "/browsers/" + subscriptionID.String() + "/remove"
 }
@@ -23,6 +31,16 @@ func removeBrowserPath(subscriptionID uuid.UUID) string {
 type notificationsPage struct {
 	Bar    topbar
 	Action string
+	// Key is the VAPID public key the browser subscribes with. When it is
+	// empty the page is one line saying notifications are not set up, with no
+	// checkboxes and no browser list.
+	Key string
+	// Subscribe is the URL the script posts the browser's subscription to.
+	Subscribe string
+	// Install is the URL of the Install sprig link. The script shows the link
+	// in place of the form on an iPhone that has not put sprig on its Home
+	// Screen.
+	Install string
 	// Digest is one digest a day of what is due. Activity is a message when
 	// somebody else in the garden logs care.
 	Digest   bool
@@ -46,6 +64,10 @@ type notificationsPage struct {
 type browserRow struct {
 	Name string
 	Used string
+	// Endpoint is the push service URL of the subscription. The script
+	// compares it with this browser's own, so Remove on this browser's row
+	// unsubscribes it from the push service as well.
+	Endpoint string
 	// Remove is the URL the row's Remove button posts to.
 	Remove string
 }
@@ -66,7 +88,81 @@ func (h *more) notifications(w http.ResponseWriter, r *http.Request) {
 	now := h.now().In(locationFor(principal.User))
 	page := newNotificationsPage(principal.User.Timezone, notificationOn(preferences, digestKind),
 		notificationOn(preferences, activityKind), principal.Membership.DigestHour, subscriptions, now)
+	page.Key = h.pushKey
 	h.templates.render(w, r, view{page: "notifications"}, page)
+}
+
+// subscribeBrowser stores the endpoint and two keys the browser's push API
+// produced. The row belongs to the signed-in account, so a browser another
+// account subscribed in moves to this one and its dates start over.
+func (h *more) subscribeBrowser(w http.ResponseWriter, r *http.Request) {
+	// With push off no browser can have a subscription to post, so the route
+	// is a 404.
+	if h.pushKey == "" {
+		http.NotFound(w, r)
+		return
+	}
+	principal := PrincipalFrom(r)
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "the form did not parse", http.StatusBadRequest)
+		return
+	}
+	endpoint := r.PostForm.Get("endpoint")
+	p256dh, auth := r.PostForm.Get("p256dh"), r.PostForm.Get("auth")
+	if !isPushEndpoint(endpoint) || !isPushPoint(p256dh) || !isPushKey(auth, authLength) {
+		http.Error(w, "that is not a push subscription", http.StatusBadRequest)
+		return
+	}
+	var userAgent *string
+	if ua := r.UserAgent(); ua != "" {
+		userAgent = &ua
+	}
+	err := h.queries.UpsertPushSubscription(r.Context(), store.UpsertPushSubscriptionParams{
+		UserID:    principal.User.ID,
+		Endpoint:  endpoint,
+		P256dhKey: p256dh,
+		AuthKey:   auth,
+		UserAgent: userAgent,
+	})
+	if err != nil {
+		serverError(h.logger, w, r, "save the push subscription", err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// authLength is the length in bytes of a subscription's auth secret.
+const authLength = 16
+
+// isPushEndpoint reports whether v is an absolute https URL. Every push
+// service is reached over https.
+func isPushEndpoint(v string) bool {
+	parsed, err := url.Parse(v)
+	return err == nil && parsed.Scheme == "https" && parsed.Host != ""
+}
+
+// isPushPoint reports whether v is base64url for a point on P-256. A
+// subscription's p256dh key has that form, and a message cannot be encrypted
+// to anything else.
+func isPushPoint(v string) bool {
+	decoded, err := decodePushKey(v)
+	if err != nil {
+		return false
+	}
+	_, err = ecdh.P256().NewPublicKey(decoded)
+	return err == nil
+}
+
+// isPushKey reports whether v is base64url for exactly length bytes.
+func isPushKey(v string, length int) bool {
+	decoded, err := decodePushKey(v)
+	return err == nil && len(decoded) == length
+}
+
+// decodePushKey decodes one of a subscription's keys. The browser encodes
+// without padding, and a padded key is accepted too.
+func decodePushKey(v string) ([]byte, error) {
+	return base64.RawURLEncoding.DecodeString(strings.TrimRight(v, "="))
 }
 
 // saveNotifications writes both types and the digest's hour. The hour is
@@ -139,12 +235,14 @@ func (h *more) removeBrowser(w http.ResponseWriter, r *http.Request) {
 
 func newNotificationsPage(zone string, digest, activity bool, hour int16, subscriptions []store.PushSubscription, now time.Time) notificationsPage {
 	page := notificationsPage{
-		Bar:      moreBar("Notifications"),
-		Action:   notificationsPath,
-		Digest:   digest,
-		Activity: activity,
-		Zone:     zoneLabel(zone),
-		Account:  accountPath,
+		Bar:       moreBar("Notifications"),
+		Action:    notificationsPath,
+		Subscribe: subscribePath,
+		Install:   installPath,
+		Digest:    digest,
+		Activity:  activity,
+		Zone:      zoneLabel(zone),
+		Account:   accountPath,
 	}
 	if digest {
 		for _, choice := range hours() {
@@ -153,9 +251,10 @@ func newNotificationsPage(zone string, digest, activity bool, hour int16, subscr
 	}
 	for _, subscription := range subscriptions {
 		page.Browsers = append(page.Browsers, browserRow{
-			Name:   browserName(subscription.UserAgent),
-			Used:   usedNote(subscription.LastSentAt, now),
-			Remove: removeBrowserPath(subscription.ID),
+			Name:     browserName(subscription.UserAgent),
+			Used:     usedNote(subscription.LastSentAt, now),
+			Endpoint: subscription.Endpoint,
+			Remove:   removeBrowserPath(subscription.ID),
 		})
 	}
 	return page
