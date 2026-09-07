@@ -115,14 +115,34 @@ func run(ctx context.Context, getenv func(string) string, stdout io.Writer) erro
 		return err
 	}
 
-	// The Notifications page gives this key to the browser to subscribe with.
-	// Empty means push is off.
+	// The Notifications page gives pushKey to the browser to subscribe with.
+	// With push off there is no key and no digest job.
 	pushKey := ""
+	var digest *push.Digest
+	var wake func()
 	if cfg.pushEnabled {
 		pushKey = cfg.push.Public
+		digest = push.NewDigest(logger, queries, push.NewSender(cfg.push, nil), cfg.baseURL.String())
+		wake = digest.Wake
+	}
+	handler := sprighttp.New(logger, sessions, passkeys, resolver, queries, templates, assets, cfg.trustedIPHeader, cfg.signupEnabled, pushKey, wake)
+	if digest == nil {
+		return serve(ctx, logger, listener, handler)
 	}
 
-	return serve(ctx, logger, listener, sprighttp.New(logger, sessions, passkeys, resolver, queries, templates, assets, cfg.trustedIPHeader, cfg.signupEnabled, pushKey))
+	// The job is stopped and waited for before run returns, because the deferred
+	// pool.Close would otherwise run while the job was still querying.
+	jobCtx, stopJob := context.WithCancel(ctx)
+	defer stopJob()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		digest.Run(jobCtx)
+	}()
+	err = serve(ctx, logger, listener, handler)
+	stopJob()
+	<-done
+	return err
 }
 
 // serve runs the server on listener until ctx is cancelled, then gives

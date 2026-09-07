@@ -113,6 +113,8 @@ func (h *more) saveAccount(w http.ResponseWriter, r *http.Request) {
 		serverError(h.logger, w, r, "save the account", err)
 		return
 	}
+	// The digest hour is read in the timezone just saved.
+	h.wake.call()
 	http.Redirect(w, r, accountPath, http.StatusSeeOther)
 }
 

@@ -183,6 +183,22 @@ func TestNotifications_SavingWritesBothTypesAndTheHour(t *testing.T) {
 	}
 }
 
+func countingWake(calls *int) wakeDigest {
+	return func() { *calls++ }
+}
+
+func TestNotifications_SavingTheSettingsWakesTheDigestJob(t *testing.T) {
+	f := moreGarden(t)
+	woken := 0
+	f.handler.wake = countingWake(&woken)
+
+	f.do(t, f.handler.saveNotifications, notificationsPath, url.Values{"digest": {"on"}, "hour": {"19"}})
+
+	if woken != 1 {
+		t.Errorf("the digest job was woken %d times, want 1, so the new hour waits for the job's timer", woken)
+	}
+}
+
 func TestNotifications_SavingWithTheDigestOffKeepsTheHourItArrivedAt(t *testing.T) {
 	f := moreGarden(t)
 
@@ -214,6 +230,19 @@ func TestNotifications_AnHourTheSelectDoesNotOfferIsRefused(t *testing.T) {
 	}
 	if !digest {
 		t.Error("the refused post changed the settings")
+	}
+}
+
+func TestNotifications_SubscribingABrowserWakesTheDigestJob(t *testing.T) {
+	f := moreGarden(t)
+	woken := 0
+	f.handler.wake = countingWake(&woken)
+	p256dh, secret := browserKeys(t)
+
+	f.subscribe(t, "https://push.invalid/new-phone", chromeOnMac, p256dh, secret)
+
+	if woken != 1 {
+		t.Errorf("the digest job was woken %d times, want 1, so the new browser waits for the job's timer", woken)
 	}
 }
 

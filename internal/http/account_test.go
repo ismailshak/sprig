@@ -175,6 +175,18 @@ func TestAccount_SavingWritesTheNameTheHandleAndTheZone(t *testing.T) {
 	}
 }
 
+func TestAccount_SavingTheTimezoneWakesTheDigestJob(t *testing.T) {
+	f := moreGarden(t)
+	woken := 0
+	f.handler.wake = countingWake(&woken)
+
+	f.saveAccount(t, "Ellie", "ellie", "Asia/Tokyo")
+
+	if woken != 1 {
+		t.Errorf("the digest job was woken %d times, want 1, so the digest hour is read in the old zone until the job's timer fires", woken)
+	}
+}
+
 func TestAccount_AnEmptyDisplayNameIsRefusedWithTheReasonUnderTheField(t *testing.T) {
 	f := moreGarden(t)
 

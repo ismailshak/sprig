@@ -143,6 +143,7 @@ type setup struct {
 	// enabled is SPRIG_SIGNUP_ENABLED: whether a stranger may create an
 	// account and a garden of their own.
 	enabled bool
+	wake    wakeDigest
 }
 
 // open reports whether the three public setup routes are served. They are when

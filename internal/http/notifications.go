@@ -19,6 +19,19 @@ const (
 	activityKind = "activity"
 )
 
+// wakeDigest has the digest job work out its next send again. A handler calls
+// it after committing a change to who gets a digest and when: a type switched
+// on or off, the hour, an account's timezone, a browser subscribed. Without it
+// the job finds the change only when its timer next fires. It is nil when push
+// is off.
+type wakeDigest func()
+
+func (w wakeDigest) call() {
+	if w != nil {
+		w()
+	}
+}
+
 // subscribePath is the URL the page's script posts a new push subscription
 // to. There is no form for it, because only the browser's push API can make a
 // subscription.
@@ -128,6 +141,7 @@ func (h *more) subscribeBrowser(w http.ResponseWriter, r *http.Request) {
 		serverError(h.logger, w, r, "save the push subscription", err)
 		return
 	}
+	h.wake.call()
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -207,6 +221,7 @@ func (h *more) saveNotifications(w http.ResponseWriter, r *http.Request) {
 		serverError(h.logger, w, r, "save the notification settings", err)
 		return
 	}
+	h.wake.call()
 	http.Redirect(w, r, notificationsPath, http.StatusSeeOther)
 }
 

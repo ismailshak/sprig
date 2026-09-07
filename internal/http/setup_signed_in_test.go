@@ -139,6 +139,19 @@ func TestSetupSignedIn_CreatingWritesAGardenTheAccountOwnsMovesTheSessionAndLand
 	}
 }
 
+func TestSetupSignedIn_CreatingAGardenWakesTheDigestJob(t *testing.T) {
+	f := setupOn(t, true)
+	robin, _ := f.signedInTo(t)
+	woken := 0
+	f.handler.wake = countingWake(&woken)
+
+	f.asAccount(t, f.handler.createSignedIn, robin, url.Values{"garden": {"Allotment"}})
+
+	if woken != 1 {
+		t.Errorf("the digest job was woken %d times, want 1, so the new garden's digest waits for the job's timer", woken)
+	}
+}
+
 func TestSetupSignedIn_ASitterMakesAGardenTheyOwn(t *testing.T) {
 	f := setupOn(t, true)
 	robin, token := f.signedInTo(t)

@@ -8,33 +8,69 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/ismailshak/sprig/internal/store"
 )
 
 // pushService is a test HTTP server in place of a browser vendor's push
-// service. It responds to every message with status and records the last
-// request.
+// service. It replies to every message with status, or with the status statuses
+// holds for the request's path. It records the last request, the path of every
+// message and when the first one arrived.
 type pushService struct {
 	*httptest.Server
-	status  int
-	request *http.Request
-	body    []byte
+	status   int
+	statuses map[string]int
+	request  *http.Request
+	body     []byte
+
+	mu    sync.Mutex
+	paths []string
+	first time.Time
 }
 
 func newPushService(t *testing.T, status int) *pushService {
 	t.Helper()
 
-	service := &pushService{status: status}
+	service := &pushService{status: status, statuses: map[string]int{}}
 	service.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		service.mu.Lock()
+		defer service.mu.Unlock()
 		service.request = r
 		service.body, _ = io.ReadAll(r.Body)
+		service.paths = append(service.paths, r.URL.Path)
+		if service.first.IsZero() {
+			service.first = time.Now()
+		}
+		if status, ok := service.statuses[r.URL.Path]; ok {
+			w.WriteHeader(status)
+			return
+		}
 		w.WriteHeader(service.status)
 	}))
 	t.Cleanup(service.Close)
 	return service
+}
+
+// firstReceived returns the time the first message arrived, and false when
+// none has.
+func (s *pushService) firstReceived() (time.Time, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.first, !s.first.IsZero()
+}
+
+// received returns the path of every message so far, sorted.
+func (s *pushService) received() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	paths := slices.Clone(s.paths)
+	slices.Sort(paths)
+	return paths
 }
 
 // browserSubscription returns a subscription with the keys a browser would

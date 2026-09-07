@@ -97,5 +97,8 @@ func (h *setup) createSignedIn(w http.ResponseWriter, r *http.Request) {
 		serverError(h.logger, w, r, "set up the garden", err)
 		return
 	}
+	// The new membership starts with the digest on. The account may already
+	// have a subscribed browser, so a digest can be due at once.
+	h.wake.call()
 	http.Redirect(w, r, todayPath, http.StatusSeeOther)
 }

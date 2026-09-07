@@ -141,6 +141,9 @@ func (h *invited) accept(w http.ResponseWriter, r *http.Request) {
 		serverError(h.logger, w, r, "accept the invite", err)
 		return
 	}
+	// The account may already have a subscribed browser, so the new membership
+	// can be due a digest at once.
+	h.wake.call()
 	http.Redirect(w, r, todayPath, http.StatusSeeOther)
 }
 

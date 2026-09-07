@@ -199,6 +199,20 @@ func TestAccept_AcceptingWritesTheMembershipFromTheInviteMovesTheSessionAndLands
 	unusable(t, f.show(t, sitterLink))
 }
 
+func TestAccept_AcceptingAnInviteWakesTheDigestJob(t *testing.T) {
+	f := invitedGarden(t)
+	f.removeSamFromRosewood(t)
+	sam := f.startSessionFor(t, samOnFairview(), samsSession)
+	woken := 0
+	f.handler.wake = countingWake(&woken)
+
+	f.accept(t, sitterLink, sam)
+
+	if woken != 1 {
+		t.Errorf("the digest job was woken %d times, want 1, so the new membership waits for the job's timer", woken)
+	}
+}
+
 func TestAccept_AnEndedMembershipIsRenewedFromTheInviteRatherThanDuplicated(t *testing.T) {
 	f := invitedGarden(t)
 	// Clare's access to Rosewood ended twelve days ago. She gets a sitter

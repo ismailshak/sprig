@@ -36,7 +36,7 @@ type middleware func(http.Handler) http.Handler
 // signupEnabled is SPRIG_SIGNUP_ENABLED, whether Set up your garden is served
 // on an install that already has an account. pushKey is the VAPID public key
 // the Notifications page gives the browser. It is empty when push is off.
-func routes(logger *slog.Logger, sessions *auth.Sessions, passkeys *auth.Passkeys, queries *store.Queries, templates *Templates, assets *Assets, trustedIPHeader string, signupEnabled bool, pushKey string) []route {
+func routes(logger *slog.Logger, sessions *auth.Sessions, passkeys *auth.Passkeys, queries *store.Queries, templates *Templates, assets *Assets, trustedIPHeader string, signupEnabled bool, pushKey string, wake func()) []route {
 	todayHandler := &today{logger: logger, queries: queries, templates: templates, now: time.Now}
 	plantsHandler := &plants{logger: logger, queries: queries, templates: templates, now: time.Now}
 	activityHandler := &activity{logger: logger, queries: queries, templates: templates, now: time.Now}
@@ -44,9 +44,9 @@ func routes(logger *slog.Logger, sessions *auth.Sessions, passkeys *auth.Passkey
 	// is already signed in.
 	resolver := auth.NewResolver(sessions, queries)
 	passkeyHandler := &passkeyCeremony{logger: logger, passkeys: passkeys, sessions: sessions, queries: queries, templates: templates, now: time.Now}
-	moreHandler := &more{logger: logger, sessions: sessions, queries: queries, templates: templates, build: build.Read(), now: time.Now, pushKey: pushKey}
-	setupHandler := &setup{logger: logger, passkeys: passkeys, sessions: sessions, resolver: resolver, queries: queries, templates: templates, now: time.Now, enabled: signupEnabled}
-	invitedHandler := &invited{logger: logger, passkeys: passkeys, sessions: sessions, resolver: resolver, queries: queries, templates: templates, now: time.Now}
+	moreHandler := &more{logger: logger, sessions: sessions, queries: queries, templates: templates, build: build.Read(), now: time.Now, pushKey: pushKey, wake: wake}
+	setupHandler := &setup{logger: logger, passkeys: passkeys, sessions: sessions, resolver: resolver, queries: queries, templates: templates, now: time.Now, enabled: signupEnabled, wake: wake}
+	invitedHandler := &invited{logger: logger, passkeys: passkeys, sessions: sessions, resolver: resolver, queries: queries, templates: templates, now: time.Now, wake: wake}
 	base := []route{
 		{pattern: "GET /healthz", handler: http.HandlerFunc(handleHealthz)},
 		{pattern: assetPattern, handler: assets.handler()},
@@ -195,10 +195,11 @@ var publicRoutes = map[string]bool{
 // wraps Recover so a recovered panic's 500 still gets a request line. The
 // cross-origin check is inside Logging and Recover so a refused request is
 // logged like any other. Authentication is inside that so a cross-site post is
-// refused before it costs a session lookup.
-func New(logger *slog.Logger, sessions *auth.Sessions, passkeys *auth.Passkeys, resolver Resolver, queries *store.Queries, templates *Templates, assets *Assets, trustedIPHeader string, signupEnabled bool, pushKey string) http.Handler {
+// refused before it costs a session lookup. wake is called after a handler
+// commits a change to who gets a digest and when. It is nil when push is off.
+func New(logger *slog.Logger, sessions *auth.Sessions, passkeys *auth.Passkeys, resolver Resolver, queries *store.Queries, templates *Templates, assets *Assets, trustedIPHeader string, signupEnabled bool, pushKey string, wake func()) http.Handler {
 	mux := http.NewServeMux()
-	for _, r := range routes(logger, sessions, passkeys, queries, templates, assets, trustedIPHeader, signupEnabled, pushKey) {
+	for _, r := range routes(logger, sessions, passkeys, queries, templates, assets, trustedIPHeader, signupEnabled, pushKey, wake) {
 		h := r.handler
 		if r.capability != "" {
 			h = require(r.capability, h)

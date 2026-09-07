@@ -423,6 +423,12 @@ func TestQueries_EveryQueryOnAGardenScopedTableBindsTheGarden(t *testing.T) {
 		if slices.Equal(touched, []string{"membership"}) && strings.Contains(query.sql, "@user_id") {
 			continue
 		}
+		// The digest job runs across every garden rather than for one request.
+		// Each row it returns names a garden id. Every read the send then
+		// makes binds that id.
+		if query.name == "ListDigestMembers" && slices.Equal(touched, []string{"membership"}) {
+			continue
+		}
 		if !strings.Contains(query.sql, "@garden_id") {
 			t.Errorf("%s reads %s and takes no @garden_id, so it can return another garden's rows",
 				query.name, strings.Join(touched, ", "))

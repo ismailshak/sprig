@@ -39,6 +39,7 @@ type more struct {
 	// to subscribe with. It is empty when push is off, and the page then says
 	// notifications are not set up.
 	pushKey string
+	wake    wakeDigest
 }
 
 type morePage struct {
