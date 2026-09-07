@@ -2,6 +2,8 @@ package http
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"html/template"
 	"io/fs"
@@ -28,6 +30,9 @@ type Templates struct {
 	dir    string
 	funcs  template.FuncMap
 	pages  map[string]*template.Template
+	// digest is a hash of the template tree at startup. The service worker's
+	// version includes it, so editing a page installs a new worker.
+	digest string
 }
 
 // ParseTemplates reads the template tree and returns an error for a template
@@ -44,7 +49,31 @@ func ParseTemplates(logger *slog.Logger, dir string, assets *Assets) (*Templates
 		return nil, err
 	}
 	t.pages = pages
+	if t.digest, err = digestTree(t.fs()); err != nil {
+		return nil, fmt.Errorf("reading the template tree: %w", err)
+	}
 	return t, nil
+}
+
+// digestTree returns a hash of every file under fsys, in path order.
+func digestTree(fsys fs.FS) (string, error) {
+	sum := sha256.New()
+	err := fs.WalkDir(fsys, ".", func(name string, entry fs.DirEntry, err error) error {
+		if err != nil || entry.IsDir() {
+			return err
+		}
+		content, err := fs.ReadFile(fsys, name)
+		if err != nil {
+			return err
+		}
+		sum.Write([]byte(name + "\n"))
+		sum.Write(content)
+		return nil
+	})
+	if err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(sum.Sum(nil)), nil
 }
 
 func (t *Templates) fs() fs.FS {

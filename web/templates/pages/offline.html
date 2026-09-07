@@ -1,0 +1,17 @@
+{{define "title"}}sprig — offline{{end}}
+
+{{define "app-class"}}app app--bare{{end}}
+
+{{/* The page the service worker shows when a navigation fails and it has no
+     cached copy. It has no tab bar, because those pages may not be cached
+     either. */}}
+{{define "main"}}
+<div class="app__body app__body--bare">
+<h1 class="bare__title">You're offline</h1>
+<p class="lead">This page has not been opened on this device, so there is nothing to show until you're back online. If you had just logged or saved something, it did not go through.</p>
+{{/* The worker serves this page under the URL that was asked for, and an
+     empty href points at that URL. */}}
+<a class="wide-action" href="">Try again</a>
+<p class="note">A page you have opened before still shows as it was then. That includes <a href="/">Today</a>.</p>
+</div>
+{{end}}

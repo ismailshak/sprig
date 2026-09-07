@@ -40,13 +40,15 @@ var routeAccess = map[string]access{
 	"GET /healthz": {public: true},
 	// The hashed URL is known only at startup, so this path is a plain one the
 	// pattern matches.
-	assetPattern:          {public: true, path: assetPrefix + "app.css"},
-	"GET /{$}":            {},
-	"GET /plants":         {},
-	"GET /activity":       {},
-	"GET /plants/new":     {capability: auth.PlantCreate},
-	"POST /plants/new":    {capability: auth.PlantCreate},
-	"GET /plants/{plant}": {path: plantPath(rosewoodPlantID), foreign: plantPath(fairviewPlantID)},
+	assetPattern:             {public: true, path: assetPrefix + "app.css"},
+	"GET /service-worker.js": {public: true},
+	"GET /offline":           {public: true},
+	"GET /{$}":               {},
+	"GET /plants":            {},
+	"GET /activity":          {},
+	"GET /plants/new":        {capability: auth.PlantCreate},
+	"POST /plants/new":       {capability: auth.PlantCreate},
+	"GET /plants/{plant}":    {path: plantPath(rosewoodPlantID), foreign: plantPath(fairviewPlantID)},
 	"GET /plants/{plant}/edit": {
 		capability: auth.PlantEdit,
 		path:       editPlantPath(rosewoodPlantID),

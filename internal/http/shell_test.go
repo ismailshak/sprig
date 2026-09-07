@@ -82,6 +82,18 @@ func TestShell_LoadsHTMXFromThisOrigin(t *testing.T) {
 	}
 }
 
+// An installed app needs the manifest. iOS takes the Home Screen icon from
+// the apple-touch-icon link and not from the manifest.
+func TestShell_LinksTheManifestAndTheAppleTouchIcon(t *testing.T) {
+	shell := renderShell(t, testAssets(), "Today")
+
+	for _, link := range []string{`rel="manifest"`, `rel="apple-touch-icon"`} {
+		if !strings.Contains(shell, link) {
+			t.Errorf("the shell has no %s link, so the app cannot be installed", link)
+		}
+	}
+}
+
 func TestShell_TheCurrentTabIsTheOnlyOneThatIsNotALink(t *testing.T) {
 	for tab, href := range map[string]string{
 		"Today":    "/",

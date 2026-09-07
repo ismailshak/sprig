@@ -10,7 +10,18 @@
 <link rel="stylesheet" href="{{asset "palettes.css"}}">
 <link rel="stylesheet" href="{{asset "tokens.css"}}">
 <link rel="stylesheet" href="{{asset "app.css"}}">
+<link rel="manifest" href="{{asset "manifest.webmanifest"}}">
+<link rel="icon" href="{{asset "icons/icon.svg"}}" type="image/svg+xml">
+{{/* For a browser that ignores an SVG favicon. */}}
+<link rel="icon" href="{{asset "icons/favicon-32.png"}}" type="image/png" sizes="32x32">
+{{/* iOS reads the Home Screen icon from this link and not from the manifest. */}}
+<link rel="apple-touch-icon" href="{{asset "icons/apple-touch-icon.png"}}">
+{{/* Each value is the page background for that colour scheme, the same
+     colour as --bg. */}}
+<meta name="theme-color" content="#f8f5ee" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#181c1a" media="(prefers-color-scheme: dark)">
 <script src="{{asset "vendor/htmx-2.0.10.min.js"}}" defer></script>
+<script src="{{asset "offline.js"}}" defer></script>
 {{/* htmx does not swap a 4xx response by default. A 422 is a form re-rendered
      with an error message, so it has to swap.
 
@@ -28,6 +39,9 @@
      centres its column. Sign in is the only one so far. */}}
 <div class="{{block "app-class" .}}app{{end}}">
 <div class="app__main">
+{{/* offline.js unhides this line when the service worker serves the page from
+     its cache, and fills the time in from the copy's Date header. */}}
+<p class="offline" id="offline" role="status" hidden>You're offline. This page was last fetched <time></time>.</p>
 {{/* Each page renders its own topbar and app__body, because their max width
      above 900px differs by page and is set by a modifier class on them. */}}
 {{block "main" .}}{{end}}
