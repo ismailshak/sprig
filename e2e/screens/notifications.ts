@@ -23,4 +23,14 @@ export class NotificationsScreen {
   save(): Locator {
     return this.page.getByRole('button', { name: 'Save changes' });
   }
+
+  // The line the page's script writes the browser's refusal into.
+  refusal(): Locator {
+    return this.page.getByRole('alert');
+  }
+
+  // The link shown in place of the form in a browser with no push API.
+  install(): Locator {
+    return this.page.getByRole('link', { name: 'Install sprig' });
+  }
 }

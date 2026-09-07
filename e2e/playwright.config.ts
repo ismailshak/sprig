@@ -38,12 +38,14 @@ export default defineConfig({
   // redirect, and the no-JavaScript project runs only those tests. @js marks
   // behaviour that exists only with JavaScript on, and @nojs behaviour that
   // exists only with it off. @offline marks a test that cuts the network and
-  // reads what the service worker serves.
+  // reads what the service worker serves. @push marks a test of the
+  // Notifications form. The page only shows the form in a browser with the
+  // push API, and the emulated iPhone runs as a Safari tab that has none.
   projects: [
     {
       name: 'phone',
       use: { ...devices['iPhone 16'] },
-      grepInvert: /@nojs|@passkey|@offline/,
+      grepInvert: /@nojs|@passkey|@offline|@push/,
     },
     {
       name: 'phone-nojs',
@@ -54,12 +56,13 @@ export default defineConfig({
     // authenticator is the only way to register a passkey without a real
     // device. @offline runs here too, because WebKit under Playwright fails a
     // navigation with no network even when a service worker has a response for
-    // it. It is a desktop Chrome, so this is also the only project running at a
-    // width where the pages take their wide layout.
+    // it. @push runs here because desktop Chrome has the push API. It is a
+    // desktop Chrome, so this is also the only project running at a width
+    // where the pages take their wide layout.
     {
       name: 'desktop',
       use: { ...devices['Desktop Chrome'] },
-      grep: /@passkey|@offline/,
+      grep: /@passkey|@offline|@push/,
     },
   ],
 });
