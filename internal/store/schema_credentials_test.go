@@ -108,23 +108,54 @@ func TestSchema_OneNotificationPreferencePerMembershipAndKind(t *testing.T) {
 	}
 }
 
-// A second attempt on the same day has to collide with the row the first one
-// wrote.
-func TestSchema_ADigestIsClaimedOncePerMembershipAndLocalDate(t *testing.T) {
+// Without the primary key, a job that retries after a restart would send the
+// same digest a second time.
+func TestSchema_ASendIsClaimedOncePerMembershipKindAndSendKey(t *testing.T) {
 	ctx := t.Context()
 	pool := migratedPool(t)
 	garden, user := seedGardenAndUser(t, pool)
 	membership := seedMembership(t, pool, garden, user, "member")
 
-	insert := "INSERT INTO notification_send (membership_id, kind, local_date) VALUES ($1, 'digest', $2)"
-	if _, err := pool.Exec(ctx, insert, membership, "2026-09-03"); err != nil {
+	insert := "INSERT INTO notification_send (membership_id, kind, send_key) VALUES ($1, $2, $3)"
+	if _, err := pool.Exec(ctx, insert, membership, "digest", "2026-09-03"); err != nil {
 		t.Fatalf("claiming today's digest: %v", err)
 	}
-	if _, err := pool.Exec(ctx, insert, membership, "2026-09-03"); err == nil {
+	if _, err := pool.Exec(ctx, insert, membership, "digest", "2026-09-03"); err == nil {
 		t.Error("today's digest was claimed twice")
 	}
-	if _, err := pool.Exec(ctx, insert, membership, "2026-09-04"); err != nil {
+	if _, err := pool.Exec(ctx, insert, membership, "digest", "2026-09-04"); err != nil {
 		t.Errorf("tomorrow's digest was refused: %v", err)
+	}
+	if _, err := pool.Exec(ctx, insert, membership, "activity", "2026-09-03"); err != nil {
+		t.Errorf("another kind with the same send key was refused: %v", err)
+	}
+	if _, err := pool.Exec(ctx, insert, membership, "misting", "2026-09-03"); err == nil {
+		t.Error("a send of a kind nobody named was accepted")
+	}
+}
+
+// Without the cascade, removing a member is refused by the foreign key as soon
+// as one notification has been sent to them.
+func TestSchema_DeletingAMembershipDeletesItsClaimedSends(t *testing.T) {
+	ctx := t.Context()
+	pool := migratedPool(t)
+	garden, user := seedGardenAndUser(t, pool)
+	membership := seedMembership(t, pool, garden, user, "member")
+
+	_, err := pool.Exec(ctx,
+		"INSERT INTO notification_send (membership_id, kind, send_key) VALUES ($1, 'digest', '2026-09-03')", membership)
+	if err != nil {
+		t.Fatalf("claiming today's digest: %v", err)
+	}
+	if _, err := pool.Exec(ctx, "DELETE FROM membership WHERE id = $1", membership); err != nil {
+		t.Fatalf("deleting the membership: %v", err)
+	}
+	var left int
+	if err := pool.QueryRow(ctx, "SELECT count(*) FROM notification_send").Scan(&left); err != nil {
+		t.Fatalf("counting the sends: %v", err)
+	}
+	if left != 0 {
+		t.Errorf("%d sends outlived the membership, want 0", left)
 	}
 }
 
