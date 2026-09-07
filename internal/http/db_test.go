@@ -28,12 +28,16 @@ func migrateSchema(ctx context.Context, databaseURL string) error {
 	return store.Migrate(ctx, pool, db.Migrations, slog.New(slog.DiscardHandler))
 }
 
+// testPhotoQuota is the photo quota in these tests, 64 MiB. That is eight
+// files at the 8 MiB per-file limit, more than any test stores.
+const testPhotoQuota = 64 << 20
+
 // testPhotos returns a photo store over a directory that is removed when the
 // test ends.
 func testPhotos(t *testing.T) *photo.Store {
 	t.Helper()
 
-	photos, err := photo.NewStore(t.TempDir())
+	photos, err := photo.NewStore(t.TempDir(), testPhotoQuota)
 	if err != nil {
 		t.Fatal(err)
 	}

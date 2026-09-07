@@ -32,8 +32,10 @@ type config struct {
 	// development. Empty means the embedded templates, parsed once.
 	templateDir string
 	photoDir    string
-	logLevel    slog.Level
-	logFormat   string
+	// photoQuota is the most one garden's photos may add up to, in bytes.
+	photoQuota int64
+	logLevel   slog.Level
+	logFormat  string
 	// signupEnabled is whether a stranger can create an account and a garden of
 	// their own at /setup. When it is off, the page is served only on an
 	// install with no account yet. An invite is then the only other way in.
@@ -51,6 +53,9 @@ type config struct {
 // needs no configuration. A deployment sets SPRIG_BASE_URL, because a browser
 // refuses a passkey ceremony whose origin is not the one it is on.
 const defaultBaseURL = "http://localhost:8080"
+
+// defaultPhotoQuota is 1 GiB.
+const defaultPhotoQuota = 1 << 30
 
 // defaultSessionTTL is 30 days without use before a session expires. Shorter
 // would prompt for a passkey more often than people tolerate.
@@ -130,6 +135,12 @@ func loadConfig(getenv func(string) string) (config, error) {
 		problems = append(problems, fmt.Sprintf("SPRIG_SESSION_TTL must be a whole number of seconds and at least one, got %s", ttl))
 	}
 	cfg.sessionTTL = ttl
+
+	quota, err := strconv.ParseInt(withDefault(strings.TrimSpace(getenv("SPRIG_PHOTO_QUOTA_BYTES")), strconv.Itoa(defaultPhotoQuota)), 10, 64)
+	if err != nil || quota < 1 {
+		problems = append(problems, fmt.Sprintf("SPRIG_PHOTO_QUOTA_BYTES must be a whole number of bytes above zero, got %q", getenv("SPRIG_PHOTO_QUOTA_BYTES")))
+	}
+	cfg.photoQuota = quota
 
 	signup, err := strconv.ParseBool(withDefault(getenv("SPRIG_SIGNUP_ENABLED"), "false"))
 	if err != nil {

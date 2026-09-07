@@ -47,4 +47,10 @@ export class GardenScreen {
   drop(label: string): Locator {
     return this.page.getByRole('button', { name: label, exact: true });
   }
+
+  // The sentence under Photos saying how much of the garden's photo storage
+  // is used.
+  storage(): Locator {
+    return this.page.getByText(/of photo storage used\./);
+  }
 }

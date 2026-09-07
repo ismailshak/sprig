@@ -26,7 +26,7 @@ func TestPath_IsGardenThenPlantThenIDWithTheKindsExtension(t *testing.T) {
 func TestNewStore_CreatesAMissingDirectory(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "photos", "nested")
 
-	if _, err := NewStore(dir); err != nil {
+	if _, err := NewStore(dir, 1<<30); err != nil {
 		t.Fatal(err)
 	}
 
@@ -41,7 +41,7 @@ func TestNewStore_ReportsADirectoryItCannotCreate(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := NewStore(filepath.Join(file, "photos")); err == nil {
+	if _, err := NewStore(filepath.Join(file, "photos"), 1<<30); err == nil {
 		t.Error("NewStore under a file returned no error")
 	}
 }

@@ -12,13 +12,15 @@ import (
 	"uuid"
 
 	"github.com/ismailshak/sprig/internal/auth"
+	"github.com/ismailshak/sprig/internal/photo"
 )
 
 var (
-	moreWaterID = uuid.MustParse("00000000-0000-7000-8000-000000000320")
-	moreFeedID  = uuid.MustParse("00000000-0000-7000-8000-000000000321")
-	moreMistID  = uuid.MustParse("00000000-0000-7000-8000-000000000322")
-	morePlantID = uuid.MustParse("00000000-0000-7000-8000-000000000323")
+	moreWaterID  = uuid.MustParse("00000000-0000-7000-8000-000000000320")
+	moreFeedID   = uuid.MustParse("00000000-0000-7000-8000-000000000321")
+	moreMistID   = uuid.MustParse("00000000-0000-7000-8000-000000000322")
+	morePlantID  = uuid.MustParse("00000000-0000-7000-8000-000000000323")
+	otherPlantID = uuid.MustParse("00000000-0000-7000-8000-000000000324")
 )
 
 // careTypeGarden gives Ellie's garden the four care types the Garden page has
@@ -582,5 +584,103 @@ func TestGarden_AddingACareTypeOpensAnEmptyRowAtTheEndOfTheList(t *testing.T) {
 	}
 	if got := listedNames(listedTypesOf(page)); !slices.Equal(got, []string{"Water", "Feed", "Mist"}) {
 		t.Errorf("the closed rows are %v, want the three the garden has", got)
+	}
+}
+
+// storageLineOn captures the text of the sentence under Photos from the
+// rendered page.
+var storageLineOn = regexp.MustCompile(`>([^<]*of photo storage used\.[^<]*)<`)
+
+// photoQuota gives the Garden page a photo store with the given quota.
+func (f *moreFixture) photoQuota(t *testing.T, quota int64) {
+	t.Helper()
+
+	photos, err := photo.NewStore(t.TempDir(), quota)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.handler.photos = photos
+}
+
+// insertPhoto records a photo of the given sizes in the garden. The row has no
+// file behind it, since the page only sums the rows.
+func (f *moreFixture) insertPhoto(t *testing.T, garden, plant uuid.UUID, bytes int64, square *int64) {
+	t.Helper()
+
+	f.exec(t, `INSERT INTO photo (garden_id, plant_id, uploaded_by, kind, path, width, height, bytes, square_bytes)
+		VALUES ($1, $2, $3, 'image/jpeg', 'x', 1, 1, $4, $5)`, garden, plant, moreUserID, bytes, square)
+}
+
+func TestGarden_ThePhotosLineSaysHowMuchOfTheGardensStorageIsUsed(t *testing.T) {
+	f := careTypeGarden(t)
+	square := int64(1 << 20)
+	f.photoQuota(t, 4<<20)
+	f.insertPhoto(t, moreGardenID, morePlantID, 1<<20, &square)
+	f.exec(t, "INSERT INTO plant (id, garden_id, nickname) VALUES ($1, $2, 'Ivy')", otherPlantID, otherGardenID)
+	f.exec(t, `INSERT INTO photo (garden_id, plant_id, uploaded_by, kind, path, width, height, bytes)
+		VALUES ($1, $2, $3, 'image/jpeg', 'y', 1, 1, $4)`, otherGardenID, otherPlantID, otherUserID, int64(1<<20))
+
+	got := storageLineOn.FindStringSubmatch(f.page(t, f.handler.garden, gardenPath))
+
+	if got == nil || got[1] != "2 MB of 4 MB of photo storage used." {
+		t.Errorf("the Photos line reads %v, want the garden's own 2 MB of 4 MB", got)
+	}
+}
+
+func TestGarden_NearlyFullThePhotosLineSaysUploadsStopAndWhatToDelete(t *testing.T) {
+	f := careTypeGarden(t)
+	f.photoQuota(t, 4<<20)
+	f.insertPhoto(t, moreGardenID, morePlantID, 3700<<10, nil)
+
+	got := storageLineOn.FindStringSubmatch(f.page(t, f.handler.garden, gardenPath))
+
+	want := "4 MB of 4 MB of photo storage used. Uploads stop when it is full, and deleting progress photos is what makes room."
+	if got == nil || got[1] != want {
+		t.Errorf("the Photos line reads %v, want %q", got, want)
+	}
+}
+
+func TestStorageLine_AFigureUnderAGigabyteReadsAsWholeMegabytes(t *testing.T) {
+	for _, c := range []struct {
+		used, quota int64
+		want        string
+	}{
+		{0, 1 << 30, "0 MB of 1 GB of photo storage used."},
+		{200 << 10, 1 << 30, "0 MB of 1 GB of photo storage used."},
+		{312 << 20, 1 << 30, "312 MB of 1 GB of photo storage used."},
+	} {
+		if got := storageLine(photo.Usage{Used: c.used, Quota: c.quota}); got != c.want {
+			t.Errorf("storageLine(%d of %d) = %q, want %q", c.used, c.quota, got, c.want)
+		}
+	}
+}
+
+func TestStorageLine_AFigureOfAGigabyteOrMoreReadsAsGigabytes(t *testing.T) {
+	for _, c := range []struct {
+		used, quota int64
+		want        string
+	}{
+		{1 << 30, 5 << 30, "1 GB of 5 GB of photo storage used."},
+		{1025 << 20, 5 << 30, "1.0 GB of 5 GB of photo storage used."},
+		{1536 << 20, 5 << 30, "1.5 GB of 5 GB of photo storage used."},
+	} {
+		if got := storageLine(photo.Usage{Used: c.used, Quota: c.quota}); got != c.want {
+			t.Errorf("storageLine(%d of %d) = %q, want %q", c.used, c.quota, got, c.want)
+		}
+	}
+}
+
+func TestStorageLine_TheLineAddsWhatToDeleteFromNineTenthsOfTheQuota(t *testing.T) {
+	for _, c := range []struct {
+		used, quota int64
+		want        string
+	}{
+		{921 << 20, 1 << 30, "921 MB of 1 GB of photo storage used."},
+		{922 << 20, 1 << 30, "922 MB of 1 GB of photo storage used. Uploads stop when it is full, and deleting progress photos is what makes room."},
+		{2 << 30, 1 << 30, "2 GB of 1 GB of photo storage used. Uploads stop when it is full, and deleting progress photos is what makes room."},
+	} {
+		if got := storageLine(photo.Usage{Used: c.used, Quota: c.quota}); got != c.want {
+			t.Errorf("storageLine(%d of %d) = %q, want %q", c.used, c.quota, got, c.want)
+		}
 	}
 }

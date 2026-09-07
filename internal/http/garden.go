@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -12,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/ismailshak/sprig/internal/auth"
+	"github.com/ismailshak/sprig/internal/photo"
 	"github.com/ismailshak/sprig/internal/store"
 )
 
@@ -73,6 +75,9 @@ type gardenPage struct {
 	Types []careTypeRow
 	// AddType is the URL the Add a care type link points at.
 	AddType string
+	// Storage is the sentence under the Photos heading, saying how much of the
+	// garden's photo storage is used.
+	Storage string
 }
 
 // careTypeRow is one care type in the list. A closed row is a link to the care
@@ -372,7 +377,45 @@ func (h *more) renderGarden(w http.ResponseWriter, r *http.Request, page gardenP
 		}
 		page.Types = careTypeRows(types, edit)
 	}
+	usage, err := h.photos.Usage(r.Context(), h.queries, principal.Garden.ID)
+	if err != nil {
+		serverError(h.logger, w, r, "sum the garden's photos", err)
+		return
+	}
+	page.Storage = storageLine(usage)
 	h.templates.render(w, r, view{page: "garden", status: status}, page)
+}
+
+// nearlyFull is the share of the quota at which the storage line adds what
+// happens when it is full and what to delete. Below it there is nothing to
+// act on.
+const nearlyFull = 0.9
+
+// storageLine is the sentence under Photos on the Garden page, such as "312 MB
+// of 1 GB of photo storage used." From nearlyFull of the quota up it adds
+// that uploads stop and that deleting progress photos is what makes room.
+func storageLine(usage photo.Usage) string {
+	line := storageFigure(usage.Used) + " of " + storageFigure(usage.Quota) + " of photo storage used."
+	if float64(usage.Used) < nearlyFull*float64(usage.Quota) {
+		return line
+	}
+	return line + " Uploads stop when it is full, and deleting progress photos is what makes room."
+}
+
+// storageFigure formats a byte count as whole megabytes, or as gigabytes from
+// 1024 MB up. A gigabyte figure keeps one decimal place unless the number of
+// gigabytes is whole. The units are binary and the labels the ordinary ones,
+// so the 1 GiB default reads as 1 GB.
+func storageFigure(bytes int64) string {
+	mb := math.Round(float64(bytes) / (1 << 20))
+	if mb < 1024 {
+		return strconv.FormatFloat(mb, 'f', 0, 64) + " MB"
+	}
+	decimals := 1
+	if math.Mod(mb, 1024) == 0 {
+		decimals = 0
+	}
+	return strconv.FormatFloat(mb/1024, 'f', decimals, 64) + " GB"
 }
 
 // careTypeRows builds the list. The one row edit names is open, and a row

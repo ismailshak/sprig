@@ -1,9 +1,9 @@
 {{define "title"}}sprig — garden{{end}}
 
-{{/* The garden's name and its care types. A care type is renamed, turned off
-     or deleted from its own row: the row is a link to its own URL, and that
-     URL renders this page with the row as a form. Nothing here needs
-     JavaScript, so the row opens by navigating to it. */}}
+{{/* The garden's name, its care types and its photo storage. A care type is
+     renamed, turned off or deleted from its own row: the row is a link to its
+     own URL, and that URL renders this page with the row as a form. Nothing
+     here needs JavaScript, so the row opens by navigating to it. */}}
 {{define "main"}}
 {{template "more-topbar" .Bar}}
 <div class="app__body app__body--sub">
@@ -33,6 +33,12 @@
 <a class="care care--outline" href="{{.AddType}}">Add a care type</a>
 </div>
 {{end}}
+{{/* A sentence rather than a meter, because there is nothing to do about the
+     figure until the garden is nearly full. */}}
+<div class="section">
+<div class="section__head"><h2 class="section__title">Photos</h2></div>
+<p class="note">{{.Storage}}</p>
+</div>
 </div>
 {{end}}
 

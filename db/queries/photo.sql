@@ -8,3 +8,9 @@ RETURNING *;
 -- name: GetPhoto :one
 SELECT * FROM photo
 WHERE garden_id = @garden_id AND id = @photo_id;
+
+-- The bytes of every photo in the garden, the square variants included.
+-- name: SumPhotoBytes :one
+SELECT coalesce(sum(bytes + coalesce(square_bytes, 0)), 0)::bigint
+FROM photo
+WHERE garden_id = @garden_id;

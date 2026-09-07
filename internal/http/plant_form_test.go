@@ -38,7 +38,7 @@ func plantFormOn(t *testing.T) *formFixture {
 	f := rosewoodPlant(t)
 	f.exec(t, "INSERT INTO care_type (id, garden_id, name, slug) VALUES ($1, $2, 'Repot', 'repot')", repotID, rosewoodID)
 	dir := t.TempDir()
-	photos, err := photo.NewStore(dir)
+	photos, err := photo.NewStore(dir, testPhotoQuota)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1380,5 +1380,103 @@ func TestPlantForm_APhotoOfExactlyTheFileLimitIsStored(t *testing.T) {
 
 	if row := f.photoOf(t, plant.ID); row.Bytes != photo.MaxBytes {
 		t.Errorf("the row counts %d bytes, want the %d posted", row.Bytes, photo.MaxBytes)
+	}
+}
+
+// photosWithRoomFor gives the form a photo store whose quota is room bytes.
+func (f *formFixture) photosWithRoomFor(t *testing.T, room int) {
+	t.Helper()
+
+	photos, err := photo.NewStore(f.photoDir, int64(room))
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.handler.photos = photos
+}
+
+const rosewoodFull = "Rosewood's photo storage is full. Deleting progress photos is what makes room."
+
+func TestPlantForm_APhotoTheGardenHasNoRoomForIsRefusedWithTheReasonUnderThePhotoField(t *testing.T) {
+	f := plantFormOn(t)
+	values := addValues()
+	values.Set("nickname", "Ada")
+	image := testJPEG(t, 30, 20)
+	f.photosWithRoomFor(t, len(image)-1)
+	before := f.countPlants(t)
+
+	rec := f.postPhoto(t, nil, values, image, nil)
+
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusUnprocessableEntity, rec.Body.String())
+	}
+	if got := errorsOn(rec.Body.String()); !slices.Contains(got, rosewoodFull) {
+		t.Errorf("the form's errors are %v, want %q", got, rosewoodFull)
+	}
+	if got := filled(t, rec.Body.String(), "nickname"); got != "Ada" {
+		t.Errorf("nickname reads %q, want Ada", got)
+	}
+	if after := f.countPlants(t); after != before {
+		t.Errorf("the garden has %d plants, want the %d it started with", after, before)
+	}
+	if got := f.storedFiles(t); len(got) != 0 {
+		t.Errorf("the directory holds %v, want nothing", got)
+	}
+}
+
+func TestPlantForm_APlantIsSavedWithNoPhotoWhenTheGardensPhotoStorageIsFull(t *testing.T) {
+	f := plantFormOn(t)
+	values := addValues()
+	values.Set("nickname", "Ada")
+	f.photosWithRoomFor(t, 0)
+
+	plant := f.created(t, f.add(t, values))
+
+	if plant.DisplayName() != "Ada" {
+		t.Errorf("the plant is %q, want Ada", plant.DisplayName())
+	}
+}
+
+func TestPlantForm_APhotoAndItsSquareOfExactlyTheRoomLeftAreStored(t *testing.T) {
+	f := plantFormOn(t)
+	values := addValues()
+	values.Set("nickname", "Ada")
+	image, square := testJPEG(t, 30, 20), testJPEG(t, 8, 8)
+	f.photosWithRoomFor(t, len(image)+len(square))
+
+	plant := f.created(t, f.postPhoto(t, nil, values, image, square))
+
+	if got := f.storedFiles(t); len(got) != 2 {
+		t.Errorf("the directory holds %v, want the photo and its square", got)
+	}
+	if row := f.photoOf(t, plant.ID); row.Bytes+*row.SquareBytes != int64(len(image)+len(square)) {
+		t.Errorf("the row counts %d and %d bytes, want %d and %d", row.Bytes, *row.SquareBytes, len(image), len(square))
+	}
+}
+
+func TestPlantForm_AnEditWithAPhotoTheGardenHasNoRoomForLeavesThePlantUnchanged(t *testing.T) {
+	f := plantFormOn(t)
+	values := addValues()
+	values.Set("nickname", "Ada")
+	image := testJPEG(t, 30, 20)
+	f.photosWithRoomFor(t, len(image)-1)
+	id := bigFellaID
+
+	rec := f.postPhoto(t, &id, values, image, nil)
+
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusUnprocessableEntity)
+	}
+	if got := errorsOn(rec.Body.String()); !slices.Contains(got, rosewoodFull) {
+		t.Errorf("the form's errors are %v, want %q", got, rosewoodFull)
+	}
+	plant, err := store.New(f.tx).GetPlant(t.Context(), rosewoodID, bigFellaID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plant.DisplayName() != "Big Fella" {
+		t.Errorf("the plant is now %q, and the post was refused", plant.DisplayName())
+	}
+	if got := f.storedFiles(t); len(got) != 0 {
+		t.Errorf("the directory holds %v, want nothing", got)
 	}
 }

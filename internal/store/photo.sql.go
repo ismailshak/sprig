@@ -90,3 +90,17 @@ func (q *Queries) GetPhoto(ctx context.Context, gardenID uuid.UUID, photoID uuid
 	)
 	return i, err
 }
+
+const sumPhotoBytes = `-- name: SumPhotoBytes :one
+SELECT coalesce(sum(bytes + coalesce(square_bytes, 0)), 0)::bigint
+FROM photo
+WHERE garden_id = $1
+`
+
+// The bytes of every photo in the garden, the square variants included.
+func (q *Queries) SumPhotoBytes(ctx context.Context, gardenID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, sumPhotoBytes, gardenID)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}

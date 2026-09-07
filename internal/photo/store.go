@@ -24,6 +24,10 @@ const MaxBytes = 8 << 20
 // ErrTooLarge is returned for a file over MaxBytes.
 var ErrTooLarge = errors.New("the photo is over the size limit")
 
+// ErrQuotaFull is returned for a photo the garden has no room left for. The
+// caller writes the message, since it names the garden.
+var ErrQuotaFull = errors.New("the garden's photo storage is full")
+
 // cacheControl is the Cache-Control header on every photo response. The file
 // under a photo's id never changes, so a browser may keep it for a year. It is
 // private because a photo is served behind a session and a shared cache must
@@ -33,16 +37,42 @@ const cacheControl = "private, max-age=31536000, immutable"
 // Store writes and reads photo files under one directory, SPRIG_PHOTO_DIR.
 type Store struct {
 	dir string
+	// quota is SPRIG_PHOTO_QUOTA_BYTES, the most one garden's photos may add
+	// up to, square variants included.
+	quota int64
 }
 
 // NewStore creates dir when it is missing and returns a store over it. A
 // directory that cannot be created is reported here, at startup, rather than
 // on the first upload.
-func NewStore(dir string) (*Store, error) {
+func NewStore(dir string, quota int64) (*Store, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, fmt.Errorf("create the photo directory: %w", err)
 	}
-	return &Store{dir: dir}, nil
+	return &Store{dir: dir, quota: quota}, nil
+}
+
+// Usage is how much of a garden's photo storage is in use, in bytes.
+type Usage struct {
+	Used  int64
+	Quota int64
+}
+
+// Remaining is how many more bytes the garden may store. Zero when it is at
+// or over the quota.
+func (u Usage) Remaining() int64 {
+	return max(u.Quota-u.Used, 0)
+}
+
+// Usage sums the garden's photo rows, main files and square variants alike.
+// It is a sum rather than a counter on the garden, so it cannot drift from the
+// rows when a photo is deleted.
+func (s *Store) Usage(ctx context.Context, q *store.Queries, gardenID uuid.UUID) (Usage, error) {
+	used, err := q.SumPhotoBytes(ctx, gardenID)
+	if err != nil {
+		return Usage{}, fmt.Errorf("sum the garden's photo bytes: %w", err)
+	}
+	return Usage{Used: used, Quota: s.quota}, nil
 }
 
 // Upload is one photo as posted, with the square variant beside it when the
@@ -54,7 +84,9 @@ type Upload struct {
 	// TakenAt is when the photo was taken. nil when the uploader did not say.
 	TakenAt *time.Time
 	File    io.ReadSeeker
-	// Size is the file's length in bytes.
+	// Size is the file's length in bytes, or zero when the caller does not
+	// know it. Save checks it against the room left in the garden's quota
+	// before reading the file.
 	Size int64
 	// Square is the square variant, nil when none was posted.
 	Square     io.ReadSeeker
@@ -64,11 +96,24 @@ type Upload struct {
 // Save writes the upload's files and inserts its row through q, so the insert
 // joins the caller's transaction. The files are written first, so a failure
 // leaves at most a file no row points at and never a row without its file. A
-// file over MaxBytes is ErrTooLarge and one that is not a JPEG or a WebP is
-// ErrNotImage, and neither is written.
+// file over MaxBytes is ErrTooLarge, one the garden has no room for is
+// ErrQuotaFull, and one that is not a JPEG or a WebP is ErrNotImage. None of
+// the three is left on disk.
+//
+// Two uploads to one garden at the same time each see the room the other has
+// not taken yet, so the quota can be overshot by one file per upload in
+// flight.
 func (s *Store) Save(ctx context.Context, q *store.Queries, u Upload) (store.Photo, error) {
 	if u.Size > MaxBytes || u.SquareSize > MaxBytes {
 		return store.Photo{}, ErrTooLarge
+	}
+	usage, err := s.Usage(ctx, q, u.GardenID)
+	if err != nil {
+		return store.Photo{}, err
+	}
+	room := usage.Remaining()
+	if u.Size+u.SquareSize > room {
+		return store.Photo{}, ErrQuotaFull
 	}
 	kind, size, err := Sniff(u.File)
 	if err != nil {
@@ -88,13 +133,13 @@ func (s *Store) Save(ctx context.Context, q *store.Queries, u Upload) (store.Pho
 
 	id := uuid.NewV7()
 	p := Path(u.GardenID, u.PlantID, id, kind)
-	written, err := s.write(p, u.File)
+	written, err := s.write(p, u.File, room)
 	if err != nil {
 		return store.Photo{}, err
 	}
 	var squareBytes *int64
 	if u.Square != nil {
-		n, err := s.write(SquarePath(p), u.Square)
+		n, err := s.write(SquarePath(p), u.Square, room-written)
 		if err != nil {
 			s.remove(p)
 			return store.Photo{}, err
@@ -164,9 +209,10 @@ func (s *Store) Serve(w http.ResponseWriter, r *http.Request, row store.Photo, s
 
 // write copies r to the file at p and returns the bytes written. It creates
 // the plant's directory first and syncs the file, so the bytes are on disk
-// before the row that points at them is inserted. A part-written file is
-// removed when the copy fails.
-func (s *Store) write(p string, r io.Reader) (int64, error) {
+// before the row that points at them is inserted. The copy stops at the
+// smaller of MaxBytes and room. A file that reaches that cap is removed and
+// reported as ErrTooLarge for MaxBytes or ErrQuotaFull for room.
+func (s *Store) write(p string, r io.Reader, room int64) (int64, error) {
 	full := s.full(p)
 	if err := os.MkdirAll(filepath.Dir(full), 0o700); err != nil {
 		return 0, fmt.Errorf("create the plant's photo directory: %w", err)
@@ -176,8 +222,17 @@ func (s *Store) write(p string, r io.Reader) (int64, error) {
 	if err != nil {
 		return 0, fmt.Errorf("create the photo's file: %w", err)
 	}
-	n, err := io.Copy(f, r)
-	if err == nil {
+	// The cap plus one byte is copied, so a file of exactly the cap is not
+	// mistaken for a longer one.
+	limit := min(int64(MaxBytes), room)
+	n, err := io.CopyN(f, r, limit+1)
+	switch {
+	case err == nil:
+		err = ErrTooLarge
+		if room < MaxBytes {
+			err = ErrQuotaFull
+		}
+	case errors.Is(err, io.EOF):
 		err = f.Sync()
 	}
 	if closeErr := f.Close(); err == nil {
@@ -185,6 +240,9 @@ func (s *Store) write(p string, r io.Reader) (int64, error) {
 	}
 	if err != nil {
 		_ = os.Remove(full)
+		if errors.Is(err, ErrTooLarge) || errors.Is(err, ErrQuotaFull) {
+			return 0, err
+		}
 		return 0, fmt.Errorf("write the photo's file: %w", err)
 	}
 	return n, nil
