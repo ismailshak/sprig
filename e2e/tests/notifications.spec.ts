@@ -20,12 +20,27 @@ test('turning both types off makes the More index say notifications are off @pus
   await expect(more.row('Notifications')).toContainText('Off');
 });
 
-test('the digest hour is saved and shown on the way back @push', async ({ notifications }) => {
+test('a saved digest hour is shown when the page is opened again @push', async ({ notifications }) => {
   await notifications.open();
 
   await notifications.hour().selectOption('19');
-  await notifications.save().click();
+  await notifications.saveChanges();
 
+  await notifications.open();
+  await expect(notifications.hour()).toHaveValue('19');
+});
+
+// The same flow with JavaScript off, where Save changes is a plain form post
+// rather than a post the page's script sends after subscribing.
+test('a digest hour saved with no JavaScript is shown when the page is opened again @nojs', async ({
+  notifications,
+}) => {
+  await notifications.open();
+
+  await notifications.hour().selectOption('19');
+  await notifications.saveChanges();
+
+  await notifications.open();
   await expect(notifications.hour()).toHaveValue('19');
 });
 
