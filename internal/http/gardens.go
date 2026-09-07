@@ -138,7 +138,15 @@ func (h *today) switchGarden(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := h.queries.SetSessionGarden(r.Context(), gardenID, principal.Session.TokenHash); err != nil {
+	// The garden is recorded on the account as well, so the next session
+	// starts there.
+	err = h.queries.InTx(r.Context(), func(q *store.Queries) error {
+		if _, err := q.SetSessionGarden(r.Context(), gardenID, principal.Session.TokenHash); err != nil {
+			return err
+		}
+		return q.SetLastGarden(r.Context(), &gardenID, principal.User.ID)
+	})
+	if err != nil {
 		serverError(h.logger, w, r, "set the session's garden", err)
 		return
 	}

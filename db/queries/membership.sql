@@ -7,13 +7,14 @@ JOIN app_user ON app_user.id = membership.user_id
 JOIN garden ON garden.id = membership.garden_id
 WHERE membership.garden_id = @garden_id AND membership.user_id = @user_id;
 
--- A new session starts on the oldest membership. This takes no garden_id
--- because it is how the garden is found. Every row returned belongs to
--- @user_id.
+-- A new session starts on the first live row: the garden the person last
+-- switched to, then the oldest membership. This takes no garden_id because it
+-- is how the garden is found. Every row returned belongs to @user_id.
 -- name: ListMembershipsForUser :many
-SELECT * FROM membership
-WHERE user_id = @user_id
-ORDER BY created_at, id;
+SELECT membership.* FROM membership
+JOIN app_user ON app_user.id = membership.user_id
+WHERE membership.user_id = @user_id
+ORDER BY membership.garden_id = app_user.last_garden_id DESC NULLS LAST, membership.created_at, membership.id;
 
 -- The hour the digest arrives, which is per membership: a person may want one
 -- for their own garden and nothing from a garden they are sitting.

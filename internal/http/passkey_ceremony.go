@@ -164,7 +164,7 @@ func (h *passkeyCeremony) signIn(w http.ResponseWriter, r *http.Request) {
 	}
 
 	now := h.now()
-	membership, err := h.resolver.OldestLiveMembership(r.Context(), now, user.ID)
+	membership, err := h.resolver.StartingMembership(r.Context(), now, user.ID)
 	if errors.Is(err, auth.ErrNoLiveMembership) {
 		// The passkey is valid and the account is in no garden, so there is
 		// nothing to open a session on. A sitter whose membership ran out is

@@ -75,7 +75,7 @@ func (q *Queries) DeletePasskey(ctx context.Context, userID uuid.UUID, passkeyID
 }
 
 const getPasskeyByCredentialID = `-- name: GetPasskeyByCredentialID :one
-SELECT k.id, k.user_id, k.credential_id, k.name, k.public_key, k.sign_count, k.flags, k.transports, k.created_at, k.last_used_at, u.id, u.display_name, u.handle, u.timezone, u.created_at
+SELECT k.id, k.user_id, k.credential_id, k.name, k.public_key, k.sign_count, k.flags, k.transports, k.created_at, k.last_used_at, u.id, u.display_name, u.handle, u.timezone, u.created_at, u.last_garden_id
 FROM passkey_credential AS k
 JOIN app_user AS u ON u.id = k.user_id
 WHERE k.credential_id = $1
@@ -107,6 +107,7 @@ func (q *Queries) GetPasskeyByCredentialID(ctx context.Context, credentialID str
 		&i.AppUser.Handle,
 		&i.AppUser.Timezone,
 		&i.AppUser.CreatedAt,
+		&i.AppUser.LastGardenID,
 	)
 	return i, err
 }

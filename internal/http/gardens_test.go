@@ -77,6 +77,13 @@ func TestGardens_SwitchingMovesTheSessionToThatGardenAndLandsOnToday(t *testing.
 	if got := f.sessionGarden(t, elliesSession); got != otherGardenID {
 		t.Errorf("the session is on %s, want Fairview", got)
 	}
+	var last *uuid.UUID
+	if err := f.tx.QueryRow(t.Context(), "SELECT last_garden_id FROM app_user WHERE id = $1", moreUserID).Scan(&last); err != nil {
+		t.Fatalf("reading the account's last garden: %v", err)
+	}
+	if last == nil || *last != otherGardenID {
+		t.Errorf("the account's last garden is %v, want Fairview", last)
+	}
 }
 
 func TestGardens_SwitchingLeavesTheAccountsOtherSessionsWhereTheyWere(t *testing.T) {

@@ -102,10 +102,11 @@ func (r *Resolver) Resolve(ctx context.Context, now time.Time, token string) (Pr
 	}, nil
 }
 
-// OldestLiveMembership returns userID's oldest membership that has not ended
-// at now. A new session starts on that garden. It returns ErrNoLiveMembership
-// when none is live.
-func (r *Resolver) OldestLiveMembership(ctx context.Context, now time.Time, userID uuid.UUID) (store.Membership, error) {
+// StartingMembership returns the membership a new session for userID starts
+// on: the garden the person last switched to while that membership is live at
+// now, and otherwise their oldest membership that is. It returns
+// ErrNoLiveMembership when none is live.
+func (r *Resolver) StartingMembership(ctx context.Context, now time.Time, userID uuid.UUID) (store.Membership, error) {
 	memberships, err := r.queries.ListMembershipsForUser(ctx, userID)
 	if err != nil {
 		return store.Membership{}, fmt.Errorf("read the memberships: %w", err)
