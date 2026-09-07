@@ -75,6 +75,9 @@ func TestLoadConfig_Defaults(t *testing.T) {
 	if cfg.photoDir != "./photos" {
 		t.Errorf("photoDir = %q, want ./photos", cfg.photoDir)
 	}
+	if cfg.photoQuota != 1<<30 {
+		t.Errorf("photoQuota = %d, want 1 GiB", cfg.photoQuota)
+	}
 	if cfg.signupEnabled {
 		t.Error("signupEnabled = true, want false, so a stranger cannot make a garden on an install nobody opened up")
 	}
@@ -161,6 +164,7 @@ func TestLoadConfig_OverridesAndTextFormat(t *testing.T) {
 		"SPRIG_LOG_LEVEL":         "debug",
 		"SPRIG_TRUSTED_IP_HEADER": "CF-Connecting-IP",
 		"SPRIG_PHOTO_DIR":         "/srv/photos",
+		"SPRIG_PHOTO_QUOTA_BYTES": "5368709120",
 	}
 	getenv := func(k string) string { return env[k] }
 
@@ -174,6 +178,9 @@ func TestLoadConfig_OverridesAndTextFormat(t *testing.T) {
 	if cfg.photoDir != "/srv/photos" {
 		t.Errorf("photoDir = %q, want %q", cfg.photoDir, "/srv/photos")
 	}
+	if cfg.photoQuota != 5<<30 {
+		t.Errorf("photoQuota = %d, want 5 GiB", cfg.photoQuota)
+	}
 	if cfg.logFormat != "text" {
 		t.Errorf("logFormat = %q, want %q", cfg.logFormat, "text")
 	}
@@ -182,6 +189,23 @@ func TestLoadConfig_OverridesAndTextFormat(t *testing.T) {
 	}
 	if cfg.trustedIPHeader != "CF-Connecting-IP" {
 		t.Errorf("trustedIPHeader = %q, want CF-Connecting-IP", cfg.trustedIPHeader)
+	}
+}
+
+func TestLoadConfig_APhotoQuotaThatIsNotAPositiveWholeNumberIsAProblemNamingTheVariable(t *testing.T) {
+	for _, quota := range []string{"0", "-1", "1GiB", "1.5"} {
+		env := map[string]string{
+			"SPRIG_DATABASE_URL":      "postgres://example/db",
+			"SPRIG_BASE_URL":          "https://sprig.example.com",
+			"SPRIG_PHOTO_QUOTA_BYTES": quota,
+		}
+		getenv := func(k string) string { return env[k] }
+
+		_, err := loadConfig(getenv)
+
+		if err == nil || !strings.Contains(err.Error(), "SPRIG_PHOTO_QUOTA_BYTES") {
+			t.Errorf("%q: err = %v, want one naming SPRIG_PHOTO_QUOTA_BYTES", quota, err)
+		}
 	}
 }
 

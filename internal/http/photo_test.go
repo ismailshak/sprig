@@ -60,7 +60,7 @@ func photosServedTo(t *testing.T, queries *store.Queries) servedPhotos {
 	t.Helper()
 
 	dir := t.TempDir()
-	photos, err := photo.NewStore(dir)
+	photos, err := photo.NewStore(dir, testPhotoQuota)
 	if err != nil {
 		t.Fatal(err)
 	}

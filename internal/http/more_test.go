@@ -98,6 +98,7 @@ func moreGarden(t *testing.T) *moreFixture {
 		handler: &more{
 			logger:    testLogger,
 			queries:   store.New(tx),
+			photos:    testPhotos(t),
 			templates: testTemplates(),
 			build:     build.Info{Version: "0.1.0", Revision: "8f2c1a4d3b29e7c05a1"},
 			now:       func() time.Time { return thursday },

@@ -95,7 +95,7 @@ func run(ctx context.Context, getenv func(string) string, stdout io.Writer) erro
 		return err
 	}
 
-	photos, err := photo.NewStore(cfg.photoDir)
+	photos, err := photo.NewStore(cfg.photoDir, cfg.photoQuota)
 	if err != nil {
 		return err
 	}

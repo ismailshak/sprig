@@ -9,6 +9,7 @@ import (
 
 	"github.com/ismailshak/sprig/internal/auth"
 	"github.com/ismailshak/sprig/internal/build"
+	"github.com/ismailshak/sprig/internal/photo"
 	"github.com/ismailshak/sprig/internal/store"
 )
 
@@ -28,9 +29,11 @@ const (
 // more serves the fourth tab: the index of everything that is not about
 // plants, and the pages behind it.
 type more struct {
-	logger    *slog.Logger
-	sessions  *auth.Sessions
-	queries   *store.Queries
+	logger   *slog.Logger
+	sessions *auth.Sessions
+	queries  *store.Queries
+	// photos supplies the Garden page's photo storage figure.
+	photos    *photo.Store
 	templates *Templates
 	build     build.Info
 	// now supplies the current time, so a test can fix the day.

@@ -251,11 +251,23 @@ func postedPhoto(w http.ResponseWriter, r *http.Request, principal auth.Principa
 	return upload, closeFiles, true
 }
 
-// photoRefused writes a 413 for a photo over the size limit and a 400 for one
-// that is not a JPEG or a WebP. It reports whether err was one of those two.
-// The caller reports any other error itself.
-func photoRefused(w http.ResponseWriter, err error) bool {
+// photoQuotaFull is the message shown under the photo field when the garden
+// has no room for the photo.
+func photoQuotaFull(garden string) string {
+	return garden + "'s photo storage is full. Deleting progress photos is what makes room."
+}
+
+// photoRefused writes the response for a photo the store refused and reports
+// whether err was such a refusal. The caller reports any other error itself.
+// A photo the garden has no room for renders the form again with the message
+// under the photo field. A file over the size limit or one that is not a JPEG
+// or a WebP gets a plain error response, because the form's script sends
+// neither.
+func (h *plants) photoRefused(w http.ResponseWriter, r *http.Request, err error, page plantFormPage) bool {
 	switch {
+	case errors.Is(err, photo.ErrQuotaFull):
+		page.PhotoFull = photoQuotaFull(PrincipalFrom(r).Garden.Name)
+		h.templates.render(w, r, view{page: plantFormPageName, status: http.StatusUnprocessableEntity}, page)
 	case errors.Is(err, photo.ErrTooLarge):
 		http.Error(w, "the photo is too large", http.StatusRequestEntityTooLarge)
 	case errors.Is(err, photo.ErrNotImage):
@@ -346,6 +358,9 @@ type plantFormPage struct {
 	// rendered again with an empty file input, because a server cannot fill
 	// one.
 	PhotoNeedsChoosing bool
+	// PhotoFull is the message shown under the photo field when the garden has
+	// no room for the photo. It is empty otherwise.
+	PhotoFull string
 	// PhotoField is whether the form renders the photo field. It is true for a
 	// member who may add photos.
 	PhotoField bool
@@ -585,7 +600,7 @@ func (h *plants) create(w http.ResponseWriter, r *http.Request) {
 	if errors.Is(err, errResponded) {
 		return
 	}
-	if photoRefused(w, err) {
+	if h.photoRefused(w, r, err, page) {
 		return
 	}
 	if err != nil {
@@ -691,7 +706,7 @@ func (h *plants) update(w http.ResponseWriter, r *http.Request) {
 	if errors.Is(err, errResponded) {
 		return
 	}
-	if photoRefused(w, err) {
+	if h.photoRefused(w, r, err, page) {
 		return
 	}
 	switch {

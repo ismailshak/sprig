@@ -19,7 +19,8 @@
   const remove = document.getElementById('photo-remove');
   const error = document.getElementById('photo-error');
   // again is the "The photo needs choosing again." line the server renders
-  // after refusing a post that had a photo. Choosing a photo removes it.
+  // when a post with a photo was refused for another field. Choosing a photo
+  // removes it.
   const again = document.getElementById('photo-again');
 
   const canResize =
