@@ -9,6 +9,7 @@ import (
 
 	"github.com/ismailshak/sprig/db"
 	"github.com/ismailshak/sprig/internal/pgtest"
+	"github.com/ismailshak/sprig/internal/photo"
 	"github.com/ismailshak/sprig/internal/store"
 )
 
@@ -25,6 +26,18 @@ func migrateSchema(ctx context.Context, databaseURL string) error {
 	defer pool.Close()
 
 	return store.Migrate(ctx, pool, db.Migrations, slog.New(slog.DiscardHandler))
+}
+
+// testPhotos returns a photo store over a directory that is removed when the
+// test ends.
+func testPhotos(t *testing.T) *photo.Store {
+	t.Helper()
+
+	photos, err := photo.NewStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return photos
 }
 
 // countRows returns the number of rows in table. It counts across every

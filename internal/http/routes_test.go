@@ -99,6 +99,14 @@ var routeAccess = map[string]access{
 		path:       removeSchedulePath(rosewoodPlantID, "feed"),
 		foreign:    removeSchedulePath(fairviewPlantID, "feed"),
 	},
+	"GET /plants/{plant}/photos/{photo}/full": {
+		path:    photoFullPath(rosewoodPlantID, rosewoodPhotoID),
+		foreign: photoFullPath(fairviewPlantID, fairviewPhotoID),
+	},
+	"GET /plants/{plant}/photos/{photo}/square": {
+		path:    photoSquarePath(rosewoodPlantID, rosewoodPhotoID),
+		foreign: photoSquarePath(fairviewPlantID, fairviewPhotoID),
+	},
 	"GET /plants/{plant}/log":  {capability: auth.CareLog, path: logPath(rosewoodPlantID), foreign: logPath(fairviewPlantID)},
 	"POST /plants/{plant}/log": {capability: auth.CareLog, path: logPath(rosewoodPlantID), foreign: logPath(fairviewPlantID)},
 	"DELETE /plants/{plant}/log/{event}": {
@@ -299,8 +307,12 @@ var (
 	fairviewID      = uuid.MustParse("00000000-0000-7000-8000-000000000201")
 	rosewoodPlantID = uuid.MustParse("00000000-0000-7000-8000-000000000211")
 	fairviewPlantID = uuid.MustParse("00000000-0000-7000-8000-000000000212")
-	rosewoodEventID = uuid.MustParse("00000000-0000-7000-8000-000000000221")
-	fairviewEventID = uuid.MustParse("00000000-0000-7000-8000-000000000222")
+	rosewoodPhotoID = uuid.MustParse("00000000-0000-7000-8000-000000000241")
+	fairviewPhotoID = uuid.MustParse("00000000-0000-7000-8000-000000000242")
+	// A photo uploaded with no square variant, and with no file on disk.
+	rosewoodPlainPhotoID = uuid.MustParse("00000000-0000-7000-8000-000000000243")
+	rosewoodEventID      = uuid.MustParse("00000000-0000-7000-8000-000000000221")
+	fairviewEventID      = uuid.MustParse("00000000-0000-7000-8000-000000000222")
 	// The two routes that delete an event use one each, since the first to run
 	// would leave the second a 404.
 	rosewoodUndoEventID = uuid.MustParse("00000000-0000-7000-8000-000000000223")
@@ -405,6 +417,13 @@ func routeQueries(t *testing.T) *store.Queries {
 			VALUES ($1, $2, 'The kitchen display', 'rosewood-token', 'sprg_1111', $3, now() + interval '30 days'),
 			       ($4, $5, 'The kitchen display', 'fairview-token', 'sprg_2222', $6, now() + interval '30 days')`,
 			[]any{rosewoodTokenID, rosewoodID, sitterPrincipal().User.ID, fairviewTokenID, fairviewID, fairviewMemberID}},
+		// A photo on each garden's plant, and a third on Rosewood with no
+		// square variant.
+		{`INSERT INTO photo (id, garden_id, plant_id, uploaded_by, kind, path, width, height, bytes, square_bytes)
+			VALUES ($1, $2, $3, $4, 'image/jpeg', 'rosewood.jpg', 3, 2, 100, 40),
+			       ($5, $6, $7, $8, 'image/jpeg', 'fairview.jpg', 3, 2, 100, 40),
+			       ($9, $2, $3, $4, 'image/jpeg', 'rosewood-plain.jpg', 3, 2, 100, NULL)`,
+			[]any{rosewoodPhotoID, rosewoodID, rosewoodPlantID, sitterPrincipal().User.ID, fairviewPhotoID, fairviewID, fairviewPlantID, fairviewMemberID, rosewoodPlainPhotoID}},
 	}
 
 	for _, row := range seed {
@@ -416,7 +435,7 @@ func routeQueries(t *testing.T) *store.Queries {
 }
 
 func TestRoutes_EveryRouteHasOneRouteAccessEntryThatMatchesIt(t *testing.T) {
-	table := routes(testLogger, testSessions(), testPasskeys(), nil, testTemplates(), testAssets(), "", false, testPushKey, nil)
+	table := routes(testLogger, testSessions(), testPasskeys(), nil, testPhotos(t), testTemplates(), testAssets(), "", false, testPushKey, nil)
 	patterns := map[string]bool{}
 	for _, r := range table {
 		patterns[r.pattern] = true
@@ -473,7 +492,7 @@ func TestRoutes_EachRouteRefusesStrangersAndRolesAsItsEntrySays(t *testing.T) {
 	every := everyCapability()
 	queries := routeQueries(t)
 
-	for _, r := range routes(testLogger, testSessions(), testPasskeys(), nil, testTemplates(), testAssets(), "", false, testPushKey, nil) {
+	for _, r := range routes(testLogger, testSessions(), testPasskeys(), nil, testPhotos(t), testTemplates(), testAssets(), "", false, testPushKey, nil) {
 		a, ok := routeAccess[r.pattern]
 		if !ok {
 			// The test above reports the missing entry.
@@ -495,7 +514,7 @@ func TestRoutes_EachRouteRefusesStrangersAndRolesAsItsEntrySays(t *testing.T) {
 			handler := New(logger, testSessions(), testPasskeys(), ResolverFunc(func(context.Context, time.Time, string) (auth.Principal, error) {
 				resolved++
 				return auth.Principal{}, auth.ErrNoSession
-			}), queries, testTemplates(), testAssets(), "", false, testPushKey, nil)
+			}), queries, testPhotos(t), testTemplates(), testAssets(), "", false, testPushKey, nil)
 			rec := httptest.NewRecorder()
 			handler.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), method, path, nil))
 			sentToSignIn := rec.Code == http.StatusSeeOther && rec.Header().Get("Location") == signInPath
@@ -511,13 +530,13 @@ func TestRoutes_EachRouteRefusesStrangersAndRolesAsItsEntrySays(t *testing.T) {
 			if a.capability != "" {
 				lacking := memberWith(without(every, a.capability))
 				rec = httptest.NewRecorder()
-				New(logger, testSessions(), testPasskeys(), acceptEveryToken(lacking), queries, testTemplates(), testAssets(), "", false, testPushKey, nil).ServeHTTP(rec, signedIn(httptest.NewRequestWithContext(t.Context(), method, path, nil)))
+				New(logger, testSessions(), testPasskeys(), acceptEveryToken(lacking), queries, testPhotos(t), testTemplates(), testAssets(), "", false, testPushKey, nil).ServeHTTP(rec, signedIn(httptest.NewRequestWithContext(t.Context(), method, path, nil)))
 				if rec.Code != http.StatusNotFound {
 					t.Errorf("a member without %s got %d, want %d", a.capability, rec.Code, http.StatusNotFound)
 				}
 
 				rec = httptest.NewRecorder()
-				New(logger, testSessions(), testPasskeys(), acceptEveryToken(memberWith(every)), queries, testTemplates(), testAssets(), "", false, testPushKey, nil).ServeHTTP(rec, signedIn(httptest.NewRequestWithContext(t.Context(), method, path, nil)))
+				New(logger, testSessions(), testPasskeys(), acceptEveryToken(memberWith(every)), queries, testPhotos(t), testTemplates(), testAssets(), "", false, testPushKey, nil).ServeHTTP(rec, signedIn(httptest.NewRequestWithContext(t.Context(), method, path, nil)))
 				if rec.Code == http.StatusNotFound {
 					t.Errorf("a member with %s got %d, so the route is hidden from the people it is for", a.capability, rec.Code)
 				}
@@ -525,7 +544,7 @@ func TestRoutes_EachRouteRefusesStrangersAndRolesAsItsEntrySays(t *testing.T) {
 
 			if !a.public {
 				rec = httptest.NewRecorder()
-				New(logger, testSessions(), testPasskeys(), acceptEveryToken(noGardenPrincipal()), queries, testTemplates(), testAssets(), "", false, testPushKey, nil).ServeHTTP(rec, signedIn(httptest.NewRequestWithContext(t.Context(), method, path, nil)))
+				New(logger, testSessions(), testPasskeys(), acceptEveryToken(noGardenPrincipal()), queries, testPhotos(t), testTemplates(), testAssets(), "", false, testPushKey, nil).ServeHTTP(rec, signedIn(httptest.NewRequestWithContext(t.Context(), method, path, nil)))
 				gotPage := rec.Code == http.StatusOK && onNoGardenPage(rec.Body.String())
 				if a.withoutGarden && gotPage {
 					t.Errorf("a session on no garden got the no-garden page from a route that is served without one")
@@ -537,7 +556,7 @@ func TestRoutes_EachRouteRefusesStrangersAndRolesAsItsEntrySays(t *testing.T) {
 
 			if a.foreign != "" {
 				rec = httptest.NewRecorder()
-				New(logger, testSessions(), testPasskeys(), acceptEveryToken(memberWith(every)), queries, testTemplates(), testAssets(), "", false, testPushKey, nil).ServeHTTP(rec, signedIn(httptest.NewRequestWithContext(t.Context(), method, a.foreign, nil)))
+				New(logger, testSessions(), testPasskeys(), acceptEveryToken(memberWith(every)), queries, testPhotos(t), testTemplates(), testAssets(), "", false, testPushKey, nil).ServeHTTP(rec, signedIn(httptest.NewRequestWithContext(t.Context(), method, a.foreign, nil)))
 				if rec.Code != http.StatusNotFound {
 					t.Errorf("an owner asking for Fairview's object at %s got %d, want %d", a.foreign, rec.Code, http.StatusNotFound)
 				}
@@ -565,7 +584,7 @@ func mutates(method string) bool {
 // capability from a principal holding all the others.
 func everyCapability() auth.Capabilities {
 	set := auth.Capabilities{}
-	for _, r := range routes(testLogger, testSessions(), testPasskeys(), nil, testTemplates(), testAssets(), "", false, testPushKey, nil) {
+	for _, r := range routes(testLogger, testSessions(), testPasskeys(), nil, nil, testTemplates(), testAssets(), "", false, testPushKey, nil) {
 		if r.capability != "" {
 			set[r.capability] = true
 		}

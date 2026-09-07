@@ -22,6 +22,7 @@ import (
 	"github.com/ismailshak/sprig/db"
 	"github.com/ismailshak/sprig/internal/auth"
 	sprighttp "github.com/ismailshak/sprig/internal/http"
+	"github.com/ismailshak/sprig/internal/photo"
 	"github.com/ismailshak/sprig/internal/push"
 	"github.com/ismailshak/sprig/internal/store"
 	"github.com/ismailshak/sprig/web"
@@ -94,6 +95,11 @@ func run(ctx context.Context, getenv func(string) string, stdout io.Writer) erro
 		return err
 	}
 
+	photos, err := photo.NewStore(cfg.photoDir)
+	if err != nil {
+		return err
+	}
+
 	// Parse before listening too, so a template that does not parse stops the
 	// process instead of returning a 500 on the first request for its page.
 	templates, err := sprighttp.ParseTemplates(logger, cfg.templateDir, assets)
@@ -125,7 +131,7 @@ func run(ctx context.Context, getenv func(string) string, stdout io.Writer) erro
 		digest = push.NewDigest(logger, queries, push.NewSender(cfg.push, nil), cfg.baseURL.String())
 		wake = digest.Wake
 	}
-	handler := sprighttp.New(logger, sessions, passkeys, resolver, queries, templates, assets, cfg.trustedIPHeader, cfg.signupEnabled, pushKey, wake)
+	handler := sprighttp.New(logger, sessions, passkeys, resolver, queries, photos, templates, assets, cfg.trustedIPHeader, cfg.signupEnabled, pushKey, wake)
 	if digest == nil {
 		return serve(ctx, logger, listener, handler)
 	}

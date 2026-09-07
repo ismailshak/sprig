@@ -1,3 +1,3 @@
-// Package photo stores and serves plant photos under SPRIG_PHOTO_DIR and
-// tracks each garden's storage quota.
+// Package photo writes plant photos under SPRIG_PHOTO_DIR, records them in the
+// photo table and serves them back.
 package photo

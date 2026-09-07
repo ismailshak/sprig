@@ -72,6 +72,9 @@ func TestLoadConfig_Defaults(t *testing.T) {
 	if cfg.templateDir != "" {
 		t.Errorf("templateDir = %q, want none, so the templates are the ones compiled in", cfg.templateDir)
 	}
+	if cfg.photoDir != "./photos" {
+		t.Errorf("photoDir = %q, want ./photos", cfg.photoDir)
+	}
 	if cfg.signupEnabled {
 		t.Error("signupEnabled = true, want false, so a stranger cannot make a garden on an install nobody opened up")
 	}
@@ -157,6 +160,7 @@ func TestLoadConfig_OverridesAndTextFormat(t *testing.T) {
 		"SPRIG_LOG_FORMAT":        "text",
 		"SPRIG_LOG_LEVEL":         "debug",
 		"SPRIG_TRUSTED_IP_HEADER": "CF-Connecting-IP",
+		"SPRIG_PHOTO_DIR":         "/srv/photos",
 	}
 	getenv := func(k string) string { return env[k] }
 
@@ -166,6 +170,9 @@ func TestLoadConfig_OverridesAndTextFormat(t *testing.T) {
 	}
 	if cfg.addr != ":9090" {
 		t.Errorf("addr = %q, want %q", cfg.addr, ":9090")
+	}
+	if cfg.photoDir != "/srv/photos" {
+		t.Errorf("photoDir = %q, want %q", cfg.photoDir, "/srv/photos")
 	}
 	if cfg.logFormat != "text" {
 		t.Errorf("logFormat = %q, want %q", cfg.logFormat, "text")

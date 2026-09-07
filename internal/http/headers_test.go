@@ -14,10 +14,10 @@ import (
 func TestSecurityHeaders_EveryRouteSetsAllFourHeaders(t *testing.T) {
 	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
 	queries := routeQueries(t)
-	stranger := New(logger, testSessions(), testPasskeys(), rejectEveryToken, queries, testTemplates(), testAssets(), "", false, testPushKey, nil)
-	owner := New(logger, testSessions(), testPasskeys(), acceptEveryToken(memberWith(everyCapability())), queries, testTemplates(), testAssets(), "", false, testPushKey, nil)
+	stranger := New(logger, testSessions(), testPasskeys(), rejectEveryToken, queries, testPhotos(t), testTemplates(), testAssets(), "", false, testPushKey, nil)
+	owner := New(logger, testSessions(), testPasskeys(), acceptEveryToken(memberWith(everyCapability())), queries, testPhotos(t), testTemplates(), testAssets(), "", false, testPushKey, nil)
 
-	for _, r := range routes(testLogger, testSessions(), testPasskeys(), nil, testTemplates(), testAssets(), "", false, testPushKey, nil) {
+	for _, r := range routes(testLogger, testSessions(), testPasskeys(), nil, testPhotos(t), testTemplates(), testAssets(), "", false, testPushKey, nil) {
 		method, path := splitPattern(r.pattern)
 		if a := routeAccess[r.pattern]; a.path != "" {
 			path = a.path

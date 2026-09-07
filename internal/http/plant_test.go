@@ -34,6 +34,7 @@ func rosewoodPlant(t *testing.T) *plantFixture {
 		handler: &plants{
 			logger:    testLogger,
 			queries:   store.New(f.tx),
+			photos:    testPhotos(t),
 			templates: testTemplates(),
 			now:       func() time.Time { return thursday },
 		},
