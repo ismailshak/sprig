@@ -7,6 +7,7 @@ package store
 
 import (
 	"context"
+	"time"
 
 	"uuid"
 )
@@ -57,6 +58,22 @@ func (q *Queries) ListPushSubscriptions(ctx context.Context, userID uuid.UUID) (
 		return nil, err
 	}
 	return items, nil
+}
+
+const setPushSubscriptionSent = `-- name: SetPushSubscriptionSent :exec
+UPDATE push_subscription SET last_sent_at = $1
+WHERE user_id = $2 AND id = $3
+`
+
+type SetPushSubscriptionSentParams struct {
+	SentAt         *time.Time
+	UserID         uuid.UUID
+	SubscriptionID uuid.UUID
+}
+
+func (q *Queries) SetPushSubscriptionSent(ctx context.Context, arg SetPushSubscriptionSentParams) error {
+	_, err := q.db.Exec(ctx, setPushSubscriptionSent, arg.SentAt, arg.UserID, arg.SubscriptionID)
+	return err
 }
 
 const upsertPushSubscription = `-- name: UpsertPushSubscription :exec

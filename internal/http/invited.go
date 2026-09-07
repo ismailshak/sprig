@@ -171,7 +171,8 @@ type invited struct {
 	queries   *store.Queries
 	templates *Templates
 	// now supplies the current time, so a test can fix the day.
-	now func() time.Time
+	now  func() time.Time
+	wake wakeDigest
 }
 
 // open looks up the token in the path and reports whether the link can be

@@ -21,3 +21,7 @@ ON CONFLICT (endpoint) DO UPDATE SET
     user_agent = EXCLUDED.user_agent,
     created_at = CASE WHEN push_subscription.user_id = EXCLUDED.user_id THEN push_subscription.created_at ELSE now() END,
     last_sent_at = CASE WHEN push_subscription.user_id = EXCLUDED.user_id THEN push_subscription.last_sent_at END;
+
+-- name: SetPushSubscriptionSent :exec
+UPDATE push_subscription SET last_sent_at = @sent_at
+WHERE user_id = @user_id AND id = @subscription_id;

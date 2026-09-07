@@ -407,7 +407,7 @@ func routeQueries(t *testing.T) *store.Queries {
 }
 
 func TestRoutes_EveryRouteHasOneRouteAccessEntryThatMatchesIt(t *testing.T) {
-	table := routes(testLogger, testSessions(), testPasskeys(), nil, testTemplates(), testAssets(), "", false, testPushKey)
+	table := routes(testLogger, testSessions(), testPasskeys(), nil, testTemplates(), testAssets(), "", false, testPushKey, nil)
 	patterns := map[string]bool{}
 	for _, r := range table {
 		patterns[r.pattern] = true
@@ -464,7 +464,7 @@ func TestRoutes_EachRouteRefusesStrangersAndRolesAsItsEntrySays(t *testing.T) {
 	every := everyCapability()
 	queries := routeQueries(t)
 
-	for _, r := range routes(testLogger, testSessions(), testPasskeys(), nil, testTemplates(), testAssets(), "", false, testPushKey) {
+	for _, r := range routes(testLogger, testSessions(), testPasskeys(), nil, testTemplates(), testAssets(), "", false, testPushKey, nil) {
 		a, ok := routeAccess[r.pattern]
 		if !ok {
 			// The test above reports the missing entry.
@@ -486,7 +486,7 @@ func TestRoutes_EachRouteRefusesStrangersAndRolesAsItsEntrySays(t *testing.T) {
 			handler := New(logger, testSessions(), testPasskeys(), ResolverFunc(func(context.Context, time.Time, string) (auth.Principal, error) {
 				resolved++
 				return auth.Principal{}, auth.ErrNoSession
-			}), queries, testTemplates(), testAssets(), "", false, testPushKey)
+			}), queries, testTemplates(), testAssets(), "", false, testPushKey, nil)
 			rec := httptest.NewRecorder()
 			handler.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), method, path, nil))
 			sentToSignIn := rec.Code == http.StatusSeeOther && rec.Header().Get("Location") == signInPath
@@ -502,13 +502,13 @@ func TestRoutes_EachRouteRefusesStrangersAndRolesAsItsEntrySays(t *testing.T) {
 			if a.capability != "" {
 				lacking := memberWith(without(every, a.capability))
 				rec = httptest.NewRecorder()
-				New(logger, testSessions(), testPasskeys(), acceptEveryToken(lacking), queries, testTemplates(), testAssets(), "", false, testPushKey).ServeHTTP(rec, signedIn(httptest.NewRequestWithContext(t.Context(), method, path, nil)))
+				New(logger, testSessions(), testPasskeys(), acceptEveryToken(lacking), queries, testTemplates(), testAssets(), "", false, testPushKey, nil).ServeHTTP(rec, signedIn(httptest.NewRequestWithContext(t.Context(), method, path, nil)))
 				if rec.Code != http.StatusNotFound {
 					t.Errorf("a member without %s got %d, want %d", a.capability, rec.Code, http.StatusNotFound)
 				}
 
 				rec = httptest.NewRecorder()
-				New(logger, testSessions(), testPasskeys(), acceptEveryToken(memberWith(every)), queries, testTemplates(), testAssets(), "", false, testPushKey).ServeHTTP(rec, signedIn(httptest.NewRequestWithContext(t.Context(), method, path, nil)))
+				New(logger, testSessions(), testPasskeys(), acceptEveryToken(memberWith(every)), queries, testTemplates(), testAssets(), "", false, testPushKey, nil).ServeHTTP(rec, signedIn(httptest.NewRequestWithContext(t.Context(), method, path, nil)))
 				if rec.Code == http.StatusNotFound {
 					t.Errorf("a member with %s got %d, so the route is hidden from the people it is for", a.capability, rec.Code)
 				}
@@ -516,7 +516,7 @@ func TestRoutes_EachRouteRefusesStrangersAndRolesAsItsEntrySays(t *testing.T) {
 
 			if !a.public {
 				rec = httptest.NewRecorder()
-				New(logger, testSessions(), testPasskeys(), acceptEveryToken(noGardenPrincipal()), queries, testTemplates(), testAssets(), "", false, testPushKey).ServeHTTP(rec, signedIn(httptest.NewRequestWithContext(t.Context(), method, path, nil)))
+				New(logger, testSessions(), testPasskeys(), acceptEveryToken(noGardenPrincipal()), queries, testTemplates(), testAssets(), "", false, testPushKey, nil).ServeHTTP(rec, signedIn(httptest.NewRequestWithContext(t.Context(), method, path, nil)))
 				gotPage := rec.Code == http.StatusOK && onNoGardenPage(rec.Body.String())
 				if a.withoutGarden && gotPage {
 					t.Errorf("a session on no garden got the no-garden page from a route that is served without one")
@@ -528,7 +528,7 @@ func TestRoutes_EachRouteRefusesStrangersAndRolesAsItsEntrySays(t *testing.T) {
 
 			if a.foreign != "" {
 				rec = httptest.NewRecorder()
-				New(logger, testSessions(), testPasskeys(), acceptEveryToken(memberWith(every)), queries, testTemplates(), testAssets(), "", false, testPushKey).ServeHTTP(rec, signedIn(httptest.NewRequestWithContext(t.Context(), method, a.foreign, nil)))
+				New(logger, testSessions(), testPasskeys(), acceptEveryToken(memberWith(every)), queries, testTemplates(), testAssets(), "", false, testPushKey, nil).ServeHTTP(rec, signedIn(httptest.NewRequestWithContext(t.Context(), method, a.foreign, nil)))
 				if rec.Code != http.StatusNotFound {
 					t.Errorf("an owner asking for Fairview's object at %s got %d, want %d", a.foreign, rec.Code, http.StatusNotFound)
 				}
@@ -556,7 +556,7 @@ func mutates(method string) bool {
 // capability from a principal holding all the others.
 func everyCapability() auth.Capabilities {
 	set := auth.Capabilities{}
-	for _, r := range routes(testLogger, testSessions(), testPasskeys(), nil, testTemplates(), testAssets(), "", false, testPushKey) {
+	for _, r := range routes(testLogger, testSessions(), testPasskeys(), nil, testTemplates(), testAssets(), "", false, testPushKey, nil) {
 		if r.capability != "" {
 			set[r.capability] = true
 		}
