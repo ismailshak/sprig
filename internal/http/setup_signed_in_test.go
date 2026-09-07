@@ -76,7 +76,7 @@ func TestSetupSignedIn_ThePageNamesTheAccountAndAsksForTheGardenNameAlone(t *tes
 		`<form method="post" action="` + setupSignedInPath + `"`,
 		"Garden name",
 		`id="garden" name="garden"`,
-		"your place in Greenhouse stay as they are. Not Robin? <a href=\"" + signInToSetUpPath + "\">Sign in as somebody else</a>.",
+		"Not Robin? <a href=\"" + signInToSetUpPath + "\">Sign in as somebody else</a>.",
 	} {
 		if !strings.Contains(page, want) {
 			t.Errorf("the page lacks %s:\n%s", want, page)
@@ -167,6 +167,34 @@ func TestSetupSignedIn_ASitterMakesAGardenTheyOwn(t *testing.T) {
 	}
 }
 
+func TestSetupSignedIn_AnAccountInNoGardenCreatesAGardenAndTheSessionIsOnTheNewGarden(t *testing.T) {
+	f := setupOn(t, true)
+	robin, _ := f.signedInTo(t)
+	// Robin's only membership is deleted and a new session starts with no
+	// garden, the way a sign-in does.
+	if _, err := f.tx.Exec(t.Context(), "DELETE FROM membership WHERE user_id = $1", robin.User.ID); err != nil {
+		t.Fatalf("removing Robin: %v", err)
+	}
+	token, session, err := f.handler.sessions.Create(t.Context(), thursday, robin.User.ID, nil, nil, "")
+	if err != nil {
+		t.Fatalf("starting the session: %v", err)
+	}
+	principal := auth.Principal{Session: session, User: robin.User}
+	if page := f.asAccount(t, f.handler.showSignedIn, principal, nil).Body.String(); !strings.Contains(page, "Set up a garden as Robin?") {
+		t.Errorf("the page does not offer the form to an account in no garden:\n%s", text(page))
+	}
+
+	rec := f.asAccount(t, f.handler.createSignedIn, principal, url.Values{"garden": {"Allotment"}})
+
+	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != todayPath {
+		t.Fatalf("status = %d, Location = %q, want %d to %s:\n%s", rec.Code, rec.Header().Get("Location"), http.StatusSeeOther, todayPath, text(rec.Body.String()))
+	}
+	now := f.principalOf(t, token)
+	if !now.InGarden() || now.Garden.Name != "Allotment" || now.Membership.Role != "owner" {
+		t.Errorf("the session is on %q as %s, want Allotment as owner", now.Garden.Name, now.Membership.Role)
+	}
+}
+
 func TestSetupSignedIn_AnEmptyGardenNameIsRefusedUnderTheFieldAndTheSessionIsStillOnTheGardenItWasOn(t *testing.T) {
 	f := setupOn(t, true)
 	robin, token := f.signedInTo(t)
@@ -238,6 +266,23 @@ func TestSetup_WithSignUpOffTheFirstRunPageHasNoSignInLink(t *testing.T) {
 func TestSetup_ASignedInBrowserOpeningTheFormIsSentToSetUpAGardenAsThatAccount(t *testing.T) {
 	f := setupOn(t, true)
 	token := f.mustCreate(t, aGardenForm(), aDevice())
+
+	rec := f.request(t, f.handler.show, setupPath, nil, &http.Cookie{Name: "__Host-sprig_session", Value: token})
+
+	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != setupSignedInPath {
+		t.Errorf("status = %d, Location = %q, want %d to %s", rec.Code, rec.Header().Get("Location"), http.StatusSeeOther, setupSignedInPath)
+	}
+}
+
+func TestSetup_ASessionOnNoGardenOpeningTheFormIsSentToSetUpAGardenAsThatAccount(t *testing.T) {
+	f := setupOn(t, true)
+	robin, token := f.signedInTo(t)
+	// Robin's only membership is deleted, so the foreign key clears the
+	// session's garden. The form at /setup writes a new account, and a person
+	// whose access ended must not be handed it.
+	if _, err := f.tx.Exec(t.Context(), "DELETE FROM membership WHERE user_id = $1", robin.User.ID); err != nil {
+		t.Fatalf("removing Robin: %v", err)
+	}
 
 	rec := f.request(t, f.handler.show, setupPath, nil, &http.Cookie{Name: "__Host-sprig_session", Value: token})
 

@@ -21,14 +21,15 @@ RETURNING id, token_hash, user_id, garden_id, passkey_credential_id, user_agent,
 type CreateSessionParams struct {
 	TokenHash           string
 	UserID              uuid.UUID
-	GardenID            uuid.UUID
+	GardenID            *uuid.UUID
 	PasskeyCredentialID *uuid.UUID
 	UserAgent           *string
 	Now                 time.Time
 }
 
 // Timestamps come from the caller's clock rather than now(), so the expiry
-// check in Go compares two readings of the same clock.
+// check in Go compares two readings of the same clock. garden_id is NULL for
+// a session that starts without one.
 func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) (Session, error) {
 	row := q.db.QueryRow(ctx, createSession,
 		arg.TokenHash,
@@ -93,8 +94,9 @@ WHERE token_hash = $2
 
 // Switching gardens updates the session row rather than creating a new one, so
 // the cookie stays as it is. The foreign key on (garden_id, user_id) rejects a
-// garden the session's user is not a member of.
-func (q *Queries) SetSessionGarden(ctx context.Context, gardenID uuid.UUID, tokenHash string) (int64, error) {
+// garden the session's user is not a member of. NULL leaves the session with
+// no garden.
+func (q *Queries) SetSessionGarden(ctx context.Context, gardenID *uuid.UUID, tokenHash string) (int64, error) {
 	result, err := q.db.Exec(ctx, setSessionGarden, gardenID, tokenHash)
 	if err != nil {
 		return 0, err

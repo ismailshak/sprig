@@ -571,7 +571,6 @@ func TestSetup_APersonWhoSignsUpAndIsThenInvitedElsewhereSignsInToTheirOwnGarden
 		logger:    testLogger,
 		passkeys:  f.handler.passkeys,
 		sessions:  f.handler.sessions,
-		resolver:  auth.NewResolver(f.handler.sessions, f.queries),
 		queries:   f.queries,
 		templates: testTemplates(),
 		now:       f.handler.now,

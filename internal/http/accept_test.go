@@ -360,23 +360,6 @@ func TestInvited_AJoinLinkOffersSignInForSomebodyWithAnAccountAndAReenrolmentLin
 	}
 }
 
-func TestAccept_AcceptTokenOfReadsOnlyAnAcceptPagesPath(t *testing.T) {
-	cases := []struct{ path, want string }{
-		{acceptPath("join-as-a-sitter"), "join-as-a-sitter"},
-		{invitedPath("join-as-a-sitter"), ""},
-		{"/invite//accept", ""},
-		{"/invite/a/b/accept", ""},
-		{"/plants/accept", ""},
-		{"/", ""},
-	}
-	for _, c := range cases {
-		token, ok := acceptTokenOf(c.path)
-		if token != c.want || ok != (c.want != "") {
-			t.Errorf("acceptTokenOf(%q) = %q, %v, want %q, %v", c.path, token, ok, c.want, c.want != "")
-		}
-	}
-}
-
 // ceremonyAs returns the sign-in handlers over the fixture's transaction with
 // principal as the account the fixture posts as, so a device can be enrolled
 // for an account other than Ellie.
@@ -386,90 +369,113 @@ func (f *invitedFixture) ceremonyAs(t *testing.T, principal auth.Principal) *pas
 	return ceremonyOn(t, f.moreFixture)
 }
 
-func TestSignIn_AnAccountInNoGardenSigningInFromAnInviteLinkJoinsTheGardenAndLandsOnToday(t *testing.T) {
+// onNoGarden inserts a session row with no garden for user under tokenHash. It
+// returns the principal Authenticate would attach for that session, with only
+// Session and User set.
+func (f *invitedFixture) onNoGarden(t *testing.T, user store.AppUser, tokenHash string) auth.Principal {
+	t.Helper()
+	f.exec(t, "INSERT INTO session (token_hash, user_id) VALUES ($1, $2)", tokenHash, user.ID)
+	return auth.Principal{Session: store.Session{TokenHash: tokenHash, UserID: user.ID}, User: user}
+}
+
+func (f *invitedFixture) sessionGardenOrNil(t *testing.T, tokenHash string) *uuid.UUID {
+	t.Helper()
+	var id *uuid.UUID
+	if err := f.tx.QueryRow(t.Context(), "SELECT garden_id FROM session WHERE token_hash = $1", tokenHash).Scan(&id); err != nil {
+		t.Fatalf("reading the session's garden: %v", err)
+	}
+	return id
+}
+
+func TestSignIn_AnAccountInNoGardenSigningInFromAnInviteLinkLandsOnTheAcceptPageWithASession(t *testing.T) {
 	f := invitedGarden(t)
 	h := f.ceremonyAs(t, samOnFairview())
 	device := aDevice()
 	f.enrolDevice(t, h, device)
 	// Sam was removed from Rosewood and his own garden is gone, so no
-	// membership is left to start a session on.
+	// membership is live.
 	f.exec(t, "DELETE FROM membership WHERE user_id = $1", otherUserID)
-	users := f.count(t, "app_user")
+	memberships := f.count(t, "membership")
 
 	rec := f.signInWithNext(t, h, device, acceptPath(sitterLink))
 
-	principal := f.sessionOf(t, rec, todayPath)
-	if principal.User.ID != otherUserID || principal.Garden.ID != moreGardenID || principal.Membership.Role != "sitter" {
-		t.Errorf("the session is %s on %s as a %s, want Sam on Rosewood as a sitter", principal.User.DisplayName, principal.Garden.Name, principal.Membership.Role)
+	principal := f.sessionOf(t, rec, acceptPath(sitterLink))
+	if principal.InGarden() || principal.User.ID != otherUserID {
+		t.Errorf("the session is %s on %q, want Sam in no garden", principal.User.DisplayName, principal.Garden.Name)
 	}
-	m := principal.Membership
-	if m.InvitedBy == nil || *m.InvitedBy != moreUserID || m.ExpiresAt == nil || !m.ExpiresAt.Equal(sitterAccessEnds) {
-		t.Errorf("the membership is %+v, want one invited by Ellie ending %v", m, sitterAccessEnds)
+	if f.count(t, "membership") != memberships {
+		t.Error("the sign-in wrote a membership, and accepting is the accept page's post")
 	}
-	if at := f.redeemedAt(t, sitterLink); at == nil {
-		t.Error("the invite was not marked used")
-	}
-	if f.count(t, "app_user") != users {
-		t.Error("the sign-in wrote an account")
+	if at := f.redeemedAt(t, sitterLink); at != nil {
+		t.Error("the sign-in marked the invite used")
 	}
 }
 
-func TestSignIn_AnAccountInNoGardenWhoseMembershipEndedHasItRenewedWhenSigningInFromAnInviteLink(t *testing.T) {
+func TestAccept_AnAccountInNoGardenSeesJoinAndAcceptingPutsTheSessionOnTheGarden(t *testing.T) {
 	f := invitedGarden(t)
-	clare := auth.Principal{
-		User:   store.AppUser{ID: peopleClareID, DisplayName: "Clare", Handle: "clare", Timezone: "Europe/London"},
-		Garden: store.Garden{ID: moreGardenID, Name: "Rosewood"},
+	f.exec(t, "DELETE FROM membership WHERE user_id = $1", otherUserID)
+	sam := f.onNoGarden(t, samOnFairview().User, samsSession)
+	users, passkeys := f.count(t, "app_user"), f.count(t, "passkey_credential")
+
+	rec := f.showAccept(t, sitterLink, sam)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "Join Rosewood as Sam?") {
+		t.Fatalf("status = %d, want the Join page:\n%s", rec.Code, text(rec.Body.String()))
 	}
-	h := f.ceremonyAs(t, clare)
-	device := aDevice()
-	f.enrolDevice(t, h, device)
+
+	rec = f.accept(t, sitterLink, sam)
+
+	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != todayPath {
+		t.Fatalf("status = %d, Location = %q, want %d to %s:\n%s", rec.Code, rec.Header().Get("Location"), http.StatusSeeOther, todayPath, text(rec.Body.String()))
+	}
+	if m := f.membershipOf(t, moreGardenID, otherUserID); m.Role != "sitter" || m.InvitedBy == nil || *m.InvitedBy != moreUserID {
+		t.Errorf("the membership is %+v, want a sitter invited by Ellie", m)
+	}
+	if got := f.sessionGardenOrNil(t, samsSession); got == nil || *got != moreGardenID {
+		t.Errorf("the session is on %v, want Rosewood", got)
+	}
+	if f.count(t, "app_user") != users || f.count(t, "passkey_credential") != passkeys {
+		t.Error("accepting wrote an account or a passkey")
+	}
+}
+
+func TestAccept_ALinkThatCannotBeUsedOffersBackAndNamesNoGardenForASessionOnNone(t *testing.T) {
+	f := invitedGarden(t)
+	f.exec(t, "DELETE FROM membership WHERE user_id = $1", otherUserID)
+	sam := f.onNoGarden(t, samOnFairview().User, samsSession)
+
+	page := f.showAccept(t, usedLink, sam).Body.String()
+
+	if !linkTo(page, todayPath, "Back") || strings.Contains(page, "Back to") {
+		t.Errorf("the page for a link that cannot be used names a garden the session is not on:\n%s", text(page))
+	}
+}
+
+func TestAccept_AnAccountWhoseMembershipEndedAcceptsFromNoGardenAndHasTheRowRenewed(t *testing.T) {
+	f := invitedGarden(t)
+	// Clare's access to Rosewood ended twelve days ago, and she is in no
+	// other garden.
+	clare := f.onNoGarden(t, store.AppUser{ID: peopleClareID, DisplayName: "Clare", Handle: "clare", Timezone: "Europe/London"}, "clares-session")
 	memberships := f.count(t, "membership")
 
-	rec := f.signInWithNext(t, h, device, acceptPath(memberLink))
+	rec := f.accept(t, memberLink, clare)
 
-	principal := f.sessionOf(t, rec, todayPath)
-	if principal.User.ID != peopleClareID || principal.Garden.ID != moreGardenID {
-		t.Errorf("the session is %s on %s, want Clare on Rosewood", principal.User.DisplayName, principal.Garden.Name)
+	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != todayPath {
+		t.Fatalf("status = %d, Location = %q, want %d to %s:\n%s", rec.Code, rec.Header().Get("Location"), http.StatusSeeOther, todayPath, text(rec.Body.String()))
 	}
-	if m := principal.Membership; m.ID != peopleClareID || m.Role != "member" || m.ExpiresAt != nil {
+	if m := f.membershipOf(t, moreGardenID, peopleClareID); m.ID != peopleClareID || m.Role != "member" || m.ExpiresAt != nil {
 		t.Errorf("the membership is %+v, want the row Clare had, now a member with no end date", m)
 	}
 	if f.count(t, "membership") != memberships {
 		t.Errorf("%d memberships, want the same as before, because the row was renewed", f.count(t, "membership"))
 	}
-}
-
-func TestSignIn_AnAccountInNoGardenSigningInFromALinkThatCannotBeUsedIsRefused(t *testing.T) {
-	for _, token := range []string{usedLink, ranOutLink, noSuchLink, samsLink} {
-		t.Run(token, func(t *testing.T) {
-			f := invitedGarden(t)
-			h := f.ceremonyAs(t, samOnFairview())
-			device := aDevice()
-			f.enrolDevice(t, h, device)
-			f.exec(t, "DELETE FROM membership WHERE user_id = $1", otherUserID)
-			memberships := f.count(t, "membership")
-
-			rec := f.signInWithNext(t, h, device, acceptPath(token))
-
-			if rec.Code != http.StatusForbidden {
-				t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusForbidden, text(rec.Body.String()))
-			}
-			if !strings.Contains(rec.Body.String(), "the account behind it is in no garden") {
-				t.Errorf("the page does not say the account is in no garden:\n%s", text(rec.Body.String()))
-			}
-			if cookieNamed(t, rec, "__Host-sprig_session") != nil {
-				t.Error("the refused sign-in set a session cookie")
-			}
-			if f.count(t, "membership") != memberships {
-				t.Error("the refused sign-in wrote a membership")
-			}
-		})
+	if got := f.sessionGardenOrNil(t, "clares-session"); got == nil || *got != moreGardenID {
+		t.Errorf("the session is on %v, want Rosewood", got)
 	}
 }
 
 func TestInvited_ASignedInBrowserOpeningAJoinLinkIsSentToAcceptItAsThatAccount(t *testing.T) {
 	f := invitedGarden(t)
-	token, _, err := f.handler.sessions.Create(t.Context(), thursday, otherUserID, otherGardenID, nil, "")
+	token, _, err := f.handler.sessions.Create(t.Context(), thursday, otherUserID, &otherGardenID, nil, "")
 	if err != nil {
 		t.Fatalf("starting Sam's session: %v", err)
 	}
@@ -486,18 +492,18 @@ func TestInvited_ASignedInBrowserOpeningAJoinLinkIsSentToAcceptItAsThatAccount(t
 	unusable(t, f.request(t, f.handler.show, usedLink, invitedPath(usedLink), nil, cookie))
 }
 
-func TestInvited_ABrowserWhoseSessionEndedOpeningAJoinLinkGetsTheForm(t *testing.T) {
+func TestInvited_ABrowserWhoseMembershipEndedOpeningAJoinLinkIsSentToAcceptItAsThatAccount(t *testing.T) {
 	f := invitedGarden(t)
-	// Clare's access to Rosewood ended twelve days ago. Her session row is
-	// still there until something reads it.
-	token, _, err := f.handler.sessions.Create(t.Context(), thursday, peopleClareID, moreGardenID, nil, "")
+	// Clare's access to Rosewood ended twelve days ago. Her session row still
+	// names Rosewood until a request resolves it.
+	token, _, err := f.handler.sessions.Create(t.Context(), thursday, peopleClareID, &moreGardenID, nil, "")
 	if err != nil {
 		t.Fatalf("starting Clare's session: %v", err)
 	}
 
 	rec := f.request(t, f.handler.show, sitterLink, invitedPath(sitterLink), nil, f.handler.sessions.Cookie(token))
 
-	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "Ellie invited you to Rosewood") {
-		t.Errorf("status = %d, want the join form:\n%s", rec.Code, text(rec.Body.String()))
+	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != acceptPath(sitterLink) {
+		t.Errorf("status = %d, Location = %q, want %d to %s, because the account is still Clare's", rec.Code, rec.Header().Get("Location"), http.StatusSeeOther, acceptPath(sitterLink))
 	}
 }

@@ -587,7 +587,7 @@ func TestInvited_ADeviceThatDidNotCheckWhoWasUsingItIsRefusedAndNothingIsWritten
 
 func TestInvited_ABrowserAlreadySignedInGetsANewSessionInPlaceOfItsOld(t *testing.T) {
 	f := invitedGarden(t)
-	old, _, err := f.handler.sessions.Create(t.Context(), thursday, moreUserID, moreGardenID, nil, "")
+	old, _, err := f.handler.sessions.Create(t.Context(), thursday, moreUserID, &moreGardenID, nil, "")
 	if err != nil {
 		t.Fatalf("starting Ellie's session: %v", err)
 	}

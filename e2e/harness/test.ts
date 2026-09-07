@@ -7,6 +7,7 @@ import { InstallScreen } from '../screens/install';
 import { InviteScreen } from '../screens/invite';
 import { InvitedScreen } from '../screens/invited';
 import { MoreScreen } from '../screens/more';
+import { NoGardenScreen } from '../screens/no-garden';
 import { NotificationsScreen } from '../screens/notifications';
 import { PasskeysScreen } from '../screens/passkeys';
 import { PeopleScreen } from '../screens/people';
@@ -30,6 +31,7 @@ type Screens = {
   invite: InviteScreen;
   invited: InvitedScreen;
   more: MoreScreen;
+  noGarden: NoGardenScreen;
   notifications: NotificationsScreen;
   passkeys: PasskeysScreen;
   people: PeopleScreen;
@@ -107,6 +109,9 @@ export const test = base.extend<{ seededGarden: void; cspViolations: void } & Sc
   },
   more: async ({ page }, use) => {
     await use(new MoreScreen(page));
+  },
+  noGarden: async ({ page }, use) => {
+    await use(new NoGardenScreen(page));
   },
   notifications: async ({ page }, use) => {
     await use(new NotificationsScreen(page));

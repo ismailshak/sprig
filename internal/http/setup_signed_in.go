@@ -25,8 +25,6 @@ type setupSignedInPage struct {
 	GardenError string
 	// Name is the display name of the account signed in.
 	Name string
-	// Current is the name of the garden the session is on now.
-	Current string
 	// Action is the URL the form posts to.
 	Action string
 	// SignIn is the URL the "Sign in as somebody else" link points at. It goes
@@ -36,11 +34,10 @@ type setupSignedInPage struct {
 
 func newSetupSignedInPage(principal auth.Principal, garden string) setupSignedInPage {
 	return setupSignedInPage{
-		Garden:  garden,
-		Name:    principal.User.DisplayName,
-		Current: principal.Garden.Name,
-		Action:  setupSignedInPath,
-		SignIn:  signInToSetUpPath,
+		Garden: garden,
+		Name:   principal.User.DisplayName,
+		Action: setupSignedInPath,
+		SignIn: signInToSetUpPath,
 	}
 }
 
@@ -63,8 +60,8 @@ func (h *setup) showSignedIn(w http.ResponseWriter, r *http.Request) {
 
 // createSignedIn handles POST /setup/signed-in. It writes the garden, moves the
 // session onto it and redirects to Today. It writes no account and no passkey,
-// because the account signed in has both. The membership the session arrived
-// on is left in place.
+// because the account signed in has both. Any membership the account already
+// holds is left as it is.
 func (h *setup) createSignedIn(w http.ResponseWriter, r *http.Request) {
 	if !h.signedInOpen() {
 		http.NotFound(w, r)
@@ -89,7 +86,7 @@ func (h *setup) createSignedIn(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return err
 		}
-		if _, err := q.SetSessionGarden(ctx, garden.ID, principal.Session.TokenHash); err != nil {
+		if _, err := q.SetSessionGarden(ctx, &garden.ID, principal.Session.TokenHash); err != nil {
 			return err
 		}
 		// The new garden is recorded on the account as well, so the next

@@ -24,6 +24,10 @@ type access struct {
 	capability auth.Capability
 	// anyMember marks a mutating route that has no capability on purpose.
 	anyMember bool
+	// withoutGarden marks a route that runs for an account in no garden.
+	// Every other protected route renders the "You're in no garden" page
+	// instead.
+	withoutGarden bool
 	// path is a request path the pattern matches, using Rosewood's ids.
 	path string
 	// foreign is path with one of Fairview's ids in place of Rosewood's. The
@@ -123,8 +127,10 @@ var routeAccess = map[string]access{
 	// Every route under More acts on the reader's own account or their own
 	// membership, so none of them names a capability. The pages a role cannot
 	// use, Garden and People, are routes of their own.
-	"GET /more":          {},
-	"POST /signout":      {anyMember: true},
+	"GET /more": {},
+	// Sign out runs for an account in no garden, so somebody with nothing to
+	// open can still sign out.
+	"POST /signout":      {anyMember: true, withoutGarden: true},
 	"GET /more/account":  {},
 	"POST /more/account": {anyMember: true},
 	// Recovery codes belong to an account rather than to a garden, so every
@@ -150,8 +156,10 @@ var routeAccess = map[string]access{
 	// The two routes an account that is already signed in uses to set up a
 	// garden of its own. Neither names a capability, because the garden the
 	// post writes is a new one of the caller's own.
-	"GET /setup/signed-in":  {},
-	"POST /setup/signed-in": {anyMember: true},
+	// Both run for an account in no garden. That is the account this page is
+	// for.
+	"GET /setup/signed-in":  {withoutGarden: true},
+	"POST /setup/signed-in": {anyMember: true, withoutGarden: true},
 	// An invite link is opened before any session exists. The token here was
 	// never issued, so the handler renders the page for a link that cannot be
 	// redeemed. There is no foreign path, because the token is what says which
@@ -162,8 +170,10 @@ var routeAccess = map[string]access{
 	// The garden an invite is for is the one the account is joining, so there
 	// is no other garden's token to refuse. Both paths use a token nobody
 	// issued. The 404 they get is the page for a link that cannot be used.
-	"GET /invite/{token}/accept":  {path: acceptPath("no-such-token"), foreign: acceptPath("no-such-token")},
-	"POST /invite/{token}/accept": {anyMember: true, path: acceptPath("no-such-token"), foreign: acceptPath("no-such-token")},
+	// Both run for an account in no garden, because accepting an invite is how
+	// it gets one.
+	"GET /invite/{token}/accept":  {withoutGarden: true, path: acceptPath("no-such-token"), foreign: acceptPath("no-such-token")},
+	"POST /invite/{token}/accept": {anyMember: true, withoutGarden: true, path: acceptPath("no-such-token"), foreign: acceptPath("no-such-token")},
 	// A passkey and a push subscription belong to an account rather than to a
 	// garden, so the foreign row here is another person's rather than another
 	// garden's. Both routes answer 404 for one.
@@ -407,6 +417,12 @@ func TestRoutes_EveryRouteHasOneRouteAccessEntryThatMatchesIt(t *testing.T) {
 		if a.public && a.capability != "" {
 			t.Errorf("%s is public and requires %q, and a request with no principal has no capabilities", r.pattern, a.capability)
 		}
+		if a.withoutGarden != r.withoutGarden {
+			t.Errorf("%s is served without a garden = %v in routeAccess and %v in routes", r.pattern, a.withoutGarden, r.withoutGarden)
+		}
+		if a.withoutGarden && (a.public || a.capability != "") {
+			t.Errorf("%s is served without a garden and is public or requires %q, and neither goes with a session on no garden", r.pattern, a.capability)
+		}
 
 		method, path := splitPattern(r.pattern)
 		if mutates(method) && a.capability == "" && !a.anyMember && !a.public {
@@ -450,6 +466,9 @@ func TestRoutes_EachRouteRefusesStrangersAndRolesAsItsEntrySays(t *testing.T) {
 		if a.path != "" {
 			path = a.path
 		}
+		// {$} anchors a pattern to the exact path. It is not part of the path
+		// a request is made to.
+		path = strings.TrimSuffix(path, "{$}")
 		if method == "" {
 			method = http.MethodGet
 		}
@@ -484,6 +503,18 @@ func TestRoutes_EachRouteRefusesStrangersAndRolesAsItsEntrySays(t *testing.T) {
 				New(logger, testSessions(), testPasskeys(), acceptEveryToken(memberWith(every)), queries, testTemplates(), testAssets(), "", false).ServeHTTP(rec, signedIn(httptest.NewRequestWithContext(t.Context(), method, path, nil)))
 				if rec.Code == http.StatusNotFound {
 					t.Errorf("a member with %s got %d, so the route is hidden from the people it is for", a.capability, rec.Code)
+				}
+			}
+
+			if !a.public {
+				rec = httptest.NewRecorder()
+				New(logger, testSessions(), testPasskeys(), acceptEveryToken(noGardenPrincipal()), queries, testTemplates(), testAssets(), "", false).ServeHTTP(rec, signedIn(httptest.NewRequestWithContext(t.Context(), method, path, nil)))
+				gotPage := rec.Code == http.StatusOK && onNoGardenPage(rec.Body.String())
+				if a.withoutGarden && gotPage {
+					t.Errorf("a session on no garden got the no-garden page from a route that is served without one")
+				}
+				if !a.withoutGarden && !gotPage {
+					t.Errorf("a session on no garden got %d from a route that needs one, want the no-garden page", rec.Code)
 				}
 			}
 

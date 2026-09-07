@@ -34,8 +34,8 @@ func init() {
 
 // devRoutes returns the development sign-in routes. The page is rendered from
 // its own template rather than the template tree.
-func devRoutes(sessions *auth.Sessions, resolver *auth.Resolver, queries *store.Queries, _ *Templates) []route {
-	d := &devSignIn{sessions: sessions, queries: queries, resolver: resolver}
+func devRoutes(sessions *auth.Sessions, queries *store.Queries, _ *Templates) []route {
+	d := &devSignIn{sessions: sessions, queries: queries}
 	return []route{
 		{pattern: "GET " + devSignInPath, handler: http.HandlerFunc(d.show)},
 		{pattern: "POST " + devSignInPath, handler: http.HandlerFunc(d.start)},
@@ -45,7 +45,6 @@ func devRoutes(sessions *auth.Sessions, resolver *auth.Resolver, queries *store.
 type devSignIn struct {
 	sessions *auth.Sessions
 	queries  *store.Queries
-	resolver *auth.Resolver
 }
 
 // An error on these routes goes into the response rather than the log,
@@ -62,9 +61,9 @@ func (d *devSignIn) show(w http.ResponseWriter, r *http.Request) {
 	_ = devSignInPage.Execute(w, users)
 }
 
-// start creates a session for the user whose handle the form names, on their
-// oldest live membership. A user with no live membership gets a 409, since the
-// screen for that case belongs to the passkey sign-in.
+// start creates a session for the user whose handle the form names. The
+// session starts with no garden, the same as one from the passkey sign-in.
+// The next request picks the garden.
 func (d *devSignIn) start(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	handle := r.FormValue("handle")
@@ -79,17 +78,6 @@ func (d *devSignIn) start(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	now := time.Now()
-	membership, err := d.resolver.StartingMembership(ctx, now, user.ID)
-	if errors.Is(err, auth.ErrNoLiveMembership) {
-		http.Error(w, fmt.Sprintf("%s is in no garden, so there is nothing to start a session on", handle), http.StatusConflict)
-		return
-	}
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
 	// Switching to another person replaces the session rather than leaving the
 	// previous row live until its TTL.
 	if err := d.sessions.DeleteFromRequest(ctx, r); err != nil {
@@ -97,7 +85,7 @@ func (d *devSignIn) start(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, _, err := d.sessions.Create(ctx, now, user.ID, membership.GardenID, nil, r.UserAgent())
+	token, _, err := d.sessions.Create(ctx, time.Now(), user.ID, nil, nil, r.UserAgent())
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

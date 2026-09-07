@@ -101,6 +101,43 @@ test('a signed-in browser opening Set up your garden is sent to set one up as th
   await expect(today.switchTo(gardens.upstairs.name)).toBeVisible();
 });
 
+test('an account in no garden is told so on every page and sets up a garden of its own', async ({
+  page,
+  noGarden,
+  setup,
+  today,
+}) => {
+  await signIn(page, people.clare.handle);
+
+  await expect(noGarden.heading()).toBeVisible();
+  await expect(page.getByText(`You are signed in as ${people.clare.name}`)).toBeVisible();
+  await page.goto('/plants');
+  await expect(noGarden.heading()).toBeVisible();
+
+  await noGarden.setUp().click();
+
+  await expect(page).toHaveURL('/setup/signed-in');
+  await setup.garden().fill('Greenhouse');
+  await setup.create().click();
+
+  await expect(page).toHaveURL('/');
+  await expect(page.getByRole('heading', { name: 'Greenhouse' })).toBeVisible();
+  await expect(page.getByText('No plants yet')).toBeVisible();
+  // Greenhouse is the account's only garden, so there is nothing to switch to.
+  await expect(today.switchGarden()).toHaveCount(0);
+});
+
+test('an account in no garden can sign out', async ({ page, noGarden }) => {
+  await signIn(page, people.clare.handle);
+  await expect(noGarden.heading()).toBeVisible();
+
+  await noGarden.signOut().click();
+
+  await expect(page).toHaveURL('/signin');
+  await page.goto('/');
+  await expect(page).toHaveURL('/signin');
+});
+
 test('an empty garden name is refused under the field and the rest of the form is kept @passkey', async ({
   page,
   setup,

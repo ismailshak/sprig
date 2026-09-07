@@ -169,7 +169,7 @@ func (h *setup) show(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	if hasLiveSession(r, h.sessions, h.resolver, h.now()) {
+	if hasSession(r, h.sessions, h.resolver, h.now()) {
 		http.Redirect(w, r, setupSignedInPath, http.StatusSeeOther)
 		return
 	}
@@ -306,7 +306,7 @@ func (h *setup) create(w http.ResponseWriter, r *http.Request) {
 		serverError(h.logger, w, r, "end the previous session", err)
 		return
 	}
-	token, _, err := h.sessions.Create(r.Context(), now, user.ID, membership.GardenID, &passkey.ID, r.UserAgent())
+	token, _, err := h.sessions.Create(r.Context(), now, user.ID, &membership.GardenID, &passkey.ID, r.UserAgent())
 	if err != nil {
 		serverError(h.logger, w, r, "start the session", err)
 		return

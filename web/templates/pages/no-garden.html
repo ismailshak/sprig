@@ -1,0 +1,14 @@
+{{define "title"}}sprig — no garden{{end}}
+
+{{define "app-class"}}app app--bare{{end}}
+
+{{/* Every route that needs a garden renders this page for an account that has
+     none. There is no tab bar, because every tab needs a garden. */}}
+{{define "main"}}
+<div class="app__body app__body--bare">
+<h1 class="bare__title">You&rsquo;re in no garden</h1>
+<p class="lead">You are signed in as {{.Name}} and this account is not in any garden. Ask whoever runs a garden for an invite link. It works with the account you have.</p>
+{{with .SetUp}}<a class="wide-action" href="{{.}}">Set up a garden of your own</a>{{end}}
+<form method="post" action="{{.SignOut}}"><button class="more__signout" type="submit">Sign out</button></form>
+</div>
+{{end}}

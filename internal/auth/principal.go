@@ -14,6 +14,9 @@ import (
 
 // Principal is the signed-in user behind a request. No URL names a garden, so
 // Garden is the only place a handler learns which one the request is for.
+// Garden, Membership and Capabilities are zero when the account is in no
+// garden. A route that needs a garden never runs for such a principal, because
+// the mux renders the "You're in no garden" page in its place.
 type Principal struct {
 	Session      store.Session
 	User         store.AppUser
@@ -28,22 +31,16 @@ func (p Principal) Can(capability Capability) bool {
 	return p.Capabilities[capability]
 }
 
+// InGarden reports whether the request has a garden. It is false for an
+// account with no live membership.
+func (p Principal) InGarden() bool {
+	return p.Garden.ID != uuid.UUID{}
+}
+
 // MembershipEnded reports whether m has ended at now. A membership with no
 // expires_at is permanent. One with a date has ended from that instant on.
 func MembershipEnded(m store.Membership, now time.Time) bool {
 	return m.ExpiresAt != nil && !now.Before(*m.ExpiresAt)
-}
-
-// MembershipEndedError is returned when a session's membership has ended. It
-// holds the user and the garden because the page shown for it names both.
-type MembershipEndedError struct {
-	User    store.AppUser
-	Garden  store.Garden
-	EndedAt time.Time
-}
-
-func (e *MembershipEndedError) Error() string {
-	return fmt.Sprintf("the membership of %s on garden %s ended at %s", e.User.Handle, e.Garden.ID, e.EndedAt.Format(time.RFC3339))
 }
 
 // ErrNoLiveMembership is returned for a user with no membership live at now.
@@ -61,38 +58,63 @@ func NewResolver(sessions *Sessions, queries *store.Queries) *Resolver {
 }
 
 // Resolve returns the Principal for token at now. It returns ErrNoSession when
-// the token has no live session, and a *MembershipEndedError when the session's
-// membership has expired, after deleting that session. The garden comes from
-// the session row, so an account with two memberships is on one garden per
-// session.
+// the token has no live session.
+//
+// Every request re-checks the garden the session row names. A session keeps
+// that garden while the account's membership of it is live. Any other session,
+// including one that started with no garden at all, is moved to a live
+// membership of the account, or has its garden set to NULL when the account
+// has none live. An account with no live membership stays signed in, so it can
+// set up a garden of its own or accept an invite.
 func (r *Resolver) Resolve(ctx context.Context, now time.Time, token string) (Principal, error) {
 	session, err := r.sessions.Lookup(ctx, now, token)
 	if err != nil {
 		return Principal{}, err
 	}
 
-	row, err := r.queries.GetMembershipWithUserAndGarden(ctx, session.GardenID, session.UserID)
-	if errors.Is(err, pgx.ErrNoRows) {
-		// The membership was deleted between the session lookup and this
-		// read, and the cascade took the session with it.
-		return Principal{}, ErrNoSession
+	if session.GardenID != nil {
+		row, err := r.queries.GetMembershipWithUserAndGarden(ctx, *session.GardenID, session.UserID)
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return Principal{}, fmt.Errorf("read the membership: %w", err)
+		}
+		if err == nil && !MembershipEnded(row.Membership, now) {
+			return r.principal(ctx, session, row)
+		}
 	}
+
+	membership, err := r.startingMembership(ctx, now, session.UserID)
+	if errors.Is(err, ErrNoLiveMembership) {
+		if session.GardenID != nil {
+			if _, err := r.queries.SetSessionGarden(ctx, nil, session.TokenHash); err != nil {
+				return Principal{}, fmt.Errorf("take the session off its garden: %w", err)
+			}
+			session.GardenID = nil
+		}
+		user, err := r.queries.GetUser(ctx, session.UserID)
+		if err != nil {
+			return Principal{}, fmt.Errorf("read the account: %w", err)
+		}
+		return Principal{Session: session, User: user}, nil
+	}
+	if err != nil {
+		return Principal{}, err
+	}
+	if _, err := r.queries.SetSessionGarden(ctx, &membership.GardenID, session.TokenHash); err != nil {
+		return Principal{}, fmt.Errorf("move the session onto the garden: %w", err)
+	}
+	session.GardenID = &membership.GardenID
+	row, err := r.queries.GetMembershipWithUserAndGarden(ctx, membership.GardenID, session.UserID)
 	if err != nil {
 		return Principal{}, fmt.Errorf("read the membership: %w", err)
 	}
+	return r.principal(ctx, session, row)
+}
 
-	if MembershipEnded(row.Membership, now) {
-		if err := r.sessions.Delete(ctx, token); err != nil {
-			return Principal{}, err
-		}
-		return Principal{}, &MembershipEndedError{User: row.AppUser, Garden: row.Garden, EndedAt: *row.Membership.ExpiresAt}
-	}
-
+func (r *Resolver) principal(ctx context.Context, session store.Session, row store.GetMembershipWithUserAndGardenRow) (Principal, error) {
 	names, err := r.queries.ListRoleCapabilities(ctx, row.Membership.Role)
 	if err != nil {
 		return Principal{}, fmt.Errorf("read the role's capabilities: %w", err)
 	}
-
 	return Principal{
 		Session:      session,
 		User:         row.AppUser,
@@ -102,11 +124,11 @@ func (r *Resolver) Resolve(ctx context.Context, now time.Time, token string) (Pr
 	}, nil
 }
 
-// StartingMembership returns the membership a new session for userID starts
-// on: the garden the person last switched to while that membership is live at
-// now, and otherwise their oldest membership that is. It returns
+// startingMembership returns the membership Resolve moves a session to. It is
+// the account's membership of the garden it last switched to when that one is
+// live at now, and otherwise the account's oldest live membership. It returns
 // ErrNoLiveMembership when none is live.
-func (r *Resolver) StartingMembership(ctx context.Context, now time.Time, userID uuid.UUID) (store.Membership, error) {
+func (r *Resolver) startingMembership(ctx context.Context, now time.Time, userID uuid.UUID) (store.Membership, error) {
 	memberships, err := r.queries.ListMembershipsForUser(ctx, userID)
 	if err != nil {
 		return store.Membership{}, fmt.Errorf("read the memberships: %w", err)

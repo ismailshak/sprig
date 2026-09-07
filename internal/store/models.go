@@ -185,7 +185,7 @@ type Session struct {
 	ID                  uuid.UUID
 	TokenHash           string
 	UserID              uuid.UUID
-	GardenID            uuid.UUID
+	GardenID            *uuid.UUID
 	PasskeyCredentialID *uuid.UUID
 	UserAgent           *string
 	CreatedAt           time.Time

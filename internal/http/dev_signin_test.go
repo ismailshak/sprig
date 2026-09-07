@@ -121,9 +121,8 @@ func TestDevSignIn_AHandleStartsARealSession(t *testing.T) {
 	}
 }
 
-// Sam's live membership is Home. The Upstairs one is more recent and has
-// ended, so a session that started there would be refused on its first
-// request.
+// Sam's live membership is Home. The Upstairs one is more recent but has
+// ended, so it is not a garden the first request can pick.
 func TestDevSignIn_TheSessionStartsOnTheOldestLiveMembership(t *testing.T) {
 	handler, resolver := devStack(t)
 
@@ -168,7 +167,25 @@ func TestDevSignIn_SwitchingUsersDeletesThePreviousSession(t *testing.T) {
 	}
 }
 
-func TestDevSignIn_AnUnknownHandleIs404AndAUserWithNoGardenIs409(t *testing.T) {
+func TestDevSignIn_AUserWithNoGardenGetsASessionOnNoGarden(t *testing.T) {
+	handler, resolver := devStack(t)
+
+	rec := postHandle(t, handler, "robin", nil)
+
+	cookie := cookieNamed(t, rec, "__Host-sprig_session")
+	if rec.Code != http.StatusSeeOther || cookie == nil {
+		t.Fatalf("status = %d and cookie = %v, want %d with a session cookie", rec.Code, cookie, http.StatusSeeOther)
+	}
+	principal, err := resolver.Resolve(t.Context(), time.Now(), cookie.Value)
+	if err != nil {
+		t.Fatalf("the cookie's token did not resolve: %v", err)
+	}
+	if principal.InGarden() || principal.User.Handle != "robin" {
+		t.Errorf("resolved to %s on %q, want robin in no garden", principal.User.Handle, principal.Garden.Name)
+	}
+}
+
+func TestDevSignIn_AnUnknownHandleIs404(t *testing.T) {
 	handler, _ := devStack(t)
 
 	cases := []struct {
@@ -178,7 +195,6 @@ func TestDevSignIn_AnUnknownHandleIs404AndAUserWithNoGardenIs409(t *testing.T) {
 	}{
 		{"a handle nobody has", "nobody", http.StatusNotFound},
 		{"an empty handle", "", http.StatusNotFound},
-		{"a user whose every membership has ended", "robin", http.StatusConflict},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

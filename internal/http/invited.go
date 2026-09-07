@@ -235,7 +235,7 @@ func (h *invited) show(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	token := r.PathValue("token")
-	if !open.reenrol() && hasLiveSession(r, h.sessions, h.resolver, h.now()) {
+	if !open.reenrol() && hasSession(r, h.sessions, h.resolver, h.now()) {
 		http.Redirect(w, r, acceptPath(token), http.StatusSeeOther)
 		return
 	}
@@ -455,7 +455,7 @@ func (h *invited) finish(w http.ResponseWriter, r *http.Request, page invitedPag
 		serverError(h.logger, w, r, "end the previous session", err)
 		return
 	}
-	token, _, err := h.sessions.Create(r.Context(), h.now(), user.ID, gardenID, &passkey.ID, r.UserAgent())
+	token, _, err := h.sessions.Create(r.Context(), h.now(), user.ID, &gardenID, &passkey.ID, r.UserAgent())
 	if err != nil {
 		serverError(h.logger, w, r, "start the session", err)
 		return

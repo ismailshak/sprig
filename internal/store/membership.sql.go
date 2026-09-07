@@ -57,10 +57,10 @@ DELETE FROM membership
 WHERE garden_id = $1 AND user_id = $2
 `
 
-// Removing a member deletes the membership. Their sessions on this garden go
-// with it through the foreign key, so they lose access at once rather than on
-// the next page they load. Every care event they logged stays where it is,
-// because an event points at the account and not at the membership.
+// Removing a member deletes the membership. The foreign key sets garden_id to
+// NULL on their sessions for this garden, so they stay signed in. Every care
+// event they logged stays where it is, because an event points at the account
+// and not at the membership.
 func (q *Queries) DeleteMembership(ctx context.Context, gardenID uuid.UUID, userID uuid.UUID) (int64, error) {
 	result, err := q.db.Exec(ctx, deleteMembership, gardenID, userID)
 	if err != nil {
@@ -203,9 +203,10 @@ WHERE membership.user_id = $1
 ORDER BY membership.garden_id = app_user.last_garden_id DESC NULLS LAST, membership.created_at, membership.id
 `
 
-// A new session starts on the first live row: the garden the person last
-// switched to, then the oldest membership. This takes no garden_id because it
-// is how the garden is found. Every row returned belongs to @user_id.
+// The garden a session is put on is the first row here that has not ended.
+// Rows come back with the garden the account last switched to first, then the
+// oldest membership. This takes no garden_id because it is how the garden is
+// found. Every row returned belongs to @user_id.
 func (q *Queries) ListMembershipsForUser(ctx context.Context, userID uuid.UUID) ([]Membership, error) {
 	rows, err := q.db.Query(ctx, listMembershipsForUser, userID)
 	if err != nil {
