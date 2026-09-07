@@ -84,3 +84,13 @@ LEFT JOIN LATERAL (
 ) AS owner ON true
 WHERE membership.user_id = @user_id
 ORDER BY membership.created_at, membership.id;
+
+-- Accepting an invite as an account whose membership of the garden has ended
+-- updates that row rather than inserting one, because membership is unique on
+-- (garden_id, user_id). The row keeps its digest hour and its notification
+-- preferences.
+-- name: RenewMembership :one
+UPDATE membership
+SET role = @role, invited_by = @invited_by, expires_at = @expires_at
+WHERE garden_id = @garden_id AND user_id = @user_id
+RETURNING *;
