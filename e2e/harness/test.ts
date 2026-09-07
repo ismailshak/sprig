@@ -1,4 +1,5 @@
 import { test as base } from '@playwright/test';
+import { AcceptScreen } from '../screens/accept';
 import { AccountScreen } from '../screens/account';
 import { ActivityScreen } from '../screens/activity';
 import { GardenScreen } from '../screens/garden';
@@ -21,6 +22,7 @@ import { TokensScreen } from '../screens/tokens';
 import { seed, stacks, type Stack } from './database';
 
 type Screens = {
+  accept: AcceptScreen;
   account: AccountScreen;
   activity: ActivityScreen;
   garden: GardenScreen;
@@ -76,6 +78,9 @@ export const test = base.extend<{ seededGarden: void } & Screens, { stack: Stack
   },
   install: async ({ page }, use) => {
     await use(new InstallScreen(page));
+  },
+  accept: async ({ page }, use) => {
+    await use(new AcceptScreen(page));
   },
   invite: async ({ page }, use) => {
     await use(new InviteScreen(page));

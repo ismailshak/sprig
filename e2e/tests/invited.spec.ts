@@ -1,10 +1,12 @@
 import type { Browser, BrowserContext, Page } from '@playwright/test';
-import { attach, aWorkingDevice } from '../harness/authenticator';
+import { aWorkingDevice, withDevice } from '../harness/authenticator';
 import { gardens, invites, people } from '../harness/garden';
 import { signIn } from '../harness/signin';
 import { expect, test } from '../harness/test';
 import { AccountScreen } from '../screens/account';
+import { AcceptScreen } from '../screens/accept';
 import { InvitedScreen } from '../screens/invited';
+import { PeopleScreen } from '../screens/people';
 
 // asAnotherBrowser opens a second browser context on the same app, so a test
 // can issue a link as the owner in one and open it in the other. The caller
@@ -22,8 +24,7 @@ test('joining through an invite link signs the sitter in and lands on Install sp
   invited,
   install,
 }) => {
-  const detach = await attach(page, aWorkingDevice);
-  try {
+  await withDevice(page, aWorkingDevice, async () => {
     await invited.open(invites.sitter.token);
     await expect(
       page.getByRole('heading', { name: `${people.ellie.name} invited you to ${gardens.home.name}` }),
@@ -44,9 +45,7 @@ test('joining through an invite link signs the sitter in and lands on Install sp
     // cannot be used.
     await invited.open(invites.sitter.token);
     await expect(page.getByRole('heading', { name: 'This link cannot be used' })).toBeVisible();
-  } finally {
-    await detach();
-  }
+  });
 });
 
 test("a re-enrolment link adds a passkey to the member's account and signs that device in @passkey", async ({
@@ -61,21 +60,193 @@ test("a re-enrolment link adds a passkey to the member's account and signs that 
   const token = InvitedScreen.tokenOf((await peopleScreen.link().textContent()) ?? '');
 
   const { page: phone, context } = await asAnotherBrowser(browser, baseURL);
-  const detach = await attach(phone, aWorkingDevice);
   try {
-    const onPhone = new InvitedScreen(phone);
-    await onPhone.open(token);
-    await expect(phone.getByRole('heading', { name: 'Add this device to your account' })).toBeVisible();
-    await expect(onPhone.name()).toHaveCount(0);
+    await withDevice(phone, aWorkingDevice, async () => {
+      const onPhone = new InvitedScreen(phone);
+      await onPhone.open(token);
+      await expect(phone.getByRole('heading', { name: 'Add this device to your account' })).toBeVisible();
+      await expect(onPhone.name()).toHaveCount(0);
 
-    await onPhone.addDevice().click();
+      await onPhone.addDevice().click();
 
-    await expect(phone).toHaveURL('/');
-    const account = new AccountScreen(phone);
-    await account.open();
-    await expect(account.name()).toHaveValue(people.sam.name);
+      await expect(phone).toHaveURL('/');
+      const account = new AccountScreen(phone);
+      await account.open();
+      await expect(account.name()).toHaveValue(people.sam.name);
+    });
   } finally {
-    await detach();
+    await context.close();
+  }
+});
+
+test('an account signed in from an invite link joins the garden and keeps the one it was in @passkey', async ({
+  page,
+  accept,
+  invited,
+  passkeys,
+  signin,
+  today,
+}) => {
+  await withDevice(page, aWorkingDevice, async () => {
+    // Robin owns Upstairs and is not in Home. The seed gives Robin no
+    // passkey, so one is registered first and the session signed out.
+    await signIn(page, people.robin.handle);
+    await passkeys.open();
+    await passkeys.add().click();
+    await expect(passkeys.rows()).toHaveCount(1);
+    await page.goto('/more');
+    await page.getByRole('button', { name: 'Sign out' }).click();
+    await expect(page).toHaveURL('/signin');
+
+    await invited.open(invites.sitter.token);
+    await invited.signInToJoin().click();
+    await expect(page).toHaveURL(/^.*\/signin\?next=/);
+    await signin.signIn().click();
+
+    await expect(page).toHaveURL(AcceptScreen.pathOf(invites.sitter.token));
+    await expect(
+      page.getByRole('heading', { name: `Join ${gardens.home.name} as ${people.robin.name}?` }),
+    ).toBeVisible();
+    await expect(page.getByText("You'll join as a sitter.")).toBeVisible();
+
+    await accept.join(gardens.home.name).click();
+
+    await expect(page).toHaveURL('/');
+    await expect(page.getByRole('heading', { name: gardens.home.name })).toBeVisible();
+    await expect(page.getByText(`${people.ellie.name}'s garden`)).toBeVisible();
+    await today.switchGarden().click();
+    await expect(today.switchTo(gardens.upstairs.name)).toBeVisible();
+
+    // The link works once.
+    await accept.open(invites.sitter.token);
+    await expect(page.getByRole('heading', { name: 'This link cannot be used' })).toBeVisible();
+  });
+});
+
+test('an account already in the garden is offered Open instead of Join, and the link is not used', async ({
+  page,
+  accept,
+  invited,
+}) => {
+  await signIn(page, people.ellie.handle);
+
+  await accept.open(invites.sitter.token);
+
+  await expect(page.getByRole('heading', { name: `You’re already in ${gardens.home.name}` })).toBeVisible();
+  await expect(
+    page.getByText(
+      `This account is already in ${gardens.home.name}, so there is nothing to join. The link has not been used.`,
+    ),
+  ).toBeVisible();
+  await expect(accept.join(gardens.home.name)).toHaveCount(0);
+  await accept.openGarden(gardens.home.name).click();
+  await expect(page).toHaveURL('/');
+  await expect(page.getByRole('heading', { name: gardens.home.name })).toBeVisible();
+
+  // The link is still unused. Opening it while signed in lands on the accept
+  // page again rather than on the join form.
+  await invited.open(invites.sitter.token);
+  await expect(page).toHaveURL(AcceptScreen.pathOf(invites.sitter.token));
+  await expect(page.getByRole('heading', { name: `You’re already in ${gardens.home.name}` })).toBeVisible();
+});
+
+test('a signed-in browser opening a join link is sent to accept it as that account', async ({
+  page,
+  accept,
+  invited,
+  today,
+}) => {
+  await signIn(page, people.robin.handle);
+
+  await invited.open(invites.sitter.token);
+
+  await expect(page).toHaveURL(AcceptScreen.pathOf(invites.sitter.token));
+  await expect(page.getByRole('heading', { name: `Join ${gardens.home.name} as ${people.robin.name}?` })).toBeVisible();
+
+  await accept.join(gardens.home.name).click();
+
+  await expect(page).toHaveURL('/');
+  await expect(page.getByRole('heading', { name: gardens.home.name })).toBeVisible();
+  await today.switchGarden().click();
+  await expect(today.switchTo(gardens.upstairs.name)).toBeVisible();
+});
+
+test('a removed sitter signing in from a join link is back in the garden as the same account @passkey', async ({
+  browser,
+  baseURL,
+  page,
+  account,
+  invited,
+  passkeys,
+  signin,
+  today,
+}) => {
+  await withDevice(page, aWorkingDevice, async () => {
+    // Jo is a sitter in Home with no passkey in the seed, so one is
+    // registered first. Then the owner removes Jo, leaving an account in no
+    // garden.
+    await signIn(page, people.jo.handle);
+    await passkeys.open();
+    await passkeys.add().click();
+    await expect(passkeys.rows()).toHaveCount(1);
+    await page.goto('/more');
+    await page.getByRole('button', { name: 'Sign out' }).click();
+    await expect(page).toHaveURL('/signin');
+
+    const { page: owner, context } = await asAnotherBrowser(browser, baseURL);
+    try {
+      await signIn(owner, people.ellie.handle);
+      const onOwner = new PeopleScreen(owner);
+      await onOwner.open();
+      await onOwner.remove(people.jo.name).click();
+      await onOwner.confirmRemove().click();
+      await expect(onOwner.row(people.jo.name)).toHaveCount(0);
+    } finally {
+      await context.close();
+    }
+
+    await invited.open(invites.sitter.token);
+    await invited.signInToJoin().click();
+    await signin.signIn().click();
+
+    await expect(page).toHaveURL('/');
+    await expect(page.getByRole('heading', { name: gardens.home.name })).toBeVisible();
+    await expect(today.switchGarden()).toHaveCount(0);
+    await account.open();
+    await expect(account.name()).toHaveValue(people.jo.name);
+  });
+});
+
+test('a link made on Invite someone joins a new person from another browser @passkey', async ({
+  browser,
+  baseURL,
+  page,
+  invite,
+  people: peopleScreen,
+}) => {
+  await signIn(page, people.ellie.handle);
+  await peopleScreen.open();
+  await peopleScreen.inviteSomeone().click();
+  await invite.chip('Member').click();
+  await invite.create().click();
+  const token = InvitedScreen.tokenOf((await invite.link().textContent()) ?? '');
+
+  const { page: phone, context } = await asAnotherBrowser(browser, baseURL);
+  try {
+    await withDevice(phone, aWorkingDevice, async () => {
+      const onPhone = new InvitedScreen(phone);
+      await onPhone.open(token);
+      await expect(
+        phone.getByRole('heading', { name: `${people.ellie.name} invited you to ${gardens.home.name}` }),
+      ).toBeVisible();
+      await expect(phone.getByText("You'll join as a member.")).toBeVisible();
+      await onPhone.name().fill('Kim');
+      await onPhone.timezone().selectOption('Europe/London');
+      await onPhone.join().click();
+
+      await expect(phone).toHaveURL('/install?after=invite');
+    });
+  } finally {
     await context.close();
   }
 });

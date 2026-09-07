@@ -39,4 +39,9 @@ export class InvitedScreen {
   signIn(): Locator {
     return this.page.getByRole('link', { name: 'sign in' });
   }
+
+  // The link under the join form for somebody who already has an account.
+  signInToJoin(): Locator {
+    return this.page.getByRole('link', { name: 'Sign in to join as yourself' });
+  }
 }
