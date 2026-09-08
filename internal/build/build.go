@@ -2,10 +2,7 @@
 // toolchain.
 package build
 
-import (
-	"runtime/debug"
-	"strings"
-)
+import "runtime/debug"
 
 // Info is the running binary's version, revision and toolchain. go build
 // embeds these automatically when building inside a git working tree.
@@ -26,10 +23,7 @@ func Read() Info {
 		return info
 	}
 
-	// The image's build context is an allowlist, so git in the build stage
-	// sees the tracked files left out as deletions and marks every build
-	// dirty. The suffix would be on every release and means nothing.
-	info.Version = strings.TrimSuffix(buildInfo.Main.Version, "+dirty")
+	info.Version = buildInfo.Main.Version
 	info.GoVersion = buildInfo.GoVersion
 
 	for _, setting := range buildInfo.Settings {

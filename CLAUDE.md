@@ -8,6 +8,7 @@ Everything runs through mise. It pins the toolchain and holds the commands:
 
 ```
 mise run build     # build ./sprig with the version and revision stamped in
+mise run build:image # cross-compile into dist/linux/<arch>/sprig, the files the Dockerfile copies
 mise run dev       # Postgres in a container, the server on the host, rebuilt on each change
 mise run dev:stop  # stop the Postgres container that dev leaves running
 mise run dev:reset # delete the dev database and reseed it from empty

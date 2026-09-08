@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+#MISE description="Cross-compile the server into dist/linux/<arch>/sprig, the files the Dockerfile copies"
+#USAGE flag "--dev" help="Compile in the development sign-in, for the e2e suite. Written under dist/dev instead"
+#USAGE flag "--arch <arch>" help="Only this architecture. Both amd64 and arm64 when omitted"
+set -euo pipefail
+
+cd "${MISE_PROJECT_ROOT:?}"
+
+# A dev build is written to a directory the Dockerfile does not copy from by default
+tags=""
+dir="dist"
+if [ "${usage_dev:-false}" = "true" ]; then
+  tags="dev"
+  dir="dist/dev"
+fi
+
+for arch in ${usage_arch:-amd64 arm64}; do
+  out="$dir/linux/$arch/sprig"
+  CGO_ENABLED=0 GOOS=linux GOARCH="$arch" go build -tags "$tags" -ldflags='-s -w' -o "$out" ./cmd/sprig
+  # Every binary written under dist/ is checked, whatever flags built it
+  if [ "$dir" = "dist" ] && grep -q -a -F /dev/signin "$out"; then
+    echo "build:image: $out contains the development sign-in" >&2
+    exit 1
+  fi
+done

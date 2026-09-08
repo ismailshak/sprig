@@ -66,8 +66,10 @@ trap cleanup EXIT
 go build -o seed ./cmd/seed
 export SPRIG_SEED_BINARY="$MISE_PROJECT_ROOT/seed"
 
-# Built once because every stack starts the same sprig-app:dev tag
+# Built once because every stack starts the same sprig-app:dev tag. Docker builds the image for the host's
+# architecture, so the binary is compiled for that one
 if [ "${usage_no_build:-false}" != "true" ]; then
+  mise run build:image --dev --arch "$(go env GOARCH)"
   docker compose build app
 fi
 

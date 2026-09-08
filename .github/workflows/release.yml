@@ -33,6 +33,10 @@ jobs:
         run: |
           git fetch --no-tags origin main
           git merge-base --is-ancestor "$GITHUB_SHA" FETCH_HEAD
+      - name: Set up the toolchain
+        uses: ./.github/actions/setup-go
+      - name: Compile the binaries
+        run: mise run build:image
       - name: Work out the tags
         id: meta
         uses: docker/metadata-action@v6
@@ -61,7 +65,6 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          # No cache-from. A published image is built from scratch so a stale cached layer cannot get into it
       # A tag cut with gh release create already has a release. A tag pushed with git gets one here,
       # with notes from the merged pull request titles. It is the last step because a release must
       # not name an image that is not on GHCR yet.

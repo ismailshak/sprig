@@ -8,9 +8,9 @@ import (
 	"testing"
 )
 
-// The Dockerfile and mise run build pass no build tag, so a plain go build
-// produces the shipped binary. Checking the binary itself catches the route
-// leaking regardless of how the route table is assembled.
+// The shipped binary is built with no tag, so a plain go build is the one to
+// check. Checking the binary itself catches the route leaking regardless of
+// how the route table is assembled.
 func TestBuild_ProductionBinaryHasNoDevelopmentSignIn(t *testing.T) {
 	const route = "/dev/signin"
 

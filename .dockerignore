@@ -1,11 +1,3 @@
 *
 
-!cmd/
-!internal/
-!web/
-!db/
-!go.mod
-!go.sum
-
-# go build stamps the revision from here.
-!.git/
+!dist/
