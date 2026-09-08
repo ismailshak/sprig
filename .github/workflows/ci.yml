@@ -62,6 +62,7 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: .
+          # load needs one platform, because the runner's Docker cannot store a multi-platform index
           platforms: linux/amd64
           build-args: GO_TAGS=dev
           load: true
@@ -95,7 +96,7 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: .
-          platforms: linux/amd64
+          platforms: linux/amd64,linux/arm64
           push: false
           cache-from: type=gha,scope=image
           cache-to: type=gha,scope=image,mode=max
@@ -133,7 +134,7 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: .
-          platforms: linux/amd64
+          platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
