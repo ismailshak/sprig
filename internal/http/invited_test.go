@@ -602,8 +602,13 @@ func TestInvited_ABrowserAlreadySignedInGetsANewSessionInPlaceOfItsOld(t *testin
 // request to an invite route goes through the rate limiters the route table
 // wraps it in. The trusted header is empty, so an address is the request's
 // RemoteAddr.
+//
+// The handlers inside New run on the wall clock and not on the fixture's
+// Thursday, so the sitter's link is re-dated from now. On the fixture's dates
+// it ran out on 8 September 2026.
 func invitedMux(t *testing.T, f *invitedFixture) http.Handler {
 	t.Helper()
+	f.exec(t, `UPDATE invite SET expires_at = now() + interval '7 days', membership_expires_at = now() + interval '14 days' WHERE token_hash = $1`, auth.HashToken(sitterLink))
 	return New(testLogger, f.handler.sessions, f.handler.passkeys, rejectEveryToken, noLiveToken, f.queries, testPhotos(t), testTemplates(), testAssets(), "", false, testPushKey, nil, nil)
 }
 
