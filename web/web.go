@@ -15,7 +15,7 @@ var embedded embed.FS
 var Templates = mustSub(embedded, "templates")
 
 // Static is the web/static directory with the "static/" prefix stripped, so
-// the stylesheet is "app.css" and htmx is "vendor/htmx-2.0.10.min.js".
+// the stylesheet is "app.css" and htmx is "vendor/htmx.min.js".
 var Static = mustSub(embedded, "static")
 
 func mustSub(fsys fs.FS, dir string) fs.FS {

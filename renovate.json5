@@ -1,0 +1,43 @@
+{
+  $schema: 'https://docs.renovatebot.com/renovate-schema.json',
+  extends: ['config:recommended'],
+  timezone: 'America/New_York',
+  schedule: ['after 6am on sunday'],
+  osvVulnerabilityAlerts: true,
+  semanticCommitType: 'chore',
+  semanticCommitScope: 'deps',
+  postUpdateOptions: ['gomodTidy', 'gomodUpdateImportPaths'],
+  // A workflow commits the vendored htmx file to Renovate's branch as this
+  // author. Ignoring the author so Renovate doesn't stop rebasing the branch.
+  gitIgnoredAuthors: ['41898282+github-actions[bot]@users.noreply.github.com'],
+  packageRules: [
+    {
+      matchUpdateTypes: ['minor', 'patch', 'digest'],
+      groupName: 'all non-major dependencies',
+    },
+    {
+      matchPackageNames: ['*'],
+      semanticCommitType: 'chore',
+    },
+  ],
+  customManagers: [
+    // The htmx version pinned under [vars] in mise.toml. htmx is a vendored
+    // file with no package manifest.
+    {
+      customType: 'regex',
+      managerFilePatterns: ['/^mise\\.toml$/'],
+      matchStrings: ['\\nhtmx = "(?<currentValue>[^"]+)"'],
+      depNameTemplate: 'htmx.org',
+      datasourceTemplate: 'npm',
+    },
+    // The mise version the setup-go action installs
+    {
+      customType: 'regex',
+      managerFilePatterns: ['/^\\.github/actions/setup-go/action\\.yml$/'],
+      matchStrings: ['uses: jdx/mise-action@[^\\n]*\\n\\s+with:\\n\\s+version: (?<currentValue>\\S+)'],
+      depNameTemplate: 'jdx/mise',
+      datasourceTemplate: 'github-releases',
+      extractVersionTemplate: '^v(?<version>.*)$',
+    },
+  ],
+}

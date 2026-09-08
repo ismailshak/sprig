@@ -1,0 +1,49 @@
+name: Vendor htmx
+# Renovate bumps the htmx version pinned in mise.toml but cannot fetch the
+# file. This workflow fetches it, commits it to the pull request's branch and
+# dispatches CI on the new head.
+on:
+  pull_request:
+    paths: [mise.toml]
+
+permissions:
+  contents: read
+
+# A rebase while this job is running would make its push a non-fast-forward
+concurrency:
+  group: vendor-htmx-${{ github.head_ref }}
+  cancel-in-progress: true
+
+jobs:
+  vendor:
+    if: github.event.pull_request.user.login == 'renovate[bot]'
+    runs-on: ubuntu-latest
+    permissions:
+      # contents to push the commit, actions to dispatch CI
+      contents: write
+      actions: write
+    steps:
+      - name: Check out the branch
+        uses: actions/checkout@v7
+        with:
+          # The branch itself rather than the merge commit, so the push lands on it
+          ref: ${{ github.head_ref }}
+      - name: Set up the toolchain
+        uses: ./.github/actions/setup-go
+      - name: Vendor the pinned release
+        run: mise run vendor:htmx
+      - name: Commit the file and dispatch CI on it
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git add --all web/static/vendor
+          if git diff --cached --quiet; then
+            echo "the vendored file already matches the pin"
+            exit 0
+          fi
+          # Renovate ignores commits by this author, so it keeps rebasing the branch
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit --message "chore(deps): vendor htmx $(mise config get vars.htmx)"
+          git push
+          gh workflow run ci.yml --ref "$GITHUB_HEAD_REF"

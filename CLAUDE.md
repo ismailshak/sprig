@@ -20,6 +20,7 @@ mise run format    # prettier over e2e and the app's scripts in web/static
 mise run hooks     # point git at .githooks, once per clone
 mise run migrate
 mise run migrate:new <name>
+mise run vendor:htmx # replace the vendored htmx with the release pinned in mise.toml
 mise run release   # <bump> is patch, minor or major. Tag main with the next version and push it
 ```
 
@@ -104,6 +105,6 @@ Not allowed anywhere: a metaphor, a story, wit, a verb or noun standing in for t
 
 The subject line is the whole message. No body, no bullets, no diff summary, however large the change. Reasoning belongs in the file being changed or in the knowledge repo, where it will be read again.
 
-Scopes: `repo`, `tooling`, `ci`, `docker`, `http`, `store`, `db`, `schedule`, `auth`, `photo`, `push`, `web`, `e2e`.
+Scopes: `repo`, `tooling`, `ci`, `docker`, `http`, `store`, `db`, `schedule`, `auth`, `photo`, `push`, `web`, `e2e`, and `deps` for the dependency bumps Renovate opens.
 
 When several scopes land together, foundational goes before dependent: config and tooling, then migrations and queries, then the handlers and templates that use them.
