@@ -324,6 +324,9 @@ var routeAccess = map[string]access{
 		path:       revokeTokenPath(rosewoodTokenID),
 		foreign:    revokeTokenPath(fairviewTokenID),
 	},
+	// The path has no id in it. The garden comes from the token, so there is
+	// no foreign path to try.
+	"GET /api/chores": {bearer: true},
 	// Restore puts back an event that has been deleted, so it reads no event.
 	// The plant in the path is what has to be the garden's.
 	"POST /plants/{plant}/log/{event}/restore": {
@@ -585,8 +588,8 @@ func TestRoutes_EachRouteRefusesStrangersAndRolesAsItsEntrySays(t *testing.T) {
 			New(logger, testSessions(), testPasskeys(), rejectEveryToken, tokens, queries, testPhotos(t), testTemplates(), testAssets(), "", false, testPushKey, nil, nil).ServeHTTP(rec, withToken(httptest.NewRequestWithContext(t.Context(), method, path, nil)))
 			sentToSignIn = rec.Code == http.StatusSeeOther && rec.Header().Get("Location") == signInPath
 			switch {
-			case a.bearer && (rec.Code == http.StatusUnauthorized || rec.Code == http.StatusNotFound):
-				t.Errorf("a live token got %d from the route it is for", rec.Code)
+			case a.bearer && rec.Code != http.StatusOK:
+				t.Errorf("a live token got %d from the route it is for, want %d", rec.Code, http.StatusOK)
 			case !a.bearer && tokensResolved > 0:
 				t.Errorf("a route that takes the session cookie looked up the API token")
 			case !a.bearer && !a.public && !sentToSignIn:
