@@ -135,9 +135,10 @@ type Day struct {
 	Overdue  []Row
 	DueToday []Row
 	ComingUp []Row
-	// Next is the plant due soonest after the ComingUp window. The empty
-	// state names it. It is nil when nothing is scheduled beyond the week.
-	Next *Row
+	// Next is every plant due on the soonest day beyond the ComingUp window,
+	// in name order. It is empty when nothing is due beyond the week. The Today
+	// page names these plants when the three sections are all empty.
+	Next []Row
 }
 
 // Row is a plant on the Today page and the care that put it there.
@@ -156,6 +157,7 @@ type Row struct {
 // whose schedules are all dormant or spent appears in none of them.
 func Today(lines []Line) Day {
 	var day Day
+	var later []Row
 	for _, row := range rows(lines) {
 		switch {
 		case row.Care.State == Overdue:
@@ -164,14 +166,20 @@ func Today(lines []Line) Day {
 			day.DueToday = append(day.DueToday, row)
 		case row.Care.Days <= comingUpDays:
 			day.ComingUp = append(day.ComingUp, row)
-		case day.Next == nil || compareRows(row, *day.Next) < 0:
-			next := row
-			day.Next = &next
+		default:
+			later = append(later, row)
 		}
 	}
 	slices.SortStableFunc(day.Overdue, compareRows)
 	slices.SortStableFunc(day.DueToday, compareRows)
 	slices.SortStableFunc(day.ComingUp, compareRows)
+	slices.SortStableFunc(later, compareRows)
+	for _, row := range later {
+		if soon(row.Care) != soon(later[0].Care) {
+			break
+		}
+		day.Next = append(day.Next, row)
+	}
 	return day
 }
 

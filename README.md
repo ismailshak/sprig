@@ -137,7 +137,7 @@ Back up the Postgres database and the photo directory together.
 
 ### The chores endpoint
 
-`GET /api/chores` returns what is overdue and due today in one garden as JSON, for a display such as a TRMNL to poll. It takes an API token from the garden's Tokens page in the `Authorization: Bearer` header. A session cookie is not accepted. A missing, revoked or expired token gets a 401.
+`GET /api/chores` returns what is overdue, due today and coming up in one garden as JSON, for a display such as a TRMNL to poll. It takes an API token from the garden's Tokens page in the `Authorization: Bearer` header. A session cookie is not accepted. A missing, revoked or expired token gets a 401.
 
 ```sh
 curl -H "Authorization: Bearer sprg_..." https://sprig.example.com/api/chores
@@ -151,11 +151,16 @@ curl -H "Authorization: Bearer sprg_..." https://sprig.example.com/api/chores
     { "plant": "Big Fella", "location": "Living room", "care": "Water", "due": "2026-09-01", "late": "2 days late" },
     { "plant": "Doris", "location": "Bedroom", "care": "Water", "due": "2026-09-03", "late": "" },
     { "plant": "Nigel", "location": "Bathroom", "care": "Water", "due": "2026-09-03", "late": "" }
+  ],
+  "upcoming": [
+    { "plant": "Trail Mix", "location": "Kitchen", "care": "Water", "due": "2026-09-04", "when": "tomorrow" },
+    { "plant": "Opuntia microdasys", "location": "Windowsill", "care": "Water", "due": "2026-09-07", "when": "Monday" },
+    { "plant": "Spike", "location": "Windowsill", "care": "Water", "due": "2026-09-15", "when": "in 12 days" }
   ]
 }
 ```
 
-The list is in the order the Today page shows, most overdue first. A plant with two cares due appears once per care. `date` is today in the timezone of the account that created the token. The endpoint allows six requests a minute per token and returns 429 with `Retry-After` past that. It is not counted per address, so a proxy setting is not needed for it.
+`chores` is in the order the Today page shows, most overdue first. A plant with two cares due appears once per care. `upcoming` is every care not yet due, soonest first, with `when` in the words the Today page uses. `date` is today in the timezone of the account that created the token. The endpoint allows six requests a minute per token and returns 429 with `Retry-After` past that. It is not counted per address, so a proxy setting is not needed for it.
 
 ## Developing
 

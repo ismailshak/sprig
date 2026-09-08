@@ -333,6 +333,19 @@ func TestToday_TheEmptyStateDependsOnWhyTheListIsEmpty(t *testing.T) {
 		}
 	})
 
+	t.Run("two plants due the same day beyond the week are both named", func(t *testing.T) {
+		f := rosewood(t)
+		// Doris was last watered on 13 August, so a 33-day interval puts the next
+		// watering on 15 September, the day Spike's is due.
+		f.exec(t, "UPDATE care_schedule SET interval_count = 33 WHERE plant_id = $1", dorisID)
+		f.exec(t, "DELETE FROM care_schedule WHERE plant_id = ANY($1)", []uuid.UUID{bigFellaID, nigelID, trailMixID, opuntiaID, sproutID})
+
+		page := f.show(t)
+		if want := "Doris and Spike are next, in 12 days."; !strings.Contains(page, want) {
+			t.Errorf("the page lacks %s:\n%s", want, text(page))
+		}
+	})
+
 	t.Run("a day with nothing scheduled shows the leaf rather than the tick", func(t *testing.T) {
 		f := rosewood(t)
 		clearTheWeek(t, f)

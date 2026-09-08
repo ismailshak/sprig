@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/ismailshak/sprig/internal/schedule"
+	"github.com/ismailshak/sprig/internal/store"
 )
 
 func TestWhenWord(t *testing.T) {
@@ -53,6 +54,31 @@ func TestOverdueWord(t *testing.T) {
 	}
 	if got := overdueWord(month, today); got != "overdue since March" {
 		t.Errorf("a month-precise line reads %q, want overdue since March", got)
+	}
+}
+
+func TestNextLine_NamesOneOrTwoPlantsAndCountsThreeOrMore(t *testing.T) {
+	today := time.Date(2026, time.September, 3, 0, 0, 0, 0, time.UTC)
+	row := func(name string) schedule.Row {
+		return schedule.Row{
+			Plant: store.Plant{Nickname: &name},
+			Care:  schedule.Line{Due: today.AddDate(0, 0, 12), Precision: schedule.PrecisionDay, Days: 12},
+		}
+	}
+	spike, doris, bigFella := row("Spike"), row("Doris"), row("Big Fella")
+
+	cases := []struct {
+		rows []schedule.Row
+		want string
+	}{
+		{[]schedule.Row{spike}, "Spike is next, in 12 days."},
+		{[]schedule.Row{doris, spike}, "Doris and Spike are next, in 12 days."},
+		{[]schedule.Row{bigFella, doris, spike}, "Big Fella and 2 more are next, in 12 days."},
+	}
+	for _, c := range cases {
+		if got := nextLine(c.rows, today); got != c.want {
+			t.Errorf("%d plants read %q, want %q", len(c.rows), got, c.want)
+		}
 	}
 }
 

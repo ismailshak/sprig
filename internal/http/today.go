@@ -366,8 +366,8 @@ func newTodayEmpty(principal auth.Principal, day schedule.Day, latest []store.Ca
 	if len(day.ComingUp) > 0 {
 		return empty
 	}
-	if next := day.Next; next != nil {
-		empty.Line = fmt.Sprintf("%s is next, %s.", next.Plant.DisplayName(), comingWord(next.Care, now))
+	if len(day.Next) > 0 {
+		empty.Line = nextLine(day.Next, now)
 	}
 	empty.Action = &link{Label: "See all plants", Href: "/plants"}
 	return empty

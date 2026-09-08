@@ -201,7 +201,7 @@ func TestToday_GroupsPlantsBySection(t *testing.T) {
 	if names := rowNames(got.ComingUp); !slices.Equal(names, []string{"Tomorrow", "Week"}) {
 		t.Errorf("ComingUp = %v, want [Tomorrow Week]", names)
 	}
-	if got.Next == nil || got.Next.Plant.DisplayName() != "Beyond" || got.Next.Care.Days != 8 {
+	if names := rowNames(got.Next); !slices.Equal(names, []string{"Beyond"}) || got.Next[0].Care.Days != 8 {
 		t.Errorf("Next = %+v, want Beyond in 8 days", got.Next)
 	}
 }
@@ -307,8 +307,27 @@ func TestToday_NextIsTheSoonestBeyondTheWeek(t *testing.T) {
 	}
 
 	got := Today(Resolve(rows, events, now))
-	if got.Next == nil || got.Next.Plant.DisplayName() != "Near" || got.Next.Care.Days != 11 {
+	if names := rowNames(got.Next); !slices.Equal(names, []string{"Near"}) || got.Next[0].Care.Days != 11 {
 		t.Errorf("Next = %+v, want Near in 11 days", got.Next)
+	}
+}
+
+func TestToday_NextHoldsEveryPlantDueOnTheSoonestDayBeyondTheWeek(t *testing.T) {
+	now := day(time.September, 3)
+	rows := []store.ListCareSchedulesRow{
+		scheduleRow(plantNamed("Far"), water, cadence(set, 30, UnitDay)),
+		scheduleRow(plantNamed("Second"), water, cadence(set, 30, UnitDay)),
+		scheduleRow(plantNamed("First"), water, cadence(set, 30, UnitDay)),
+	}
+	events := []store.CareEvent{
+		eventOn(rows[0].Plant, water, day(time.August, 20)),
+		eventOn(rows[1].Plant, water, day(time.August, 15)),
+		eventOn(rows[2].Plant, water, day(time.August, 15)),
+	}
+
+	got := Today(Resolve(rows, events, now))
+	if names := rowNames(got.Next); !slices.Equal(names, []string{"First", "Second"}) {
+		t.Errorf("Next = %v, want [First Second], the two due on the 14th in name order and not Far on the 19th", names)
 	}
 }
 

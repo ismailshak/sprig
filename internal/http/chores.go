@@ -1,9 +1,12 @@
 package http
 
 import (
+	"cmp"
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"slices"
+	"strings"
 	"time"
 
 	"golang.org/x/time/rate"
@@ -15,8 +18,8 @@ import (
 
 const choresPath = "/api/chores"
 
-// chores handles GET /api/chores. It returns the garden's overdue and
-// due-today cares as JSON to a caller holding an API token.
+// chores handles GET /api/chores. It returns the garden's overdue, due-today
+// and upcoming cares as JSON to a caller holding an API token.
 type chores struct {
 	logger  *slog.Logger
 	queries *store.Queries
@@ -32,6 +35,9 @@ type choresResponse struct {
 	// Chores is every care that is overdue or due today, most overdue first.
 	// It is an empty array rather than null when there is nothing to do.
 	Chores []chore `json:"chores"`
+	// Upcoming is every care not yet due, soonest first. It is an empty array
+	// rather than null when there is none.
+	Upcoming []upcomingCare `json:"upcoming"`
 }
 
 // chore is one care on one plant.
@@ -49,6 +55,19 @@ type chore struct {
 	// Late is how far past due the care is, such as "2 days late". It is
 	// empty for a care due today.
 	Late string `json:"late"`
+}
+
+// upcomingCare is one care on one plant that is not yet due.
+type upcomingCare struct {
+	Plant    string `json:"plant"`
+	Location string `json:"location"`
+	Care     string `json:"care"`
+	// Due is the day the care falls due, as YYYY-MM-DD. For a schedule
+	// precise only to a month it is the first of that month.
+	Due string `json:"due"`
+	// When is the due day in the words the Today page uses: "tomorrow", a
+	// weekday name, "in 12 days" or "in March".
+	When string `json:"when"`
 }
 
 func (h *chores) show(w http.ResponseWriter, r *http.Request) {
@@ -73,9 +92,9 @@ func (h *chores) show(w http.ResponseWriter, r *http.Request) {
 		serverError(h.logger, w, r, "list the latest care", err)
 		return
 	}
-	day := schedule.Today(schedule.Resolve(schedules, latest, now))
+	lines := schedule.Resolve(schedules, latest, now)
 
-	body, err := json.Marshal(newChoresResponse(principal, day, now))
+	body, err := json.Marshal(newChoresResponse(principal, lines, now))
 	if err != nil {
 		serverError(h.logger, w, r, "encode the chores", err)
 		return
@@ -88,13 +107,16 @@ func (h *chores) show(w http.ResponseWriter, r *http.Request) {
 
 // newChoresResponse lists the overdue plants first and then those due today,
 // in the same order as the Today page. A plant with two cares due gets a chore
-// for each, the overdue one first.
-func newChoresResponse(principal auth.Principal, day schedule.Day, now time.Time) choresResponse {
+// for each, the overdue one first. Upcoming holds the cares that are not yet
+// due, soonest first.
+func newChoresResponse(principal auth.Principal, lines []schedule.Line, now time.Time) choresResponse {
 	response := choresResponse{
-		Garden: principal.Garden.Name,
-		Date:   now.Format(time.DateOnly),
-		Chores: []chore{},
+		Garden:   principal.Garden.Name,
+		Date:     now.Format(time.DateOnly),
+		Chores:   []chore{},
+		Upcoming: []upcomingCare{},
 	}
+	day := schedule.Today(lines)
 	for _, rows := range [][]schedule.Row{day.Overdue, day.DueToday} {
 		for _, row := range rows {
 			for _, state := range []schedule.State{schedule.Overdue, schedule.DueToday} {
@@ -105,6 +127,9 @@ func newChoresResponse(principal auth.Principal, day schedule.Day, now time.Time
 				}
 			}
 		}
+	}
+	for _, line := range upcomingLines(lines) {
+		response.Upcoming = append(response.Upcoming, newUpcomingCare(line, now))
 	}
 	return response
 }
@@ -122,6 +147,40 @@ func newChore(line schedule.Line, now time.Time) chore {
 		c.Late = overdueWord(line, now)
 	}
 	return c
+}
+
+func newUpcomingCare(line schedule.Line, now time.Time) upcomingCare {
+	c := upcomingCare{
+		Plant: line.Plant.DisplayName(),
+		Care:  line.CareType.Name,
+		Due:   line.Due.Format(time.DateOnly),
+		When:  comingWord(line, now),
+	}
+	if line.Plant.Location != nil {
+		c.Location = *line.Plant.Location
+	}
+	return c
+}
+
+// upcomingLines returns the lines not yet due, soonest first. Two cares due on
+// the same day are ordered by plant name, then plant id, then care name, so the
+// order does not change between polls.
+func upcomingLines(lines []schedule.Line) []schedule.Line {
+	var out []schedule.Line
+	for _, line := range lines {
+		if line.State == schedule.Upcoming {
+			out = append(out, line)
+		}
+	}
+	slices.SortStableFunc(out, func(a, b schedule.Line) int {
+		return cmp.Or(
+			cmp.Compare(a.Days, b.Days),
+			strings.Compare(strings.ToLower(a.Plant.DisplayName()), strings.ToLower(b.Plant.DisplayName())),
+			cmp.Compare(a.Plant.ID.String(), b.Plant.ID.String()),
+			strings.Compare(a.CareType.Name, b.CareType.Name),
+		)
+	})
+	return out
 }
 
 // choresLimits returns the rate limiter wrapped around GET /api/chores. It is

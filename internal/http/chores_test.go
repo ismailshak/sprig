@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"slices"
 	"testing"
 	"time"
 
@@ -55,7 +56,7 @@ func decodeChores(t *testing.T, body string) choresResponse {
 	return response
 }
 
-func TestChores_OnlyTheOverdueAndDueTodayCaresAreListed(t *testing.T) {
+func TestChores_TheOverdueAndDueTodayCaresAreTheChoresAndTheRestAreUpcoming(t *testing.T) {
 	_, handler, principal := choresGarden(t)
 
 	body := poll(t, handler, principal).Body.String()
@@ -65,9 +66,35 @@ func TestChores_OnlyTheOverdueAndDueTodayCaresAreListed(t *testing.T) {
 	want := `{"garden":"Rosewood","date":"2026-09-03","chores":[` +
 		`{"plant":"Big Fella","location":"Living room","care":"Water","due":"2026-09-01","late":"2 days late"},` +
 		`{"plant":"Doris","location":"Bedroom","care":"Water","due":"2026-09-03","late":""},` +
-		`{"plant":"Nigel","location":"Bathroom","care":"Water","due":"2026-09-03","late":""}]}`
+		`{"plant":"Nigel","location":"Bathroom","care":"Water","due":"2026-09-03","late":""}],` +
+		`"upcoming":[` +
+		`{"plant":"Trail Mix","location":"Kitchen","care":"Water","due":"2026-09-04","when":"tomorrow"},` +
+		`{"plant":"Opuntia microdasys","location":"Windowsill","care":"Water","due":"2026-09-07","when":"Monday"},` +
+		`{"plant":"Sprout","location":"","care":"Water","due":"2026-09-08","when":"Tuesday"},` +
+		`{"plant":"Nigel","location":"Bathroom","care":"Feed","due":"2026-09-10","when":"in 7 days"},` +
+		`{"plant":"Spike","location":"Windowsill","care":"Water","due":"2026-09-15","when":"in 12 days"}]}`
 	if body != want {
 		t.Errorf("the body reads\n%s\nwant\n%s", body, want)
+	}
+}
+
+func TestChores_CaresDueTheSameDayAreListedByPlantName(t *testing.T) {
+	f, handler, principal := choresGarden(t)
+	// Spike's watering is due on the 15th. These intervals move Big Fella's
+	// and Doris's there too. The schedules arrive ordered by location, so Doris
+	// in the Bedroom comes before Big Fella in the Living room, and a sort on
+	// the day alone would leave her first.
+	f.exec(t, "UPDATE care_schedule SET interval_count = 24 WHERE plant_id = $1", bigFellaID)
+	f.exec(t, "UPDATE care_schedule SET interval_count = 33 WHERE plant_id = $1", dorisID)
+
+	got := decodeChores(t, poll(t, handler, principal).Body.String())
+
+	var names []string
+	for _, u := range got.Upcoming[len(got.Upcoming)-3:] {
+		names = append(names, u.Plant)
+	}
+	if want := []string{"Big Fella", "Doris", "Spike"}; !slices.Equal(names, want) {
+		t.Errorf("the three cares due on the 15th read %v, want %v", names, want)
 	}
 }
 
@@ -147,13 +174,13 @@ func TestChores_APlantInAnotherGardenIsNotInTheList(t *testing.T) {
 	}
 }
 
-func TestChores_AGardenWithNothingDueSendsAnEmptyListRatherThanNull(t *testing.T) {
+func TestChores_AGardenWithNothingScheduledSendsEmptyListsRatherThanNull(t *testing.T) {
 	f, handler, principal := choresGarden(t)
 	f.exec(t, "DELETE FROM care_schedule WHERE garden_id = $1", rosewoodID)
 
 	body := poll(t, handler, principal).Body.String()
 
-	want := `{"garden":"Rosewood","date":"2026-09-03","chores":[]}`
+	want := `{"garden":"Rosewood","date":"2026-09-03","chores":[],"upcoming":[]}`
 	if body != want {
 		t.Errorf("the body reads\n%s\nwant\n%s", body, want)
 	}
