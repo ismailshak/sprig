@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+#MISE description="Replace the vendored htmx under web/static/vendor with the release pinned in mise.toml, fetched from the npm registry"
+set -euo pipefail
+
+cd "${MISE_PROJECT_ROOT:?}"
+
+# Read the pin with mise rather than a #MISE env header, because such a header
+# makes this file a config that every clone has to run mise trust on.
+version="$(mise config get vars.htmx)"
+target="web/static/vendor/htmx.min.js"
+
+tmp="$(mktemp -d)"
+trap 'rm -rf "$tmp"' EXIT
+
+# The registry's record of the release names its tarball and the sha512 it was
+# published with, so a corrupted download fails before anything is extracted.
+curl -fsSL "https://registry.npmjs.org/htmx.org/$version" >"$tmp/release.json"
+tarball="$(node -p 'JSON.parse(require("fs").readFileSync(0, "utf8")).dist.tarball' <"$tmp/release.json")"
+integrity="$(node -p 'JSON.parse(require("fs").readFileSync(0, "utf8")).dist.integrity' <"$tmp/release.json")"
+
+curl -fsSL "$tarball" -o "$tmp/htmx.tgz"
+actual="sha512-$(openssl dgst -sha512 -binary "$tmp/htmx.tgz" | openssl base64 -A)"
+if [ "$actual" != "$integrity" ]; then
+  echo "vendor:htmx: $tarball has integrity $actual, the registry published $integrity" >&2
+  exit 1
+fi
+
+tar -xzf "$tmp/htmx.tgz" -C "$tmp" package/dist/htmx.min.js
+
+cp "$tmp/package/dist/htmx.min.js" "$target"
+echo "vendor:htmx: wrote htmx $version to $target"

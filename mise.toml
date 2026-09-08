@@ -2,6 +2,11 @@
 # Defaults to the compose database, unless the shell overrides it.
 SPRIG_DATABASE_URL = "{{ env.SPRIG_DATABASE_URL | default(value='postgres://sprig:sprig@localhost:5432/sprig?sslmode=disable') }}"
 
+# The htmx release vendored under web/static/vendor, pinned here so Renovate
+# can bump it. mise run vendor:htmx fetches that release and replaces the file.
+[vars]
+htmx = "2.0.10"
+
 [tools]
 go = "1.27.1"
 golangci-lint = "2.13.2"
