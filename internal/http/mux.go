@@ -44,7 +44,9 @@ type middleware func(http.Handler) http.Handler
 // signupEnabled is SPRIG_SIGNUP_ENABLED, whether Set up your garden is served
 // on an install that already has an account. pushKey is the VAPID public key
 // the Notifications page gives the browser. It is empty when push is off.
-func routes(logger *slog.Logger, sessions *auth.Sessions, passkeys *auth.Passkeys, queries *store.Queries, photos *photo.Store, templates *Templates, assets *Assets, trustedIPHeader string, signupEnabled bool, pushKey string, wake func(), notify notifyActivity) []route {
+// test sends that page's test message to one browser. It is nil when push is
+// off.
+func routes(logger *slog.Logger, sessions *auth.Sessions, passkeys *auth.Passkeys, queries *store.Queries, photos *photo.Store, templates *Templates, assets *Assets, trustedIPHeader string, signupEnabled bool, pushKey string, wake func(), notify notifyActivity, test sendTest) []route {
 	todayHandler := &today{logger: logger, queries: queries, templates: templates, now: time.Now, notify: notify}
 	plantsHandler := &plants{logger: logger, queries: queries, photos: photos, templates: templates, now: time.Now}
 	activityHandler := &activity{logger: logger, queries: queries, templates: templates, now: time.Now}
@@ -53,7 +55,7 @@ func routes(logger *slog.Logger, sessions *auth.Sessions, passkeys *auth.Passkey
 	// is already signed in.
 	resolver := auth.NewResolver(sessions, queries)
 	passkeyHandler := &passkeyCeremony{logger: logger, passkeys: passkeys, sessions: sessions, queries: queries, templates: templates, now: time.Now}
-	moreHandler := &more{logger: logger, sessions: sessions, queries: queries, photos: photos, templates: templates, build: build.Read(), now: time.Now, pushKey: pushKey, wake: wake}
+	moreHandler := &more{logger: logger, sessions: sessions, queries: queries, photos: photos, templates: templates, build: build.Read(), now: time.Now, pushKey: pushKey, wake: wake, test: test}
 	setupHandler := &setup{logger: logger, passkeys: passkeys, sessions: sessions, resolver: resolver, queries: queries, templates: templates, now: time.Now, enabled: signupEnabled, wake: wake}
 	invitedHandler := &invited{logger: logger, passkeys: passkeys, sessions: sessions, resolver: resolver, queries: queries, templates: templates, now: time.Now, wake: wake}
 	recoverHandler := &recoverAccount{logger: logger, passkeys: passkeys, queries: queries, templates: templates, now: time.Now}
@@ -123,6 +125,7 @@ func routes(logger *slog.Logger, sessions *auth.Sessions, passkeys *auth.Passkey
 		{pattern: "GET " + notificationsPath, handler: http.HandlerFunc(moreHandler.notifications)},
 		{pattern: "POST " + notificationsPath, handler: http.HandlerFunc(moreHandler.saveNotifications)},
 		{pattern: "POST " + subscribePath, handler: http.HandlerFunc(moreHandler.subscribeBrowser)},
+		{pattern: "POST " + sendTestPath, handler: http.HandlerFunc(moreHandler.sendTestNotification)},
 		{pattern: "POST " + notificationsPath + "/browsers/{browser}/remove", handler: http.HandlerFunc(moreHandler.removeBrowser)},
 		{pattern: "GET " + installPath, handler: http.HandlerFunc(moreHandler.install)},
 		{pattern: "GET " + gardensPath, handler: http.HandlerFunc(todayHandler.gardenSheet)},
@@ -231,11 +234,12 @@ var publicRoutes = map[string]bool{
 // inside that so a cross-site post is refused before it costs a session
 // lookup. wake is called after a handler commits a change to who gets a
 // digest and when. notify is called after a handler records care, to send
-// the garden's other members a push notification about it. Both are nil when
+// the garden's other members a push notification about it. test sends the
+// Notifications page's test message to one browser. All three are nil when
 // push is off.
-func New(logger *slog.Logger, sessions *auth.Sessions, passkeys *auth.Passkeys, resolver, tokens Resolver, queries *store.Queries, photos *photo.Store, templates *Templates, assets *Assets, trustedIPHeader string, signupEnabled bool, pushKey string, wake func(), notify func(ctx context.Context, gardenID, actorID uuid.UUID, n push.Notification)) http.Handler {
+func New(logger *slog.Logger, sessions *auth.Sessions, passkeys *auth.Passkeys, resolver, tokens Resolver, queries *store.Queries, photos *photo.Store, templates *Templates, assets *Assets, trustedIPHeader string, signupEnabled bool, pushKey string, wake func(), notify func(ctx context.Context, gardenID, actorID uuid.UUID, n push.Notification), test func(ctx context.Context, subscription store.PushSubscription, n push.Notification) error) http.Handler {
 	mux := http.NewServeMux()
-	table := routes(logger, sessions, passkeys, queries, photos, templates, assets, trustedIPHeader, signupEnabled, pushKey, wake, notifyActivity(notify))
+	table := routes(logger, sessions, passkeys, queries, photos, templates, assets, trustedIPHeader, signupEnabled, pushKey, wake, notifyActivity(notify), sendTest(test))
 	for _, r := range table {
 		h := r.handler
 		if r.capability != "" {

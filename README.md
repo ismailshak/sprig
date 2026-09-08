@@ -168,4 +168,4 @@ mise run e2e    # the Playwright suite against a seeded throwaway Postgres
 mise run lint
 ```
 
-`mise run dev` starts the server at `http://localhost:8080` with a development sign-in that stands in for passkeys. `mise run seed` fills the database with a few example gardens to sign into. The development sign-in is behind a build tag and is not in the published image.
+`mise run dev` starts the server at `http://localhost:8080` with a development sign-in that stands in for passkeys. Push notifications are on, signed with a throwaway VAPID pair shared with the e2e stack, so a browser on localhost can subscribe and receive the digest. `mise run seed` fills the database with a few example gardens to sign into. The development sign-in is behind a build tag and is not in the published image.

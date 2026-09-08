@@ -1,8 +1,11 @@
 package http
 
 import (
+	"context"
 	"crypto/ecdh"
 	"encoding/base64"
+	"errors"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -10,6 +13,9 @@ import (
 	"time"
 	"uuid"
 
+	"github.com/jackc/pgx/v5"
+
+	"github.com/ismailshak/sprig/internal/push"
 	"github.com/ismailshak/sprig/internal/store"
 )
 
@@ -36,6 +42,40 @@ func (w wakeDigest) call() {
 // to. There is no form for it, because only the browser's push API can make a
 // subscription.
 const subscribePath = notificationsPath + "/browsers"
+
+const sendTestPath = notificationsPath + "/test"
+
+// sendTest sends one push message to one browser and returns any send error
+// unchanged. A subscription the push service no longer has is deleted and
+// push.ErrGone returned. It is nil when push is off.
+type sendTest func(ctx context.Context, subscription store.PushSubscription, n push.Notification) error
+
+// testResultParam is the query parameter the redirect after Send a test puts
+// the outcome in.
+const testResultParam = "test"
+
+const (
+	testSent   = "sent"
+	testGone   = "gone"
+	testFailed = "failed"
+	testNone   = "none"
+)
+
+// testResultLines maps each outcome to the line shown under Send a test.
+var testResultLines = map[string]string{
+	testSent:   "Sent. If nothing arrived, check that this browser allows notifications from sprig.",
+	testGone:   "The push service no longer has this browser, so it has been removed. Turn a type on and save to subscribe again.",
+	testFailed: "The test could not be sent. Try again in a minute.",
+	testNone:   "This browser is not subscribed, so there is nothing to send.",
+}
+
+// testMessage is the message Send a test delivers. Its URL is this page's
+// path, made absolute before it is sent.
+var testMessage = push.Notification{
+	Title: "Notifications are working",
+	Body:  "This is the test sent from the Notifications page. Reminders will arrive here the same way.",
+	URL:   notificationsPath,
+}
 
 func removeBrowserPath(subscriptionID uuid.UUID) string {
 	return notificationsPath + "/browsers/" + subscriptionID.String() + "/remove"
@@ -68,6 +108,12 @@ type notificationsPage struct {
 	// Account is the URL of the link in the note under the hour.
 	Account  string
 	Browsers []browserRow
+	// Test is the URL the Send a test form posts to. The form is on the page
+	// only while a browser is subscribed.
+	Test string
+	// TestResult is the line under Send a test saying how it went. It is empty
+	// unless the query string holds a known outcome.
+	TestResult string
 }
 
 // browserRow is one push subscription. A subscription belongs to a browser
@@ -102,7 +148,43 @@ func (h *more) notifications(w http.ResponseWriter, r *http.Request) {
 	page := newNotificationsPage(principal.User.Timezone, notificationOn(preferences, digestKind),
 		notificationOn(preferences, activityKind), principal.Membership.DigestHour, subscriptions, now)
 	page.Key = h.pushKey
+	page.TestResult = testResultLines[r.URL.Query().Get(testResultParam)]
 	h.templates.render(w, r, view{page: "notifications"}, page)
+}
+
+// sendTestNotification sends the test message to the browser whose endpoint
+// the form posted, then redirects to the Notifications page with the outcome
+// in the query string. An endpoint that is empty or another account's matches
+// no row. The outcome is then testNone.
+func (h *more) sendTestNotification(w http.ResponseWriter, r *http.Request) {
+	// With push off no browser can be subscribed, so the route is a 404.
+	if h.pushKey == "" || h.test == nil {
+		http.NotFound(w, r)
+		return
+	}
+	principal := PrincipalFrom(r)
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "the form did not parse", http.StatusBadRequest)
+		return
+	}
+	result := testSent
+	subscription, err := h.queries.GetPushSubscriptionByEndpoint(r.Context(), principal.User.ID, r.PostForm.Get("endpoint"))
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		result = testNone
+	case err != nil:
+		serverError(h.logger, w, r, "find the browser to test", err)
+		return
+	default:
+		switch err := h.test(r.Context(), subscription, testMessage); {
+		case errors.Is(err, push.ErrGone):
+			result = testGone
+		case err != nil:
+			h.logger.ErrorContext(r.Context(), "test notification not sent", slog.Any("error", err))
+			result = testFailed
+		}
+	}
+	http.Redirect(w, r, notificationsPath+"?"+testResultParam+"="+result, http.StatusSeeOther)
 }
 
 // subscribeBrowser stores the endpoint and two keys the browser's push API
@@ -258,6 +340,7 @@ func newNotificationsPage(zone string, digest, activity bool, hour int16, subscr
 		Activity:  activity,
 		Zone:      zoneLabel(zone),
 		Account:   accountPath,
+		Test:      sendTestPath,
 	}
 	if digest {
 		for _, choice := range hours() {

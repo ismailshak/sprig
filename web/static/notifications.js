@@ -75,9 +75,24 @@
     const { endpoint, keys } = subscription.toJSON();
     const response = await fetch(form.dataset.subscribe, {
       method: 'POST',
-      body: new URLSearchParams({ endpoint, p256dh: keys.p256dh, auth: keys.auth }),
+      body: new URLSearchParams({
+        endpoint,
+        p256dh: keys.p256dh,
+        auth: keys.auth,
+      }),
     });
     if (!response.ok) throw new Error('the subscription was refused with ' + response.status);
+  }
+
+  // thisBrowsersSubscription returns this browser's push subscription, or null
+  // when it has none and when the push API throws.
+  async function thisBrowsersSubscription() {
+    try {
+      const registration = await navigator.serviceWorker.getRegistration();
+      return (registration && (await registration.pushManager.getSubscription())) || null;
+    } catch {
+      return null;
+    }
   }
 
   // Remove on this browser's own row unsubscribes it from the push service
@@ -85,15 +100,26 @@
   for (const remove of document.querySelectorAll('form[data-endpoint]')) {
     remove.addEventListener('submit', async (event) => {
       event.preventDefault();
-      try {
-        const registration = await navigator.serviceWorker.getRegistration();
-        const subscription = registration && (await registration.pushManager.getSubscription());
-        if (subscription && subscription.endpoint === remove.dataset.endpoint) await subscription.unsubscribe();
-      } catch {
-        // The row is deleted either way. A browser that cannot unsubscribe
-        // holds a subscription nothing will be sent to.
+      const subscription = await thisBrowsersSubscription();
+      if (subscription && subscription.endpoint === remove.dataset.endpoint) {
+        // A failed unsubscribe is ignored. The row is deleted either way, so
+        // nothing will be sent to the subscription again.
+        await subscription.unsubscribe().catch(() => {});
       }
       remove.submit();
+    });
+  }
+
+  // The hidden endpoint field tells the server which browser to send the test
+  // to. Only the push API can read it, so the script fills the field in before
+  // the form posts.
+  const test = document.getElementById('push-test');
+  if (test) {
+    test.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const subscription = await thisBrowsersSubscription();
+      if (subscription) test.elements.endpoint.value = subscription.endpoint;
+      test.submit();
     });
   }
 

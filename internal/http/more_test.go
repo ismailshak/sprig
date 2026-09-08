@@ -35,6 +35,14 @@ var (
 	strangerPushID   = uuid.MustParse("00000000-0000-7000-8000-000000000311")
 )
 
+// The phone and the laptop are Ellie's subscribed browsers. The stranger is
+// Sam's, in the other garden.
+const (
+	phoneEndpoint    = "https://push.invalid/phone"
+	laptopEndpoint   = "https://push.invalid/laptop"
+	strangerEndpoint = "https://push.invalid/stranger"
+)
+
 type moreFixture struct {
 	handler *more
 	// todayHandler serves POST /gardens. The switch tests use this fixture
@@ -80,10 +88,11 @@ func moreGarden(t *testing.T) *moreFixture {
 		       ($5, $6, 'stranger', 'iPhone', '\x00', NULL)`,
 		phoneKeyID, moreUserID, thursday, laptopKeyID, strangerKeyID, otherUserID)
 	exec(`INSERT INTO push_subscription (id, user_id, endpoint, p256dh_key, auth_key, user_agent, last_sent_at)
-		VALUES ($1, $2, 'https://push.invalid/phone', 'p', 'a', $3, $4),
-		       ($5, $2, 'https://push.invalid/laptop', 'p', 'a', $6, NULL),
-		       ($7, $8, 'https://push.invalid/stranger', 'p', 'a', $3, NULL)`,
-		phonePushID, moreUserID, safariOniPhone, thursday, laptopPushID, chromeOnMac, strangerPushID, otherUserID)
+		VALUES ($1, $2, $9, 'p', 'a', $3, $4),
+		       ($5, $2, $10, 'p', 'a', $6, NULL),
+		       ($7, $8, $11, 'p', 'a', $3, NULL)`,
+		phonePushID, moreUserID, safariOniPhone, thursday, laptopPushID, chromeOnMac, strangerPushID, otherUserID,
+		phoneEndpoint, laptopEndpoint, strangerEndpoint)
 
 	// One invite waiting, beside three that are not: one that has run out, one
 	// that has been redeemed, and one in the other garden.

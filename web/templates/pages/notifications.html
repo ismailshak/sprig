@@ -72,9 +72,17 @@
 </li>
 {{end}}</ul>
 <p class="note">One for each browser you have allowed notifications in. Removing one stops them arriving there.</p>
+{{/* The script fills endpoint with this browser's push subscription URL.
+     Without JavaScript it stays empty, so the page says this browser is not
+     subscribed. */}}
+<form method="post" action="{{.Test}}" id="push-test">
+<input type="hidden" name="endpoint" value="">
+<button class="wide-action" type="submit">Send a test</button>
+</form>
 {{else}}
 <p class="note">No browser is subscribed yet, so nothing is being delivered. Saving with a type on asks this browser for permission.</p>
 {{end}}
+{{with .TestResult}}<p class="note" role="status">{{.}}</p>{{end}}
 </div>
 {{end}}
 </div>

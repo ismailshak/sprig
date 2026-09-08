@@ -608,7 +608,7 @@ func TestInvited_ABrowserAlreadySignedInGetsANewSessionInPlaceOfItsOld(t *testin
 func invitedMux(t *testing.T, f *invitedFixture) http.Handler {
 	t.Helper()
 	f.exec(t, `UPDATE invite SET expires_at = now() + interval '7 days', membership_expires_at = now() + interval '14 days' WHERE token_hash = $1`, auth.HashToken(sitterLink))
-	return New(testLogger, f.handler.sessions, f.handler.passkeys, rejectEveryToken, noLiveToken, f.queries, testPhotos(t), testTemplates(), testAssets(), "", false, testPushKey, nil, nil)
+	return New(testLogger, f.handler.sessions, f.handler.passkeys, rejectEveryToken, noLiveToken, f.queries, testPhotos(t), testTemplates(), testAssets(), "", false, testPushKey, nil, nil, nil)
 }
 
 // postFrom posts form to path from address through handler.

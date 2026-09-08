@@ -45,4 +45,13 @@ export class NotificationsScreen {
   install(): Locator {
     return this.page.getByRole('link', { name: 'Install sprig' });
   }
+
+  sendTest(): Locator {
+    return this.page.getByRole('button', { name: 'Send a test' });
+  }
+
+  // The line under Send a test saying how the test went.
+  testResult(): Locator {
+    return this.page.getByRole('status');
+  }
 }

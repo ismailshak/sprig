@@ -196,7 +196,7 @@ func (d *Digest) send(ctx context.Context, member store.ListDigestMembersRow, lo
 		if err != nil {
 			return fmt.Errorf("listing the browsers: %w", err)
 		}
-		sent, err := deliver(ctx, d.logger, q, d.sender, member.UserID, member.Handle, subscriptions, notification, now)
+		sent, err := deliver(ctx, d.logger, q, d.sender, member.Handle, subscriptions, notification, now)
 		if err != nil {
 			return err
 		}

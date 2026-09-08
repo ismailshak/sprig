@@ -12,6 +12,14 @@ export SPRIG_COOKIE_NAME=sprig_session
 # Reading the templates from disk rather than from the copy embedded in the
 # binary means an edit shows up on the next request instead of the next restart.
 export SPRIG_TEMPLATE_DIR="${MISE_PROJECT_ROOT:?}/web/templates"
+# Push is on so the Notifications page, the digest job and Send a test can be
+# tried against a real browser. The pair is the same throwaway one compose.yaml
+# gives the e2e app. It is fixed rather than generated per run, because a new
+# pair would invalidate every subscription a development browser made.
+export SPRIG_PUSH_ENABLED=true
+export SPRIG_VAPID_PUBLIC_KEY=BIKy0ljeIkYXaxRwCtYWzL6mcXZ1uQRljQ9HlisKJLJiAWkvTHx6QKQNtjbZeP5AvsVqD6-lKh6RDeyszC8lu3A
+export SPRIG_VAPID_PRIVATE_KEY=NYvCfU2w94nee-zA8CqDtHNwV7z9nKVjO3JyESW9mcs
+export SPRIG_VAPID_SUBJECT=mailto:sprig@example.com
 
 # Ctrl+C exits 0 so that mise does not report the task as failed.
 trap 'exit 0' INT

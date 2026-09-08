@@ -5,6 +5,7 @@ import (
 	"crypto/ecdh"
 	"crypto/rand"
 	"encoding/base64"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -14,6 +15,9 @@ import (
 	"testing"
 	"time"
 	"uuid"
+
+	"github.com/ismailshak/sprig/internal/push"
+	"github.com/ismailshak/sprig/internal/store"
 )
 
 // The two User-Agent strings the seeded subscriptions carry. A real one names
@@ -516,6 +520,138 @@ func TestSubscribe_WithPushOffTheRouteIsNotFound(t *testing.T) {
 	rec := f.subscribe(t, "https://push.example.com/send/new", chromeOnMac, p256dh, auth)
 
 	if rec.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusNotFound)
+	}
+}
+
+// recordedSends is a sendTest that keeps what it was asked to send and
+// returns err.
+type recordedSends struct {
+	subscriptions []store.PushSubscription
+	notifications []push.Notification
+	err           error
+}
+
+func (r *recordedSends) send(_ context.Context, subscription store.PushSubscription, n push.Notification) error {
+	r.subscriptions = append(r.subscriptions, subscription)
+	r.notifications = append(r.notifications, n)
+	return r.err
+}
+
+func TestNotifications_SendATestIsOfferedOnlyWhileABrowserIsSubscribed(t *testing.T) {
+	f := moreGarden(t)
+
+	if !strings.Contains(f.page(t, f.handler.notifications, notificationsPath), `action="`+sendTestPath+`"`) {
+		t.Error("two browsers are subscribed and the page offers no Send a test")
+	}
+
+	f.exec(t, "DELETE FROM push_subscription WHERE user_id = $1", moreUserID)
+	if strings.Contains(f.page(t, f.handler.notifications, notificationsPath), `action="`+sendTestPath+`"`) {
+		t.Error("no browser is subscribed and the page still offers Send a test")
+	}
+}
+
+// testOutcome posts Send a test with endpoint and returns the value of the
+// test parameter on the redirect.
+func (f *moreFixture) testOutcome(t *testing.T, endpoint string) string {
+	t.Helper()
+
+	rec := f.do(t, f.handler.sendTestNotification, sendTestPath, url.Values{"endpoint": {endpoint}})
+	location, err := url.Parse(rec.Header().Get("Location"))
+	if rec.Code != http.StatusSeeOther || err != nil || location.Path != notificationsPath {
+		t.Fatalf("status = %d to %q, want %d to %s", rec.Code, rec.Header().Get("Location"), http.StatusSeeOther, notificationsPath)
+	}
+	return location.Query().Get(testResultParam)
+}
+
+// resultPage renders the Notifications page with outcome in the query string,
+// the way the redirect after Send a test does. It returns the text with the
+// tags taken out.
+func (f *moreFixture) resultPage(t *testing.T, outcome string) string {
+	t.Helper()
+
+	return text(f.page(t, f.handler.notifications, notificationsPath+"?"+testResultParam+"="+outcome))
+}
+
+func TestSendTest_OnlyTheBrowserWhoseEndpointWasPostedIsSentTheTest(t *testing.T) {
+	f := moreGarden(t)
+	recorder := &recordedSends{}
+	f.handler.test = recorder.send
+
+	outcome := f.testOutcome(t, phoneEndpoint)
+
+	if outcome != testSent {
+		t.Errorf("the outcome is %q, want %q", outcome, testSent)
+	}
+	if len(recorder.subscriptions) != 1 || recorder.subscriptions[0].ID != phonePushID {
+		t.Fatalf("sent to %v, want the phone alone", recorder.subscriptions)
+	}
+	if got := recorder.notifications[0]; got.URL != notificationsPath || got.Title == "" || got.Body == "" {
+		t.Errorf("the message sent is %+v, want a title, a body and this page's path", got)
+	}
+	if page := f.resultPage(t, testSent); !strings.Contains(page, testResultLines[testSent]) {
+		t.Errorf("the page does not say the test was sent:\n%s", page)
+	}
+}
+
+func TestSendTest_ABrowserThePushServiceHasDroppedSaysItHasBeenRemoved(t *testing.T) {
+	f := moreGarden(t)
+	f.handler.test = (&recordedSends{err: push.ErrGone}).send
+
+	if outcome := f.testOutcome(t, phoneEndpoint); outcome != testGone {
+		t.Errorf("the outcome is %q, want %q", outcome, testGone)
+	}
+	if page := f.resultPage(t, testGone); !strings.Contains(page, testResultLines[testGone]) {
+		t.Errorf("the page does not say the browser has been removed:\n%s", page)
+	}
+}
+
+func TestSendTest_ARefusedSendSaysTheTestCouldNotBeSent(t *testing.T) {
+	f := moreGarden(t)
+	f.handler.test = (&recordedSends{err: errors.New("the push service answered 500")}).send
+
+	if outcome := f.testOutcome(t, phoneEndpoint); outcome != testFailed {
+		t.Errorf("the outcome is %q, want %q", outcome, testFailed)
+	}
+	if page := f.resultPage(t, testFailed); !strings.Contains(page, testResultLines[testFailed]) {
+		t.Errorf("the page does not say the send failed:\n%s", page)
+	}
+}
+
+func TestSendTest_AnEmptyOrAnotherAccountsEndpointSendsNothingAndSaysThisBrowserIsNotSubscribed(t *testing.T) {
+	f := moreGarden(t)
+	recorder := &recordedSends{}
+	f.handler.test = recorder.send
+
+	for _, endpoint := range []string{"", strangerEndpoint} {
+		if outcome := f.testOutcome(t, endpoint); outcome != testNone {
+			t.Errorf("endpoint %q: the outcome is %q, want %q", endpoint, outcome, testNone)
+		}
+	}
+	if len(recorder.subscriptions) != 0 {
+		t.Errorf("sent to %v, want nothing sent", recorder.subscriptions)
+	}
+	if page := f.resultPage(t, testNone); !strings.Contains(page, testResultLines[testNone]) {
+		t.Errorf("the page does not say the browser is not subscribed:\n%s", page)
+	}
+}
+
+func TestSendTest_AnUnknownOutcomeInTheQueryShowsNoLine(t *testing.T) {
+	f := moreGarden(t)
+
+	page := f.resultPage(t, "anything")
+	for outcome, line := range testResultLines {
+		if strings.Contains(page, line) {
+			t.Errorf("a made-up outcome rendered the %s line:\n%s", outcome, page)
+		}
+	}
+}
+
+func TestSendTest_WithPushOffTheRouteIsNotFound(t *testing.T) {
+	f := moreGarden(t)
+	f.handler.pushKey = ""
+
+	if rec := f.do(t, f.handler.sendTestNotification, sendTestPath, url.Values{"endpoint": {phoneEndpoint}}); rec.Code != http.StatusNotFound {
 		t.Errorf("status = %d, want %d", rec.Code, http.StatusNotFound)
 	}
 }

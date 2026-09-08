@@ -173,7 +173,7 @@ func chorePolls(t *testing.T) (func(token string) *httptest.ResponseRecorder, *i
 		lookups++
 		return tokenPrincipal(), nil
 	})
-	handler := New(logger, testSessions(), testPasskeys(), rejectEveryToken, tokens, queries, testPhotos(t), testTemplates(), testAssets(), "", false, testPushKey, nil, nil)
+	handler := New(logger, testSessions(), testPasskeys(), rejectEveryToken, tokens, queries, testPhotos(t), testTemplates(), testAssets(), "", false, testPushKey, nil, nil, nil)
 
 	return func(token string) *httptest.ResponseRecorder {
 		t.Helper()
