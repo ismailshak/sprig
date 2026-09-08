@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/ismailshak/sprig/internal/store"
 )
 
 func TestTokenExpiry(t *testing.T) {
@@ -65,5 +67,31 @@ func TestNewAPIToken_TwoTokensDiffer(t *testing.T) {
 	}
 	if firstPrefix == secondPrefix {
 		t.Error("two tokens carry the same prefix, and the prefix is what tells two rows apart")
+	}
+}
+
+func TestAPITokenLive(t *testing.T) {
+	now := time.Date(2026, time.September, 14, 12, 0, 0, 0, time.UTC)
+	revoked := now.Add(-time.Hour)
+
+	cases := []struct {
+		name      string
+		expiresAt time.Time
+		revokedAt *time.Time
+		want      bool
+	}{
+		{"expiring tomorrow is live", now.Add(24 * time.Hour), nil, true},
+		{"expiring a second from now is live", now.Add(time.Second), nil, true},
+		{"expiring this instant has stopped", now, nil, false},
+		{"expired yesterday has stopped", now.Add(-24 * time.Hour), nil, false},
+		{"revoked with time still to run has stopped", now.Add(24 * time.Hour), &revoked, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			token := store.APIToken{ExpiresAt: c.expiresAt, RevokedAt: c.revokedAt}
+			if got := APITokenLive(token, now); got != c.want {
+				t.Errorf("APITokenLive = %v, want %v", got, c.want)
+			}
+		})
 	}
 }

@@ -12,17 +12,24 @@ import (
 	"github.com/ismailshak/sprig/internal/store"
 )
 
-// Principal is the signed-in user behind a request. No URL names a garden, so
-// Garden is the only place a handler learns which one the request is for.
-// Garden, Membership and Capabilities are zero when the account is in no
-// garden. A route that needs a garden never runs for such a principal, because
-// the mux renders the "You're in no garden" page in its place.
+// Principal is who is behind a request: the signed-in user, or the device
+// holding a bearer token. No URL names a garden, so Garden is the only place a
+// handler learns which one the request is for. Garden, Membership and
+// Capabilities are zero when the account is in no garden. A route that needs a
+// garden never runs for such a principal, because the mux renders the "You're
+// in no garden" page in its place.
+//
+// A bearer token resolves to Garden and APIToken alone. Session, User,
+// Membership and Capabilities stay zero. Can is therefore false for every
+// capability, so a token can only read.
 type Principal struct {
 	Session      store.Session
 	User         store.AppUser
 	Garden       store.Garden
 	Membership   store.Membership
 	Capabilities Capabilities
+	// APIToken is nil unless the request presented a bearer token.
+	APIToken *store.APIToken
 }
 
 // Can reports whether the principal's role has capability. Templates and

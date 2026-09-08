@@ -26,6 +26,10 @@ type route struct {
 	// Every other protected route renders the "You're in no garden" page
 	// instead, so a handler always has a garden to read.
 	withoutGarden bool
+	// bearer marks a route that takes an API token in the Authorization
+	// header instead of the session cookie. The token's principal has no
+	// capabilities, so such a route names none and uses no mutating method.
+	bearer bool
 	// limits are the rate limiters wrapped around this route, outermost first.
 	limits  []middleware
 	handler http.Handler
@@ -215,19 +219,22 @@ var publicRoutes = map[string]bool{
 	"POST " + recoverPasskeyPath:   true,
 }
 
-// New builds sprig's handler. The middleware order matters. RequestID runs
-// outermost so the id is set before anything logs. SecurityHeaders is outside
-// Recover so the 500 a panic produces has the security headers too. Logging
-// wraps Recover so a recovered panic's 500 still gets a request line. The
-// cross-origin check is inside Logging and Recover so a refused request is
-// logged like any other. Authentication is inside that so a cross-site post is
-// refused before it costs a session lookup. wake is called after a handler
-// commits a change to who gets a digest and when. notify is called after a
-// handler records care, to send the garden's other members a push
-// notification about it. Both are nil when push is off.
-func New(logger *slog.Logger, sessions *auth.Sessions, passkeys *auth.Passkeys, resolver Resolver, queries *store.Queries, photos *photo.Store, templates *Templates, assets *Assets, trustedIPHeader string, signupEnabled bool, pushKey string, wake func(), notify func(ctx context.Context, gardenID, actorID uuid.UUID, n push.Notification)) http.Handler {
+// New builds sprig's handler. resolver turns a session cookie into a
+// principal. tokens turns a bearer token into one. The middleware order
+// matters. RequestID runs outermost so the id is set before anything logs.
+// SecurityHeaders is outside Recover so the 500 a panic produces has the
+// security headers too. Logging wraps Recover so a recovered panic's 500
+// still gets a request line. The cross-origin check is inside Logging and
+// Recover so a refused request is logged like any other. Authentication is
+// inside that so a cross-site post is refused before it costs a session
+// lookup. wake is called after a handler commits a change to who gets a
+// digest and when. notify is called after a handler records care, to send
+// the garden's other members a push notification about it. Both are nil when
+// push is off.
+func New(logger *slog.Logger, sessions *auth.Sessions, passkeys *auth.Passkeys, resolver, tokens Resolver, queries *store.Queries, photos *photo.Store, templates *Templates, assets *Assets, trustedIPHeader string, signupEnabled bool, pushKey string, wake func(), notify func(ctx context.Context, gardenID, actorID uuid.UUID, n push.Notification)) http.Handler {
 	mux := http.NewServeMux()
-	for _, r := range routes(logger, sessions, passkeys, queries, photos, templates, assets, trustedIPHeader, signupEnabled, pushKey, wake, notifyActivity(notify)) {
+	table := routes(logger, sessions, passkeys, queries, photos, templates, assets, trustedIPHeader, signupEnabled, pushKey, wake, notifyActivity(notify))
+	for _, r := range table {
 		h := r.handler
 		if r.capability != "" {
 			h = require(r.capability, h)
@@ -238,6 +245,12 @@ func New(logger *slog.Logger, sessions *auth.Sessions, passkeys *auth.Passkeys, 
 		if !publicRoutes[r.pattern] && !r.withoutGarden {
 			h = requireGarden(templates, signupEnabled, h)
 		}
+		// The token lookup goes outside the garden check because the token is
+		// where the garden comes from. It goes inside the limiters so a request
+		// past the budget costs no lookup.
+		if r.bearer {
+			h = requireToken(logger, tokens, h)
+		}
 		// Wrapping backwards leaves limits[0] outermost, so a request already
 		// refused by the per-address budget spends nothing from the shared one.
 		for i := len(r.limits) - 1; i >= 0; i-- {
@@ -246,19 +259,36 @@ func New(logger *slog.Logger, sessions *auth.Sessions, passkeys *auth.Passkeys, 
 		mux.Handle(r.pattern, h)
 	}
 
-	isPublic := func(r *http.Request) bool {
+	credentials := credentialsFor(table)
+	credentialFor := func(r *http.Request) credential {
 		_, pattern := mux.Handler(r)
-		return publicRoutes[pattern]
+		return credentials[pattern]
 	}
 
 	var handler http.Handler = mux
-	handler = Authenticate(logger, sessions, resolver, isPublic)(handler)
+	handler = Authenticate(logger, sessions, resolver, credentialFor)(handler)
 	handler = crossOrigin().Handler(handler)
 	handler = Recover(logger)(handler)
 	handler = Logging(logger, mux)(handler)
 	handler = SecurityHeaders(handler)
 	handler = RequestID(handler)
 	return handler
+}
+
+// credentialsFor returns what each route's pattern authenticates with. A
+// pattern absent from the map, including one no route matches, takes the
+// session cookie.
+func credentialsFor(table []route) map[string]credential {
+	credentials := map[string]credential{}
+	for _, r := range table {
+		switch {
+		case publicRoutes[r.pattern]:
+			credentials[r.pattern] = noCredential
+		case r.bearer:
+			credentials[r.pattern] = apiToken
+		}
+	}
+	return credentials
 }
 
 // crossOrigin is the second half of the CSRF defence after SameSite=Lax on the

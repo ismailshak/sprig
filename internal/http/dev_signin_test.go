@@ -66,7 +66,7 @@ func devStack(t *testing.T) (http.Handler, *auth.Resolver) {
 	if err != nil {
 		t.Fatalf("building the passkeys: %v", err)
 	}
-	return New(logger, sessions, passkeys, resolver, queries, testPhotos(t), testTemplates(), testAssets(), "", false, testPushKey, nil, nil), resolver
+	return New(logger, sessions, passkeys, resolver, noLiveToken, queries, testPhotos(t), testTemplates(), testAssets(), "", false, testPushKey, nil, nil), resolver
 }
 
 func postHandle(t *testing.T, handler http.Handler, handle string, cookie *http.Cookie) *httptest.ResponseRecorder {

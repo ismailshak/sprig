@@ -52,6 +52,31 @@ func (q *Queries) CreateAPIToken(ctx context.Context, arg CreateAPITokenParams) 
 	return i, err
 }
 
+const getAPITokenByHash = `-- name: GetAPITokenByHash :one
+SELECT id, garden_id, name, token_hash, prefix, created_by, created_at, expires_at, last_used_at, revoked_at FROM api_token WHERE token_hash = $1
+`
+
+// Returns revoked and expired rows too, so the caller decides whether the
+// token still works. It binds no garden_id because this row is what tells a
+// request which garden it is on.
+func (q *Queries) GetAPITokenByHash(ctx context.Context, tokenHash string) (APIToken, error) {
+	row := q.db.QueryRow(ctx, getAPITokenByHash, tokenHash)
+	var i APIToken
+	err := row.Scan(
+		&i.ID,
+		&i.GardenID,
+		&i.Name,
+		&i.TokenHash,
+		&i.Prefix,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+		&i.LastUsedAt,
+		&i.RevokedAt,
+	)
+	return i, err
+}
+
 const listAPITokens = `-- name: ListAPITokens :many
 SELECT id, garden_id, name, token_hash, prefix, created_by, created_at, expires_at, last_used_at, revoked_at FROM api_token
 WHERE garden_id = $1 AND revoked_at IS NULL
@@ -112,4 +137,13 @@ func (q *Queries) RevokeAPIToken(ctx context.Context, arg RevokeAPITokenParams) 
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const touchAPIToken = `-- name: TouchAPIToken :exec
+UPDATE api_token SET last_used_at = $1::timestamptz WHERE token_hash = $2
+`
+
+func (q *Queries) TouchAPIToken(ctx context.Context, now time.Time, tokenHash string) error {
+	_, err := q.db.Exec(ctx, touchAPIToken, now, tokenHash)
+	return err
 }

@@ -241,7 +241,7 @@ func signInMux(t *testing.T, f *moreFixture) http.Handler {
 		t.Fatalf("building the passkeys: %v", err)
 	}
 	sessions := auth.NewSessions(queries, testTTL, cookie)
-	return New(testLogger, sessions, passkeys, rejectEveryToken, queries, testPhotos(t), testTemplates(), testAssets(), "", false, testPushKey, nil, nil)
+	return New(testLogger, sessions, passkeys, rejectEveryToken, noLiveToken, queries, testPhotos(t), testTemplates(), testAssets(), "", false, testPushKey, nil, nil)
 }
 
 // challengeFrom posts for a sign-in challenge from address.

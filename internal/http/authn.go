@@ -26,15 +26,36 @@ func (f ResolverFunc) Resolve(ctx context.Context, now time.Time, token string) 
 	return f(ctx, now, token)
 }
 
-// Authenticate requires a principal on every request isPublic does not exempt,
-// and puts it on the context for PrincipalFrom. A request with no session, or
-// with a token that resolves to none, is redirected to sign in. A resolved
-// session has its cookie reissued, so the cookie's expiry extends along with
-// the session row's.
-func Authenticate(logger *slog.Logger, sessions *auth.Sessions, resolver Resolver, isPublic func(*http.Request) bool) func(http.Handler) http.Handler {
+// credential is what a route authenticates a request with. A route takes one
+// kind and no other.
+type credential int
+
+const (
+	// sessionCookie is the cookie a browser holds after signing in. It is
+	// the zero value, so a route takes it unless it is listed as public or
+	// flagged bearer.
+	sessionCookie credential = iota
+	// noCredential marks a public route. Authenticate reads no cookie for it.
+	noCredential
+	// apiToken is a token issued on the Tokens page and sent in the
+	// Authorization header. A route taking it does not accept the session
+	// cookie.
+	apiToken
+)
+
+// Authenticate requires a principal on every request credentialFor says takes
+// the session cookie, and puts it on the context for PrincipalFrom. A request
+// with no cookie, or with one that resolves to no session, is redirected to
+// sign in. A resolved session has its cookie reissued, so the cookie's expiry
+// extends along with the session row's.
+//
+// A public route and a route taking an API token both pass through here.
+// requireToken resolves the bearer token further in, inside the mux.
+func Authenticate(logger *slog.Logger, sessions *auth.Sessions, resolver Resolver, credentialFor func(*http.Request) credential) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if isPublic(r) {
+			switch credentialFor(r) {
+			case noCredential, apiToken:
 				next.ServeHTTP(w, r)
 				return
 			}
@@ -62,6 +83,37 @@ func Authenticate(logger *slog.Logger, sessions *auth.Sessions, resolver Resolve
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
+}
+
+// requireToken resolves the bearer token in the Authorization header and puts
+// the principal on the context for PrincipalFrom. A request with no token, or
+// one that matches no live row, gets a 401.
+func requireToken(logger *slog.Logger, tokens Resolver, h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		token := bearerToken(r)
+		if token == "" {
+			unauthorized(w)
+			return
+		}
+		principal, err := tokens.Resolve(r.Context(), time.Now(), token)
+		switch {
+		case errors.Is(err, auth.ErrNoAPIToken):
+			unauthorized(w)
+			return
+		case err != nil:
+			serverError(logger, w, r, "resolve the token", err)
+			return
+		}
+		h.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), principalKey, principal)))
+	})
+}
+
+// unauthorized sends a 401 naming the Bearer scheme in WWW-Authenticate. The
+// caller is a device with no sign-in page to open, so it gets a refusal and
+// not a redirect.
+func unauthorized(w http.ResponseWriter) {
+	w.Header().Set("WWW-Authenticate", "Bearer")
+	http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
 }
 
 // hasSession reports whether the request's session cookie resolves to a
@@ -127,9 +179,9 @@ func locationFor(user store.AppUser) *time.Location {
 	return location
 }
 
-// PrincipalFrom returns the principal Authenticate attached to r. It panics
-// on a request carrying none, since every route outside the public allowlist
-// has one.
+// PrincipalFrom returns the principal Authenticate or requireToken attached
+// to r. It panics on a request carrying none, since every route outside the
+// public allowlist has one.
 func PrincipalFrom(r *http.Request) auth.Principal {
 	principal, ok := r.Context().Value(principalKey).(auth.Principal)
 	if !ok {

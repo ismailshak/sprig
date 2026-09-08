@@ -32,6 +32,9 @@ type access struct {
 	// Every other protected route renders the "You're in no garden" page
 	// instead.
 	withoutGarden bool
+	// bearer marks a route that takes an API token in the Authorization
+	// header and not the session cookie. Every other route refuses a token.
+	bearer bool
 	// path is a request path the pattern matches, using Rosewood's ids.
 	path string
 	// foreign is path with one of Fairview's ids in place of Rosewood's. The
@@ -493,6 +496,15 @@ func TestRoutes_EveryRouteHasOneRouteAccessEntryThatMatchesIt(t *testing.T) {
 		}
 
 		method, path := splitPattern(r.pattern)
+		if a.bearer != r.bearer {
+			t.Errorf("%s takes an API token = %v in routeAccess and %v in routes", r.pattern, a.bearer, r.bearer)
+		}
+		if a.bearer && (a.public || a.capability != "" || a.withoutGarden) {
+			t.Errorf("%s takes an API token and is public, requires %q or is served without a garden, and a token is a garden's own read-only credential", r.pattern, a.capability)
+		}
+		if a.bearer && mutates(method) {
+			t.Errorf("%s takes an API token and mutates, and a token can only read", r.pattern)
+		}
 		if mutates(method) && a.capability == "" && !a.anyMember && !a.public {
 			t.Errorf("%s mutates and names no capability; give it one, or say anyMember if every member may call it", r.pattern)
 		}
@@ -546,7 +558,7 @@ func TestRoutes_EachRouteRefusesStrangersAndRolesAsItsEntrySays(t *testing.T) {
 			handler := New(logger, testSessions(), testPasskeys(), ResolverFunc(func(context.Context, time.Time, string) (auth.Principal, error) {
 				resolved++
 				return auth.Principal{}, auth.ErrNoSession
-			}), queries, testPhotos(t), testTemplates(), testAssets(), "", false, testPushKey, nil, nil)
+			}), noLiveToken, queries, testPhotos(t), testTemplates(), testAssets(), "", false, testPushKey, nil, nil)
 			rec := httptest.NewRecorder()
 			handler.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), method, path, nil))
 			sentToSignIn := rec.Code == http.StatusSeeOther && rec.Header().Get("Location") == signInPath
@@ -555,28 +567,58 @@ func TestRoutes_EachRouteRefusesStrangersAndRolesAsItsEntrySays(t *testing.T) {
 				t.Errorf("a stranger was sent to sign in from a public route")
 			case a.public && resolved > 0:
 				t.Errorf("a public route cost a session lookup")
-			case !a.public && !sentToSignIn:
+			case a.bearer && rec.Code != http.StatusUnauthorized:
+				t.Errorf("a stranger got %d from a route that takes an API token, want %d", rec.Code, http.StatusUnauthorized)
+			case !a.public && !a.bearer && !sentToSignIn:
 				t.Errorf("a stranger got %d from %q, want %d to %s", rec.Code, rec.Header().Get("Location"), http.StatusSeeOther, signInPath)
+			}
+
+			// A live token is accepted only on the routes flagged bearer.
+			// Every other route leaves it unread and sends the device to sign
+			// in.
+			tokensResolved := 0
+			tokens := ResolverFunc(func(context.Context, time.Time, string) (auth.Principal, error) {
+				tokensResolved++
+				return tokenPrincipal(), nil
+			})
+			rec = httptest.NewRecorder()
+			New(logger, testSessions(), testPasskeys(), rejectEveryToken, tokens, queries, testPhotos(t), testTemplates(), testAssets(), "", false, testPushKey, nil, nil).ServeHTTP(rec, withToken(httptest.NewRequestWithContext(t.Context(), method, path, nil)))
+			sentToSignIn = rec.Code == http.StatusSeeOther && rec.Header().Get("Location") == signInPath
+			switch {
+			case a.bearer && (rec.Code == http.StatusUnauthorized || rec.Code == http.StatusNotFound):
+				t.Errorf("a live token got %d from the route it is for", rec.Code)
+			case !a.bearer && tokensResolved > 0:
+				t.Errorf("a route that takes the session cookie looked up the API token")
+			case !a.bearer && !a.public && !sentToSignIn:
+				t.Errorf("a device's token got %d from %q, want %d to %s", rec.Code, rec.Header().Get("Location"), http.StatusSeeOther, signInPath)
+			}
+
+			if a.bearer {
+				rec = httptest.NewRecorder()
+				New(logger, testSessions(), testPasskeys(), acceptEveryToken(memberWith(every)), noLiveToken, queries, testPhotos(t), testTemplates(), testAssets(), "", false, testPushKey, nil, nil).ServeHTTP(rec, signedIn(httptest.NewRequestWithContext(t.Context(), method, path, nil)))
+				if rec.Code != http.StatusUnauthorized {
+					t.Errorf("a signed-in owner got %d from a route that takes only an API token, want %d", rec.Code, http.StatusUnauthorized)
+				}
 			}
 
 			if a.capability != "" {
 				lacking := memberWith(without(every, a.capability))
 				rec = httptest.NewRecorder()
-				New(logger, testSessions(), testPasskeys(), acceptEveryToken(lacking), queries, testPhotos(t), testTemplates(), testAssets(), "", false, testPushKey, nil, nil).ServeHTTP(rec, signedIn(httptest.NewRequestWithContext(t.Context(), method, path, nil)))
+				New(logger, testSessions(), testPasskeys(), acceptEveryToken(lacking), noLiveToken, queries, testPhotos(t), testTemplates(), testAssets(), "", false, testPushKey, nil, nil).ServeHTTP(rec, signedIn(httptest.NewRequestWithContext(t.Context(), method, path, nil)))
 				if rec.Code != http.StatusNotFound {
 					t.Errorf("a member without %s got %d, want %d", a.capability, rec.Code, http.StatusNotFound)
 				}
 
 				rec = httptest.NewRecorder()
-				New(logger, testSessions(), testPasskeys(), acceptEveryToken(memberWith(every)), queries, testPhotos(t), testTemplates(), testAssets(), "", false, testPushKey, nil, nil).ServeHTTP(rec, signedIn(httptest.NewRequestWithContext(t.Context(), method, path, nil)))
+				New(logger, testSessions(), testPasskeys(), acceptEveryToken(memberWith(every)), noLiveToken, queries, testPhotos(t), testTemplates(), testAssets(), "", false, testPushKey, nil, nil).ServeHTTP(rec, signedIn(httptest.NewRequestWithContext(t.Context(), method, path, nil)))
 				if rec.Code == http.StatusNotFound {
 					t.Errorf("a member with %s got %d, so the route is hidden from the people it is for", a.capability, rec.Code)
 				}
 			}
 
-			if !a.public {
+			if !a.public && !a.bearer {
 				rec = httptest.NewRecorder()
-				New(logger, testSessions(), testPasskeys(), acceptEveryToken(noGardenPrincipal()), queries, testPhotos(t), testTemplates(), testAssets(), "", false, testPushKey, nil, nil).ServeHTTP(rec, signedIn(httptest.NewRequestWithContext(t.Context(), method, path, nil)))
+				New(logger, testSessions(), testPasskeys(), acceptEveryToken(noGardenPrincipal()), noLiveToken, queries, testPhotos(t), testTemplates(), testAssets(), "", false, testPushKey, nil, nil).ServeHTTP(rec, signedIn(httptest.NewRequestWithContext(t.Context(), method, path, nil)))
 				gotPage := rec.Code == http.StatusOK && onNoGardenPage(rec.Body.String())
 				if a.withoutGarden && gotPage {
 					t.Errorf("a session on no garden got the no-garden page from a route that is served without one")
@@ -588,7 +630,7 @@ func TestRoutes_EachRouteRefusesStrangersAndRolesAsItsEntrySays(t *testing.T) {
 
 			if a.foreign != "" {
 				rec = httptest.NewRecorder()
-				New(logger, testSessions(), testPasskeys(), acceptEveryToken(memberWith(every)), queries, testPhotos(t), testTemplates(), testAssets(), "", false, testPushKey, nil, nil).ServeHTTP(rec, signedIn(httptest.NewRequestWithContext(t.Context(), method, a.foreign, nil)))
+				New(logger, testSessions(), testPasskeys(), acceptEveryToken(memberWith(every)), noLiveToken, queries, testPhotos(t), testTemplates(), testAssets(), "", false, testPushKey, nil, nil).ServeHTTP(rec, signedIn(httptest.NewRequestWithContext(t.Context(), method, a.foreign, nil)))
 				if rec.Code != http.StatusNotFound {
 					t.Errorf("an owner asking for Fairview's object at %s got %d, want %d", a.foreign, rec.Code, http.StatusNotFound)
 				}
