@@ -106,14 +106,15 @@ async function postFetchedAt(clientId, fetchedAt) {
   }
 }
 
-// A push message is JSON with a title, a body and the URL to open. The server
-// sends the same three fields, so one added there is read here.
+// A push message is JSON with a title, a body, the URL to open and an icon
+// URL. The icon is the plant's picture when the notification is about one
+// plant, and empty otherwise.
 self.addEventListener('push', (event) => {
   const notification = event.data ? event.data.json() : {};
   event.waitUntil(
     self.registration.showNotification(notification.title || 'sprig', {
       body: notification.body,
-      icon: ICON,
+      icon: notification.icon || ICON,
       data: { url: notification.url },
     }),
   );

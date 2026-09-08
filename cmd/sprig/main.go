@@ -14,6 +14,7 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	"uuid"
 
 	// Embeds the timezone database, so the binary resolves users' timezones
 	// in a base image that has none.
@@ -160,22 +161,29 @@ func run(ctx context.Context, getenv func(string) string, stdout io.Writer) erro
 	}
 
 	// The Notifications page gives pushKey to the browser to subscribe with.
-	// With push off there is no key and no digest job.
+	// With push off there is no key, no digest job and no activity
+	// notification.
 	pushKey := ""
 	var digest *push.Digest
+	var activity *push.Activity
 	var wake func()
+	var notify func(context.Context, uuid.UUID, uuid.UUID, push.Notification)
 	if cfg.pushEnabled {
 		pushKey = cfg.push.Public
-		digest = push.NewDigest(logger, queries, push.NewSender(cfg.push, nil), cfg.baseURL.String())
+		sender := push.NewSender(cfg.push, nil)
+		digest = push.NewDigest(logger, queries, sender, cfg.baseURL.String())
+		activity = push.NewActivity(logger, queries, sender, cfg.baseURL.String())
 		wake = digest.Wake
+		notify = activity.Send
 	}
-	handler := sprighttp.New(logger, sessions, passkeys, resolver, queries, photos, templates, assets, cfg.trustedIPHeader, cfg.signupEnabled, pushKey, wake)
-	if digest == nil {
+	handler := sprighttp.New(logger, sessions, passkeys, resolver, queries, photos, templates, assets, cfg.trustedIPHeader, cfg.signupEnabled, pushKey, wake, notify)
+	if !cfg.pushEnabled {
 		return serve(ctx, logger, listener, handler)
 	}
 
-	// The job is stopped and waited for before run returns, because the deferred
-	// pool.Close would otherwise run while the job was still querying.
+	// run does not return until the digest job has stopped and every activity
+	// notification has finished sending. The deferred pool.Close would
+	// otherwise close the pool under one of them.
 	jobCtx, stopJob := context.WithCancel(ctx)
 	defer stopJob()
 	done := make(chan struct{})
@@ -186,6 +194,7 @@ func run(ctx context.Context, getenv func(string) string, stdout io.Writer) erro
 	err = serve(ctx, logger, listener, handler)
 	stopJob()
 	<-done
+	activity.Wait()
 	return err
 }
 

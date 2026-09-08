@@ -13,6 +13,7 @@ import (
 	"uuid"
 
 	"github.com/ismailshak/sprig/internal/auth"
+	"github.com/ismailshak/sprig/internal/push"
 	"github.com/ismailshak/sprig/internal/store"
 )
 
@@ -871,5 +872,108 @@ func TestLog_TheLoggedRowStillShowsThePlantsPicture(t *testing.T) {
 	row := rowElement.FindString(rec.Body.String())
 	if got, want := images(row), []string{photoSquarePath(dorisID, photoID)}; !slices.Equal(got, want) {
 		t.Errorf("the logged row's images are %v, want the square at %v", got, want)
+	}
+}
+
+// notified is one call the handler made to its notify hook.
+type notified struct {
+	gardenID, actorID uuid.UUID
+	n                 push.Notification
+}
+
+// captureNotifications replaces the fixture's notify hook with one that
+// records each call in the returned slice.
+func (f *todayFixture) captureNotifications() *[]notified {
+	var got []notified
+	f.handler.notify = func(_ context.Context, gardenID, actorID uuid.UUID, n push.Notification) {
+		got = append(got, notified{gardenID: gardenID, actorID: actorID, n: n})
+	}
+	return &got
+}
+
+func TestLog_TheNotificationSaysWhoWateredWhichPlantAndOpensThatPlant(t *testing.T) {
+	f := rosewood(t)
+	got := f.captureNotifications()
+
+	rec := f.post(t, dorisID.String(), url.Values{"row": {"water"}, "care": {"water"}}, true)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+
+	want := []notified{{gardenID: rosewoodID, actorID: readerID, n: push.Notification{Title: "Rosewood", Body: "Ellie watered Doris.", URL: "/plants/" + dorisID.String()}}}
+	if !slices.Equal(*got, want) {
+		t.Errorf("notified %+v, want %+v", *got, want)
+	}
+}
+
+func TestLog_ASkipIsNotifiedAsSkipped(t *testing.T) {
+	f := rosewood(t)
+	got := f.captureNotifications()
+
+	f.post(t, nigelID.String(), url.Values{"row": {"water"}, "care": {"feed"}, "outcome": {"skipped"}, "again": {"3"}}, true)
+
+	if len(*got) != 1 || (*got)[0].n.Body != "Ellie skipped Nigel." {
+		t.Errorf("notified %+v, want one notification saying Ellie skipped Nigel.", *got)
+	}
+}
+
+func TestLog_TheNotificationsIconIsThePlantsProfilePicture(t *testing.T) {
+	f := rosewood(t)
+	var photoID uuid.UUID
+	err := f.tx.QueryRow(t.Context(), `INSERT INTO photo (garden_id, plant_id, uploaded_by, kind, path, width, height, bytes, square_bytes)
+		VALUES ($1, $2, $3, 'image/jpeg', 'x', 1, 1, 1024, 512) RETURNING id`, rosewoodID, dorisID, readerID).Scan(&photoID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.exec(t, "UPDATE plant SET profile_photo_id = $1 WHERE id = $2", photoID, dorisID)
+	got := f.captureNotifications()
+
+	f.post(t, dorisID.String(), url.Values{"row": {"water"}, "care": {"water"}}, true)
+
+	want := "/plants/" + dorisID.String() + "/photos/" + photoID.String() + "/square"
+	if len(*got) != 1 || (*got)[0].n.Icon != want {
+		t.Errorf("notified %+v, want one notification with icon %s", *got, want)
+	}
+}
+
+func TestLog_ARefusedTimeNotifiesNobody(t *testing.T) {
+	f := rosewood(t)
+	got := f.captureNotifications()
+
+	rec := f.post(t, dorisID.String(), url.Values{"care": {"water"}, "when": {"today"}, "time": {"23:00"}}, true)
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusUnprocessableEntity, rec.Body.String())
+	}
+
+	if len(*got) != 0 {
+		t.Errorf("notified %+v, want nothing: no care was recorded", *got)
+	}
+}
+
+func TestLog_OnThePlantPageNotifiesTheGarden(t *testing.T) {
+	f := rosewood(t)
+	got := f.captureNotifications()
+
+	rec := f.post(t, dorisID.String(), url.Values{"over": {overPlant}, "care": {"water"}}, false)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusSeeOther, rec.Body.String())
+	}
+
+	want := []notified{{gardenID: rosewoodID, actorID: readerID, n: push.Notification{Title: "Rosewood", Body: "Ellie watered Doris.", URL: "/plants/" + dorisID.String()}}}
+	if !slices.Equal(*got, want) {
+		t.Errorf("notified %+v, want %+v", *got, want)
+	}
+}
+
+func TestUndo_NotifiesNobody(t *testing.T) {
+	f := rosewood(t)
+	got := f.captureNotifications()
+	f.post(t, dorisID.String(), url.Values{"row": {"water"}, "care": {"water"}}, true)
+	event := f.latest(t, dorisID)
+
+	f.undo(t, dorisID, event.ID, "water", true)
+
+	if len(*got) != 1 {
+		t.Errorf("notified %d times, want once for the log and nothing for the undo", len(*got))
 	}
 }
