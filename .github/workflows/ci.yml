@@ -4,10 +4,15 @@ name: CI
 # push run also writes the caches pull requests read, because a cache written
 # on a pull request branch is only readable from that branch. A version tag
 # runs the Release workflow instead.
+#
+# workflow_dispatch exists so the htmx vendoring workflow can start a run on a
+# Renovate branch after pushing the vendored file to it. A push made with the
+# workflow token doesn't start a pull_request run, so that head would go unchecked.
 on:
   pull_request:
   push:
     branches: [main]
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -27,6 +32,15 @@ jobs:
         uses: ./.github/actions/setup-go
       - name: Lint project
         run: mise run lint
+      # A Renovate pull request is skipped here because its pull_request run
+      # starts before the vendored file is pushed to the branch. The run
+      # dispatched after that push checks the branch instead.
+      - name: Check the vendored htmx is the release mise.toml pins
+        if: github.event.pull_request.user.login != 'renovate[bot]'
+        run: |
+          mise run vendor:htmx
+          git add --intent-to-add web/static/vendor
+          git diff --stat --exit-code -- web/static/vendor
 
   test:
     runs-on: ubuntu-latest
