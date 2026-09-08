@@ -45,6 +45,22 @@ func comingWord(line schedule.Line, now time.Time) string {
 	return whenWord(line.Days, now)
 }
 
+// nextLine is the empty state's sentence naming what is due soonest beyond
+// the week: "Spike is next, in 12 days." One plant is named, two are both
+// named, and three or more are the first and a count. rows is Day.Next, so
+// every row is due on the same day.
+func nextLine(rows []schedule.Row, now time.Time) string {
+	when := comingWord(rows[0].Care, now)
+	first := rows[0].Plant.DisplayName()
+	switch len(rows) {
+	case 1:
+		return fmt.Sprintf("%s is next, %s.", first, when)
+	case 2:
+		return fmt.Sprintf("%s and %s are next, %s.", first, rows[1].Plant.DisplayName(), when)
+	}
+	return fmt.Sprintf("%s and %d more are next, %s.", first, len(rows)-1, when)
+}
+
 // whenWord returns the day a care falls on, given days after today. Up to six
 // days ahead it is a weekday name. Up to 60 days it is a count. Beyond that it
 // is a month, with the year added once it is more than a year away.

@@ -391,7 +391,13 @@ func TestSeed_TodayPlacesEachPlantInTheSectionItsDueInImplies(t *testing.T) {
 			t.Errorf("Gerald's row is about %s, want feed", r.Care.CareType.Slug)
 		}
 	}
-	if day.Next == nil || day.Next.Plant.DisplayName() != "Ferngully" || day.Next.Care.Days != 8 {
-		t.Errorf("Next = %+v, want Ferngully in 8 days", day.Next)
+	// Ferngully and the unnamed pothos are both due in 8 days, the day after
+	// Coming up ends, so the empty state names the two of them.
+	next := make([]string, 0, len(day.Next))
+	for _, r := range day.Next {
+		next = append(next, r.Plant.DisplayName())
+	}
+	if !slices.Equal(next, []string{"Ferngully", "Golden pothos"}) || day.Next[0].Care.Days != 8 {
+		t.Errorf("Next = %v in %d days, want [Ferngully Golden pothos] in 8 days", next, day.Next[0].Care.Days)
 	}
 }
