@@ -17,17 +17,13 @@ test("the garden's name is saved and Today is headed with it", async ({ garden, 
   await expect(page.getByRole('heading', { name: 'The Roof', level: 1 })).toBeVisible();
 });
 
-test('a care type with events recorded against it can be turned off and not deleted', async ({
-  garden,
-  plant,
-  page,
-}) => {
+test('a care type with care logged against it can be turned off and not deleted', async ({ garden, plant, page }) => {
   await garden.open();
   await garden.row(careTypes.repot).click();
 
-  await expect(page.getByText(/^Recorded once/)).toBeVisible();
+  await expect(page.getByText(/^Used once/)).toBeVisible();
   await expect(garden.drop('Delete')).toHaveCount(0);
-  await garden.drop('Turn it off').click();
+  await garden.drop('Turn off').click();
 
   await expect(garden.row(careTypes.repot)).toContainText('Off');
   await plant.open(seeded.bigFella);
@@ -37,7 +33,7 @@ test('a care type with events recorded against it can be turned off and not dele
 test('an event stays on the log after its care type is turned off', async ({ garden, activity, page }) => {
   await garden.open();
   await garden.row(careTypes.repot).click();
-  await garden.drop('Turn it off').click();
+  await garden.drop('Turn off').click();
 
   await page.goto(`/activity?plant=${seeded.bigFella.id}`);
   await expect(activity.rows().filter({ hasText: 'Repotted' })).toHaveCount(1);
@@ -47,7 +43,7 @@ test('a care type that was turned off is offered again once it is back on', asyn
   await garden.open();
   await garden.row(careTypes.mist).click();
 
-  await garden.drop('Turn it back on').click();
+  await garden.drop('Turn on').click();
 
   await expect(garden.row(careTypes.mist)).not.toContainText('Off');
   await plant.open(seeded.nigel);
@@ -67,7 +63,7 @@ test('a renamed care type keeps the schedules it had', async ({ garden, plant })
   await expect(plant.scheduleRow('Watering')).toContainText('Every 3 weeks');
 });
 
-test('a care type nothing has been recorded against is added and then deleted', async ({ garden, page }) => {
+test('a care type nothing has been logged against is added and then deleted', async ({ garden, page }) => {
   await garden.open();
   await garden.addType().click();
 
@@ -76,7 +72,7 @@ test('a care type nothing has been recorded against is added and then deleted', 
   await expect(garden.row('Prune')).toBeVisible();
 
   await garden.row('Prune').click();
-  await expect(page.getByText('Nothing has been recorded against it yet')).toBeVisible();
+  await expect(page.getByText('Not used yet, so it can be deleted.')).toBeVisible();
   await garden.drop('Delete').click();
 
   await expect(garden.row('Prune')).toHaveCount(0);
@@ -100,7 +96,7 @@ test('a care type left without a name is refused', async ({ garden, page }) => {
   await garden.typeName().fill('');
   await garden.save().click();
 
-  await expect(page.getByText('Give the care type a name.')).toBeVisible();
+  await expect(page.getByText('Enter a name.')).toBeVisible();
   await garden.cancel().click();
   await expect(garden.row(careTypes.feed)).toBeVisible();
 });

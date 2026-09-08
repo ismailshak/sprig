@@ -51,7 +51,7 @@ func TestRecovery_AnAccountHoldingNoneIsToldSoAndOfferedASet(t *testing.T) {
 	if recoveryLine.MatchString(page) {
 		t.Errorf("the page shows a batch for an account holding none:\n%s", page)
 	}
-	if !strings.Contains(page, "You are holding none") {
+	if !strings.Contains(page, "As the owner, nobody can send you a new invite link") {
 		t.Errorf("the page does not say the account is holding none:\n%s", page)
 	}
 	if got, want := text(wideAction.FindStringSubmatch(page)[1]), "Create codes"; got != want {
@@ -104,7 +104,7 @@ func TestRecovery_CreatingCodesShowsTenOnceAndStoresOnlyTheirHashes(t *testing.T
 	if len(codes) != 10 {
 		t.Fatalf("the box lists %d codes, want 10:\n%s", len(codes), box[1])
 	}
-	if !strings.Contains(box[1], "This is the only time they are shown") {
+	if !strings.Contains(box[1], "These codes are shown only once") {
 		t.Errorf("the box does not say the codes are shown once:\n%s", box[1])
 	}
 	if !strings.Contains(page, `<a class="wide-action" href="`+accountPath+`">Done</a>`) {

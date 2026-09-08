@@ -24,7 +24,7 @@ test('an empty display name is refused and the page says what is missing', async
   await account.name().fill('');
   await account.save().click();
 
-  await expect(page.getByText('Give a display name')).toBeVisible();
+  await expect(page.getByText('Enter a display name')).toBeVisible();
   await expect(account.name()).toHaveValue('');
 });
 
@@ -43,7 +43,7 @@ test('a handle another account holds is refused and the page names it', async ({
   await account.handle().fill(people.sam.handle);
   await account.save().click();
 
-  await expect(page.getByText(`${people.sam.handle} is taken`)).toBeVisible();
+  await expect(page.getByText(`${people.sam.handle} is already taken`)).toBeVisible();
   await expect(account.handle()).toHaveValue(people.sam.handle);
 
   await account.open();

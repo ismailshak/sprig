@@ -27,7 +27,7 @@ test('a new token is shown once, joins the list, and is gone on the next visit',
   await tokens.create().click();
 
   await expect(tokens.token()).toBeVisible();
-  await expect(page.getByText(/It stops working on \d+ \w+/)).toBeVisible();
+  await expect(page.getByText(/It expires on \d+ \w+/)).toBeVisible();
   await expect(tokens.row('The greenhouse pi')).toBeVisible();
 
   await tokens.open();
@@ -41,7 +41,7 @@ test('a token with no name is refused and says so under the field', async ({ tok
   await tokens.expiry().selectOption('90');
   await tokens.create().click();
 
-  await expect(page.getByText(/^Say what the token is for/)).toBeVisible();
+  await expect(page.getByText(/^Enter a name\./)).toBeVisible();
   await expect(tokens.expiry()).toHaveValue('90');
   await expect(tokens.token()).toHaveCount(0);
 });

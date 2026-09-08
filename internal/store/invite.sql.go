@@ -12,17 +12,17 @@ import (
 	"uuid"
 )
 
-const countWaitingInvites = `-- name: CountWaitingInvites :one
+const countPendingInvites = `-- name: CountPendingInvites :one
 SELECT count(*) FROM invite
 WHERE garden_id = $1 AND user_id IS NULL AND redeemed_at IS NULL AND expires_at > $2
 `
 
-// An invite that has expired is not waiting for anybody, so More's People row
-// counts only the ones that can still be redeemed. A re-enrolment link is not
-// counted either: it adds a device to somebody already in the garden, and
-// their row is in the members list rather than in the Invited section.
-func (q *Queries) CountWaitingInvites(ctx context.Context, gardenID uuid.UUID, now time.Time) (int64, error) {
-	row := q.db.QueryRow(ctx, countWaitingInvites, gardenID, now)
+// An expired invite is not pending, so More's People row counts only the ones
+// that can still be redeemed. A re-enrolment link is not counted either: it
+// adds a device to somebody already in the garden, and their row is in the
+// members list rather than in the Pending invites section.
+func (q *Queries) CountPendingInvites(ctx context.Context, gardenID uuid.UUID, now time.Time) (int64, error) {
+	row := q.db.QueryRow(ctx, countPendingInvites, gardenID, now)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -70,23 +70,7 @@ func (q *Queries) CreateInvite(ctx context.Context, arg CreateInviteParams) (Inv
 	return i, err
 }
 
-const deleteReenrolmentInvites = `-- name: DeleteReenrolmentInvites :execrows
-DELETE FROM invite
-WHERE garden_id = $1 AND user_id = $2 AND redeemed_at IS NULL
-`
-
-// Every unredeemed re-enrolment link for one person. Issuing a new one deletes
-// the old, because these rows are not in the Invited section and a link nobody
-// can see is a link nobody can revoke.
-func (q *Queries) DeleteReenrolmentInvites(ctx context.Context, gardenID uuid.UUID, userID *uuid.UUID) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteReenrolmentInvites, gardenID, userID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const deleteWaitingInvite = `-- name: DeleteWaitingInvite :execrows
+const deletePendingInvite = `-- name: DeletePendingInvite :execrows
 DELETE FROM invite
 WHERE garden_id = $1 AND id = $2 AND redeemed_at IS NULL
 `
@@ -94,8 +78,24 @@ WHERE garden_id = $1 AND id = $2 AND redeemed_at IS NULL
 // Revoking deletes the row. That is what makes the link stop working. A
 // redeemed invite is not deleted here, because Revoke is only offered on rows
 // nobody has opened.
-func (q *Queries) DeleteWaitingInvite(ctx context.Context, gardenID uuid.UUID, inviteID uuid.UUID) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteWaitingInvite, gardenID, inviteID)
+func (q *Queries) DeletePendingInvite(ctx context.Context, gardenID uuid.UUID, inviteID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deletePendingInvite, gardenID, inviteID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteReenrolmentInvites = `-- name: DeleteReenrolmentInvites :execrows
+DELETE FROM invite
+WHERE garden_id = $1 AND user_id = $2 AND redeemed_at IS NULL
+`
+
+// Every unredeemed re-enrolment link for one person. Issuing a new one deletes
+// the old, because these rows are not in the Pending invites section and a
+// link nobody can see is a link nobody can revoke.
+func (q *Queries) DeleteReenrolmentInvites(ctx context.Context, gardenID uuid.UUID, userID *uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteReenrolmentInvites, gardenID, userID)
 	if err != nil {
 		return 0, err
 	}
@@ -147,17 +147,17 @@ func (q *Queries) GetInviteByTokenHash(ctx context.Context, tokenHash string) (G
 	return i, err
 }
 
-const listWaitingInvites = `-- name: ListWaitingInvites :many
+const listPendingInvites = `-- name: ListPendingInvites :many
 SELECT id, garden_id, token_hash, role, user_id, created_by, created_at, expires_at, redeemed_at, membership_expires_at FROM invite
 WHERE garden_id = $1 AND user_id IS NULL AND redeemed_at IS NULL
 ORDER BY created_at DESC, id
 `
 
-// The Invited section on People. It holds invites to people who are not in the
-// garden yet, the ones that have run out included, because an expired link is
-// still a row somebody wants to clear away.
-func (q *Queries) ListWaitingInvites(ctx context.Context, gardenID uuid.UUID) ([]Invite, error) {
-	rows, err := q.db.Query(ctx, listWaitingInvites, gardenID)
+// The Pending invites section on People. It holds invites to people who are
+// not in the garden yet, the ones that have run out included, because an
+// expired link is still a row somebody wants to clear away.
+func (q *Queries) ListPendingInvites(ctx context.Context, gardenID uuid.UUID) ([]Invite, error) {
+	rows, err := q.db.Query(ctx, listPendingInvites, gardenID)
 	if err != nil {
 		return nil, err
 	}

@@ -32,8 +32,8 @@ func removeMemberPath(handle string) string {
 	return memberPath(handle) + "/remove"
 }
 
-// reenrolMemberPath is the URL the Re-enrol button posts to. It creates an
-// invite link that adds a device to the account this person already has.
+// reenrolMemberPath is the URL the Sign-in link button posts to. It creates a
+// link that adds a passkey to the account this person already has.
 func reenrolMemberPath(handle string) string {
 	return memberPath(handle) + "/reenrol"
 }
@@ -47,9 +47,9 @@ func revokeInvitePath(inviteID uuid.UUID) string {
 // row and under the chips on Invite someone. The sentences describe what
 // role_capability grants, so a change to that table has to be made here too.
 var roleWhat = map[string]string{
-	"owner":  "Everything, including inviting people and changing what they can do.",
-	"member": "Logs care, adds and edits plants, and adds photos.",
-	"sitter": "Logs care and sees everything. Adds no photos and no plants.",
+	"owner":  "Owners can do everything, including managing people.",
+	"member": "Members can log care, add and edit plants, and add photos.",
+	"sitter": "Sitters can log care and view everything, but not add plants or photos.",
 }
 
 // offeredRoles are the roles the select on a member's row and the chips on
@@ -63,8 +63,8 @@ type peoplePage struct {
 	Bar topbar
 	// Action is the URL the members form posts to.
 	Action string
-	// Secret is the re-enrolment link the Re-enrol button just created. It is
-	// nil on every other request.
+	// Secret is the link the Sign-in link button just created. It is nil on
+	// every other request.
 	Secret *secretBox
 	// SecretWhy is the paragraph under that link, saying what it does to the
 	// account it names.
@@ -73,7 +73,7 @@ type peoplePage struct {
 	// Save is false when the reader is the only member. Their own row has no
 	// controls, so there is nothing to save.
 	Save bool
-	// Invites are the rows in the Invited section. The section is left off the
+	// Invites are the rows under Pending invites. The section is left off the
 	// page when there are none rather than rendered empty.
 	Invites []inviteRow
 	// InviteSomeone is the URL of the Invite someone link at the bottom. It is
@@ -122,8 +122,8 @@ type memberRow struct {
 	// Who is what to call this person in a sentence: their display name, with
 	// the handle in brackets after it where another member has the same name.
 	Who string
-	// Reenrol is the URL the Re-enrol button posts to, and ReenrolForm the id
-	// of the form it belongs to. Forms cannot nest, so that form is rendered
+	// Reenrol is the URL the Sign-in link button posts to, and ReenrolForm the
+	// id of the form it belongs to. Forms cannot nest, so that form is rendered
 	// after the members form and the button names it in its form attribute.
 	Reenrol     string
 	ReenrolForm string
@@ -144,12 +144,13 @@ type removeQuestion struct {
 	// forms cannot nest.
 	Action string
 	Form   string
-	// Keep is the URL the Keep them link points at: People with no row asking.
+	// Keep is the URL the Cancel link points at. It is People with no row
+	// asking.
 	Keep string
 }
 
-// inviteRow is one invite in the Invited section: a link that has been sent and
-// not opened.
+// inviteRow is one row under Pending invites: a link that has been sent and not
+// opened.
 type inviteRow struct {
 	// Role is the role the invite grants, "Sitter". The person has no name yet.
 	Role string
@@ -165,11 +166,12 @@ type inviteRow struct {
 // re-enrolment link or a new API token. Only a hash of it is stored, so it
 // cannot be shown again once the page is left.
 type secretBox struct {
-	// Label is the line above the value, "The link" or "The token".
+	// Label is the line above the value, such as "Invite link" or "Your new
+	// token".
 	Label string
 	Value string
 	// Why is the paragraph under the value. It says the value is shown once,
-	// and for a token it names the date it stops working.
+	// and for a token it names the date it expires.
 	Why string
 }
 
@@ -193,7 +195,7 @@ func (h *more) people(w http.ResponseWriter, r *http.Request) {
 func (h *more) saveMembers(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "the form did not parse", http.StatusBadRequest)
+		badRequest(w)
 		return
 	}
 	members, err := h.queries.ListMembers(r.Context(), principal.Garden.ID)
@@ -203,7 +205,7 @@ func (h *more) saveMembers(w http.ResponseWriter, r *http.Request) {
 	}
 	changes, ok := postedChanges(members, principal, r.PostForm)
 	if !ok {
-		http.Error(w, "the form did not offer that", http.StatusBadRequest)
+		badRequest(w)
 		return
 	}
 
@@ -300,7 +302,7 @@ func (h *more) removeMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if removed == 0 {
-		http.NotFound(w, r)
+		notFound(w)
 		return
 	}
 	http.Redirect(w, r, peoplePath, http.StatusSeeOther)
@@ -331,16 +333,16 @@ func (h *more) revokeInvite(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	inviteID, err := uuid.Parse(r.PathValue("invite"))
 	if err != nil {
-		http.NotFound(w, r)
+		notFound(w)
 		return
 	}
-	revoked, err := h.queries.DeleteWaitingInvite(r.Context(), principal.Garden.ID, inviteID)
+	revoked, err := h.queries.DeletePendingInvite(r.Context(), principal.Garden.ID, inviteID)
 	if err != nil {
 		serverError(h.logger, w, r, "revoke the invite", err)
 		return
 	}
 	if revoked == 0 {
-		http.NotFound(w, r)
+		notFound(w)
 		return
 	}
 	http.Redirect(w, r, peoplePath, http.StatusSeeOther)
@@ -348,20 +350,20 @@ func (h *more) revokeInvite(w http.ResponseWriter, r *http.Request) {
 
 // memberFromPath reads the member the URL names. It writes a 404 and returns
 // false for a handle nobody in this garden holds, and for the reader's own
-// handle, because their row has no Remove and no Re-enrol button.
+// handle, because their row has no Remove and no Sign-in link button.
 func (h *more) memberFromPath(w http.ResponseWriter, r *http.Request) (store.GetMemberByHandleRow, bool) {
 	principal := PrincipalFrom(r)
 	member, err := h.queries.GetMemberByHandle(r.Context(), principal.Garden.ID, r.PathValue("member"))
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		http.NotFound(w, r)
+		notFound(w)
 		return store.GetMemberByHandleRow{}, false
 	case err != nil:
 		serverError(h.logger, w, r, "read the member", err)
 		return store.GetMemberByHandleRow{}, false
 	}
 	if member.AppUser.ID == principal.User.ID {
-		http.NotFound(w, r)
+		notFound(w)
 		return store.GetMemberByHandleRow{}, false
 	}
 	return member, true
@@ -373,7 +375,7 @@ func (h *more) memberFromPath(w http.ResponseWriter, r *http.Request) (store.Get
 // that does not end.
 //
 // A re-enrolment deletes any unredeemed link for the same person first. Those
-// rows are not in the Invited section, so a second press would otherwise leave
+// rows are not under Pending invites, so a second press would otherwise leave
 // a working link that no page can revoke.
 func (h *more) createInvite(r *http.Request, role string, userID *uuid.UUID, ends *time.Time) (string, error) {
 	principal := PrincipalFrom(r)
@@ -416,7 +418,7 @@ func (h *more) renderPeople(w http.ResponseWriter, r *http.Request, state people
 		serverError(h.logger, w, r, "list the members", err)
 		return
 	}
-	invites, err := h.queries.ListWaitingInvites(r.Context(), principal.Garden.ID)
+	invites, err := h.queries.ListPendingInvites(r.Context(), principal.Garden.ID)
 	if err != nil {
 		serverError(h.logger, w, r, "list the invites", err)
 		return
@@ -446,13 +448,11 @@ func (h *more) renderPeople(w http.ResponseWriter, r *http.Request, state people
 func reenrolBox(user store.AppUser, collides map[string]bool, link string) (*secretBox, string) {
 	who := whoWord(user, collides)
 	box := &secretBox{
-		Label: "The link",
+		Label: "Sign-in link for " + who,
 		Value: link,
-		Why: "This is the only time it is shown — sprig keeps a hash of it and nothing else. " +
-			"Send it to " + who + " however you already message them.",
+		Why:   "This link is shown only once. Copy it now and send it to " + who + ".",
 	}
-	return box, "It adds a device to the account " + who + " already has, rather than making a second " +
-		user.DisplayName + " — so everything they have logged stays theirs. It works once and expires in 7 days."
+	return box, "It lets " + who + " add a passkey on a new device. It works once and expires in 7 days."
 }
 
 // memberRows builds the Members list. asking is the handle of the one row that
@@ -483,8 +483,8 @@ func newMemberRow(member store.ListMembersRow, principal auth.Principal, collide
 	row.Reenrol, row.ReenrolForm = reenrolMemberPath(handle), "reenrol-"+handle
 	row.Remove = removeMemberPath(handle)
 	row.RoleField, row.UntilField = roleField(handle), untilField(handle)
-	row.RoleLabel = "What " + row.Who + " can do"
-	row.UntilLabel = "When " + row.Who + "'s access ends"
+	row.RoleLabel = row.Who + "’s role"
+	row.UntilLabel = row.Who + "’s access ends on"
 
 	// A membership with an end date shows the date on its second line in place
 	// of the sentence about what the person can do, because nothing else on the

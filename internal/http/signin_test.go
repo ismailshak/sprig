@@ -34,7 +34,7 @@ func TestSignIn_ThePageIsServedWithNoSessionAndPostsToTheSignInRoutes(t *testing
 		`data-passkey="get"`,
 		`data-challenge="` + challengePath + `"`,
 		`<input type="hidden" name="` + credentialField + `">`,
-		"Signing in needs JavaScript and a browser that supports passkeys.",
+		"Requires JavaScript and a browser with passkey support.",
 		`href="` + recoverPath + `"`,
 	} {
 		if !strings.Contains(page, want) {
@@ -67,7 +67,7 @@ func TestSignIn_AnAnswerWithNoChallengeBehindItSaysTheRequestExpiredOnThePage(t 
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusUnauthorized, text(rec.Body.String()))
 	}
-	if !strings.Contains(rec.Body.String(), "That took too long, so the request has expired. Try signing in again.") {
+	if !strings.Contains(rec.Body.String(), "Sign-in timed out. Try again.") {
 		t.Errorf("the page does not say the request expired:\n%s", text(rec.Body.String()))
 	}
 	// The form is still on the page, so a second attempt takes no navigation.
@@ -90,7 +90,7 @@ func TestSignIn_APasskeyRemovedFromTheAccountIsRefusedOnThePage(t *testing.T) {
 	}
 	// The comparison is against the rendered text, because the apostrophe in
 	// the sentence is escaped in the markup.
-	if !strings.Contains(text(rec.Body.String()), "That passkey is not one sprig knows. It may have been removed from the account's Passkeys page.") {
+	if !strings.Contains(text(rec.Body.String()), "This passkey isn’t registered. It may have been removed on the Passkeys page.") {
 		t.Errorf("the page does not say the passkey is unknown:\n%s", text(rec.Body.String()))
 	}
 	if cookieNamed(t, rec, "__Host-sprig_session") != nil {

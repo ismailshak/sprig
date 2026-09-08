@@ -5,8 +5,8 @@ import { expect, test } from '../harness/test';
 // The sentences People and Invite someone both use for what a role can do. The
 // server writes them in one place, and these tests read them on both pages.
 const roleWhat = {
-  member: 'Logs care, adds and edits plants, and adds photos.',
-  sitter: 'Logs care and sees everything. Adds no photos and no plants.',
+  member: 'Members can log care, add and edit plants, and add photos.',
+  sitter: 'Sitters can log care and view everything, but not add plants or photos.',
 } as const;
 
 test.beforeEach(async ({ page }) => {
@@ -64,8 +64,8 @@ test('removing a member asks first, and keeping them leaves the row where it was
   await people.remove(seeded.sam.name).click();
 
   await expect(page.getByText(`Remove ${seeded.sam.name}?`)).toBeVisible();
-  await expect(page.getByText(/their name stays on every watering/)).toBeVisible();
-  await people.keep().click();
+  await expect(page.getByText(/Their name stays on everything they’ve logged/)).toBeVisible();
+  await people.cancelRemove().click();
   await expect(people.remove(seeded.sam.name)).toBeVisible();
 });
 
@@ -89,7 +89,7 @@ test('a re-enrolment link is shown once and is gone on the next visit', async ({
   await expect(people.link()).toHaveCount(0);
 });
 
-test('the Invited section is not shown once the last invite is revoked', async ({ people }) => {
+test('Pending invites is not shown once the last invite is revoked', async ({ people }) => {
   await people.open();
 
   await expect(people.invited()).toBeVisible();
@@ -146,7 +146,7 @@ test('an end date of today is refused, because access would end before the link 
   await invite.until().fill(todayFor());
   await invite.create().click();
 
-  await expect(page.getByText('Pick a day after today. Access ends when the day you pick begins.')).toBeVisible();
+  await expect(page.getByText('Choose a date after today. Access ends at the start of that day.')).toBeVisible();
   await expect(invite.link()).toHaveCount(0);
   await expect(invite.until()).toHaveValue(todayFor());
 });

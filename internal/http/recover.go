@@ -23,7 +23,7 @@ const (
 	// to for a registration challenge.
 	recoverChallengePath = recoverPath + "/challenge"
 	// recoverPasskeyPath is the URL the Add this device form posts the
-	// browser's answer to.
+	// browser's credential to.
 	recoverPasskeyPath = recoverPath + "/passkey"
 )
 
@@ -34,18 +34,16 @@ const codeField = "code"
 const (
 	recoverTitle  = "Recover an account"
 	addThisDevice = "Add this device"
-	registerLabel = "Register a passkey"
+	registerLabel = "Add passkey"
 	// The heading and the sentence shown for a code that cannot be used. A
 	// used code, a code nobody made and a string that is not a code all get
 	// this page, so somebody holding a stolen sheet of codes cannot find out
 	// which of them still work.
-	codeCannotBeUsedTitle = "That code cannot be used"
-	codeCannotBeUsedLine  = "Ask whoever runs the garden to send you a new invite link. If the garden is your own, there is no way back in from here."
-	// The heading and the sentence shown for a post past the rate limit. The
-	// sentence says the limit is on the page rather than on the account,
-	// because somebody else's attempts can spend the shared limit.
-	tooManyTriesTitle = "Too many tries"
-	tooManyTriesLine  = "Wait a few minutes and try again. This limit is on the page rather than on your account, so it can be somebody else's attempts you are waiting out."
+	codeCannotBeUsedTitle = "This code can’t be used"
+	codeCannotBeUsedLine  = "It may have been used already or replaced by a newer set. Try another code, or ask the garden’s owner for a new invite link."
+	// The heading and the sentence shown for a post past the rate limit.
+	tooManyAttemptsTitle = "Too many attempts"
+	tooManyAttemptsLine  = "Wait a few minutes and try again."
 )
 
 // errCodeUsed is returned inside the transaction that registers the passkey
@@ -68,7 +66,8 @@ type recoverPage struct {
 	// that registers a passkey.
 	AddDevice bool
 	// Code is the matched code. The registration form posts it back in a
-	// hidden input, so the challenge and the answer find the account again.
+	// hidden input, so the challenge and the registration find the account
+	// again.
 	// CodeField is that input's name.
 	Code      string
 	CodeField string
@@ -77,7 +76,7 @@ type recoverPage struct {
 	Refusal string
 	// Action is the URL the form posts to. Challenge is the URL the
 	// registration form's script posts to for a challenge. Field is the name
-	// of the hidden input the browser's answer goes in.
+	// of the hidden input the browser's credential goes in.
 	Action    string
 	Challenge string
 	Field     string
@@ -126,7 +125,7 @@ func (h *recoverAccount) show(w http.ResponseWriter, r *http.Request) {
 // nothing. Every other code gets the same 422 page.
 func (h *recoverAccount) check(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "the form did not parse", http.StatusBadRequest)
+		badRequest(w)
 		return
 	}
 	code, _, ok, err := h.lookUp(r)
@@ -170,7 +169,7 @@ func (h *recoverAccount) lookUp(r *http.Request) (code string, user store.AppUse
 // /recover/passkey renders the response the person reads.
 func (h *recoverAccount) challenge(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "the form did not parse", http.StatusBadRequest)
+		badRequest(w)
 		return
 	}
 	_, user, ok, err := h.lookUp(r)
@@ -196,14 +195,14 @@ func (h *recoverAccount) challenge(w http.ResponseWriter, r *http.Request) {
 	writeJSON(h.logger, w, r, creation)
 }
 
-// register handles POST /recover/passkey, the browser's answer to the
-// challenge. Marking the code used and saving the passkey are one
+// register handles POST /recover/passkey, the post holding the credential the
+// browser created. Marking the code used and saving the passkey are one
 // transaction, so a refused registration leaves the code unused. A code an
 // earlier post already used saves no passkey. Success redirects to sign in
 // and starts no session.
 func (h *recoverAccount) register(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "the form did not parse", http.StatusBadRequest)
+		badRequest(w)
 		return
 	}
 	// The ceremony cookie is cleared whatever the outcome, so one challenge
@@ -238,7 +237,7 @@ func (h *recoverAccount) register(w http.ResponseWriter, r *http.Request) {
 	}
 	if err != nil {
 		page := addDevicePage(code)
-		page.Refusal = registrationRefusal(h.logger, w, r, err, registerLabel, "register the passkey")
+		page.Refusal = registrationRefusal(h.logger, w, r, err, "register the passkey")
 		if page.Refusal == "" {
 			return
 		}
@@ -253,18 +252,18 @@ func (h *recoverAccount) renderCannotBeUsed(w http.ResponseWriter, r *http.Reque
 	h.templates.render(w, r, view{page: "recover", status: http.StatusUnprocessableEntity}, turnedAwayPage(codeCannotBeUsedTitle, codeCannotBeUsedLine))
 }
 
-// tooManyCodes renders the Too many tries page with a 429. It is the response
+// tooManyCodes renders the Too many attempts page with a 429. It is the response
 // to a POST /recover or a POST /recover/passkey past the rate limit. Both are
 // ordinary form posts, so a person reads the response.
 func (h *recoverAccount) tooManyCodes(w http.ResponseWriter, r *http.Request) {
-	h.templates.render(w, r, view{page: "recover", status: http.StatusTooManyRequests}, turnedAwayPage(tooManyTriesTitle, tooManyTriesLine))
+	h.templates.render(w, r, view{page: "recover", status: http.StatusTooManyRequests}, turnedAwayPage(tooManyAttemptsTitle, tooManyAttemptsLine))
 }
 
 // tooManyRecoveryChallenges is the response to a POST /recover/challenge past
 // the rate limit. The line is plain text, because the page's script fetches
 // this URL and puts the body above the button.
 func tooManyRecoveryChallenges(w http.ResponseWriter, _ *http.Request) {
-	http.Error(w, tooManyTriesTitle+". "+tooManyTriesLine, http.StatusTooManyRequests)
+	http.Error(w, tooManyAttemptsTitle+". "+tooManyAttemptsLine, http.StatusTooManyRequests)
 }
 
 // recoverLimits are the two rate limiters shared by the three routes that

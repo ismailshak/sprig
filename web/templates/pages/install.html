@@ -1,4 +1,4 @@
-{{define "title"}}sprig — install{{end}}
+{{define "title"}}Install sprig · sprig{{end}}
 
 {{define "app-class"}}app{{if .AfterInvite}} app--bare{{end}}{{end}}
 
@@ -13,14 +13,14 @@
 {{if .AfterInvite}}<div class="app__body app__body--bare">
 <h1 class="bare__title">Install sprig</h1>{{else}}{{template "more-topbar" .Bar}}
 <div class="app__body app__body--sub">{{end}}
-<p class="lead">sprig is a website that can behave like an app: its own icon, no address bar, and notifications.</p>
+<p class="lead">Add sprig to your home screen for an app icon, a full-screen view and notifications.</p>
 <form method="get" action="{{.Action}}">
 {{if .AfterInvite}}<input type="hidden" name="after" value="invite">{{end}}
 <div class="chips">{{range .Chips}}<button class="chip" name="platform" value="{{.Value}}" aria-pressed="{{.On}}">{{.Label}}</button>{{end}}</div>
 </form>
 <ol class="steps">{{range .Steps}}<li>{{.}}</li>{{end}}</ol>
 <p class="note">{{.Why}}</p>
-{{if .AfterInvite}}<a class="wide-action" href="{{.Today}}">Go to the garden</a>{{end}}
+{{if .AfterInvite}}<a class="wide-action" href="{{.Today}}">Continue</a>{{end}}
 </div>
 {{end}}
 

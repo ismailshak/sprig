@@ -127,7 +127,7 @@ func TestSeed_ThePasskeysAreThePrototypesTwoDevices(t *testing.T) {
 	}
 }
 
-func TestSeed_OneSitterInviteIsWaiting(t *testing.T) {
+func TestSeed_OneSitterInviteIsPending(t *testing.T) {
 	pool := seeded(t)
 	ref := testReference(t)
 
@@ -141,7 +141,7 @@ func TestSeed_OneSitterInviteIsWaiting(t *testing.T) {
 		SELECT role, created_at, expires_at, user_id IS NULL FROM invite
 		WHERE garden_id = $1 AND redeemed_at IS NULL`, home().id)
 	if len(rows) != 1 {
-		t.Fatalf("%d invites are waiting, want 1", len(rows))
+		t.Fatalf("%d invites are pending, want 1", len(rows))
 	}
 	inv := rows[0]
 	if inv.Role != "sitter" {

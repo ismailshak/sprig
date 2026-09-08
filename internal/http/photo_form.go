@@ -32,11 +32,10 @@ type photoFormPage struct {
 // PhotoField is the photo field's data for the template.
 func (p photoFormPage) PhotoField() photoField {
 	return photoField{
-		Choose:      "Choose a photo",
-		Missing:     p.PhotoMissing,
-		Full:        p.PhotoFull,
-		PreviewNote: true,
-		Submit:      "Add photo",
+		Choose:  "Choose photo",
+		Missing: p.PhotoMissing,
+		Full:    p.PhotoFull,
+		Submit:  "Add photo",
 	}
 }
 
@@ -71,7 +70,7 @@ func (h *plants) addPhoto(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.ContentLength > usage.Remaining()+photoFormOverhead {
-		page.PhotoFull = photoQuotaFull(principal.Garden.Name)
+		page.PhotoFull = photoQuotaFull
 		h.templates.render(w, r, view{page: "photo-new", status: http.StatusRequestEntityTooLarge}, page)
 		return
 	}
@@ -94,14 +93,14 @@ func (h *plants) addPhoto(w http.ResponseWriter, r *http.Request) {
 	})
 	switch {
 	case errors.Is(err, photo.ErrQuotaFull):
-		page.PhotoFull = photoQuotaFull(principal.Garden.Name)
+		page.PhotoFull = photoQuotaFull
 		h.templates.render(w, r, view{page: "photo-new", status: http.StatusUnprocessableEntity}, page)
 		return
 	case errors.Is(err, photo.ErrTooLarge):
-		http.Error(w, "the photo is too large", http.StatusRequestEntityTooLarge)
+		http.Error(w, "The photo is too large.", http.StatusRequestEntityTooLarge)
 		return
 	case errors.Is(err, photo.ErrNotImage):
-		http.Error(w, "the photo is not a JPEG or a WebP", http.StatusBadRequest)
+		http.Error(w, "The photo must be a JPEG or WebP.", http.StatusBadRequest)
 		return
 	case err != nil:
 		serverError(h.logger, w, r, "add the photo", err)

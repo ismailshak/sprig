@@ -18,7 +18,7 @@ export class PlantScreen {
     return this.page.getByRole('img', { name: /^Picture of / });
   }
 
-  section(title: 'Schedule' | 'Reference' | 'Photos' | 'Recent'): Locator {
+  section(title: 'Schedule' | 'Details' | 'Photos' | 'Recent activity'): Locator {
     return this.page.getByRole('region', { name: title });
   }
 
@@ -94,26 +94,27 @@ export class PlantScreen {
     await this.page.waitForLoadState();
   }
 
-  async keepSchedule(care: string): Promise<void> {
-    await this.scheduleRow(care).getByRole('button', { name: 'Keep it' }).click();
+  async cancelRemoveSchedule(care: string): Promise<void> {
+    await this.scheduleRow(care).getByRole('button', { name: 'Cancel' }).click();
     await this.page.waitForLoadState();
   }
 
-  referenceLabels(): Locator {
-    return this.section('Reference').getByRole('term');
+  detailLabels(): Locator {
+    return this.section('Details').getByRole('term');
   }
 
-  referenceValues(): Locator {
-    return this.section('Reference').getByRole('definition');
+  detailValues(): Locator {
+    return this.section('Details').getByRole('definition');
   }
 
   recentLines(): Locator {
-    return this.section('Recent').getByRole('listitem');
+    return this.section('Recent activity').getByRole('listitem');
   }
 
-  // The link under Recent. It opens the activity log filtered to this plant.
+  // The All activity link under Recent activity. It opens the Activity page
+  // filtered to this plant.
   allActivity(): Locator {
-    return this.section('Recent').getByRole('link');
+    return this.section('Recent activity').getByRole('link');
   }
 
   async edit(): Promise<void> {
@@ -134,8 +135,8 @@ export class PlantScreen {
     await this.page.waitForLoadState();
   }
 
-  async keepIt(): Promise<void> {
-    await this.foot().getByRole('button', { name: 'Keep it' }).click();
+  async cancelArchive(): Promise<void> {
+    await this.foot().getByRole('button', { name: 'Cancel' }).click();
     await this.page.waitForLoadState();
   }
 

@@ -15,7 +15,7 @@ test('a plant with no photos reads "No photos yet" on its Photos page', async ({
   await photos.open(seeded.bigFella);
 
   await expect(page.getByText('No photos yet')).toBeVisible();
-  await expect(photos.addAPhoto()).toBeVisible();
+  await expect(photos.addPhoto()).toBeVisible();
   await expect(photos.tiles()).toHaveCount(0);
 });
 
@@ -49,7 +49,7 @@ test("pressing the picture at the top of a plant's page opens that photo's page 
 }) => {
   await plantForm.openNew();
   await plantForm.field('Nickname').fill('Ada');
-  await plantForm.choosePhoto('Add a photo', files.gpsTagged);
+  await plantForm.choosePhoto('Add photo', files.gpsTagged);
   await expect(plantForm.photoPreview()).toBeVisible();
   await plantForm.submit('Add plant');
   await expect(plant.heading()).toHaveText('Ada');
@@ -77,7 +77,7 @@ test("deleting a photo asks first and then removes it from the plant's page @js"
 
   await photo.askToDelete();
   await expect(photo.foot()).toContainText('Delete this photo?');
-  await photo.keepIt();
+  await photo.cancelDelete();
   await expect(photo.foot()).not.toContainText('Delete this photo?');
   await photo.delete();
 
@@ -98,7 +98,7 @@ test("a sitter's plant page has no Add tile and says there are no photos", async
 
 // The resize happens in the browser, so a browser running no script cannot
 // add a photo and the page says so.
-test('with no JavaScript Add a photo says a photo cannot be added @nojs', async ({ photoForm }) => {
+test('with no JavaScript Add photo says a photo cannot be added @nojs', async ({ photoForm }) => {
   await photoForm.open(seeded.bigFella);
 
   await expect(photoForm.unsupported()).toBeVisible();

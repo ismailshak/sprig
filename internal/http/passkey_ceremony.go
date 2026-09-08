@@ -15,20 +15,20 @@ import (
 const (
 	// registerPath is the URL the Passkeys page's script posts to for a
 	// registration challenge. It then runs navigator.credentials.create and
-	// posts the answer to passkeysPath.
+	// posts the credential to passkeysPath.
 	registerPath = passkeysPath + "/challenge"
 	// challengePath is the URL the sign-in page's script posts to for a sign-in
-	// challenge. It then runs navigator.credentials.get and posts the answer to
-	// signInPath.
+	// challenge. It then runs navigator.credentials.get and posts the credential
+	// to signInPath.
 	challengePath = signInPath + "/challenge"
 )
 
 // credentialField is the name of the form field the page posts the browser's
-// answer to a challenge in. It holds what PublicKeyCredential.toJSON produced.
+// credential in. It holds what PublicKeyCredential.toJSON produced.
 const credentialField = "credential"
 
-// passkeyCeremony serves the four passkey requests: a challenge and an answer
-// for registering a device, and the same pair for signing in.
+// passkeyCeremony serves the four passkey requests: the challenge and the
+// credential post that register a device, and the same pair for signing in.
 type passkeyCeremony struct {
 	logger    *slog.Logger
 	passkeys  *auth.Passkeys
@@ -64,11 +64,11 @@ func (h *passkeyCeremony) registerChallenge(w http.ResponseWriter, r *http.Reque
 func (h *passkeyCeremony) register(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "the form did not parse", http.StatusBadRequest)
+		badRequest(w)
 		return
 	}
 	// The page that reports a refusal lists the devices already enrolled. The
-	// list is read here, before the answer is checked, so a refusal renders
+	// list is read here, before the credential is checked, so a refusal renders
 	// from it and runs no query after a failed write.
 	keys, err := h.queries.ListPasskeys(r.Context(), principal.User.ID)
 	if err != nil {
@@ -91,10 +91,10 @@ func (h *passkeyCeremony) register(w http.ResponseWriter, r *http.Request) {
 }
 
 // refuseRegistration re-renders the Passkeys page with the reason the device
-// was not enrolled. keys is the list the page shows, read before the answer was
-// checked.
+// was not enrolled. keys is the list the page shows, read before the credential
+// was checked.
 func (h *passkeyCeremony) refuseRegistration(w http.ResponseWriter, r *http.Request, principal auth.Principal, keys []store.PasskeyCredential, err error) {
-	message := registrationRefusal(h.logger, w, r, err, "Add a passkey", "add the passkey")
+	message := registrationRefusal(h.logger, w, r, err, "add the passkey")
 	if message == "" {
 		return
 	}
@@ -104,28 +104,27 @@ func (h *passkeyCeremony) refuseRegistration(w http.ResponseWriter, r *http.Requ
 }
 
 // registrationRefusal returns the sentence a page shows when a device was not
-// enrolled. button is the label of the button the sentence tells the person to
-// press again. Every refusal the person can act on has its own sentence.
+// enrolled. Every refusal the person can act on has its own sentence.
 // Anything else gets no sentence, because the response has been written here
 // instead: a 400 for a post with no credential in it, and a 500 for the rest.
 // what is the action the 500's log line names as failed.
-func registrationRefusal(logger *slog.Logger, w http.ResponseWriter, r *http.Request, err error, button, what string) string {
+func registrationRefusal(logger *slog.Logger, w http.ResponseWriter, r *http.Request, err error, what string) string {
 	switch {
 	case errors.Is(err, auth.ErrNotVerified):
-		return "This device did not check that it was you. Turn on its screen lock, or set a PIN on your security key, and try again."
+		return "This device didn’t verify you. Turn on its screen lock or set a PIN, then try again."
 	case errors.Is(err, auth.ErrNotDiscoverable):
-		return "This device would not store the passkey, so there would be nothing to sign in with. Try a phone, a laptop or a security key with room on it."
+		return "This device can’t store a passkey. Try another device or a security key."
 	case errors.Is(err, auth.ErrCeremonyGone):
-		return "That took too long, so the request has expired. Press " + button + " again."
+		return "The request timed out. Try again."
 	case errors.Is(err, auth.ErrAlreadyRegistered):
 		return "This device already has a passkey for sprig."
 	case errors.Is(err, auth.ErrFailedVerification):
-		// The answer parsed and did not check out. The page's script never
+		// The credential parsed and did not check out. The page's script never
 		// produces one of those, so the reason goes in the log.
 		logger.WarnContext(r.Context(), "refuse the passkey", slog.Any("error", err))
-		return "This passkey could not be checked, so it was not added. Press " + button + " again."
+		return "The passkey couldn’t be verified and wasn’t added. Try again."
 	case errors.Is(err, auth.ErrBadCredential):
-		http.Error(w, "the form did not send a credential", http.StatusBadRequest)
+		badRequest(w)
 		return ""
 	default:
 		serverError(logger, w, r, what, err)
@@ -135,7 +134,8 @@ func registrationRefusal(logger *slog.Logger, w http.ResponseWriter, r *http.Req
 
 // signInChallenge handles POST /signin/challenge and returns the options for
 // navigator.credentials.get as JSON. No account is named, because the browser
-// offers the passkeys it holds for this site and its answer says who this is.
+// offers the passkeys it holds for this site and the credential says who this
+// is.
 func (h *passkeyCeremony) signInChallenge(w http.ResponseWriter, r *http.Request) {
 	assertion, cookie, err := h.passkeys.BeginAssertion(r.Context(), h.now())
 	if err != nil {
@@ -157,7 +157,7 @@ func (h *passkeyCeremony) signInChallenge(w http.ResponseWriter, r *http.Request
 // to set up a garden of their own or accept an invite.
 func (h *passkeyCeremony) signIn(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "the form did not parse", http.StatusBadRequest)
+		badRequest(w)
 		return
 	}
 
@@ -194,22 +194,22 @@ func (h *passkeyCeremony) refuseSignIn(w http.ResponseWriter, r *http.Request, e
 	var message string
 	switch {
 	case errors.Is(err, auth.ErrNotVerified):
-		message = "This device did not check that it was you. Unlock it and try again."
+		message = "This device didn’t verify you. Unlock it and try again."
 	case errors.Is(err, auth.ErrUnknownCredential):
-		message = "That passkey is not one sprig knows. It may have been removed from the account's Passkeys page."
+		message = "This passkey isn’t registered. It may have been removed on the Passkeys page."
 	case errors.Is(err, auth.ErrClonedCredential):
 		// Two copies of the private key are in use, and this request may be from
 		// either of them, so the message does not say what was wrong. The log
 		// line names the passkey row, so whoever reads it can find the account.
 		h.logger.WarnContext(r.Context(), "refuse the sign-in", slog.Any("error", err))
-		message = "That passkey cannot be used. Ask whoever runs the garden to remove it and invite you again."
+		message = "This passkey can’t be used. Ask the garden’s owner for a new invite link."
 	case errors.Is(err, auth.ErrFailedVerification):
 		h.logger.WarnContext(r.Context(), "refuse the sign-in", slog.Any("error", err))
-		message = "That passkey could not be checked. Try signing in again."
+		message = "This passkey couldn’t be verified. Try again."
 	case errors.Is(err, auth.ErrCeremonyGone):
-		message = "That took too long, so the request has expired. Try signing in again."
+		message = "Sign-in timed out. Try again."
 	case errors.Is(err, auth.ErrBadCredential):
-		http.Error(w, "the form did not send a credential", http.StatusBadRequest)
+		badRequest(w)
 		return
 	default:
 		serverError(h.logger, w, r, "sign in", err)

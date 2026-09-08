@@ -12,20 +12,19 @@
 {{end}}<button class="photo-field__empty" id="photo-add" type="button"{{if .Picture}} hidden{{end}}>{{template "icon-camera"}}<span>{{.Choose}}</span></button>
 {{/* A post refused for another field is rendered again with an empty file
      input, because a server cannot fill one. */}}
-{{if .NeedsChoosing}}<p class="field__error" id="photo-again">The photo needs choosing again.</p>{{end}}
-{{if .Missing}}<p class="field__error">Choose a photo first.</p>{{end}}
+{{if .NeedsChoosing}}<p class="field__error" id="photo-again">Choose the photo again.</p>{{end}}
+{{if .Missing}}<p class="field__error">Choose a photo.</p>{{end}}
 {{/* Shown when the garden has no room for the photo. It has no id, so the
      script that clears the line above by id leaves this one alone. Choosing
      another photo does not make room. */}}
 {{with .Full}}<p class="field__error">{{.}}</p>{{end}}
 <div id="photo-chosen"{{if not .Picture}} hidden{{end}}>
-<img class="photo-field__pic" id="photo-preview"{{if .Picture}} src="{{.Picture}}" alt="Current picture"{{else}} alt="Chosen photo"{{end}}>
+<img class="photo-field__pic" id="photo-preview"{{if .Picture}} src="{{.Picture}}" alt="Current photo"{{else}} alt="Chosen photo"{{end}}>
 <div class="photo-field__actions">
 <button class="care care--outline care--small" id="photo-replace" type="button">Replace</button>
 <button class="sched__cancel" id="photo-remove" type="button">Remove</button>
 </div>
-{{if .PreviewNote}}<p class="note">This is the photo that will be sent.</p>{{end}}
 </div>
-<p class="field__error" id="photo-error" hidden>That file could not be read as a photo.</p>
+<p class="field__error" id="photo-error" hidden>This file couldn’t be opened as a photo.</p>
 {{with .Submit}}<button class="wide-action" type="submit">{{.}}</button>{{end}}
 </div>{{end}}

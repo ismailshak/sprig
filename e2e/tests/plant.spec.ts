@@ -4,7 +4,7 @@ import { expect, test } from '../harness/test';
 
 // The seeded feeding schedules run March to September, so a feeding row's due
 // date depends on the month the suite runs in. Every assertion below is about a
-// watering, a schedule rule, or a care recorded during the test.
+// watering, a schedule rule, or a care logged during the test.
 
 test.beforeEach(async ({ page }) => {
   await signIn(page, people.ellie.handle);
@@ -44,12 +44,12 @@ test('a schedule row shows its rule and how late the care is', async ({ plant })
 });
 
 // Sprout has a nickname and nothing else. No common or botanical name, no room,
-// none of the six reference facts, no note, no acquired date.
-test('a plant with no reference details has no Reference section', async ({ page, plant }) => {
+// none of the six detail facts, no note, no acquired date.
+test('a plant with no details has no Details section', async ({ page, plant }) => {
   await plant.open(seeded.sprout);
 
   await expect(plant.heading()).toHaveText(seeded.sprout.name);
-  await expect(plant.section('Reference')).toHaveCount(0);
+  await expect(plant.section('Details')).toHaveCount(0);
   // Sun, Soil, Climate, Pot and Acquired appear nowhere else on the page, so
   // their absence is checked against the whole page. Water and Feed are skipped
   // because they are also care types named in the Schedule section.
@@ -62,19 +62,19 @@ test('a plant with no reference details has no Reference section', async ({ page
   await expect(plant.recentLines().first()).toContainText('watered');
 });
 
-// Big Fella has every reference field set, so the six labels appear here in
+// Big Fella has every detail field set, so the six labels appear here in
 // the order every plant page uses.
-test("a plant's page shows its reference details", async ({ plant }) => {
+test("a plant's page shows its details", async ({ plant }) => {
   await plant.open(seeded.bigFella);
 
-  await expect(plant.referenceLabels()).toHaveText(['Sun', 'Water', 'Feed', 'Soil', 'Climate', 'Pot']);
-  for (const value of await plant.referenceValues().allTextContents()) {
+  await expect(plant.detailLabels()).toHaveText(['Sun', 'Water', 'Feed', 'Soil', 'Climate', 'Pot']);
+  for (const value of await plant.detailValues().allTextContents()) {
     expect(value.trim()).not.toBe('');
   }
-  await expect(plant.section('Reference')).toContainText('Bright indirect. The west window scorches him by August.');
-  await expect(plant.section('Reference')).toContainText('Wipe the leaves when they dust over.');
-  await expect(plant.section('Reference')).toContainText('Acquired');
-  await expect(plant.section('Reference')).toContainText('March 2024');
+  await expect(plant.section('Details')).toContainText('Bright indirect. The west window scorches him by August.');
+  await expect(plant.section('Details')).toContainText('Wipe the leaves when they dust over.');
+  await expect(plant.section('Details')).toContainText('Acquired');
+  await expect(plant.section('Details')).toContainText('March 2024');
 });
 
 test('Recent lines show who did what without the plant name', async ({ plant }) => {
@@ -92,8 +92,8 @@ test('the sheet opened from a plant offers every care type in the garden', async
   await plant.logCare();
 
   await expect(sheet.dialog()).toHaveAccessibleName(`Log care for ${seeded.doris.name}`);
-  await expect(sheet.what('Water')).toHaveAttribute('aria-pressed', 'true');
-  await expect(sheet.what('Repot')).toBeVisible();
+  await expect(sheet.careChip('Water')).toHaveAttribute('aria-pressed', 'true');
+  await expect(sheet.careChip('Repot')).toBeVisible();
 });
 
 test("the sheet opened from a plant's page has no link back to that page", async ({ plant, sheet }) => {
@@ -119,7 +119,7 @@ test("a care with no schedule can be logged from the plant's page @swap", async 
   await plant.open(seeded.doris);
   await plant.logCare();
 
-  await sheet.what('Repot').click();
+  await sheet.careChip('Repot').click();
   await sheet.submit('Log repotting');
 
   await expect(plant.recentLines().first()).toContainText('You repotted · today');
@@ -134,6 +134,6 @@ test("a time later than now is refused on the plant's page @swap", async ({ plan
 
   await sheet.submit('Log watering');
 
-  await expect(sheet.dialog().getByText('That is later than now.')).toBeVisible();
+  await expect(sheet.dialog().getByText('That time is in the future.')).toBeVisible();
   await expect(plant.heading()).toHaveText(seeded.doris.name);
 });

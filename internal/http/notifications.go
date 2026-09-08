@@ -50,8 +50,8 @@ const sendTestPath = notificationsPath + "/test"
 // push.ErrGone returned. It is nil when push is off.
 type sendTest func(ctx context.Context, subscription store.PushSubscription, n push.Notification) error
 
-// testResultParam is the query parameter the redirect after Send a test puts
-// the outcome in.
+// testResultParam is the query parameter the redirect after a test puts the
+// outcome in.
 const testResultParam = "test"
 
 const (
@@ -61,19 +61,20 @@ const (
 	testNone   = "none"
 )
 
-// testResultLines maps each outcome to the line shown under Send a test.
+// testResultLines maps each outcome to the line shown under the Send test
+// notification button.
 var testResultLines = map[string]string{
-	testSent:   "Sent. If nothing arrived, check that this browser allows notifications from sprig.",
-	testGone:   "The push service no longer has this browser, so it has been removed. Turn a type on and save to subscribe again.",
-	testFailed: "The test could not be sent. Try again in a minute.",
-	testNone:   "This browser is not subscribed, so there is nothing to send.",
+	testSent:   "Test sent. If it didn’t arrive, check this device’s notification settings.",
+	testGone:   "This device’s subscription had expired and has been removed. Turn on a notification and save to subscribe again.",
+	testFailed: "The test couldn’t be sent. Try again in a minute.",
+	testNone:   "This device isn’t subscribed.",
 }
 
-// testMessage is the message Send a test delivers. Its URL is this page's
-// path, made absolute before it is sent.
+// testMessage is the notification Send test notification delivers. Its URL is
+// this page's path, made absolute before it is sent.
 var testMessage = push.Notification{
 	Title: "Notifications are working",
-	Body:  "This is the test sent from the Notifications page. Reminders will arrive here the same way.",
+	Body:  "Test notification from sprig.",
 	URL:   notificationsPath,
 }
 
@@ -85,8 +86,8 @@ type notificationsPage struct {
 	Bar    topbar
 	Action string
 	// Key is the VAPID public key the browser subscribes with. When it is
-	// empty the page is one line saying notifications are not set up, with no
-	// checkboxes and no browser list.
+	// empty the page is one line saying notifications are not enabled, with no
+	// checkboxes and no device list.
 	Key string
 	// Subscribe is the URL the script posts the browser's subscription to.
 	Subscribe string
@@ -108,18 +109,17 @@ type notificationsPage struct {
 	// Account is the URL of the link in the note under the hour.
 	Account  string
 	Browsers []browserRow
-	// Test is the URL the Send a test form posts to. The form is on the page
-	// only while a browser is subscribed.
+	// Test is the URL the Send test notification form posts to. The form is on
+	// the page only while a device is subscribed.
 	Test string
-	// TestResult is the line under Send a test saying how it went. It is empty
-	// unless the query string holds a known outcome.
+	// TestResult is the line under the Send test notification button saying how
+	// it went. It is empty unless the query string holds a known outcome.
 	TestResult string
 }
 
-// browserRow is one push subscription. A subscription belongs to a browser
-// rather than to a person, and a dead one is invisible everywhere else in the
-// app: the symptom is notifications that stop on one device with nothing on
-// any screen to say so.
+// browserRow is one push subscription, shown as a row under Subscribed
+// devices. A subscription belongs to a browser rather than to an account, so
+// one person has a row for each browser they turned notifications on in.
 type browserRow struct {
 	Name string
 	Used string
@@ -159,12 +159,12 @@ func (h *more) notifications(w http.ResponseWriter, r *http.Request) {
 func (h *more) sendTestNotification(w http.ResponseWriter, r *http.Request) {
 	// With push off no browser can be subscribed, so the route is a 404.
 	if h.pushKey == "" || h.test == nil {
-		http.NotFound(w, r)
+		notFound(w)
 		return
 	}
 	principal := PrincipalFrom(r)
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "the form did not parse", http.StatusBadRequest)
+		badRequest(w)
 		return
 	}
 	result := testSent
@@ -194,18 +194,18 @@ func (h *more) subscribeBrowser(w http.ResponseWriter, r *http.Request) {
 	// With push off no browser can have a subscription to post, so the route
 	// is a 404.
 	if h.pushKey == "" {
-		http.NotFound(w, r)
+		notFound(w)
 		return
 	}
 	principal := PrincipalFrom(r)
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "the form did not parse", http.StatusBadRequest)
+		badRequest(w)
 		return
 	}
 	endpoint := r.PostForm.Get("endpoint")
 	p256dh, auth := r.PostForm.Get("p256dh"), r.PostForm.Get("auth")
 	if !isPushEndpoint(endpoint) || !isPushPoint(p256dh) || !isPushKey(auth, authLength) {
-		http.Error(w, "that is not a push subscription", http.StatusBadRequest)
+		badRequest(w)
 		return
 	}
 	var userAgent *string
@@ -266,14 +266,14 @@ func decodePushKey(v string) ([]byte, error) {
 func (h *more) saveNotifications(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "the form did not parse", http.StatusBadRequest)
+		badRequest(w)
 		return
 	}
 	hour := principal.Membership.DigestHour
 	if r.PostForm.Has("hour") {
 		posted, ok := offeredHour(r.PostForm.Get("hour"))
 		if !ok {
-			http.Error(w, "the form did not offer that", http.StatusBadRequest)
+			badRequest(w)
 			return
 		}
 		hour = posted
@@ -313,7 +313,7 @@ func (h *more) removeBrowser(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	subscriptionID, err := uuid.Parse(r.PathValue("browser"))
 	if err != nil {
-		http.NotFound(w, r)
+		notFound(w)
 		return
 	}
 	removed, err := h.queries.DeletePushSubscription(r.Context(), principal.User.ID, subscriptionID)
@@ -324,7 +324,7 @@ func (h *more) removeBrowser(w http.ResponseWriter, r *http.Request) {
 	// Another account's subscription and one already removed are both 404,
 	// since neither was a button this page offered.
 	if removed == 0 {
-		http.NotFound(w, r)
+		notFound(w)
 		return
 	}
 	http.Redirect(w, r, notificationsPath, http.StatusSeeOther)
@@ -417,11 +417,11 @@ var (
 // browserName reads a device and a browser out of a User-Agent, as
 // "Mac · Chrome". It names the rows on the Notifications page and a passkey on
 // the Passkeys page. A User-Agent names no model, so a MacBook Air is a Mac. A
-// string that names neither device nor browser is "Unknown browser", and its
+// string that names neither device nor browser is "Unknown device", and its
 // date still tells the row from the others.
 func browserName(userAgent *string) string {
 	if userAgent == nil {
-		return "Unknown browser"
+		return "Unknown device"
 	}
 	parts := make([]string, 0, 2)
 	for _, device := range deviceNames {
@@ -437,7 +437,7 @@ func browserName(userAgent *string) string {
 		}
 	}
 	if len(parts) == 0 {
-		return "Unknown browser"
+		return "Unknown device"
 	}
 	return strings.Join(parts, " · ")
 }

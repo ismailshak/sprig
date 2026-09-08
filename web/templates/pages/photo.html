@@ -1,4 +1,4 @@
-{{define "title"}}sprig — a photo of {{.Name}}{{end}}
+{{define "title"}}Photo of {{.Name}} · sprig{{end}}
 
 {{/* A page rather than a lightbox, so the back button works and the URL can be
      shared. The back link goes to the plant's Photos page. */}}
@@ -23,10 +23,10 @@
 {{define "photo-foot"}}{{with .Foot}}<div class="plant__foot{{if .Asking}} plant__foot--asking{{end}}" id="photo-foot">
 {{if .Asking}}
 <span class="plant__ask">Delete this photo?</span>
-<span class="plant__note">It is removed from {{.Name}}'s photos and cannot be brought back.</span>
-{{/* Keep it swaps the button back. Delete is a full navigation, because the
+<span class="plant__note">This can’t be undone.</span>
+{{/* Cancel swaps the button back. Delete is a full navigation, because the
      photo's page goes with the photo. */}}
-<form method="get" action="{{.Keep}}"><button class="plant__keep" hx-get="{{.Keep}}" hx-target="#photo-foot" hx-swap="outerHTML settle:0ms">Keep it</button></form>
+<form method="get" action="{{.Keep}}"><button class="plant__keep" hx-get="{{.Keep}}" hx-target="#photo-foot" hx-swap="outerHTML settle:0ms">Cancel</button></form>
 <form method="post" action="{{.Delete}}"><button class="care care--small">Delete</button></form>
 {{else}}
 <form method="get" action="{{.Delete}}"><button class="plant__archive" hx-get="{{.Delete}}" hx-target="#photo-foot" hx-swap="outerHTML settle:0ms">Delete</button></form>

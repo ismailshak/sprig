@@ -31,7 +31,7 @@
       const permission = await Notification.requestPermission();
       if (permission !== 'granted') {
         message.textContent =
-          'This browser gave no permission, so nothing will arrive here. If you blocked notifications for sprig, allow them in the browser’s settings and turn a type on again.';
+          'Notifications are blocked on this device. Allow them in your browser’s settings, then try again.';
       }
     });
   }

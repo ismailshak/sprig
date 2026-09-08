@@ -185,7 +185,7 @@ func TestPhotos_ACursorThatDoesNotParseIs404(t *testing.T) {
 	}
 }
 
-func TestPhotos_APlantWithNoPhotosOffersAMemberAddAPhoto(t *testing.T) {
+func TestPhotos_APlantWithNoPhotosOffersAMemberAddPhoto(t *testing.T) {
 	f := plantFormOn(t)
 
 	page := f.grid(t, bigFellaID, "", false).Body.String()
@@ -193,12 +193,12 @@ func TestPhotos_APlantWithNoPhotosOffersAMemberAddAPhoto(t *testing.T) {
 	if !strings.Contains(text(page), "No photos yet") {
 		t.Errorf("the page does not say there are no photos:\n%s", text(page))
 	}
-	if !strings.Contains(page, `href="`+newPhotoPath(bigFellaID)+`">Add a photo</a>`) {
-		t.Error("the empty page does not offer Add a photo")
+	if !strings.Contains(page, `href="`+newPhotoPath(bigFellaID)+`">Add photo</a>`) {
+		t.Error("the empty page does not offer Add photo")
 	}
 }
 
-func TestPhotos_ASitterIsNotOfferedAddAPhoto(t *testing.T) {
+func TestPhotos_ASitterIsNotOfferedAddPhoto(t *testing.T) {
 	f := plantFormOn(t)
 	f.principal.Capabilities = auth.Capabilities{auth.CareLog: true}
 	f.storedPhoto(t, bigFellaID, readerID, thursday)

@@ -15,8 +15,8 @@ import (
 	"github.com/ismailshak/sprig/internal/store"
 )
 
-// recentLength is how many events the Recent section shows. Four is a month for
-// a plant watered weekly, enough to see the pattern.
+// recentLength is how many events the Recent activity section shows. Four is a
+// month for a plant watered weekly, enough to see the pattern.
 const recentLength = 4
 
 // stripLength is how many photos the Photos strip shows, newest first. Six is
@@ -126,10 +126,10 @@ type plantPage struct {
 	Log string
 	// Foot is nil for an archived plant.
 	Foot *plantFoot
-	// Reference is nil when the plant has no facts or notes, and the section
-	// is not rendered.
-	Reference *plantReference
-	Recent    []recentLine
+	// Details is nil when the plant has no facts, no note and no acquired
+	// date. The section is not rendered then.
+	Details *plantDetails
+	Recent  []recentLine
 	// Photos is the Photos strip, newest first. AddPhoto is the URL of the Add
 	// a photo page at the start of the strip, empty for a reader who may not
 	// add photos and for an archived plant. SeeAll is the link to the Photos
@@ -137,9 +137,9 @@ type plantPage struct {
 	Photos   []photoTile
 	AddPhoto string
 	SeeAll   *link
-	// Activity is the link under Recent to the log filtered to this plant. Nil
-	// for a plant with nothing recorded, since that page would only repeat the
-	// line above the link.
+	// Activity is the All activity link under Recent activity, pointing at the
+	// Activity page filtered to this plant. Nil for a plant with no events,
+	// since that page would then be empty too.
 	Activity *link
 	Sheet    *sheet
 }
@@ -174,7 +174,7 @@ type scheduleRow struct {
 	Edit *scheduleEditor
 }
 
-type plantReference struct {
+type plantDetails struct {
 	Facts    []plantFact
 	Note     string
 	Acquired string
@@ -199,7 +199,7 @@ func newPlantPage(principal auth.Principal, d plantDetail) plantPage {
 		Picture:   picturePath(plant),
 		Names:     otherNames(plant),
 		Schedule:  scheduleRows(principal, d),
-		Reference: newPlantReference(plant),
+		Details:   newPlantDetails(plant),
 		Recent:    recentLines(principal, d.recent, d.now),
 	}
 	if plant.ProfilePhotoID != nil {
@@ -215,7 +215,7 @@ func newPlantPage(principal auth.Principal, d plantDetail) plantPage {
 		page.Room = *plant.Location
 	}
 	if len(d.recent) > 0 {
-		page.Activity = &link{Label: "All activity for " + page.Name, Href: plantActivityPath(plant.ID)}
+		page.Activity = &link{Label: "All activity", Href: plantActivityPath(plant.ID)}
 	}
 	if plant.ArchivedAt != nil {
 		return page
@@ -238,7 +238,8 @@ type plantFoot struct {
 	// POST archives.
 	Archive string
 	// Asking is true while the confirmation replaces the two buttons. Keep is
-	// the URL of the Keep link, which goes back to the plant's page.
+	// the URL the confirmation's Cancel button goes to, the plant's page with
+	// the buttons back.
 	Asking bool
 	Name   string
 	Keep   string
@@ -368,8 +369,8 @@ func dueWord(line schedule.Line, now time.Time) string {
 	case schedule.Dormant:
 		return "Out of season"
 	case schedule.Overdue:
-		// Capitalised because the text stands alone here. On the Plants list
-		// the care name comes before it.
+		// Capitalised because this is the whole of the text on the right. On
+		// the Plants list the care name comes before it.
 		return capitalise(overdueWord(line, now))
 	case schedule.DueToday:
 		// A schedule precise only to a month is due for the whole month, so the
@@ -391,11 +392,11 @@ func dueWord(line schedule.Line, now time.Time) string {
 // a date. It matches the week Today's Coming up covers.
 const comingWeek = 7
 
-// newPlantReference builds the facts in a fixed order for every plant. Water
-// and Feed repeat the care types above, because a schedule says how often and a
-// fact says what this plant needs.
-func newPlantReference(plant store.Plant) *plantReference {
-	ref := &plantReference{Acquired: acquiredWord(plant.AcquiredYear, plant.AcquiredMonth)}
+// newPlantDetails builds the facts in a fixed order for every plant. Water and
+// Feed repeat two care type names because a schedule says how often and a fact
+// says what this plant needs.
+func newPlantDetails(plant store.Plant) *plantDetails {
+	details := &plantDetails{Acquired: acquiredWord(plant.AcquiredYear, plant.AcquiredMonth)}
 	for _, f := range []struct {
 		label string
 		value *string
@@ -408,16 +409,16 @@ func newPlantReference(plant store.Plant) *plantReference {
 		{"Pot", plant.Pot},
 	} {
 		if isSet(f.value) {
-			ref.Facts = append(ref.Facts, plantFact{Label: f.label, Value: *f.value})
+			details.Facts = append(details.Facts, plantFact{Label: f.label, Value: *f.value})
 		}
 	}
 	if isSet(plant.Notes) {
-		ref.Note = *plant.Notes
+		details.Note = *plant.Notes
 	}
-	if len(ref.Facts) == 0 && ref.Note == "" && ref.Acquired == "" {
+	if len(details.Facts) == 0 && details.Note == "" && details.Acquired == "" {
 		return nil
 	}
-	return ref
+	return details
 }
 
 func recentLines(principal auth.Principal, recent []store.ListPlantCareEventsRow, now time.Time) []recentLine {
@@ -435,13 +436,13 @@ func (h *plants) plant(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	plantID, err := uuid.Parse(r.PathValue("plant"))
 	if err != nil {
-		http.NotFound(w, r)
+		notFound(w)
 		return
 	}
 	detail, err := loadPlant(r.Context(), h.queries, principal, plantID, h.now())
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		http.NotFound(w, r)
+		notFound(w)
 		return
 	case err != nil:
 		serverError(h.logger, w, r, "load the plant", err)
@@ -450,7 +451,7 @@ func (h *plants) plant(w http.ResponseWriter, r *http.Request) {
 	page := newPlantPage(principal, detail)
 	fragment, ok := plantSwap(r, &page)
 	if !ok {
-		http.NotFound(w, r)
+		notFound(w)
 		return
 	}
 	h.templates.render(w, r, view{page: "plant", fragment: fragment}, page)

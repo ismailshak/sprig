@@ -179,7 +179,7 @@ func TestOffline_RendersWithNoSession(t *testing.T) {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
 	}
 	page := text(rec.Body.String())
-	for _, want := range []string{"You're offline", "Try again"} {
+	for _, want := range []string{"You’re offline", "Try again"} {
 		if !strings.Contains(page, want) {
 			t.Errorf("the page does not say %q:\n%s", want, page)
 		}

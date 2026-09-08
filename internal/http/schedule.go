@@ -66,14 +66,14 @@ func (h *plants) editor(w http.ResponseWriter, r *http.Request, asking bool) {
 	}
 	draft, ok := scheduleDraftFor(r.URL.Query(), detail, care)
 	if !ok {
-		http.Error(w, "the editor did not offer that", http.StatusBadRequest)
+		badRequest(w)
 		return
 	}
 
 	page := newPlantPage(principal, detail)
 	row := page.rowFor(care.Slug)
 	if row == nil {
-		http.NotFound(w, r)
+		notFound(w)
 		return
 	}
 	row.Edit = newScheduleEditor(draft, detail, asking)
@@ -89,12 +89,12 @@ func (h *plants) saveSchedule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "the form did not parse", http.StatusBadRequest)
+		badRequest(w)
 		return
 	}
 	draft, ok := scheduleDraftFor(r.PostForm, detail, care)
 	if !ok {
-		http.Error(w, "the editor did not offer that", http.StatusBadRequest)
+		badRequest(w)
 		return
 	}
 
@@ -103,7 +103,7 @@ func (h *plants) saveSchedule(w http.ResponseWriter, r *http.Request) {
 		page := newPlantPage(principal, detail)
 		row := page.rowFor(care.Slug)
 		if row == nil {
-			http.NotFound(w, r)
+			notFound(w)
 			return
 		}
 		row.Edit = newScheduleEditor(draft, detail, false)
@@ -134,7 +134,7 @@ func (h *plants) removeSchedule(w http.ResponseWriter, r *http.Request) {
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		http.NotFound(w, r)
+		notFound(w)
 		return
 	case err != nil:
 		serverError(h.logger, w, r, "remove the schedule", err)
@@ -151,25 +151,25 @@ func (h *plants) plantAndCare(w http.ResponseWriter, r *http.Request, principal 
 	var none store.CareType
 	plantID, err := uuid.Parse(r.PathValue("plant"))
 	if err != nil {
-		http.NotFound(w, r)
+		notFound(w)
 		return plantDetail{}, none, false
 	}
 	detail, err := loadPlant(r.Context(), h.queries, principal, plantID, h.now())
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		http.NotFound(w, r)
+		notFound(w)
 		return plantDetail{}, none, false
 	case err != nil:
 		serverError(h.logger, w, r, "load the plant", err)
 		return plantDetail{}, none, false
 	}
 	if detail.plant.ArchivedAt != nil {
-		http.NotFound(w, r)
+		notFound(w)
 		return plantDetail{}, none, false
 	}
 	care, ok := careFor(detail.cares, r.PathValue("care"))
 	if !ok {
-		http.NotFound(w, r)
+		notFound(w)
 		return plantDetail{}, none, false
 	}
 	return detail, care, true
@@ -202,7 +202,7 @@ func (h *plants) settledRow(w http.ResponseWriter, r *http.Request, principal au
 	page := newPlantPage(principal, detail)
 	row := page.rowFor(slug)
 	if row == nil {
-		http.NotFound(w, r)
+		notFound(w)
 		return
 	}
 	h.renderRow(w, r, page, *row, 0)

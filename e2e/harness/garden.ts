@@ -21,7 +21,7 @@ export const devices = {
 } as const;
 
 // The browsers Ellie has subscribed to notifications in, one row each under
-// "Where they arrive". The server builds each name from the User-Agent the
+// Subscribed devices. The server builds each name from the User-Agent the
 // seed writes. A User-Agent names no model, so the laptop's row says Mac.
 export const browsers = {
   phone: 'iPhone · Safari',
@@ -37,7 +37,7 @@ export const gardens = {
   upstairs: { name: 'Upstairs' },
 } as const;
 
-// The one invite waiting on People: a sitter's, made two days ago. Its token
+// The one pending invite on People: a sitter's, made two days ago. Its token
 // is the plaintext the seed hashes, so a test can open the link.
 export const invites = {
   sitter: { token: 'development-sitter-invite' },
@@ -74,11 +74,11 @@ export const plants = {
   littleFella: { id: '00000000-0000-7000-8000-050000000009', name: 'Little Fella' },
   // Opuntia microdasys has only a botanical name.
   opuntia: { id: '00000000-0000-7000-8000-050000000011', name: 'Opuntia microdasys' },
-  // The seed gives Sprout no location, so Plants lists it under No room.
+  // The seed gives Sprout no room, so Plants lists it under No room.
   sprout: { id: '00000000-0000-7000-8000-050000000012', name: 'Sprout' },
 } as const;
 
-// No room is the heading Plants uses for plants with no location. It is not a
+// No room is the heading Plants uses for plants with no room set. It is not a
 // room the seed writes.
 export const rooms = {
   bathroom: 'Bathroom',

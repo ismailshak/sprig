@@ -37,14 +37,14 @@ test('joining through an invite link signs the sitter in and lands on Install sp
     await expect(page.getByRole('heading', { name: 'Install sprig' })).toBeVisible();
     await expect(page.getByRole('navigation')).toHaveCount(0);
 
-    await install.goToGarden().click();
+    await install.continueLink().click();
     await expect(page).toHaveURL('/');
     await expect(page.getByRole('heading', { name: gardens.home.name })).toBeVisible();
 
     // The link works once. A second visit gets the page for a link that
     // cannot be used.
     await invited.open(invites.sitter.token);
-    await expect(page.getByRole('heading', { name: 'This link cannot be used' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'This invite link can’t be used' })).toBeVisible();
   });
 });
 
@@ -107,19 +107,19 @@ test('an account signed in from an invite link joins the garden and keeps the on
     await expect(
       page.getByRole('heading', { name: `Join ${gardens.home.name} as ${people.robin.name}?` }),
     ).toBeVisible();
-    await expect(page.getByText("You'll join as a sitter.")).toBeVisible();
+    await expect(page.getByText('You’ll join as a sitter.')).toBeVisible();
 
     await accept.join(gardens.home.name).click();
 
     await expect(page).toHaveURL('/');
     await expect(page.getByRole('heading', { name: gardens.home.name })).toBeVisible();
-    await expect(page.getByText(`${people.ellie.name}'s garden`)).toBeVisible();
+    await expect(page.getByText(`${people.ellie.name}’s garden`)).toBeVisible();
     await today.switchGarden().click();
     await expect(today.switchTo(gardens.upstairs.name)).toBeVisible();
 
     // The link works once.
     await accept.open(invites.sitter.token);
-    await expect(page.getByRole('heading', { name: 'This link cannot be used' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'This invite link can’t be used' })).toBeVisible();
   });
 });
 
@@ -133,11 +133,7 @@ test('an account already in the garden is offered Open instead of Join, and the 
   await accept.open(invites.sitter.token);
 
   await expect(page.getByRole('heading', { name: `You’re already in ${gardens.home.name}` })).toBeVisible();
-  await expect(
-    page.getByText(
-      `This account is already in ${gardens.home.name}, so there is nothing to join. The link has not been used.`,
-    ),
-  ).toBeVisible();
+  await expect(page.getByText('This account is already a member. The link hasn’t been used.')).toBeVisible();
   await expect(accept.join(gardens.home.name)).toHaveCount(0);
   await accept.openGarden(gardens.home.name).click();
   await expect(page).toHaveURL('/');
@@ -269,7 +265,7 @@ test('a link made on Invite someone joins a new person from another browser @pas
       await expect(
         phone.getByRole('heading', { name: `${people.ellie.name} invited you to ${gardens.home.name}` }),
       ).toBeVisible();
-      await expect(phone.getByText("You'll join as a member.")).toBeVisible();
+      await expect(phone.getByText('You’ll join as a member.')).toBeVisible();
       await onPhone.name().fill('Kim');
       await onPhone.timezone().selectOption('Europe/London');
       await onPhone.join().click();
@@ -293,7 +289,7 @@ test('a revoked invite link cannot be used, and the page offers sign in instead'
 
   await invited.open(invites.sitter.token);
 
-  await expect(page.getByRole('heading', { name: 'This link cannot be used' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'This invite link can’t be used' })).toBeVisible();
   await expect(invited.join()).toHaveCount(0);
   await invited.signIn().click();
   await expect(page).toHaveURL('/signin');
@@ -302,7 +298,7 @@ test('a revoked invite link cannot be used, and the page offers sign in instead'
 test('a link that was never issued cannot be used', async ({ page, invited }) => {
   await invited.open('a-token-nobody-made');
 
-  await expect(page.getByRole('heading', { name: 'This link cannot be used' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'This invite link can’t be used' })).toBeVisible();
   await expect(invited.join()).toHaveCount(0);
 });
 
@@ -313,7 +309,7 @@ test("with no JavaScript the join button is disabled, the page says joining need
   await invited.open(invites.sitter.token);
 
   await expect(invited.join()).toBeDisabled();
-  await expect(page.getByText('Joining needs JavaScript and a browser that supports passkeys')).toBeVisible();
+  await expect(page.getByText('Requires JavaScript and a browser with passkey support')).toBeVisible();
   await expect(invited.timezone()).toHaveValue('Europe/London');
 });
 

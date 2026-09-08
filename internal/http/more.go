@@ -40,7 +40,7 @@ type more struct {
 	now func() time.Time
 	// pushKey is the VAPID public key the Notifications page gives the browser
 	// to subscribe with. It is empty when push is off, and the page then says
-	// notifications are not set up.
+	// notifications are not enabled.
 	pushKey string
 	wake    wakeDigest
 	// test sends the Notifications page's test message to one browser. It is
@@ -87,7 +87,7 @@ type linkRow struct {
 // moreState is what the index needs beyond the reader's role.
 type moreState struct {
 	notificationsOn bool
-	waitingInvites  int
+	pendingInvites  int
 	// noCodesLeft is true when the signed-in person manages the garden's people
 	// and holds no unused recovery code. Only someone who manages people is
 	// prompted for codes, because there is nobody above them to send a new
@@ -116,11 +116,11 @@ func (h *more) state(ctx context.Context, principal auth.Principal) (moreState, 
 	// someone who can manage people, so a member's index does not pay for
 	// either query.
 	if principal.Can(auth.MemberManage) {
-		waiting, err := h.queries.CountWaitingInvites(ctx, principal.Garden.ID, h.now())
+		pending, err := h.queries.CountPendingInvites(ctx, principal.Garden.ID, h.now())
 		if err != nil {
-			return moreState{}, fmt.Errorf("count the waiting invites: %w", err)
+			return moreState{}, fmt.Errorf("count the pending invites: %w", err)
 		}
-		state.waitingInvites = int(waiting)
+		state.pendingInvites = int(pending)
 
 		batch, live, err := h.recoveryBatch(ctx, principal.User.ID)
 		if err != nil {
@@ -144,7 +144,7 @@ func newMorePage(principal auth.Principal, state moreState, info build.Info) mor
 		rows = append(rows, linkRow{Label: "Garden", Href: gardenPath})
 	}
 	if principal.Can(auth.MemberManage) {
-		rows = append(rows, linkRow{Label: "People", Href: peoplePath, Note: waitingNote(state.waitingInvites)})
+		rows = append(rows, linkRow{Label: "People", Href: peoplePath, Note: pendingNote(state.pendingInvites)})
 	}
 	if principal.Can(auth.TokenManage) {
 		rows = append(rows, linkRow{Label: "Tokens", Href: tokensPath})

@@ -57,7 +57,7 @@ UPDATE plant SET archived_at = now()
 WHERE garden_id = @garden_id AND id = @plant_id AND archived_at IS NULL
 RETURNING *;
 
--- Every room the garden's plants are in, listed once, for the Location field on
+-- Every room the garden's plants are in, listed once, for the Room field on
 -- the plant form. A room only archived plants are in is left out, because the
 -- Plants list stops showing it too. The order ignores case, the same as the
 -- Plants list's grouping. GROUP BY rather than SELECT DISTINCT, because

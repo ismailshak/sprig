@@ -43,11 +43,11 @@ func deleteCareTypePath(slug string) string {
 
 // The messages shown under a name field when a form is refused.
 const (
-	gardenNameMissing   = "Give the garden a name. It is what the top of Today says."
-	careTypeNameMissing = "Give the care type a name."
+	gardenNameMissing   = "Enter a garden name."
+	careTypeNameMissing = "Enter a name."
 	// A name of punctuation alone leaves nothing to build a slug from, and the
 	// slug is what every schedule and every URL refers to the type by.
-	careTypeNameUnusable = "Give it a name with a letter or a number in it."
+	careTypeNameUnusable = "The name needs at least one letter or number."
 )
 
 // careTypeNameTaken is shown when the name would collide with a care type the
@@ -86,7 +86,7 @@ type gardenPage struct {
 type careTypeRow struct {
 	Name string
 	// Off is true for a care type that has been turned off. Its row is greyed
-	// and says Off, and the type is out of the scheduler and out of the sheet.
+	// and says Off, and the type is out of every schedule and out of the sheet.
 	Off bool
 	// Edit is the URL that opens this row as an editor.
 	Edit   string
@@ -103,12 +103,11 @@ type careTypeEditor struct {
 	Name string
 	// Error is shown under the field, empty when the name is valid.
 	Error string
-	// Why says how many events are recorded against this care type and which
-	// of Turn it off and Delete follows from that. It is empty for a care type
-	// that does not exist yet.
+	// Why is the sentence under the name. It is empty for a care type that
+	// does not exist yet.
 	Why string
-	// Drop is the Turn it off, Turn it back on or Delete button. It is nil for
-	// a care type that does not exist yet, which has nothing to remove.
+	// Drop is the Turn off, Turn on or Delete button. It is nil for a care type
+	// that does not exist yet, which has nothing to remove.
 	Drop *dropButton
 	// Cancel is the URL the Cancel link points at. It closes the editor and
 	// goes back to the Garden page.
@@ -145,7 +144,7 @@ func (h *more) garden(w http.ResponseWriter, r *http.Request) {
 func (h *more) saveGardenName(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "the form did not parse", http.StatusBadRequest)
+		badRequest(w)
 		return
 	}
 	name := strings.TrimSpace(r.PostForm.Get("name"))
@@ -255,8 +254,7 @@ func (h *more) renameCareType(w http.ResponseWriter, r *http.Request) {
 }
 
 // turnOffCareType handles POST /more/garden/types/{care}/off. The type leaves
-// the scheduler and the sheet, and every event recorded against it stays where
-// it is.
+// every schedule and the sheet, and every event logged under it is kept.
 func (h *more) turnOffCareType(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	care, ok := h.careTypeFromPath(w, r, principal)
@@ -279,8 +277,8 @@ func (h *more) turnOnCareType(w http.ResponseWriter, r *http.Request) {
 }
 
 // deleteCareType handles POST /more/garden/types/{care}/delete. A care type
-// with an event recorded against it is a 404, because the row that has one
-// offers Turn it off instead and never offers this.
+// something has been logged under is a 404, because its row offers Turn off
+// instead and never offers this.
 func (h *more) deleteCareType(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	care, ok := h.careTypeFromPath(w, r, principal)
@@ -293,7 +291,7 @@ func (h *more) deleteCareType(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if deleted == 0 {
-		http.NotFound(w, r)
+		notFound(w)
 		return
 	}
 	http.Redirect(w, r, gardenPath, http.StatusSeeOther)
@@ -305,7 +303,7 @@ func (h *more) deleteCareType(w http.ResponseWriter, r *http.Request) {
 func (h *more) afterCareTypeChange(w http.ResponseWriter, r *http.Request, what string, err error) {
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		http.NotFound(w, r)
+		notFound(w)
 	case err != nil:
 		serverError(h.logger, w, r, what, err)
 	default:
@@ -320,7 +318,7 @@ func (h *more) careTypeFromPath(w http.ResponseWriter, r *http.Request, principa
 	care, err := h.queries.GetCareTypeBySlug(r.Context(), principal.Garden.ID, r.PathValue("care"))
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		http.NotFound(w, r)
+		notFound(w)
 		return store.CareType{}, false
 	case err != nil:
 		serverError(h.logger, w, r, "read the care type", err)
@@ -332,7 +330,7 @@ func (h *more) careTypeFromPath(w http.ResponseWriter, r *http.Request, principa
 // postedName reads the name field of one of this page's forms.
 func (h *more) postedName(w http.ResponseWriter, r *http.Request) (string, bool) {
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "the form did not parse", http.StatusBadRequest)
+		badRequest(w)
 		return "", false
 	}
 	return strings.TrimSpace(r.PostForm.Get("name")), true
@@ -386,20 +384,19 @@ func (h *more) renderGarden(w http.ResponseWriter, r *http.Request, page gardenP
 	h.templates.render(w, r, view{page: "garden", status: status}, page)
 }
 
-// nearlyFull is the share of the quota at which the storage line adds what
-// happens when it is full and what to delete. Below it there is nothing to
-// act on.
+// nearlyFull is the share of the quota at which the storage line adds the
+// sentence about deleting photos. Below it there is nothing to act on.
 const nearlyFull = 0.9
 
 // storageLine is the sentence under Photos on the Garden page, such as "312 MB
 // of 1 GB of photo storage used." From nearlyFull of the quota up it adds
-// that uploads stop and that deleting progress photos is what makes room.
+// that deleting photos makes room.
 func storageLine(usage photo.Usage) string {
 	line := storageFigure(usage.Used) + " of " + storageFigure(usage.Quota) + " of photo storage used."
 	if float64(usage.Used) < nearlyFull*float64(usage.Quota) {
 		return line
 	}
-	return line + " Uploads stop when it is full, and deleting progress photos is what makes room."
+	return line + " When it’s full, delete photos to make room."
 }
 
 // storageFigure formats a byte count as whole megabytes, or as gigabytes from
@@ -444,10 +441,10 @@ func careTypeRows(types []store.ListCareTypesWithEventsRow, edit careTypeEdit) [
 	return rows
 }
 
-// openCareType builds the editor for one row. Which of the three buttons the
-// row offers is decided here, and the sentence above it says the same thing in
-// words, so a person reads why Delete is not on offer before pressing anything
-// rather than getting it back as an error afterwards.
+// openCareType builds the editor for one row and chooses which of the three
+// buttons it offers. The sentence above the button says the same thing in
+// words, so a person reads why Delete is not offered rather than getting it
+// back as an error afterwards.
 func openCareType(care store.ListCareTypesWithEventsRow, edit careTypeEdit) *careTypeEditor {
 	slug := care.CareType.Slug
 	editor := &careTypeEditor{
@@ -459,9 +456,9 @@ func openCareType(care store.ListCareTypesWithEventsRow, edit careTypeEdit) *car
 	}
 	switch {
 	case care.CareType.ArchivedAt != nil:
-		editor.Drop = &dropButton{Label: "Turn it back on", Action: onCareTypePath(slug)}
+		editor.Drop = &dropButton{Label: "Turn on", Action: onCareTypePath(slug)}
 	case care.Events > 0:
-		editor.Drop = &dropButton{Label: "Turn it off", Action: offCareTypePath(slug)}
+		editor.Drop = &dropButton{Label: "Turn off", Action: offCareTypePath(slug)}
 	default:
 		editor.Drop = &dropButton{Label: "Delete", Action: deleteCareTypePath(slug)}
 	}
@@ -469,19 +466,19 @@ func openCareType(care store.ListCareTypesWithEventsRow, edit careTypeEdit) *car
 }
 
 // careTypeWhy is the sentence under the name in an open row: that the care type
-// is off, or how many events are recorded against it.
+// is off, or how many times it has been used.
 func careTypeWhy(events int64, off bool) string {
 	switch {
 	case off:
-		return "It is off, so it is out of every schedule and out of the sheet. Turning it back on puts it in both."
+		return "Turned off. It’s hidden from schedules and Log care until turned on again."
 	case events == 0:
-		return "Nothing has been recorded against it yet, so it can go for good."
+		return "Not used yet, so it can be deleted."
 	}
-	return "Recorded " + timesRecorded(events) + ", so it can be renamed or turned off but never deleted — turning it off " +
-		"takes it out of schedules and out of the sheet, and leaves every one of those events readable."
+	return "Used " + timesUsed(events) + ", so it can be renamed or turned off but not deleted. " +
+		"Turning it off hides it from schedules and Log care. Past activity is kept."
 }
 
-func timesRecorded(events int64) string {
+func timesUsed(events int64) string {
 	if events == 1 {
 		return "once"
 	}

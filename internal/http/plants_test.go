@@ -320,7 +320,7 @@ func TestPlants_AGardenWithNoPlantsShowsAnAddPlantLink(t *testing.T) {
 	if _, order := sections(page); len(order) > 0 {
 		t.Errorf("an empty garden draws the rooms %v", order)
 	}
-	for _, want := range []string{"No plants yet", "Add a plant and sprig will remind you when to water it.", "Add a plant"} {
+	for _, want := range []string{"No plants yet", "Add a plant to see its tasks here.", "Add plant"} {
 		if !strings.Contains(text(page), want) {
 			t.Errorf("the empty plant list does not say %q:\n%s", want, text(page))
 		}

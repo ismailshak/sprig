@@ -1,4 +1,4 @@
-{{define "title"}}sprig — garden{{end}}
+{{define "title"}}Garden · sprig{{end}}
 
 {{/* The garden's name, its care types and its photo storage. A care type is
      renamed, turned off or deleted from its own row: the row is a link to its
@@ -10,11 +10,11 @@
 {{if .EditName}}
 <form method="post" action="{{.Action}}" novalidate>
 <div class="field">
-<label class="field__label" for="name">Name <span class="field__hint">what the top of Today says</span></label>
+<label class="field__label" for="name">Name</label>
 <input class="input" id="name" name="name" type="text" value="{{.Name}}">
 {{with .NameError}}<p class="field__error">{{.}}</p>{{end}}
 </div>
-<button class="wide-action" type="submit">Save the name</button>
+<button class="wide-action" type="submit">Save</button>
 </form>
 {{end}}
 {{if .ManageTypes}}
@@ -30,7 +30,7 @@
 </a>
 {{end}}</li>
 {{end}}</ul>
-<a class="care care--outline" href="{{.AddType}}">Add a care type</a>
+<a class="care care--outline" href="{{.AddType}}">Add care type</a>
 </div>
 {{end}}
 {{/* A sentence rather than a meter, because there is nothing to do about the
@@ -45,7 +45,7 @@
 {{/* A care type's row while it is being edited. The form is the row, so one
      care type is saved on its own.
 
-     Save comes before Turn it off in the markup and the stylesheet moves the
+     Save comes before Turn off in the markup and the stylesheet moves the
      drop button to the left, because pressing Enter in the name field submits
      the form's first button and that must not be the one that deletes the care
      type. */}}

@@ -10,7 +10,7 @@ export class NotificationsScreen {
   }
 
   digest(): Locator {
-    return this.page.getByLabel(/What needs doing/);
+    return this.page.getByLabel(/Daily digest/);
   }
 
   activity(): Locator {
@@ -19,7 +19,7 @@ export class NotificationsScreen {
 
   // The hour is on the page only while the digest is on.
   hour(): Locator {
-    return this.page.getByLabel('The digest arrives at');
+    return this.page.getByLabel('Send the digest at');
   }
 
   save(): Locator {
@@ -47,10 +47,10 @@ export class NotificationsScreen {
   }
 
   sendTest(): Locator {
-    return this.page.getByRole('button', { name: 'Send a test' });
+    return this.page.getByRole('button', { name: 'Send test notification' });
   }
 
-  // The line under Send a test saying how the test went.
+  // The line under the Send test notification button saying how the test went.
   testResult(): Locator {
     return this.page.getByRole('status');
   }

@@ -87,7 +87,7 @@ func rosewood(t *testing.T) *todayFixture {
 		exec("INSERT INTO care_event (garden_id, plant_id, care_type_id, performed_by, performed_at, recorded_at, done) VALUES ($1, $2, $3, $4, $5, $5, true)",
 			rosewoodID, p.id, waterID, readerID, p.lastWatered)
 	}
-	// Nigel gets a second care because the sheet shows the What field only for
+	// Nigel gets a second care because the sheet shows the Care field only for
 	// a plant with more than one. set_at puts the feed a week out so his row
 	// stays a watering.
 	exec("INSERT INTO care_schedule (garden_id, plant_id, care_type_id, interval_count, interval_unit, set_at) VALUES ($1, $2, $3, 3, 'week', $4)",
@@ -229,7 +229,7 @@ func TestToday_PlacesEachPlantInTheSectionItsCareFallsIn(t *testing.T) {
 	if strings.Contains(page, rowID(spikeID)) {
 		t.Error("Spike is on the page, and is not due for another twelve days")
 	}
-	if !strings.Contains(text(page), "3 plants need you today, 1 of them overdue.") {
+	if !strings.Contains(text(page), "3 plants due today, 1 of them overdue.") {
 		t.Errorf("the summary does not say three plants need attention and one is overdue:\n%s", text(page))
 	}
 }
@@ -280,7 +280,7 @@ func TestToday_TheCountsDropAsCaresAreLogged(t *testing.T) {
 	if strings.Contains(page, rowID(dorisID)) {
 		t.Error("Doris is still on the page after being watered")
 	}
-	if !strings.Contains(text(page), "2 plants need you today, 1 of them overdue.") {
+	if !strings.Contains(text(page), "2 plants due today, 1 of them overdue.") {
 		t.Errorf("the summary did not fall to two:\n%s", text(page))
 	}
 
@@ -290,7 +290,7 @@ func TestToday_TheCountsDropAsCaresAreLogged(t *testing.T) {
 	if _, ok := byID["due-today"]; ok {
 		t.Errorf("Due today is still drawn with nothing in it: %v", order)
 	}
-	if !strings.Contains(text(page), "1 plant needs you today, 1 of them overdue.") {
+	if !strings.Contains(text(page), "1 plant due today, 1 of them overdue.") {
 		t.Errorf("the summary did not fall to one plant:\n%s", text(page))
 	}
 
@@ -338,13 +338,13 @@ func TestToday_TheEmptyStateDependsOnWhyTheListIsEmpty(t *testing.T) {
 		clearTheWeek(t, f)
 
 		page := f.show(t)
-		for _, want := range []string{"Nothing needs you today", "Spike is next, in 12 days.", `href="/plants"`, "See all plants"} {
+		for _, want := range []string{"Nothing due today", "Spike is next, in 12 days.", `href="/plants"`, "See all plants"} {
 			if !strings.Contains(page, want) {
 				t.Errorf("the page lacks %s:\n%s", want, text(page))
 			}
 		}
 		if strings.Contains(page, "All done") {
-			t.Error("a day where nothing was scheduled was congratulated")
+			t.Error("a day with nothing scheduled says All done")
 		}
 	})
 
@@ -354,7 +354,7 @@ func TestToday_TheEmptyStateDependsOnWhyTheListIsEmpty(t *testing.T) {
 		f.exec(t, "DELETE FROM care_schedule WHERE plant_id = $1", spikeID)
 
 		page := f.show(t)
-		if !strings.Contains(page, "Nothing is due, and nothing is overdue.") {
+		if !strings.Contains(page, "Nothing is due or overdue.") {
 			t.Errorf("the page does not say nothing is due:\n%s", text(page))
 		}
 		if strings.Contains(page, "is next") {
@@ -367,7 +367,7 @@ func TestToday_TheEmptyStateDependsOnWhyTheListIsEmpty(t *testing.T) {
 		f.exec(t, "DELETE FROM plant WHERE garden_id = $1", rosewoodID)
 
 		page := f.show(t)
-		for _, want := range []string{"No plants yet", "Add a plant and sprig will remind you when to water it.", `href="/plants/new"`, "Add a plant"} {
+		for _, want := range []string{"No plants yet", "Add a plant to see its tasks here.", `href="/plants/new"`, ">Add plant<"} {
 			if !strings.Contains(page, want) {
 				t.Errorf("the page lacks %s:\n%s", want, text(page))
 			}
@@ -428,7 +428,7 @@ func TestToday_ReadsTheDayInTheReadersTimezone(t *testing.T) {
 
 func TestToday_ThePageHeadingShowsTheDateAndTheGardenName(t *testing.T) {
 	page := rosewood(t).show(t)
-	for _, want := range []string{`<title>sprig — today</title>`, "Thursday 3 September", `aria-current="page"`} {
+	for _, want := range []string{`<title>Today · sprig</title>`, "Thursday 3 September", `aria-current="page"`} {
 		if !strings.Contains(page, want) {
 			t.Errorf("the page lacks %s", want)
 		}
@@ -496,7 +496,7 @@ func TestFeed_ShowsASkipAsSkipped(t *testing.T) {
 func TestFeed_ShowsUndoOnlyOnTheReadersOwnCareInsideTheWindow(t *testing.T) {
 	sam := uuid.MustParse("00000000-0000-7000-8000-000000000198")
 	// Sam's watering of Doris is lines[0] and the reader's watering of Nigel is
-	// lines[1], both recorded a moment ago. Every seeded event is days old.
+	// lines[1], both logged a moment ago. Every seeded event is days old.
 	setup := func(t *testing.T) *todayFixture {
 		f := rosewood(t)
 		f.exec(t, "INSERT INTO app_user (id, display_name, handle, timezone) VALUES ($1, 'Sam', 'sam', 'Europe/London')", sam)
@@ -549,7 +549,7 @@ func TestFeed_ShowsUndoOnlyOnTheReadersOwnCareInsideTheWindow(t *testing.T) {
 
 // The feed element has to be on the page for a swap to fill it. No whitespace
 // is allowed inside the div because the stylesheet hides the feed with :empty.
-func TestFeed_IsEmptyInAGardenWithNothingRecorded(t *testing.T) {
+func TestFeed_IsEmptyInAGardenWithNothingLogged(t *testing.T) {
 	f := rosewood(t)
 	f.exec(t, "DELETE FROM care_event WHERE garden_id = $1", rosewoodID)
 
@@ -685,7 +685,7 @@ func TestToday_TheGardenSheetListsEveryLiveGardenWithItsOwnerAndRoleAndMarksTheC
 
 	want := []renderedGardenRow{
 		{name: "Rosewood", meta: "Your garden · Owner", current: true},
-		{name: "Fairview", meta: "Robin's garden · Sitter · until 8 Sep", button: true, posts: fairviewGardenID.String()},
+		{name: "Fairview", meta: "Robin’s garden · Sitter · until 8 Sep", button: true, posts: fairviewGardenID.String()},
 	}
 	for _, hx := range []bool{false, true} {
 		page := f.gardens(t, hx)
@@ -749,8 +749,8 @@ func TestToday_AGardenAnotherPersonCreatedSaysWhoseItIsUnderItsNameEvenToASecond
 	if m == nil {
 		t.Fatal("the top bar has no line under the garden's name")
 	}
-	if got := text(m[1]); got != "Robin's garden" {
-		t.Errorf("the line under the name is %q, want %q", got, "Robin's garden")
+	if got := text(m[1]); got != "Robin’s garden" {
+		t.Errorf("the line under the name is %q, want %q", got, "Robin’s garden")
 	}
 }
 
@@ -791,8 +791,8 @@ func TestToday_TheLogCareSheetPageKeepsTheSwitchIconAndTheOwnerLine(t *testing.T
 	if switchLink.FindStringSubmatch(page) == nil {
 		t.Error("the sheet page has no switch icon in the top bar")
 	}
-	if m := ownerLine.FindStringSubmatch(page); m == nil || text(m[1]) != "Jo's garden" {
-		t.Errorf("the sheet page's line under the name is %v, want Jo's garden", m)
+	if m := ownerLine.FindStringSubmatch(page); m == nil || text(m[1]) != "Jo’s garden" {
+		t.Errorf("the sheet page's line under the name is %v, want Jo’s garden", m)
 	}
 }
 

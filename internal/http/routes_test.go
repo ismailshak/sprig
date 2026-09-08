@@ -41,6 +41,9 @@ type access struct {
 	// route returns 404 for it, because no store query can find another
 	// garden's row from a session on Rosewood.
 	foreign string
+	// notFoundPage marks a route whose 404 is a rendered page rather than the
+	// plain-text body.
+	notFoundPage bool
 }
 
 var routeAccess = map[string]access{
@@ -225,11 +228,22 @@ var routeAccess = map[string]access{
 	// issued. The 404 they get is the page for a link that cannot be used.
 	// Both run for an account in no garden, because accepting an invite is how
 	// it gets one.
-	"GET /invite/{token}/accept":  {withoutGarden: true, path: acceptPath("no-such-token"), foreign: acceptPath("no-such-token")},
-	"POST /invite/{token}/accept": {anyMember: true, withoutGarden: true, path: acceptPath("no-such-token"), foreign: acceptPath("no-such-token")},
+	"GET /invite/{token}/accept": {
+		withoutGarden: true,
+		path:          acceptPath("no-such-token"),
+		foreign:       acceptPath("no-such-token"),
+		notFoundPage:  true,
+	},
+	"POST /invite/{token}/accept": {
+		anyMember:     true,
+		withoutGarden: true,
+		path:          acceptPath("no-such-token"),
+		foreign:       acceptPath("no-such-token"),
+		notFoundPage:  true,
+	},
 	// A passkey and a push subscription belong to an account rather than to a
 	// garden, so the foreign row here is another person's rather than another
-	// garden's. Both routes answer 404 for one.
+	// garden's. Both routes return 404 for one.
 	"POST /more/passkeys/{key}/remove": {
 		anyMember: true,
 		path:      removePasskeyPath(readerPasskeyID),
@@ -336,6 +350,10 @@ var routeAccess = map[string]access{
 		path:       eventPath(rosewoodPlantID, rosewoodCorrectEventID, "/restore", logQuery{}),
 		foreign:    eventPath(fairviewPlantID, fairviewCorrectEventID, "/restore", logQuery{}),
 	},
+	// The route that matches every path no other route matches. It names no
+	// capability and needs no garden, because it writes a 404 without reading
+	// anything.
+	"/": {anyMember: true, withoutGarden: true, path: "/nope"},
 }
 
 var (
@@ -368,7 +386,7 @@ var (
 	// The stranger is a second account, holding the passkey and the push
 	// subscription the More routes have to refuse. The reader holds two
 	// passkeys, because the query refuses to remove the last one an account
-	// has and that answer is a 404 as well.
+	// has and that refusal is a 404 as well.
 	strangerID        = uuid.MustParse("00000000-0000-7000-8000-000000000241")
 	readerPasskeyID   = uuid.MustParse("00000000-0000-7000-8000-000000000242")
 	strangerPasskeyID = uuid.MustParse("00000000-0000-7000-8000-000000000243")
@@ -612,6 +630,8 @@ func TestRoutes_EachRouteRefusesStrangersAndRolesAsItsEntrySays(t *testing.T) {
 				New(logger, testSessions(), testPasskeys(), acceptEveryToken(lacking), noLiveToken, queries, testPhotos(t), testTemplates(), testAssets(), "", false, testPushKey, nil, nil, nil).ServeHTTP(rec, signedIn(httptest.NewRequestWithContext(t.Context(), method, path, nil)))
 				if rec.Code != http.StatusNotFound {
 					t.Errorf("a member without %s got %d, want %d", a.capability, rec.Code, http.StatusNotFound)
+				} else if got := strings.TrimSpace(rec.Body.String()); got != notFoundText {
+					t.Errorf("a member without %s read %q, want the %q an unknown path gets", a.capability, got, notFoundText)
 				}
 
 				rec = httptest.NewRecorder()
@@ -638,6 +658,8 @@ func TestRoutes_EachRouteRefusesStrangersAndRolesAsItsEntrySays(t *testing.T) {
 				New(logger, testSessions(), testPasskeys(), acceptEveryToken(memberWith(every)), noLiveToken, queries, testPhotos(t), testTemplates(), testAssets(), "", false, testPushKey, nil, nil, nil).ServeHTTP(rec, signedIn(httptest.NewRequestWithContext(t.Context(), method, a.foreign, nil)))
 				if rec.Code != http.StatusNotFound {
 					t.Errorf("an owner asking for Fairview's object at %s got %d, want %d", a.foreign, rec.Code, http.StatusNotFound)
+				} else if got := strings.TrimSpace(rec.Body.String()); !a.notFoundPage && got != notFoundText {
+					t.Errorf("Fairview's object at %s reads %q, want the %q a missing row gets", a.foreign, got, notFoundText)
 				}
 			}
 		})

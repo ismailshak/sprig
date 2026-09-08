@@ -11,7 +11,7 @@ test('a recovery code registers a passkey without signing in, and that passkey t
 }) => {
   await withDevice(page, aWorkingDevice, async () => {
     await signin.open();
-    await page.getByRole('link', { name: 'use one' }).click();
+    await page.getByRole('link', { name: 'use a recovery code' }).click();
     await expect(page).toHaveURL('/recover');
     await expect(page.getByRole('heading', { name: 'Recover an account' })).toBeVisible();
 
@@ -45,8 +45,8 @@ test('a code nobody made and a used code get the same page, with no form on it',
   await recover.code().fill('zzzz-zzzz-zzzz');
   await recover.use().click();
 
-  await expect(page.getByRole('heading', { name: 'That code cannot be used' })).toBeVisible();
-  await expect(page.getByText('Ask whoever runs the garden to send you a new invite link.')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'This code can’t be used' })).toBeVisible();
+  await expect(page.getByText('Try another code, or ask the garden’s owner for a new invite link.')).toBeVisible();
   await expect(recover.code()).toHaveCount(0);
   await expect(recover.registerPasskey()).toHaveCount(0);
 
@@ -55,8 +55,8 @@ test('a code nobody made and a used code get the same page, with no form on it',
   await recover.code().fill(recoveryBatch.used);
   await recover.use().click();
 
-  await expect(page.getByRole('heading', { name: 'That code cannot be used' })).toBeVisible();
-  await expect(page.getByText('Ask whoever runs the garden to send you a new invite link.')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'This code can’t be used' })).toBeVisible();
+  await expect(page.getByText('Try another code, or ask the garden’s owner for a new invite link.')).toBeVisible();
   await expect(recover.code()).toHaveCount(0);
 });
 
@@ -70,8 +70,6 @@ test('with no JavaScript a live code still opens Add this device, whose button i
 
   await expect(page.getByRole('heading', { name: 'Add this device' })).toBeVisible();
   await expect(recover.registerPasskey()).toBeDisabled();
-  await expect(
-    page.getByText('Registering a passkey needs JavaScript and a browser that supports passkeys'),
-  ).toBeVisible();
+  await expect(page.getByText('Requires JavaScript and a browser with passkey support')).toBeVisible();
   await expect(page.getByRole('navigation')).toHaveCount(0);
 });

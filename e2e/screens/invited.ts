@@ -1,7 +1,7 @@
 import type { Locator, Page } from '@playwright/test';
 
 // The page an invite link opens, at /invite/<token>. A token comes from the
-// seed or from the link Invite someone and Re-enrol show.
+// seed or from the link Invite someone and Sign-in link show.
 export class InvitedScreen {
   constructor(private readonly page: Page) {}
 
@@ -28,7 +28,7 @@ export class InvitedScreen {
   // The submit buttons, one on the join form and one on the re-enrolment
   // form. Both are disabled until the page's script enables them.
   join(): Locator {
-    return this.page.getByRole('button', { name: 'Join with a passkey' });
+    return this.page.getByRole('button', { name: /^Join / });
   }
 
   addDevice(): Locator {
@@ -42,6 +42,6 @@ export class InvitedScreen {
 
   // The link under the join form for somebody who already has an account.
   signInToJoin(): Locator {
-    return this.page.getByRole('link', { name: 'Sign in to join as yourself' });
+    return this.page.getByRole('link', { name: 'Sign in to join' });
   }
 }

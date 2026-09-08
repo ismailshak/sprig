@@ -30,10 +30,8 @@ func returnPath(next string) string {
 }
 
 // tooManySignIns is the sentence the sign-in page shows once the address or
-// the whole route has spent its budget. It says the limit is on the page
-// rather than on the account, because the shared budget can be spent by
-// somebody else's attempts.
-const tooManySignIns = "Too many tries. Wait a few minutes and try again. This limit is on the page rather than on your account, so it can be somebody else's attempts you are waiting out."
+// the whole route has spent its budget.
+const tooManySignIns = "Too many attempts. Wait a few minutes and try again."
 
 // signInPage is the data the sign-in template renders. The page has one
 // button, no fields, and a line above the button saying why the last attempt

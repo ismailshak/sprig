@@ -22,10 +22,10 @@ export class SetupScreen {
   // The button on the public form is disabled until the page's script enables
   // it. The one on the signed-in page is not.
   create(): Locator {
-    return this.page.getByRole('button', { name: 'Create the garden' });
+    return this.page.getByRole('button', { name: 'Create garden' });
   }
 
   signInToSetUp(): Locator {
-    return this.page.getByRole('link', { name: 'Sign in to set up a garden as yourself' });
+    return this.page.getByRole('link', { name: 'Sign in' });
   }
 }

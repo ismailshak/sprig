@@ -1,4 +1,4 @@
-{{define "title"}}sprig — {{.Title}}{{end}}
+{{define "title"}}{{.Title}} · sprig{{end}}
 
 {{/* Cancel rather than a back arrow, because a chevron only says the page will
      be left, and this form has typed input to discard.
@@ -30,32 +30,32 @@
      invent one. */}}
 <div class="form__names">
 <div class="field">
-<label class="field__label" for="nickname">Nickname <span class="field__hint">what you call it</span></label>
+<label class="field__label" for="nickname">Nickname <span class="field__hint">e.g. Nigel</span></label>
 <input class="input" id="nickname" name="nickname" type="text" value="{{.Nickname}}">
 </div>
 <div class="field">
-<label class="field__label" for="common">Common name <span class="field__hint">what a shop calls it</span></label>
+<label class="field__label" for="common">Common name <span class="field__hint">e.g. Swiss cheese plant</span></label>
 <input class="input" id="common" name="common" type="text" value="{{.Common}}">
 </div>
 <div class="field">
-<label class="field__label" for="botanical">Botanical name <span class="field__hint">the Latin name</span></label>
+<label class="field__label" for="botanical">Botanical name <span class="field__hint">e.g. Monstera deliciosa</span></label>
 <input class="input" id="botanical" name="botanical" type="text" value="{{.Botanical}}">
 </div>
 {{with .NameError}}<p class="field__error">{{.}}</p>{{end}}
 </div>
-{{/* Location is a text input with a <datalist> of the rooms the garden's
+{{/* Room is a text input with a <datalist> of the rooms the garden's
      plants are already in. The Plants list groups on the text as it was typed,
      so "Bathroom" and "bathroom" are two rooms there. The script this page
      loads removes the list attribute and fills the listbox below instead, so
      only one of the two lists ever opens. The field posts the same value under
      the same name either way. */}}
 <div class="field">
-<label class="field__label" for="where">Location</label>
+<label class="field__label" for="room">Room</label>
 <div class="combo">
-<input class="input" id="where" name="where" type="text" list="rooms" autocomplete="off" placeholder="Pick a room, or name a new one" value="{{.Location}}">
+<input class="input" id="room" name="room" type="text" list="rooms" autocomplete="off" placeholder="Choose or add a room" value="{{.Room}}">
 <span class="combo__mark" aria-hidden="true"></span>
 <datalist id="rooms">{{range .Rooms}}<option value="{{.}}">{{end}}</datalist>
-<ul class="combo__list" id="where-list" role="listbox" aria-label="Rooms" hidden></ul>
+<ul class="combo__list" id="room-list" role="listbox" aria-label="Rooms" hidden></ul>
 </div>
 </div>
 {{/* Schedules are on the add form but not on the edit form. A new plant can be
@@ -65,7 +65,7 @@
 <section class="section section--schedule" aria-labelledby="schedule">
 <div class="section__head">
 <h2 class="section__title" id="schedule">Schedule</h2>
-<span class="section__count">All optional</span>
+<span class="section__count">Optional</span>
 </div>
 <ul class="list">
 {{template "schedule-fields" .}}</ul>
@@ -73,10 +73,10 @@
 {{end}}
 {{/* Behind a disclosure, because a form opening with eight empty boxes looks
      like work. It starts open when any of the fields has a value. */}}
-<details class="disclosure"{{if .Reference}} open{{end}}>
+<details class="disclosure"{{if .Details}} open{{end}}>
 <summary class="disclosure__head">
-<span class="section__title">Reference</span>
-<span class="disclosure__hint">Care notes</span>
+<span class="section__title">Details</span>
+<span class="disclosure__hint">Optional</span>
 </summary>
 <div class="disclosure__body">
 {{range .Facts}}<div class="field">

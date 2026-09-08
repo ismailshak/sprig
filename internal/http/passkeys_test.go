@@ -38,7 +38,7 @@ func TestPasskeys_TheLastOneOffersNoRemoveAndThePageSaysWhy(t *testing.T) {
 	if rows[0].drop != "" {
 		t.Errorf("the only passkey offers Remove at %q", rows[0].drop)
 	}
-	if !strings.Contains(text(page), "This is the only way you can sign in, so it cannot be removed") {
+	if !strings.Contains(text(page), "Your only passkey can’t be removed") {
 		t.Errorf("the page does not say why Remove is absent:\n%s", text(page))
 	}
 }

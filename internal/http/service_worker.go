@@ -106,7 +106,7 @@ func shellURLs(assets *Assets) []string {
 // check for a new worker rather than reuse a cached copy.
 func (s *serviceWorker) serve(w http.ResponseWriter, r *http.Request) {
 	if s.script == nil {
-		http.NotFound(w, r)
+		notFound(w)
 		return
 	}
 	w.Header().Set("Cache-Control", "no-cache")

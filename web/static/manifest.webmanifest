@@ -2,7 +2,7 @@
   "id": "/",
   "name": "sprig",
   "short_name": "sprig",
-  "description": "Watering, feeding and repotting, plant by plant.",
+  "description": "Track watering, feeding and repotting for every plant.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

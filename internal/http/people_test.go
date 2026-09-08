@@ -23,7 +23,7 @@ var (
 	peoplePlantID    = uuid.MustParse("00000000-0000-7000-8000-000000000334")
 	peopleWaterID    = uuid.MustParse("00000000-0000-7000-8000-000000000335")
 	peopleEventID    = uuid.MustParse("00000000-0000-7000-8000-000000000336")
-	peopleWaitingID  = uuid.MustParse("00000000-0000-7000-8000-000000000337")
+	pendingInviteID  = uuid.MustParse("00000000-0000-7000-8000-000000000337")
 	peopleExpiredID  = uuid.MustParse("00000000-0000-7000-8000-000000000338")
 	peopleRedeemedID = uuid.MustParse("00000000-0000-7000-8000-000000000340")
 	peopleFinnID     = uuid.MustParse("00000000-0000-7000-8000-000000000341")
@@ -55,10 +55,10 @@ func peopleGarden(t *testing.T) *moreFixture {
 
 	f.exec(t, "DELETE FROM invite WHERE garden_id = $1", moreGardenID)
 	f.exec(t, `INSERT INTO invite (id, garden_id, token_hash, role, created_by, created_at, expires_at, redeemed_at) VALUES
-		($1, $2, 'waiting', 'sitter', $3, $4, $5, NULL),
+		($1, $2, 'pending', 'sitter', $3, $4, $5, NULL),
 		($6, $2, 'ran-out', 'member', $3, $7, $8, NULL),
 		($9, $2, 'redeemed', 'sitter', $3, $4, $5, $4)`,
-		peopleWaitingID, moreGardenID, moreUserID, thursday.AddDate(0, 0, -2), thursday.AddDate(0, 0, 5),
+		pendingInviteID, moreGardenID, moreUserID, thursday.AddDate(0, 0, -2), thursday.AddDate(0, 0, 5),
 		peopleExpiredID, thursday.AddDate(0, 0, -8), thursday.AddDate(0, 0, -1), peopleRedeemedID)
 	return f
 }
@@ -99,8 +99,8 @@ func TestPeople_APermanentMemberHasBothRolesTheirOwnSelectedAndNoEndDate(t *test
 	if row.until != "" {
 		t.Errorf("a permanent membership offers the end date %q; a date arrives with the invite", row.until)
 	}
-	if !slices.Equal(row.acts, []string{"Re-enrol", "Remove"}) {
-		t.Errorf("Sam's row offers %v, want Re-enrol and Remove", row.acts)
+	if !slices.Equal(row.acts, []string{"Sign-in link", "Remove"}) {
+		t.Errorf("Sam's row offers %v, want Sign-in link and Remove", row.acts)
 	}
 }
 
@@ -161,23 +161,23 @@ func TestPeople_AHandleIsShownOnlyWhereTwoMembersShareADisplayName(t *testing.T)
 			t.Errorf("no row shows the handle %q, and two members are called Ellie", want)
 		}
 	}
-	if label := ariaLabels(page)["role.ellie2"]; label != "What Ellie (ellie2) can do" {
+	if label := ariaLabels(page)["role.ellie2"]; label != "Ellie (ellie2)’s role" {
 		t.Errorf("the select is named %q, and a name alone names both Ellies", label)
 	}
 }
 
-func TestPeople_TheInvitedSectionIsAbsentWhenNoInviteIsWaiting(t *testing.T) {
+func TestPeople_PendingInvitesIsAbsentOnceEveryInviteIsGone(t *testing.T) {
 	f := peopleGarden(t)
 
 	if got := invitesShown(f.page(t, f.handler.people, peoplePath)); len(got) != 2 {
-		t.Fatalf("the Invited section holds %v, want the waiting invite and the one that ran out", got)
+		t.Fatalf("Pending invites holds %v, want the live invite and the one that ran out", got)
 	}
 
 	f.exec(t, "DELETE FROM invite WHERE garden_id = $1", moreGardenID)
 	page := f.page(t, f.handler.people, peoplePath)
 
-	if strings.Contains(page, "Invited") {
-		t.Error("the Invited section is on the page with nothing in it")
+	if strings.Contains(page, "Pending invites") {
+		t.Error("Pending invites is on the page with nothing in it")
 	}
 }
 
@@ -188,24 +188,24 @@ func TestPeople_AnInviteSaysWhenItWasSentAndWhetherItHasRunOut(t *testing.T) {
 
 	want := []string{"Sitter Sent Tuesday · expires in 5 days", "Member Sent 26 Aug · expired"}
 	if !slices.Equal(got, want) {
-		t.Errorf("the Invited section reads %v, want %v", got, want)
+		t.Errorf("Pending invites reads %v, want %v", got, want)
 	}
 }
 
-func TestPeople_AnInviteThatRunsOutLaterTodayStillReadsAsWaiting(t *testing.T) {
+func TestPeople_AnInviteThatRunsOutLaterTodayReadsAsExpiringInADay(t *testing.T) {
 	f := peopleGarden(t)
 	f.exec(t, "DELETE FROM invite WHERE garden_id = $1", moreGardenID)
 	f.exec(t, `INSERT INTO invite (id, garden_id, token_hash, role, created_by, created_at, expires_at)
 		VALUES ($1, $2, 'later-today', 'sitter', $3, $4, $5)`,
-		peopleWaitingID, moreGardenID, moreUserID, thursday.AddDate(0, 0, -7), thursday.Add(3*time.Hour))
+		pendingInviteID, moreGardenID, moreUserID, thursday.AddDate(0, 0, -7), thursday.Add(3*time.Hour))
 
 	got := invitesShown(f.page(t, f.handler.people, peoplePath))
 
 	if want := []string{"Sitter Sent 27 Aug · expires in 1 day"}; !slices.Equal(got, want) {
-		t.Errorf("the Invited section reads %v, want %v; the link works until this afternoon", got, want)
+		t.Errorf("Pending invites reads %v, want %v; the link works until this afternoon", got, want)
 	}
-	if note := noteOn(t, f.page(t, f.handler.show, morePath), "People"); note != "1 invite waiting" {
-		t.Errorf("More says %q, and the row it is counting reads as waiting", note)
+	if note := noteOn(t, f.page(t, f.handler.show, morePath), "People"); note != "1 invite pending" {
+		t.Errorf("More says %q, and the row it is counting is still pending", note)
 	}
 }
 
@@ -335,7 +335,7 @@ func TestPeople_TheRemoveQuestionNamesThePersonAndWhatTheyKeep(t *testing.T) {
 	if row.ask != "Remove Sam?" {
 		t.Errorf("the row asks %q, want %q", row.ask, "Remove Sam?")
 	}
-	if !strings.Contains(row.why, "their name stays on every watering") {
+	if !strings.Contains(row.why, "Their name stays on everything they’ve logged") {
 		t.Errorf("the question reads %q, and it has to say what removing them keeps", row.why)
 	}
 }
@@ -429,7 +429,7 @@ func TestPeople_AReenrolmentLinkIsShownOnceAndOnlyItsHashIsStored(t *testing.T) 
 	}
 }
 
-func TestPeople_AReenrolmentLinkIsNotCountedAmongTheInvitesWaiting(t *testing.T) {
+func TestPeople_AReenrolmentLinkIsNotListedUnderPendingInvites(t *testing.T) {
 	f := peopleGarden(t)
 	before := invitesShown(f.page(t, f.handler.people, peoplePath))
 
@@ -437,7 +437,7 @@ func TestPeople_AReenrolmentLinkIsNotCountedAmongTheInvitesWaiting(t *testing.T)
 
 	after := invitesShown(f.page(t, f.handler.people, peoplePath))
 	if !slices.Equal(before, after) {
-		t.Errorf("the Invited section reads %v after a re-enrolment and %v before, and Sam is already a member", after, before)
+		t.Errorf("Pending invites reads %v after a re-enrolment and %v before, and Sam is already a member", after, before)
 	}
 }
 
@@ -472,14 +472,14 @@ func TestPeople_ASecondReenrolmentLinkReplacesTheFirst(t *testing.T) {
 func TestPeople_RevokingAnInviteTakesItOutOfTheList(t *testing.T) {
 	f := peopleGarden(t)
 
-	rec := f.remove(t, f.handler.revokeInvite, "invite", peopleWaitingID, revokeInvitePath(peopleWaitingID))
+	rec := f.remove(t, f.handler.revokeInvite, "invite", pendingInviteID, revokeInvitePath(pendingInviteID))
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusSeeOther, rec.Body.String())
 	}
 
 	got := invitesShown(f.page(t, f.handler.people, peoplePath))
 	if want := []string{"Member Sent 26 Aug · expired"}; !slices.Equal(got, want) {
-		t.Errorf("the Invited section reads %v, want %v", got, want)
+		t.Errorf("Pending invites reads %v, want %v", got, want)
 	}
 }
 
@@ -532,7 +532,7 @@ func roleOf(t *testing.T, f *moreFixture, userID uuid.UUID) string {
 var (
 	// A member's row has one of two class combinations, one for the controls
 	// and one for "Remove Ellie?". An invite row has neither, so this pattern
-	// skips the Invited section.
+	// skips the Pending invites section.
 	memberRowElement = regexp.MustCompile(`(?s)<li class="row row--setting row--stack (row--people[^"]*|row--editing row--asking)">(.*?)</li>`)
 	memberName       = regexp.MustCompile(`(?s)<span class="row__name">(.*?)</span>`)
 	memberHandle     = regexp.MustCompile(`<span class="row__handle">([^<]*)</span>`)
@@ -651,9 +651,9 @@ func memberNames(page string) []string {
 	return out
 }
 
-// invitesShown reads the Invited section, one string per row.
+// invitesShown reads the Pending invites section, one string per row.
 func invitesShown(page string) []string {
-	invited := strings.SplitN(page, `<h2 class="section__title">Invited</h2>`, 2)
+	invited := strings.SplitN(page, `<h2 class="section__title">Pending invites</h2>`, 2)
 	if len(invited) != 2 {
 		return nil
 	}

@@ -16,13 +16,13 @@ export class PeopleScreen {
   // The role select on a member's row. Its accessible name includes the
   // person's name, because the row has no visible label above it.
   role(name: string): Locator {
-    return this.page.getByLabel(`What ${name} can do`);
+    return this.page.getByLabel(`${name}’s role`);
   }
 
   // The end date field on a member's row. Only a membership with an end date
   // has one.
   until(name: string): Locator {
-    return this.page.getByLabel(`When ${name}'s access ends`);
+    return this.page.getByLabel(`${name}’s access ends on`);
   }
 
   save(): Locator {
@@ -30,7 +30,7 @@ export class PeopleScreen {
   }
 
   reenrol(name: string): Locator {
-    return this.page.getByRole('button', { name: `Re-enrol ${name}` });
+    return this.page.getByRole('button', { name: `Sign-in link for ${name}` });
   }
 
   remove(name: string): Locator {
@@ -39,8 +39,8 @@ export class PeopleScreen {
 
   // The two buttons under "Remove Ellie?". They replace the controls on the
   // row Remove was pressed on.
-  keep(): Locator {
-    return this.page.getByRole('link', { name: 'Keep them' });
+  cancelRemove(): Locator {
+    return this.page.getByRole('link', { name: 'Cancel' });
   }
 
   confirmRemove(): Locator {
@@ -48,7 +48,7 @@ export class PeopleScreen {
   }
 
   invited(): Locator {
-    return this.page.getByRole('heading', { name: 'Invited' });
+    return this.page.getByRole('heading', { name: 'Pending invites' });
   }
 
   revoke(): Locator {
@@ -59,7 +59,7 @@ export class PeopleScreen {
     return this.page.getByRole('link', { name: 'Invite someone' });
   }
 
-  // The re-enrolment link, shown once at the top of the page. It is matched on
+  // The sign-in link, shown once at the top of the page. It is matched on
   // the path that redeems it, because no other text on the page contains
   // that.
   link(): Locator {

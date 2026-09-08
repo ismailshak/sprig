@@ -58,25 +58,25 @@ func (h *plants) servePhoto(w http.ResponseWriter, r *http.Request, square bool)
 	principal := PrincipalFrom(r)
 	plantID, err := uuid.Parse(r.PathValue("plant"))
 	if err != nil {
-		http.NotFound(w, r)
+		notFound(w)
 		return
 	}
 	photoID, err := uuid.Parse(r.PathValue("photo"))
 	if err != nil {
-		http.NotFound(w, r)
+		notFound(w)
 		return
 	}
 	row, err := h.queries.GetPhoto(r.Context(), principal.Garden.ID, photoID)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		http.NotFound(w, r)
+		notFound(w)
 		return
 	case err != nil:
 		serverError(h.logger, w, r, "load the photo", err)
 		return
 	}
 	if row.PlantID != plantID || (square && row.SquareBytes == nil) {
-		http.NotFound(w, r)
+		notFound(w)
 		return
 	}
 	if err := h.photos.Serve(w, r, row, square); err != nil {

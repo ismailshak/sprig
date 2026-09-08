@@ -243,8 +243,8 @@ func (f *formFixture) ask(t *testing.T, plantID uuid.UUID, target string) *httpt
 	return rec
 }
 
-// keep requests the plant's page the way the Keep it link does, which renders
-// the buttons at the bottom closed again.
+// keep requests the plant's page the way the confirmation's Cancel button does.
+// The response is the buttons at the bottom with the confirmation closed.
 func (f *formFixture) keep(t *testing.T, plantID uuid.UUID) *httptest.ResponseRecorder {
 	t.Helper()
 
@@ -352,7 +352,7 @@ func filled(t *testing.T, page, id string) string {
 	return ""
 }
 
-// roomsOffered returns the rooms the Location field lists, in page order.
+// roomsOffered returns the rooms the Room field lists, in page order.
 func roomsOffered(t *testing.T, page string) []string {
 	t.Helper()
 
@@ -422,12 +422,12 @@ func addValues() url.Values {
 		"nickname":       {""},
 		"common":         {""},
 		"botanical":      {""},
-		"where":          {""},
+		"room":           {""},
 		"notes":          {""},
 		"acquired-month": {"0"},
 		"acquired-year":  {"0"},
 	}
-	for _, ref := range referenceFields {
+	for _, ref := range detailFields {
 		values.Set(ref.name, "")
 	}
 	return values
@@ -460,8 +460,8 @@ func TestPlantForm_TheAddFormOpensWithAWeeklyWateringRow(t *testing.T) {
 	}
 	page := rec.Body.String()
 
-	if title := formTitle.FindStringSubmatch(page); title == nil || text(title[1]) != "Add a plant" {
-		t.Errorf("the bar reads %v, want Add a plant", title)
+	if title := formTitle.FindStringSubmatch(page); title == nil || text(title[1]) != "Add plant" {
+		t.Errorf("the bar reads %v, want Add plant", title)
 	}
 	if got := openRows(page); !slices.Equal(got, []string{"water"}) {
 		t.Errorf("the form opens with %v scheduled, want water alone", got)
@@ -482,7 +482,7 @@ func TestPlantForm_OnePostCreatesThePlantAndItsSchedules(t *testing.T) {
 	values := addValues()
 	values.Set("nickname", "Ada")
 	values.Set("botanical", "Ficus lyrata")
-	values.Set("where", "Study")
+	values.Set("room", "Study")
 	openValues(values, "water", cadenceValues("10", "day"))
 	openValues(values, "repot", onceValues("0", "3", "2028"))
 
@@ -514,7 +514,7 @@ func TestPlantForm_AMultipartPostWithNoPhotoCreatesThePlant(t *testing.T) {
 	f := plantFormOn(t)
 	values := addValues()
 	values.Set("nickname", "Ada")
-	values.Set("where", "Study")
+	values.Set("room", "Study")
 
 	plant := f.created(t, f.addMultipart(t, values, ""))
 
@@ -546,14 +546,14 @@ func TestPlantForm_APostOverTheBodyCapIsRefusedInEitherEncoding(t *testing.T) {
 func TestPlantForm_ARefusedPostWithAPhotoSaysThePhotoNeedsChoosingAgain(t *testing.T) {
 	f := plantFormOn(t)
 	values := addValues()
-	values.Set("where", "Study")
+	values.Set("room", "Study")
 
 	rec := f.addMultipart(t, values, "monstera.jpg")
 
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusUnprocessableEntity)
 	}
-	if got := errorsOn(rec.Body.String()); !slices.Contains(got, "The photo needs choosing again.") {
+	if got := errorsOn(rec.Body.String()); !slices.Contains(got, "Choose the photo again.") {
 		t.Errorf("the refused form says %v, want the line about the photo", got)
 	}
 }
@@ -561,14 +561,14 @@ func TestPlantForm_ARefusedPostWithAPhotoSaysThePhotoNeedsChoosingAgain(t *testi
 func TestPlantForm_ARefusedPostWithNoPhotoDoesNotAskForOne(t *testing.T) {
 	f := plantFormOn(t)
 	values := addValues()
-	values.Set("where", "Study")
+	values.Set("room", "Study")
 
 	rec := f.addMultipart(t, values, "")
 
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusUnprocessableEntity)
 	}
-	if got := errorsOn(rec.Body.String()); slices.Contains(got, "The photo needs choosing again.") {
+	if got := errorsOn(rec.Body.String()); slices.Contains(got, "Choose the photo again.") {
 		t.Errorf("the refused form says %v, and no photo was chosen", got)
 	}
 }
@@ -577,7 +577,7 @@ func TestPlantForm_APlantWithNoNameIsRefusedAndTheFormKeepsItsValues(t *testing.
 	f := plantFormOn(t)
 	before := f.countPlants(t)
 	values := addValues()
-	values.Set("where", "Study")
+	values.Set("room", "Study")
 	values.Set("notes", "The one from Ravi.")
 
 	rec := f.add(t, values)
@@ -586,11 +586,11 @@ func TestPlantForm_APlantWithNoNameIsRefusedAndTheFormKeepsItsValues(t *testing.
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusUnprocessableEntity)
 	}
 	page := rec.Body.String()
-	if got := errorsOn(page); !slices.Contains(got, "Give it at least one name. Any of the three will do.") {
+	if got := errorsOn(page); !slices.Contains(got, "Enter at least one name.") {
 		t.Errorf("the form says %v, want the line about the three names", got)
 	}
-	if where, notes := filled(t, page, "where"), filled(t, page, "notes"); where != "Study" || notes != "The one from Ravi." {
-		t.Errorf("the refusal came back with %q and %q, and both were typed in", where, notes)
+	if room, notes := filled(t, page, "room"), filled(t, page, "notes"); room != "Study" || notes != "The one from Ravi." {
+		t.Errorf("the refusal came back with %q and %q, and both were typed in", room, notes)
 	}
 	if after := f.countPlants(t); after != before {
 		t.Errorf("the refused post wrote %d plants", after-before)
@@ -610,11 +610,11 @@ func TestPlantForm_AnAcquiredMonthNeedsItsYear(t *testing.T) {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusUnprocessableEntity)
 	}
 	page := rec.Body.String()
-	if got := errorsOn(page); !slices.Contains(got, "Give the year as well as the month.") {
+	if got := errorsOn(page); !slices.Contains(got, "Choose a year as well as a month.") {
 		t.Errorf("the form says %v, want the line about the year", got)
 	}
-	// The message is inside the Reference disclosure, which has to be open
-	// for it to be seen.
+	// The message is inside the Details disclosure. The disclosure has to be
+	// open for it to be seen.
 	if !strings.Contains(page, `<details class="disclosure" open>`) {
 		t.Error("the refusal is behind a closed disclosure")
 	}
@@ -636,7 +636,7 @@ func TestPlantForm_AnIntervalOfZeroIsRefusedWithTheMessageOnItsRow(t *testing.T)
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusUnprocessableEntity)
 	}
 	page := rec.Body.String()
-	if got := errorsOn(page); !slices.Contains(got, "Give a number between 1 and 999.") {
+	if got := errorsOn(page); !slices.Contains(got, "Enter a number between 1 and 999.") {
 		t.Errorf("the row says %v, want the line about the count", got)
 	}
 	if got := filled(t, page, "water-every"); got != "0" {
@@ -661,7 +661,7 @@ func TestPlantForm_AShapeChosenWithoutJavaScriptReRendersWithTheFieldsItNeeds(t 
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusUnprocessableEntity)
 	}
 	page := rec.Body.String()
-	if got := errorsOn(page); !slices.Contains(got, "Give it a date.") {
+	if got := errorsOn(page); !slices.Contains(got, "Choose a date.") {
 		t.Errorf("the row says %v, want the line about the date", got)
 	}
 	for _, id := range []string{"water-day", "water-month", "water-year"} {
@@ -685,7 +685,7 @@ func TestPlantForm_ADayTheMonthDoesNotHaveIsRefused(t *testing.T) {
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusUnprocessableEntity)
 	}
-	if got := errorsOn(rec.Body.String()); !slices.Contains(got, "There is no 31 February.") {
+	if got := errorsOn(rec.Body.String()); !slices.Contains(got, "Invalid date.") {
 		t.Errorf("the row says %v, want the line about February", got)
 	}
 }
@@ -775,7 +775,7 @@ func TestPlantForm_OpeningARowKeepsTheFormsValues(t *testing.T) {
 	f := plantFormOn(t)
 	values := addValues()
 	values.Set("nickname", "Ada")
-	values.Set("where", "Study")
+	values.Set("room", "Study")
 	openValues(values, "water", cadenceValues("10", "day"))
 	values.Add("open", "repot")
 
@@ -788,8 +788,8 @@ func TestPlantForm_OpeningARowKeepsTheFormsValues(t *testing.T) {
 	if got := openRows(page); !slices.Equal(got, []string{"water", "repot"}) {
 		t.Errorf("the form has %v open, want the watering and the repot", got)
 	}
-	if name, where := filled(t, page, "nickname"), filled(t, page, "where"); name != "Ada" || where != "Study" {
-		t.Errorf("the re-render came back with %q in %q, and Ada in the study was typed", name, where)
+	if name, room := filled(t, page, "nickname"), filled(t, page, "room"); name != "Ada" || room != "Study" {
+		t.Errorf("the re-render came back with %q in %q, and Ada in the study was typed", name, room)
 	}
 	if every := filled(t, page, "water-every"); every != "10" {
 		t.Errorf("the watering came back every %s, and 10 days was typed", every)
@@ -819,7 +819,7 @@ func TestPlantForm_AnHTMXRequestGetsTheRowAlone(t *testing.T) {
 func TestPlantForm_BothFormsOfferEveryRoomThePlantsAreIn(t *testing.T) {
 	f := plantFormOn(t)
 
-	// Windowsill holds two plants and Sprout has no location, so a room appears
+	// Windowsill holds two plants and Sprout has no room, so a room appears
 	// once and a plant with no room adds nothing.
 	want := []string{"Bathroom", "Bedroom", "Kitchen", "Living room", "Windowsill"}
 	if got := roomsOffered(t, f.open(t, newPlantPath, false).Body.String()); !slices.Equal(got, want) {
@@ -843,11 +843,11 @@ func TestPlantForm_ARoomOnlyAnArchivedPlantIsInIsNotOffered(t *testing.T) {
 	}
 }
 
-func TestPlantForm_ALocationTypedInAnotherCaseIsStoredAsTheRoomTheGardenHas(t *testing.T) {
+func TestPlantForm_ARoomTypedInAnotherCaseIsStoredAsTheRoomTheGardenHas(t *testing.T) {
 	f := plantFormOn(t)
 	values := addValues()
 	values.Set("nickname", "Ada")
-	values.Set("where", "bathroom")
+	values.Set("room", "bathroom")
 
 	plant := f.created(t, f.add(t, values))
 
@@ -856,11 +856,11 @@ func TestPlantForm_ALocationTypedInAnotherCaseIsStoredAsTheRoomTheGardenHas(t *t
 	}
 }
 
-func TestPlantForm_ALocationMatchingNoRoomIsStoredAsItWasTyped(t *testing.T) {
+func TestPlantForm_ARoomMatchingNoneTheGardenHasIsStoredAsItWasTyped(t *testing.T) {
 	f := plantFormOn(t)
 	values := addValues()
 	values.Set("nickname", "Ada")
-	values.Set("where", "Potting shed")
+	values.Set("room", "Potting shed")
 
 	plant := f.created(t, f.add(t, values))
 
@@ -869,11 +869,11 @@ func TestPlantForm_ALocationMatchingNoRoomIsStoredAsItWasTyped(t *testing.T) {
 	}
 }
 
-func TestPlantForm_SavingALocationInAnotherCaseKeepsTheGardensSpelling(t *testing.T) {
+func TestPlantForm_SavingARoomInAnotherCaseKeepsTheGardensSpelling(t *testing.T) {
 	f := plantFormOn(t)
 	values := addValues()
 	values.Set("nickname", "Big Fella")
-	values.Set("where", "LIVING ROOM")
+	values.Set("room", "LIVING ROOM")
 
 	rec := f.save(t, bigFellaID, values)
 
@@ -889,41 +889,41 @@ func TestPlantForm_SavingALocationInAnotherCaseKeepsTheGardensSpelling(t *testin
 	}
 }
 
-func TestPlantForm_ARefusedPostShowsTheLocationInTheGardensSpelling(t *testing.T) {
+func TestPlantForm_ARefusedPostShowsTheRoomInTheGardensSpelling(t *testing.T) {
 	f := plantFormOn(t)
 	values := addValues()
-	values.Set("where", "bathroom")
+	values.Set("room", "bathroom")
 
 	rec := f.add(t, values)
 
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusUnprocessableEntity)
 	}
-	if got := filled(t, rec.Body.String(), "where"); got != "Bathroom" {
+	if got := filled(t, rec.Body.String(), "room"); got != "Bathroom" {
 		t.Errorf("the Location field reads %q, want Bathroom", got)
 	}
 }
 
-func TestPlantForm_OpeningARowShowsTheLocationInTheGardensSpelling(t *testing.T) {
+func TestPlantForm_OpeningARowShowsTheRoomInTheGardensSpelling(t *testing.T) {
 	f := plantFormOn(t)
 	values := addValues()
 	values.Set("nickname", "Ada")
-	values.Set("where", "bathroom")
+	values.Set("room", "bathroom")
 	values.Add("open", "water")
 
 	// With no script the button that opens a schedule row submits the whole
-	// form as a GET, so the server re-renders the Location field.
+	// form as a GET, so the server re-renders the Room field.
 	rec := f.open(t, newPlantPath+"?"+values.Encode(), false)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
 	}
-	if got := filled(t, rec.Body.String(), "where"); got != "Bathroom" {
+	if got := filled(t, rec.Body.String(), "room"); got != "Bathroom" {
 		t.Errorf("the Location field reads %q, want Bathroom", got)
 	}
 }
 
-func TestPlantForm_TheEditFormIsFilledInWithTheReferenceSectionOpen(t *testing.T) {
+func TestPlantForm_TheEditFormIsFilledInWithTheDetailsSectionOpen(t *testing.T) {
 	f := plantFormOn(t)
 	f.exec(t, "UPDATE plant SET sun = 'Bright indirect.', acquired_year = 2024, acquired_month = 3 WHERE id = $1", bigFellaID)
 
@@ -940,7 +940,7 @@ func TestPlantForm_TheEditFormIsFilledInWithTheReferenceSectionOpen(t *testing.T
 		{"nickname", "Big Fella"},
 		{"common", "Swiss cheese plant"},
 		{"botanical", "Monstera deliciosa"},
-		{"where", "Living room"},
+		{"room", "Living room"},
 		{"sun", "Bright indirect."},
 		{"acquired-month", "3"},
 		{"acquired-year", "2024"},
@@ -950,7 +950,7 @@ func TestPlantForm_TheEditFormIsFilledInWithTheReferenceSectionOpen(t *testing.T
 		}
 	}
 	if !strings.Contains(page, `<details class="disclosure" open>`) {
-		t.Error("the reference is shut on a plant that has something in it")
+		t.Error("the Details disclosure is shut on a plant that has something in it")
 	}
 	// Schedules are edited on the plant's page, beside the due date they
 	// change.
@@ -977,13 +977,13 @@ func TestPlantForm_AReaderWhoMayNotArchiveSeesNoArchiveLink(t *testing.T) {
 }
 
 // Sprout has a nickname and nothing else.
-func TestPlantForm_APlantWithNoReferenceFieldsHasTheReferenceSectionClosed(t *testing.T) {
+func TestPlantForm_APlantWithNoDetailsHasTheDetailsSectionClosed(t *testing.T) {
 	f := plantFormOn(t)
 
 	page := f.editForm(t, sproutID).Body.String()
 
 	if !strings.Contains(page, `<details class="disclosure">`) {
-		t.Error("the reference opened on a plant with nothing in it")
+		t.Error("the Details disclosure opened on a plant with nothing in it")
 	}
 }
 
@@ -1080,10 +1080,10 @@ func TestPlantForm_ArchiveShowsAConfirmationFirst(t *testing.T) {
 		t.Errorf("the foot does not ask about the plant:\n%s", text(page))
 	}
 	// The confirmation says the history is kept, not only that the plant goes.
-	if !strings.Contains(page, "Its history is kept") {
+	if !strings.Contains(page, "keeps its activity and photos") {
 		t.Errorf("the question does not say what archiving keeps:\n%s", text(page))
 	}
-	if !strings.Contains(page, "Keep it") {
+	if !strings.Contains(page, ">Cancel<") {
 		t.Error("the question has no way out of it")
 	}
 	// The plant's page is still shown above the confirmation.
@@ -1116,7 +1116,7 @@ func TestPlantForm_AnHTMXRequestGetsTheConfirmationAlone(t *testing.T) {
 	}
 }
 
-func TestPlantForm_KeepItRestoresTheButtons(t *testing.T) {
+func TestPlantForm_CancelOnTheArchiveQuestionRestoresTheButtons(t *testing.T) {
 	f := plantFormOn(t)
 
 	rec := f.keep(t, bigFellaID)
@@ -1126,7 +1126,7 @@ func TestPlantForm_KeepItRestoresTheButtons(t *testing.T) {
 	}
 	page := rec.Body.String()
 	if strings.Contains(page, "Archive Big Fella?") {
-		t.Errorf("the question is still up after Keep it:\n%s", page)
+		t.Errorf("the question is still up after Cancel:\n%s", page)
 	}
 	for _, want := range []string{`id="plant-foot"`, "Edit plant", "Archive"} {
 		if !strings.Contains(page, want) {
@@ -1436,7 +1436,7 @@ func TestPlantForm_TheEditFormShowsTheCurrentPictureAndTheAddFormShowsNone(t *te
 	if got, want := images(edit), []string{photoFullPath(bigFellaID, photoID)}; !slices.Equal(got, want) {
 		t.Errorf("the edit form's images are %v, want the picture at %v", got, want)
 	}
-	if !strings.Contains(edit, `alt="Current picture"`) {
+	if !strings.Contains(edit, `alt="Current photo"`) {
 		t.Error("the edit form does not say the picture is the current one")
 	}
 	if got := images(add); len(got) != 0 {
@@ -1531,8 +1531,6 @@ func (f *formFixture) photosWithRoomFor(t *testing.T, room int) {
 	f.handler.photos = photos
 }
 
-const rosewoodFull = "Rosewood's photo storage is full. Deleting progress photos is what makes room."
-
 func TestPlantForm_APhotoTheGardenHasNoRoomForIsRefusedWithTheReasonUnderThePhotoField(t *testing.T) {
 	f := plantFormOn(t)
 	values := addValues()
@@ -1546,8 +1544,8 @@ func TestPlantForm_APhotoTheGardenHasNoRoomForIsRefusedWithTheReasonUnderThePhot
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusUnprocessableEntity, rec.Body.String())
 	}
-	if got := errorsOn(rec.Body.String()); !slices.Contains(got, rosewoodFull) {
-		t.Errorf("the form's errors are %v, want %q", got, rosewoodFull)
+	if got := errorsOn(rec.Body.String()); !slices.Contains(got, photoQuotaFull) {
+		t.Errorf("the form's errors are %v, want %q", got, photoQuotaFull)
 	}
 	if got := filled(t, rec.Body.String(), "nickname"); got != "Ada" {
 		t.Errorf("nickname reads %q, want Ada", got)
@@ -1603,8 +1601,8 @@ func TestPlantForm_AnEditWithAPhotoTheGardenHasNoRoomForLeavesThePlantUnchanged(
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusUnprocessableEntity)
 	}
-	if got := errorsOn(rec.Body.String()); !slices.Contains(got, rosewoodFull) {
-		t.Errorf("the form's errors are %v, want %q", got, rosewoodFull)
+	if got := errorsOn(rec.Body.String()); !slices.Contains(got, photoQuotaFull) {
+		t.Errorf("the form's errors are %v, want %q", got, photoQuotaFull)
 	}
 	plant, err := store.New(f.tx).GetPlant(t.Context(), rosewoodID, bigFellaID)
 	if err != nil {

@@ -9,10 +9,10 @@ export class PhotoFormScreen {
     await this.page.goto(`/plants/${plant.id}/photos/new`);
   }
 
-  // The Choose a photo button. The server renders it hidden and the page's
+  // The Choose photo button. The server renders it hidden and the page's
   // script shows it, so with JavaScript off it stays hidden.
   chooseButton(): Locator {
-    return this.page.getByRole('button', { name: 'Choose a photo' });
+    return this.page.getByRole('button', { name: 'Choose photo' });
   }
 
   async choose(file: string): Promise<void> {
@@ -29,7 +29,7 @@ export class PhotoFormScreen {
   // The line shown in a browser that cannot resize a photo. The page's script
   // hides it when the browser can.
   unsupported(): Locator {
-    return this.page.getByText("This browser can't resize a photo");
+    return this.page.getByText('Photos can’t be added from this device.');
   }
 
   submitButton(): Locator {

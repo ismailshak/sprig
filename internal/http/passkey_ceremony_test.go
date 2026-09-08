@@ -49,7 +49,7 @@ func ceremonyWithCookies(t *testing.T, f *moreFixture, cookie auth.CookieSetting
 
 // post calls one of the ceremony handlers as a form post, with the fixture's
 // principal on the request. Any cookies given are added to it. The ceremony
-// cookie is how an answer says which challenge it is for.
+// cookie is how a post says which challenge it belongs to.
 func (f *moreFixture) post(t *testing.T, handler http.HandlerFunc, path string, form url.Values, cookies ...*http.Cookie) *httptest.ResponseRecorder {
 	t.Helper()
 
@@ -122,15 +122,15 @@ func TestPasskeys_AddAPasskeyIsDisabledUntilThePagesScriptRuns(t *testing.T) {
 
 	// Only the browser can talk to the device, so a press with no script
 	// running would post an empty credential.
-	if !buttonIsDisabled(t, page, "Add a passkey") {
+	if !buttonIsDisabled(t, page, "Add passkey") {
 		t.Errorf("Add a passkey is not disabled:\n%s", page)
 	}
 }
 
 func TestPasskeys_TheCeremonyCookieDropsTheHostPrefixWhereCookiesAreNotSecure(t *testing.T) {
 	f := moreGarden(t)
-	// A browser drops a __Host- cookie that is not Secure, and the answer to a
-	// challenge would then have no way to say which challenge it is for.
+	// A browser drops a __Host- cookie that is not Secure, and the post that
+	// finishes a ceremony would then have no way to name its challenge.
 	h := ceremonyWithCookies(t, f, auth.CookieSettings{Name: "sprig_session", Secure: false})
 
 	rec := f.post(t, h.registerChallenge, registerPath, nil)
@@ -190,7 +190,7 @@ func TestPasskeys_AnAnswerWithNoChallengeBehindItSaysTheRequestExpired(t *testin
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusUnprocessableEntity, rec.Body.String())
 	}
-	if !strings.Contains(rec.Body.String(), "That took too long") {
+	if !strings.Contains(rec.Body.String(), "The request timed out") {
 		t.Errorf("the page does not say the request expired:\n%s", text(rec.Body.String()))
 	}
 	// The page it renders still lists the devices already enrolled.
@@ -319,7 +319,7 @@ func aDevice() *passkeytest.Authenticator {
 }
 
 // challengeJSON posts to handler for a challenge and decodes the options it
-// returns into v. It returns the ceremony cookie the answer has to send.
+// returns into v. It returns the ceremony cookie the next post has to send.
 func (f *moreFixture) challengeJSON(t *testing.T, handler http.HandlerFunc, path string, v any) *http.Cookie {
 	t.Helper()
 
@@ -338,7 +338,7 @@ func (f *moreFixture) challengeJSON(t *testing.T, handler http.HandlerFunc, path
 }
 
 // registerDevice runs a registration through the two handlers and returns the
-// response to the answer.
+// response to the second post.
 func (f *moreFixture) registerDevice(t *testing.T, h *passkeyCeremony, device *passkeytest.Authenticator) *httptest.ResponseRecorder {
 	t.Helper()
 
@@ -348,7 +348,7 @@ func (f *moreFixture) registerDevice(t *testing.T, h *passkeyCeremony, device *p
 }
 
 // signInWith runs a sign-in through the two handlers and returns the response
-// to the answer.
+// to the second post.
 func (f *moreFixture) signInWith(t *testing.T, h *passkeyCeremony, device *passkeytest.Authenticator) *httptest.ResponseRecorder {
 	t.Helper()
 
@@ -434,14 +434,14 @@ func TestSignIn_AnAnswerThatDoesNotCheckOutIsRefusedAndIsNotAServerError(t *test
 	device := aDevice()
 	f.enrolDevice(t, h, device)
 
-	// The answer is signed for a page on another origin.
+	// The credential is signed for a page on another origin.
 	device.Origin = "https://sprig.example"
 	rec := f.signInWith(t, h, device)
 
 	if rec.Code != http.StatusUnauthorized {
 		t.Errorf("status = %d, want %d:\n%s", rec.Code, http.StatusUnauthorized, rec.Body.String())
 	}
-	if !strings.Contains(rec.Body.String(), "could not be checked") {
+	if !strings.Contains(rec.Body.String(), "couldn’t be verified") {
 		t.Errorf("the refusal does not say the passkey could not be checked:\n%s", rec.Body.String())
 	}
 	if strings.Contains(log.String(), `"level":"ERROR"`) {
@@ -463,7 +463,7 @@ func TestPasskeys_AnAnswerThatDoesNotCheckOutSaysSoOnThePage(t *testing.T) {
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusUnprocessableEntity, text(rec.Body.String()))
 	}
-	if !strings.Contains(rec.Body.String(), "could not be checked") {
+	if !strings.Contains(rec.Body.String(), "couldn’t be verified") {
 		t.Errorf("the page does not say the passkey could not be checked:\n%s", text(rec.Body.String()))
 	}
 }

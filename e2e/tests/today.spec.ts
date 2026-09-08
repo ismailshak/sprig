@@ -19,7 +19,7 @@ test('an overdue plant shows how late it is', async ({ today }) => {
   await expect(row.getByRole('button', { name: 'Water' })).toBeVisible();
 });
 
-test('a plant due today shows only its location', async ({ today }) => {
+test('a plant due today shows its room and the care, and no date', async ({ today }) => {
   await today.open();
 
   const row = today.careRow(plants.doris, 'water');

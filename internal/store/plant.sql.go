@@ -214,7 +214,7 @@ GROUP BY location
 ORDER BY lower(location), location
 `
 
-// Every room the garden's plants are in, listed once, for the Location field on
+// Every room the garden's plants are in, listed once, for the Room field on
 // the plant form. A room only archived plants are in is left out, because the
 // Plants list stops showing it too. The order ignores case, the same as the
 // Plants list's grouping. GROUP BY rather than SELECT DISTINCT, because

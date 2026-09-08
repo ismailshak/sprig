@@ -1,4 +1,4 @@
-{{define "title"}}sprig — passkeys{{end}}
+{{define "title"}}Passkeys · sprig{{end}}
 
 {{/* One row per device the account has registered, with when it was last used.
      That date is what makes the list readable: two rows called iPhone and
@@ -7,7 +7,7 @@
 {{define "main"}}
 {{template "more-topbar" .Bar}}
 <div class="app__body app__body--sub">
-<p class="lead">A passkey is how you sign in — your phone or laptop unlocks it the way it unlocks itself. Add one for each device you use.</p>
+<p class="lead">Passkeys sign you in with your device’s face, fingerprint or PIN. Add one on each device you use.</p>
 <ul class="list">
 {{range .Keys}}<li class="row row--setting row--stack">
 <span class="row__text">
@@ -21,10 +21,10 @@
 {{/* The reason is under the list rather than in a dialog after the press,
      because removing the last passkey is the one action here that nothing can
      undo. */}}
-{{if .OnlyOne}}<p class="note">This is the only way you can sign in, so it cannot be removed. Add a second device first.</p>{{end}}
+{{if .OnlyOne}}<p class="note">Your only passkey can’t be removed. Add one on another device first.</p>{{end}}
 {{/* Only the browser can talk to the device holding a passkey, so a script
      drives this form. It posts to data-challenge for a challenge, puts the
-     browser's answer in the hidden field, then posts the form. The button
+     browser's credential in the hidden field, then posts the form. The button
      starts disabled with the note under it, because the server cannot tell
      whether the script will run. The script enables the button and removes the
      note. In a browser with no credential API it does neither. The error line
@@ -33,8 +33,8 @@
 <p class="field__error" id="passkey-error" role="alert">{{.Error}}</p>
 <form method="post" action="{{.Add}}" data-passkey="create" data-challenge="{{.Challenge}}" data-field="{{.Field}}" data-message="passkey-error" data-note="passkey-noscript">
 <input type="hidden" name="{{.Field}}">
-<button class="wide-action" type="submit" disabled>Add a passkey</button>
-<p class="note" id="passkey-noscript">Adding a passkey needs JavaScript and a browser that supports passkeys.</p>
+<button class="wide-action" type="submit" disabled>Add passkey</button>
+<p class="note" id="passkey-noscript">Requires JavaScript and a browser with passkey support.</p>
 </form>
 </div>
 {{end}}

@@ -20,11 +20,11 @@ func revokeTokenPath(tokenID uuid.UUID) string {
 // tokenNameMissing is the message under the name field when it is posted
 // empty. The name is what tells one row from the next, so a token cannot be
 // created without one.
-const tokenNameMissing = "Say what the token is for, so a row can be told from the next one."
+const tokenNameMissing = "Enter a name."
 
-// tokenLives are the lifetimes the Stops working select offers, in days,
-// shortest first. The ninety-day cap is the last option rather than a number
-// to type, so no larger value can be entered.
+// tokenLives are the lifetimes the Expires select offers, in days, shortest
+// first. The ninety-day cap is the last option rather than a number to type, so
+// no larger value can be entered.
 var tokenLives = []int{7, 30, 60, 90}
 
 // defaultTokenLife is the lifetime chosen when the form opens, in days.
@@ -42,13 +42,12 @@ type tokensPage struct {
 	Secret *secretBox
 	Tokens []tokenRow
 	// AnyExpired is true when a row in the list has expired. The note under the
-	// list then says what has already happened instead of what to watch for.
+	// list is rendered only then.
 	AnyExpired bool
-	// Name is what the "What is it for" field holds, and NameError the message
-	// under it.
+	// Name is what the Name field holds, and NameError the message under it.
 	Name      string
 	NameError string
-	// Lives is the "Stops working" select's options.
+	// Lives is the Expires select's options.
 	Lives []option
 }
 
@@ -84,19 +83,19 @@ func (h *more) tokens(w http.ResponseWriter, r *http.Request) {
 func (h *more) createToken(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "the form did not parse", http.StatusBadRequest)
+		badRequest(w)
 		return
 	}
 	days, err := strconv.Atoi(r.PostForm.Get("expiry"))
 	if err != nil || !slices.Contains(tokenLives, days) {
-		http.Error(w, "the form did not offer that", http.StatusBadRequest)
+		badRequest(w)
 		return
 	}
 	// TokenExpiry applies the ninety-day cap that holds for every token in the
 	// app, whatever lifetime the form offered.
 	expires, err := auth.TokenExpiry(h.now(), time.Duration(days)*24*time.Hour)
 	if err != nil {
-		http.Error(w, "the form did not offer that", http.StatusBadRequest)
+		badRequest(w)
 		return
 	}
 
@@ -124,10 +123,9 @@ func (h *more) createToken(w http.ResponseWriter, r *http.Request) {
 	page := tokensPage{
 		Lives: lifeOptions(defaultTokenLife),
 		Secret: &secretBox{
-			Label: "The token",
+			Label: "Your new token",
 			Value: token,
-			Why: "This is the only time it is shown. Paste it into the device now — if it is lost, revoke the row and make another. " +
-				"It stops working on " + dateWord(expires, locationFor(principal.User)) + ".",
+			Why:   "This token is shown only once. Copy it now. It expires on " + dateWord(expires, locationFor(principal.User)) + ".",
 		},
 	}
 	h.renderTokens(w, r, page, 0)
@@ -140,7 +138,7 @@ func (h *more) revokeToken(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	tokenID, err := uuid.Parse(r.PathValue("token"))
 	if err != nil {
-		http.NotFound(w, r)
+		notFound(w)
 		return
 	}
 	params := store.RevokeAPITokenParams{Now: h.now(), GardenID: principal.Garden.ID, TokenID: tokenID}
@@ -152,7 +150,7 @@ func (h *more) revokeToken(w http.ResponseWriter, r *http.Request) {
 	// Another garden's token and one already revoked are both 404, since
 	// neither was a button this page offered.
 	if revoked == 0 {
-		http.NotFound(w, r)
+		notFound(w)
 		return
 	}
 	http.Redirect(w, r, tokensPath, http.StatusSeeOther)
@@ -201,8 +199,7 @@ func tokenRows(tokens []store.APIToken, now time.Time) []tokenRow {
 	return rows
 }
 
-// lifeOptions builds the Stops working select's options, with chosen
-// selected.
+// lifeOptions builds the Expires select's options, with chosen selected.
 func lifeOptions(chosen int) []option {
 	options := make([]option, 0, len(tokenLives))
 	for _, days := range tokenLives {

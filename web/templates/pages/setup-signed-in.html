@@ -1,4 +1,4 @@
-{{define "title"}}sprig — set up your garden{{end}}
+{{define "title"}}Set up your garden · sprig{{end}}
 
 {{define "app-class"}}app app--bare{{end}}
 
@@ -10,16 +10,16 @@
      reported by the server as the message under it. */}}
 {{define "main"}}
 <div class="app__body app__body--bare">
-<h1 class="bare__title">Set up a garden as {{.Name}}?</h1>
-<p class="lead">Name the garden. You&rsquo;ll own it, and you can invite people to it afterwards.</p>
+<h1 class="bare__title">Set up a garden as {{.Name}}</h1>
+<p class="lead">You’ll be its owner and can invite people once it’s set up.</p>
 <form method="post" action="{{.Action}}" novalidate>
 <div class="field">
 <label class="field__label" for="garden">Garden name <span class="field__hint">it can be changed later</span></label>
 <input class="input" id="garden" name="garden" type="text" value="{{.Garden}}" autocomplete="off" spellcheck="false">
 {{with .GardenError}}<p class="field__error">{{.}}</p>{{end}}
 </div>
-<button class="wide-action" type="submit">Create the garden</button>
+<button class="wide-action" type="submit">Create garden</button>
 </form>
-<p class="note">Nothing about your account changes: your name, your passkeys and everything you have logged stay as they are. Not {{.Name}}? <a href="{{.SignIn}}">Sign in as somebody else</a>.</p>
+<p class="note">Not {{.Name}}? <a href="{{.SignIn}}">Sign in as someone else</a>.</p>
 </div>
 {{end}}

@@ -4,26 +4,26 @@ import "net/http"
 
 // platforms is the three sets of steps, in the order the chips offer them. The
 // platform is chosen on the page rather than read off the User-Agent, because
-// half the time this URL arrives in a message and is read on a device that is
-// not the one being set up.
+// this URL is often sent in a message and opened on a device other than the one
+// being set up.
 var platforms = []struct {
 	value string
 	label string
 	steps []string
-	// why is the note under the steps. On an iPhone an installed app is what
-	// makes notifications possible at all; on the other two it is a preference.
+	// why is the note under the steps. On iPhone an installed app is the only
+	// way to get notifications. On Android and desktop it is a preference.
 	why string
 }{
 	{
 		value: "iphone",
 		label: "iPhone",
 		steps: []string{
-			"Open sprig in Safari. It has to be Safari — other browsers on iOS cannot install it.",
+			"Open sprig in Safari. Other iOS browsers can’t install it.",
 			"Tap the Share button at the bottom of the screen.",
 			"Scroll down and choose Add to Home Screen.",
-			"Open sprig from the Home Screen from now on.",
+			"Open sprig from your Home Screen from now on.",
 		},
-		why: "On an iPhone this is what makes notifications possible at all. Until it is done, the switches on the notifications page are not there to turn on.",
+		why: "On iPhone, notifications only work from the installed app.",
 	},
 	{
 		value: "android",
@@ -33,7 +33,7 @@ var platforms = []struct {
 			"Tap the three dots at the top right.",
 			"Choose Install app, or Add to Home screen.",
 		},
-		why: "Notifications work in the browser on Android either way. Installing gets it its own icon and no address bar.",
+		why: "On Android, notifications work in the browser too. Installing adds an app icon and a full-screen view.",
 	},
 	{
 		value: "desktop",
@@ -42,7 +42,7 @@ var platforms = []struct {
 			"In Chrome or Edge, click the install icon at the right of the address bar.",
 			"In Safari on a Mac, choose File, then Add to Dock.",
 		},
-		why: "Optional. A tab works exactly as well, and this is mostly about not losing it among thirty others.",
+		why: "Optional. A browser tab works just as well.",
 	},
 }
 
@@ -60,10 +60,10 @@ type installPage struct {
 	Why    string
 	// AfterInvite is true when the page is reached at the end of redeeming an
 	// invite. It is then rendered with no tab bar and no back link, and ends in
-	// a link to Today. The form the chips submit keeps the after parameter in a
-	// hidden input, so choosing a platform stays on this version of the page.
+	// the Continue link. The form the chips submit keeps the after parameter in
+	// a hidden input, so choosing a platform stays on this version of the page.
 	AfterInvite bool
-	// Today is the URL the Go to the garden link points at.
+	// Today is the URL the Continue link points at.
 	Today string
 }
 

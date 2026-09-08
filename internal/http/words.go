@@ -218,9 +218,8 @@ func agoWord(at, now time.Time) string {
 	return at.Format("2 Jan")
 }
 
-// offNote is the Notifications row's note on More. A row reports its state
-// only when that state is a loose end, so notifications that are on say
-// nothing at all.
+// offNote is the Notifications row's note on More: "Off" when neither
+// notification type is on, and nothing when one is.
 func offNote(on bool) string {
 	if on {
 		return ""
@@ -228,16 +227,16 @@ func offNote(on bool) string {
 	return "Off"
 }
 
-// waitingNote is the People row's note on More: how many invites have been
+// pendingNote is the People row's note on More: how many invites have been
 // issued and not taken up, and nothing when there are none.
-func waitingNote(invites int) string {
+func pendingNote(invites int) string {
 	switch invites {
 	case 0:
 		return ""
 	case 1:
-		return "1 invite waiting"
+		return "1 invite pending"
 	}
-	return fmt.Sprintf("%d invites waiting", invites)
+	return fmt.Sprintf("%d invites pending", invites)
 }
 
 // shortRevision cuts a git revision to the seven characters a person reads it
@@ -250,10 +249,8 @@ func shortRevision(revision string) string {
 	return revision[:short]
 }
 
-// usedNote is the second line of a passkey or a browser row: "Last used
-// today", or "Never used" where nothing has been recorded against it. A device
-// that has never been seen is the interesting row in the list, since it is
-// either the one to remove or the one whose setup did not finish.
+// usedNote is the second line of a passkey row or a subscribed device row:
+// "Last used today", or "Never used" when the row has no last-used date.
 func usedNote(at *time.Time, now time.Time) string {
 	if at == nil {
 		return "Never used"
@@ -321,7 +318,7 @@ func inviteExpiryWord(expiresAt, now time.Time) string {
 // accepts an invite. It names the role the invite grants, what that role can
 // do, and the day access ends when endsAt is set.
 func joiningSentence(role string, endsAt *time.Time, location *time.Location) string {
-	sentence := "You'll join as a " + role + ". " + roleWhat[role]
+	sentence := "You’ll join as a " + role + ". " + roleWhat[role]
 	if endsAt != nil {
 		sentence += " Your access ends on " + dateWord(*endsAt, location) + "."
 	}

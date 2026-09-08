@@ -15,7 +15,7 @@ test('the last passkey offers no Remove and the page says why', async ({ page, p
 
   await expect(passkeys.row(devices.laptop)).toHaveCount(0);
   await expect(passkeys.removeOn(devices.phone)).toHaveCount(0);
-  await expect(page.getByText('This is the only way you can sign in')).toBeVisible();
+  await expect(page.getByText('Your only passkey can’t be removed')).toBeVisible();
 });
 
 test('adding a passkey puts the device on the list @passkey', async ({ page, passkeys }) => {
@@ -56,8 +56,7 @@ test('a device that already holds a passkey adds no second one @passkey', async 
 // under the same error name as a cancelled prompt, so that a site cannot learn
 // what somebody's devices can do by asking. One sentence covers all three
 // cases, and both tests assert the whole of it.
-const refused =
-  'No passkey was added. Either you cancelled, or this device cannot do what sprig needs: store the passkey itself, and check that it is you with a screen lock, a fingerprint or a PIN. The browser does not say which.';
+const refused = 'No passkey was added. You may have cancelled, or this device can’t store passkeys.';
 
 test('a device that will not store the passkey adds none, and the page says the browser does not say why @passkey', async ({
   page,
@@ -101,7 +100,7 @@ test('a security key with no PIN adds none, and the page says the browser does n
   await expect(passkeys.rows()).toHaveCount(2);
 });
 
-test('Add a passkey can be pressed again after a device is refused @passkey', async ({ page, passkeys }) => {
+test('Add passkey can be pressed again after a device is refused @passkey', async ({ page, passkeys }) => {
   await passkeys.open();
 
   await withDevice(page, { stores: false, verifies: true, unlocked: true }, async () => {
@@ -115,12 +114,12 @@ test('Add a passkey can be pressed again after a device is refused @passkey', as
   });
 });
 
-test('with no JavaScript Add a passkey is disabled and the page says it needs JavaScript @nojs', async ({
+test('with no JavaScript Add passkey is disabled and the page says it needs JavaScript @nojs', async ({
   page,
   passkeys,
 }) => {
   await passkeys.open();
 
   await expect(passkeys.add()).toBeDisabled();
-  await expect(page.getByText('Adding a passkey needs JavaScript and a browser that supports passkeys')).toBeVisible();
+  await expect(page.getByText('Requires JavaScript and a browser with passkey support')).toBeVisible();
 });

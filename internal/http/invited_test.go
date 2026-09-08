@@ -159,9 +159,9 @@ func (f *invitedFixture) challenge(t *testing.T, token string, form url.Values) 
 	return &creation, cookie
 }
 
-// redeem runs the whole flow on token with device answering: the post for
-// the challenge, then the post with the device's answer in the credential
-// field. cookies go on the second post beside the ceremony cookie.
+// redeem runs the whole flow on token with device: the post for the challenge,
+// then the post with the credential it made in the credential field. cookies go
+// on the second post beside the ceremony cookie.
 func (f *invitedFixture) redeem(t *testing.T, token string, form url.Values, device *passkeytest.Authenticator, cookies ...*http.Cookie) *httptest.ResponseRecorder {
 	t.Helper()
 
@@ -218,7 +218,7 @@ func unusable(t *testing.T, rec *httptest.ResponseRecorder) string {
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("status = %d, want %d", rec.Code, http.StatusNotFound)
 	}
-	if !strings.Contains(page, "This link cannot be used") {
+	if !strings.Contains(page, "This invite link can’t be used") {
 		t.Errorf("the page does not say the link cannot be used:\n%s", text(page))
 	}
 	if strings.Contains(page, "<form") {
@@ -245,15 +245,15 @@ func TestInvited_AJoinLinkRendersTheFormWithTheGardenTheInviterAndTheRoleAndNoTa
 		`name="timezone" data-propose`,
 		`<option value="Europe/London" selected>`,
 		`<input type="hidden" name="` + credentialField + `">`,
-		"Joining needs JavaScript and a browser that supports passkeys.",
-		"You&#39;ll join as a sitter. Logs care and sees everything. Adds no photos and no plants. Your access ends on 18 Sep.",
+		"Requires JavaScript and a browser with passkey support.",
+		"You’ll join as a sitter. Sitters can log care and view everything, but not add plants or photos. Your access ends on 18 Sep.",
 	} {
 		if !strings.Contains(page, want) {
 			t.Errorf("the page lacks %s:\n%s", want, page)
 		}
 	}
-	if !buttonIsDisabled(t, page, joinLabel) {
-		t.Errorf("%s is not disabled:\n%s", joinLabel, page)
+	if !buttonIsDisabled(t, page, "Join Rosewood") {
+		t.Errorf("Join Rosewood is not disabled:\n%s", page)
 	}
 	if strings.Contains(page, "nav__item") {
 		t.Error("the page renders the tab bar, and there is no garden to tab to")
@@ -265,7 +265,7 @@ func TestInvited_AJoinLinkWithNoEndDateSaysNothingAboutAccessEnding(t *testing.T
 
 	page := text(f.show(t, memberLink).Body.String())
 
-	if !strings.Contains(page, "You'll join as a member. Logs care, adds and edits plants, and adds photos.") {
+	if !strings.Contains(page, "You’ll join as a member. Members can log care, add and edit plants, and add photos.") {
 		t.Errorf("the page does not say what a member can do:\n%s", page)
 	}
 	if strings.Contains(page, "access ends") {
@@ -284,9 +284,9 @@ func TestInvited_AReenrolmentLinkAsksForNothingAndNamesTheAccountsGarden(t *test
 	page := rec.Body.String()
 	for _, want := range []string{
 		"Add this device to your account",
-		"Ellie made this link so this device can sign in to your account in Rosewood.",
+		"Ellie sent this link so you can sign in to Rosewood from this device.",
 		`data-passkey="create"`,
-		"Adding a device needs JavaScript and a browser that supports passkeys.",
+		"Requires JavaScript and a browser with passkey support.",
 	} {
 		if !strings.Contains(page, want) {
 			t.Errorf("the page lacks %s:\n%s", want, page)
@@ -364,8 +364,8 @@ func TestInvited_AnEmptyFieldIsRefusedOnTheChallengeAndTheMessageIsUnderItOnTheP
 		posted  string
 		message string
 	}{
-		{"name", "  ", "Give yourself a name to sign your care with."},
-		{"timezone", "", "Pick a timezone."},
+		{"name", "  ", "Enter a display name."},
+		{"timezone", "", "Choose a timezone."},
 	}
 	for _, c := range cases {
 		t.Run(c.field+" empty", func(t *testing.T) {
@@ -469,14 +469,14 @@ func TestInvited_JoiningWritesTheAccountTheMembershipAndThePasskeyMarksTheLinkUs
 	if f.count(t, "app_user") != users+1 || f.count(t, "membership") != memberships+1 {
 		t.Errorf("%d accounts and %d memberships, want one more of each than before", f.count(t, "app_user"), f.count(t, "membership"))
 	}
-	waiting, err := f.queries.CountWaitingInvites(t.Context(), moreGardenID, thursday)
+	pending, err := f.queries.CountPendingInvites(t.Context(), moreGardenID, thursday)
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The fixture leaves four join invites waiting, and the join redeems one
+	// The fixture leaves four join invites pending, and the join redeems one
 	// of them. Expired, redeemed and re-enrolment rows are not counted.
-	if waiting != 3 {
-		t.Errorf("%d invites are waiting on People after the join, want 3", waiting)
+	if pending != 3 {
+		t.Errorf("%d invites are pending on People after the join, want 3", pending)
 	}
 }
 
@@ -560,7 +560,7 @@ func TestInvited_ADeviceThatDidNotCheckWhoWasUsingItIsRefusedAndNothingIsWritten
 		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusUnprocessableEntity, text(rec.Body.String()))
 	}
 	page := rec.Body.String()
-	if !strings.Contains(page, "This device did not check that it was you.") {
+	if !strings.Contains(page, "This device didn’t verify you.") {
 		t.Errorf("the page does not say the device did not verify:\n%s", text(page))
 	}
 	if !strings.Contains(page, `value="Robin"`) || !strings.Contains(page, `<option value="Asia/Tokyo" selected>`) {
@@ -640,7 +640,7 @@ func TestInvited_TheSeventhPostInAMinuteFromOneAddressIsRefusedWithTheSentenceAb
 		t.Fatalf("the seventh post: status = %d, want %d", rec.Code, http.StatusTooManyRequests)
 	}
 	page := rec.Body.String()
-	if !strings.Contains(text(page), tooManyInviteTries) {
+	if !strings.Contains(text(page), tooManyInviteAttempts) {
 		t.Errorf("the page does not show the rate-limit sentence:\n%s", text(page))
 	}
 	if !strings.Contains(page, "Ellie invited you to Rosewood") || !strings.Contains(page, "<form") {
@@ -671,7 +671,7 @@ func TestInvited_TheSeventhChallengeInAMinuteFromOneAddressIsRefusedAsPlainText(
 	if rec.Code != http.StatusTooManyRequests {
 		t.Fatalf("the seventh challenge: status = %d, want %d", rec.Code, http.StatusTooManyRequests)
 	}
-	if strings.TrimSpace(rec.Body.String()) != tooManyInviteTries {
+	if strings.TrimSpace(rec.Body.String()) != tooManyInviteAttempts {
 		t.Errorf("the body is %q, want the rate-limit sentence alone, because the page's script shows it as it is", rec.Body.String())
 	}
 	if n := f.count(t, "webauthn_ceremony"); n != 6 {

@@ -1,4 +1,4 @@
-{{define "title"}}sprig — join a garden{{end}}
+{{define "title"}}Join a garden · sprig{{end}}
 
 {{define "app-class"}}app app--bare{{end}}
 
@@ -7,12 +7,12 @@
 {{define "main"}}
 <div class="app__body app__body--bare">
 {{if .Unusable}}
-<h1 class="bare__title">This link cannot be used</h1>
-<p class="bare__line">An invite link works once and stops working after 7 days. Ask whoever sent it for a new one.</p>
+<h1 class="bare__title">This invite link can’t be used</h1>
+<p class="bare__line">Invite links work once and expire after 7 days. Ask the person who sent it for a new one.</p>
 <a class="wide-action" href="/">{{if .Current}}Back to {{.Current}}{{else}}Back{{end}}</a>
 {{else if .AlreadyIn}}
-<h1 class="bare__title">You&rsquo;re already in {{.Garden}}</h1>
-<p class="bare__line">This account is already in {{.Garden}}, so there is nothing to join. The link has not been used.</p>
+<h1 class="bare__title">You’re already in {{.Garden}}</h1>
+<p class="bare__line">This account is already a member. The link hasn’t been used.</p>
 <form method="post" action="{{.Switch}}">
 <input type="hidden" name="{{.Field}}" value="{{.GardenID}}">
 <button class="wide-action" type="submit">Open {{.Garden}}</button>
@@ -23,7 +23,7 @@
 <form method="post" action="{{.Action}}">
 <button class="wide-action" type="submit">Join {{.Garden}}</button>
 </form>
-<p class="note">Nothing about your account changes: your name, your passkeys and everything you have logged stay as they are. Not {{.Name}}? <a href="{{.SignIn}}">Sign in as somebody else</a>.</p>
+<p class="note">Not {{.Name}}? <a href="{{.SignIn}}">Sign in as someone else</a>.</p>
 {{end}}
 </div>
 {{end}}

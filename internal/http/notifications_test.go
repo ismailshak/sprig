@@ -20,8 +20,8 @@ import (
 	"github.com/ismailshak/sprig/internal/store"
 )
 
-// The two User-Agent strings the seeded subscriptions carry. A real one names
-// no model, which is why the Mac's row cannot say MacBook Air.
+// The two User-Agent strings the seeded subscriptions were made with. Neither
+// names a model, so the Mac's row cannot say MacBook Air.
 const (
 	safariOniPhone = "Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Mobile/15E148 Safari/604.1"
 	chromeOnMac    = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36"
@@ -46,8 +46,8 @@ type stackedRow struct {
 	drop string
 }
 
-// stackedRowsOf reads the rows on Passkeys and under "Where they arrive",
-// which are the same row.
+// stackedRowsOf reads the rows on Passkeys and under Subscribed devices. Both
+// pages render the same row markup.
 func stackedRowsOf(page string) []stackedRow {
 	var out []stackedRow
 	for _, m := range stackRow.FindAllStringSubmatch(page, -1) {
@@ -141,7 +141,7 @@ func TestNotifications_TheHoursNoteNamesTheAccountsTimezone(t *testing.T) {
 
 	page := text(f.page(t, f.handler.notifications, notificationsPath))
 
-	if !strings.Contains(page, "In America/New York") {
+	if !strings.Contains(page, "America/New York time") {
 		t.Errorf("the note does not name the account's timezone:\n%s", page)
 	}
 }
@@ -166,7 +166,7 @@ func TestNotifications_AnAccountWithNoSubscriptionSaysNothingIsBeingDelivered(t 
 
 	page := text(f.page(t, f.handler.notifications, notificationsPath))
 
-	if !strings.Contains(page, "No browser is subscribed yet") {
+	if !strings.Contains(page, "No devices are subscribed") {
 		t.Errorf("the page does not say nothing is being delivered:\n%s", page)
 	}
 }
@@ -207,7 +207,7 @@ func TestNotifications_SavingWithTheDigestOffKeepsTheHourItArrivedAt(t *testing.
 	f := moreGarden(t)
 
 	// The select is not on the page while the digest is off, so the form that
-	// turns it back on carries no hour.
+	// turns it back on posts no hour.
 	f.do(t, f.handler.saveNotifications, notificationsPath, url.Values{})
 
 	var hour int16
@@ -294,15 +294,15 @@ func TestBrowserName_NamesTheDeviceAndTheBrowserTheSubscriptionCameFrom(t *testi
 		{"Mozilla/5.0 (Linux; Android 15) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Mobile Safari/537.36", "Android · Chrome"},
 		{"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 Edg/140.0.0.0", "Windows · Edge"},
 		{"Mozilla/5.0 (X11; Linux x86_64; rv:143.0) Gecko/20100101 Firefox/143.0", "Linux · Firefox"},
-		{"something else entirely", "Unknown browser"},
+		{"something else entirely", "Unknown device"},
 	}
 	for _, c := range cases {
 		if got := browserName(&c.userAgent); got != c.want {
 			t.Errorf("%s is %q, want %q", c.userAgent, got, c.want)
 		}
 	}
-	if got := browserName(nil); got != "Unknown browser" {
-		t.Errorf("a subscription with no user agent is %q, want %q", got, "Unknown browser")
+	if got := browserName(nil); got != "Unknown device" {
+		t.Errorf("a subscription with no user agent is %q, want %q", got, "Unknown device")
 	}
 }
 
@@ -341,7 +341,7 @@ func TestNotifications_WithPushOffThePageSaysNotificationsAreNotSetUpAndOffersNo
 
 	page := f.page(t, f.handler.notifications, notificationsPath)
 
-	if !strings.Contains(text(page), "Notifications are not set up on this sprig") {
+	if !strings.Contains(text(page), "Notifications aren’t enabled on this server") {
 		t.Errorf("the page does not say notifications are not set up:\n%s", page)
 	}
 	if checkedBox.MatchString(page) {
@@ -551,8 +551,8 @@ func TestNotifications_SendATestIsOfferedOnlyWhileABrowserIsSubscribed(t *testin
 	}
 }
 
-// testOutcome posts Send a test with endpoint and returns the value of the
-// test parameter on the redirect.
+// testOutcome posts the Send test notification form with endpoint and returns
+// the value of the test parameter on the redirect.
 func (f *moreFixture) testOutcome(t *testing.T, endpoint string) string {
 	t.Helper()
 
@@ -565,8 +565,8 @@ func (f *moreFixture) testOutcome(t *testing.T, endpoint string) string {
 }
 
 // resultPage renders the Notifications page with outcome in the query string,
-// the way the redirect after Send a test does. It returns the text with the
-// tags taken out.
+// the way the redirect after a test does. It returns the text with the tags
+// taken out.
 func (f *moreFixture) resultPage(t *testing.T, outcome string) string {
 	t.Helper()
 

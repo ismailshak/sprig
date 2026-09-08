@@ -72,11 +72,11 @@ func TestSetupSignedIn_ThePageNamesTheAccountAndAsksForTheGardenNameAlone(t *tes
 	}
 	page := rec.Body.String()
 	for _, want := range []string{
-		"Set up a garden as Robin?",
+		"Set up a garden as Robin",
 		`<form method="post" action="` + setupSignedInPath + `"`,
 		"Garden name",
 		`id="garden" name="garden"`,
-		"Not Robin? <a href=\"" + signInToSetUpPath + "\">Sign in as somebody else</a>.",
+		"Not Robin? <a href=\"" + signInToSetUpPath + "\">Sign in as someone else</a>.",
 	} {
 		if !strings.Contains(page, want) {
 			t.Errorf("the page lacks %s:\n%s", want, page)
@@ -193,7 +193,7 @@ func TestSetupSignedIn_AnAccountInNoGardenCreatesAGardenAndTheSessionIsOnTheNewG
 		t.Fatalf("starting the session: %v", err)
 	}
 	principal := auth.Principal{Session: session, User: robin.User}
-	if page := f.asAccount(t, f.handler.showSignedIn, principal, nil).Body.String(); !strings.Contains(page, "Set up a garden as Robin?") {
+	if page := f.asAccount(t, f.handler.showSignedIn, principal, nil).Body.String(); !strings.Contains(page, "Set up a garden as Robin") {
 		t.Errorf("the page does not offer the form to an account in no garden:\n%s", text(page))
 	}
 
@@ -257,7 +257,7 @@ func TestSetup_ThePageLinksToSignInForSomebodyWithAnAccount(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
 	}
-	if !linkTo(rec.Body.String(), signInToSetUpPath, "Sign in to set up a garden as yourself") {
+	if !linkTo(rec.Body.String(), signInToSetUpPath, "Sign in") {
 		t.Errorf("the page has no link to sign in with the next path set to %s:\n%s", setupSignedInPath, rec.Body.String())
 	}
 }
@@ -271,7 +271,7 @@ func TestSetup_WithSignUpOffTheFirstRunPageHasNoSignInLink(t *testing.T) {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
 	}
 	page := rec.Body.String()
-	if linkTo(page, signInToSetUpPath, "Sign in to set up a garden as yourself") || strings.Contains(page, "Already have a sprig account?") {
+	if linkTo(page, signInToSetUpPath, "Sign in") || strings.Contains(page, "Already have a sprig account?") {
 		t.Errorf("the page offers sign in, and with sign-up off it is served on an install with no account:\n%s", page)
 	}
 }

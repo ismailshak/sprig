@@ -12,8 +12,8 @@ test('clicking a care row opens the log sheet for that care', async ({ today, sh
 
   await expect(sheet.dialog()).toHaveAccessibleName('Log care for Nigel');
   await expect(sheet.dialog().getByRole('link', { name: /Nigel/ })).toBeVisible();
-  await expect(sheet.what('Water')).toHaveAttribute('aria-pressed', 'true');
-  await expect(sheet.what('Feed')).toHaveAttribute('aria-pressed', 'false');
+  await expect(sheet.careChip('Water')).toHaveAttribute('aria-pressed', 'true');
+  await expect(sheet.careChip('Feed')).toHaveAttribute('aria-pressed', 'false');
   await expect(sheet.chip('Just now')).toBeChecked();
   await expect(sheet.dialog().getByRole('button', { name: 'Log watering' })).toBeVisible();
 });
@@ -22,7 +22,7 @@ test('the sheet has no care type choice for a plant with one care', async ({ tod
   await today.openSheet(plants.doris, 'water');
 
   await expect(sheet.dialog()).toBeVisible();
-  await expect(sheet.dialog().getByText('What', { exact: true })).toHaveCount(0);
+  await expect(sheet.dialog().getByText('Care', { exact: true })).toHaveCount(0);
 });
 
 test("logging a care from the sheet removes the plant from today's list @swap", async ({ today, sheet }) => {
@@ -48,7 +48,7 @@ test('a skip makes the care due again after the chosen number of days @swap', as
   await today.openSheet(plants.nigel, 'water');
   await sheet.chip('Skipped').check();
   await sheet.chip('1 day').check();
-  await sheet.submit('Record a skip');
+  await sheet.submit('Log skip');
   await expect(sheet.dialog()).toHaveCount(0);
 
   await today.open();
@@ -60,14 +60,14 @@ test('a skip makes the care due again after the chosen number of days @swap', as
 test("switching the care type relabels the usual chip with that type's interval @swap", async ({ today, sheet }) => {
   await today.openSheet(plants.nigel, 'water');
   await sheet.chip('Skipped').check();
-  await expect(sheet.chip('The usual 4 days')).toBeVisible();
+  await expect(sheet.chip('4 days (usual)')).toBeVisible();
 
-  await sheet.what('Feed').click();
+  await sheet.careChip('Feed').click();
 
-  await expect(sheet.what('Feed')).toHaveAttribute('aria-pressed', 'true');
-  await expect(sheet.chip('The usual 21 days')).toBeVisible();
+  await expect(sheet.careChip('Feed')).toHaveAttribute('aria-pressed', 'true');
+  await expect(sheet.chip('21 days (usual)')).toBeVisible();
   await expect(sheet.chip('Skipped')).toBeChecked();
-  await expect(sheet.dialog().getByRole('button', { name: 'Record a skip' })).toBeVisible();
+  await expect(sheet.dialog().getByRole('button', { name: 'Log skip' })).toBeVisible();
 });
 
 test('a time later than now is refused @swap', async ({ today, sheet }) => {
@@ -76,7 +76,7 @@ test('a time later than now is refused @swap', async ({ today, sheet }) => {
   await sheet.time().fill('23:59');
   await sheet.submit('Log watering');
 
-  await expect(sheet.dialog().getByText('That is later than now.')).toBeVisible();
+  await expect(sheet.dialog().getByText('That time is in the future.')).toBeVisible();
   await expect(sheet.chip('Earlier today')).toBeChecked();
 });
 
@@ -88,7 +88,7 @@ test('cancelling the sheet leaves the row unchanged', async ({ today, sheet }) =
   await expect(today.careRow(plants.doris, 'water')).toBeVisible();
 });
 
-test('a logged row shows what was recorded without a reload @js', async ({ today, sheet }) => {
+test('a logged row reads Watered just now without a reload @js', async ({ today, sheet }) => {
   await today.openSheet(plants.doris, 'water');
   await sheet.submit('Log watering');
 

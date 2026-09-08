@@ -1,4 +1,4 @@
-{{define "title"}}sprig — {{.Name}}'s photos{{end}}
+{{define "title"}}{{.Name}}’s photos · sprig{{end}}
 
 {{/* The back link goes to the plant's page. The plant is named in the link
      rather than in a title, because the page is the plant's photos and
@@ -17,8 +17,8 @@
 <div class="empty">
 <span class="empty__mark">{{template "icon-camera"}}</span>
 <h2 class="empty__title">No photos yet</h2>
-<p class="empty__line">Progress photos show how {{.Name}} changes over time.</p>
-{{with .Add}}<a class="empty__action" href="{{.}}">Add a photo</a>{{end}}
+<p class="empty__line">Add photos to see how {{.Name}} changes over time.</p>
+{{with .Add}}<a class="empty__action" href="{{.}}">Add photo</a>{{end}}
 </div>
 {{end}}
 </div>

@@ -1,11 +1,11 @@
-/* The Location field on the plant form. The server renders a text input and a
+/* The Room field on the plant form. The server renders a text input and a
    <datalist> of the rooms the garden's plants are in. This script takes the
    list attribute off the input and shows those rooms in a listbox of its own
    instead. The field posts the same value under the same name with or without
    this script. */
 (function () {
-  const input = document.getElementById('where');
-  const list = document.getElementById('where-list');
+  const input = document.getElementById('room');
+  const list = document.getElementById('room-list');
   const datalist = document.getElementById('rooms');
   if (!input || !list || !datalist) return;
 
@@ -15,7 +15,7 @@
   // attribute stops the browser opening its own dropdown over the listbox.
   input.removeAttribute('list');
   input.setAttribute('role', 'combobox');
-  input.setAttribute('aria-controls', 'where-list');
+  input.setAttribute('aria-controls', 'room-list');
   input.setAttribute('aria-autocomplete', 'list');
   input.setAttribute('aria-expanded', 'false');
 
@@ -49,7 +49,7 @@
       ...options.map((option, i) => {
         const li = document.createElement('li');
         li.className = option.fresh ? 'combo__option combo__option--new' : 'combo__option';
-        li.id = `where-opt-${i}`;
+        li.id = `room-opt-${i}`;
         li.setAttribute('role', 'option');
         li.setAttribute('aria-selected', String(i === active));
         li.dataset.index = String(i);
@@ -59,7 +59,7 @@
     );
     list.hidden = false;
     input.setAttribute('aria-expanded', 'true');
-    input.setAttribute('aria-activedescendant', active < 0 ? '' : `where-opt-${active}`);
+    input.setAttribute('aria-activedescendant', active < 0 ? '' : `room-opt-${active}`);
   };
 
   const choose = (i) => {

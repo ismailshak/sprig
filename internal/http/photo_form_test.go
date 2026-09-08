@@ -101,8 +101,8 @@ func TestPhotoForm_APostWithNoPhotoSaysChooseAPhotoFirst(t *testing.T) {
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusUnprocessableEntity, rec.Body.String())
 	}
-	if got := errorsOn(rec.Body.String()); len(got) != 1 || got[0] != "Choose a photo first." {
-		t.Errorf("the form's errors are %v, want Choose a photo first.", got)
+	if got := errorsOn(rec.Body.String()); len(got) != 1 || got[0] != "Choose a photo." {
+		t.Errorf("the form's errors are %v, want Choose a photo.", got)
 	}
 }
 
@@ -119,8 +119,8 @@ func TestPhotoForm_ABodyLongerThanTheRoomLeftIs413WithTheReasonBeforeItIsRead(t 
 	if rec.Code != http.StatusRequestEntityTooLarge {
 		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusRequestEntityTooLarge, rec.Body.String())
 	}
-	if got := errorsOn(rec.Body.String()); len(got) != 1 || got[0] != rosewoodFull {
-		t.Errorf("the form's errors are %v, want %q", got, rosewoodFull)
+	if got := errorsOn(rec.Body.String()); len(got) != 1 || got[0] != photoQuotaFull {
+		t.Errorf("the form's errors are %v, want %q", got, photoQuotaFull)
 	}
 	if got := f.storedFiles(t); len(got) != 0 {
 		t.Errorf("the directory holds %v, want nothing", got)
@@ -139,8 +139,8 @@ func TestPhotoForm_APhotoTheGardenHasNoRoomForIsRefusedWithTheReasonAndNothingIs
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusUnprocessableEntity, rec.Body.String())
 	}
-	if got := errorsOn(rec.Body.String()); len(got) != 1 || got[0] != rosewoodFull {
-		t.Errorf("the form's errors are %v, want %q", got, rosewoodFull)
+	if got := errorsOn(rec.Body.String()); len(got) != 1 || got[0] != photoQuotaFull {
+		t.Errorf("the form's errors are %v, want %q", got, photoQuotaFull)
 	}
 	if got := f.storedFiles(t); len(got) != 0 {
 		t.Errorf("the directory holds %v, want nothing", got)

@@ -12,7 +12,6 @@ import (
 )
 
 var (
-	handleHint      = regexp.MustCompile(`for="handle">Handle <span class="field__hint">([^<]*)</span>`)
 	zoneOptionTag   = regexp.MustCompile(`<option value="([^"]+)"(?: data-also="[^"]+")?( selected)?>([^<]+)</option>`)
 	fieldBlock      = regexp.MustCompile(`(?s)<div class="field">(.*?)</div>`)
 	fieldInput      = regexp.MustCompile(`id="([^"]+)" name=`)
@@ -324,17 +323,6 @@ func TestAccount_BothMessagesAreShownWhenTheNameAndTheHandleAreBothEmpty(t *test
 	}
 	if got := errorUnder(page, "handle"); got != handleMissing {
 		t.Errorf("the form says %q under Handle, want %q", got, handleMissing)
-	}
-}
-
-func TestAccount_TheHandleHintNamesTheSavedDisplayNameAndNotTheOnePosted(t *testing.T) {
-	f := moreGarden(t)
-
-	rec := f.saveAccount(t, "", "eleanor", "Europe/London")
-
-	got := handleHint.FindStringSubmatch(rec.Body.String())
-	if want := "what tells you from another Ellie"; got == nil || got[1] != want {
-		t.Errorf("the hint beside Handle reads %v, want %q", got, want)
 	}
 }
 
