@@ -107,6 +107,33 @@ var routeAccess = map[string]access{
 		path:    photoSquarePath(rosewoodPlantID, rosewoodPhotoID),
 		foreign: photoSquarePath(fairviewPlantID, fairviewPhotoID),
 	},
+	"GET /plants/{plant}/photos": {path: photosPath(rosewoodPlantID), foreign: photosPath(fairviewPlantID)},
+	"GET /plants/{plant}/photos/new": {
+		capability: auth.PhotoAdd,
+		path:       newPhotoPath(rosewoodPlantID),
+		foreign:    newPhotoPath(fairviewPlantID),
+	},
+	"POST /plants/{plant}/photos/new": {
+		capability: auth.PhotoAdd,
+		path:       newPhotoPath(rosewoodPlantID),
+		foreign:    newPhotoPath(fairviewPlantID),
+	},
+	"GET /plants/{plant}/photos/{photo}": {
+		path:    photoPath(rosewoodPlantID, rosewoodPhotoID),
+		foreign: photoPath(fairviewPlantID, fairviewPhotoID),
+	},
+	// Rendering the confirmation changes nothing, so it uses the same photo as
+	// the routes above.
+	"GET /plants/{plant}/photos/{photo}/delete": {
+		capability: auth.PhotoDeleteOwn,
+		path:       deletePhotoPath(rosewoodPlantID, rosewoodPhotoID),
+		foreign:    deletePhotoPath(fairviewPlantID, fairviewPhotoID),
+	},
+	"POST /plants/{plant}/photos/{photo}/delete": {
+		capability: auth.PhotoDeleteOwn,
+		path:       deletePhotoPath(rosewoodPlantID, rosewoodDeletePhotoID),
+		foreign:    deletePhotoPath(fairviewPlantID, fairviewDeletePhotoID),
+	},
 	"GET /plants/{plant}/log":  {capability: auth.CareLog, path: logPath(rosewoodPlantID), foreign: logPath(fairviewPlantID)},
 	"POST /plants/{plant}/log": {capability: auth.CareLog, path: logPath(rosewoodPlantID), foreign: logPath(fairviewPlantID)},
 	"DELETE /plants/{plant}/log/{event}": {
@@ -311,8 +338,11 @@ var (
 	fairviewPhotoID = uuid.MustParse("00000000-0000-7000-8000-000000000242")
 	// A photo uploaded with no square variant, and with no file on disk.
 	rosewoodPlainPhotoID = uuid.MustParse("00000000-0000-7000-8000-000000000243")
-	rosewoodEventID      = uuid.MustParse("00000000-0000-7000-8000-000000000221")
-	fairviewEventID      = uuid.MustParse("00000000-0000-7000-8000-000000000222")
+	// The delete route removes its photo, so it gets a pair of its own.
+	rosewoodDeletePhotoID = uuid.MustParse("00000000-0000-7000-8000-000000000244")
+	fairviewDeletePhotoID = uuid.MustParse("00000000-0000-7000-8000-000000000245")
+	rosewoodEventID       = uuid.MustParse("00000000-0000-7000-8000-000000000221")
+	fairviewEventID       = uuid.MustParse("00000000-0000-7000-8000-000000000222")
 	// The two routes that delete an event use one each, since the first to run
 	// would leave the second a 404.
 	rosewoodUndoEventID = uuid.MustParse("00000000-0000-7000-8000-000000000223")
@@ -417,13 +447,15 @@ func routeQueries(t *testing.T) *store.Queries {
 			VALUES ($1, $2, 'The kitchen display', 'rosewood-token', 'sprg_1111', $3, now() + interval '30 days'),
 			       ($4, $5, 'The kitchen display', 'fairview-token', 'sprg_2222', $6, now() + interval '30 days')`,
 			[]any{rosewoodTokenID, rosewoodID, sitterPrincipal().User.ID, fairviewTokenID, fairviewID, fairviewMemberID}},
-		// A photo on each garden's plant, and a third on Rosewood with no
-		// square variant.
+		// A photo on each garden's plant, a third on Rosewood with no square
+		// variant, and a pair for the delete route to remove.
 		{`INSERT INTO photo (id, garden_id, plant_id, uploaded_by, kind, path, width, height, bytes, square_bytes)
 			VALUES ($1, $2, $3, $4, 'image/jpeg', 'rosewood.jpg', 3, 2, 100, 40),
 			       ($5, $6, $7, $8, 'image/jpeg', 'fairview.jpg', 3, 2, 100, 40),
-			       ($9, $2, $3, $4, 'image/jpeg', 'rosewood-plain.jpg', 3, 2, 100, NULL)`,
-			[]any{rosewoodPhotoID, rosewoodID, rosewoodPlantID, sitterPrincipal().User.ID, fairviewPhotoID, fairviewID, fairviewPlantID, fairviewMemberID, rosewoodPlainPhotoID}},
+			       ($9, $2, $3, $4, 'image/jpeg', 'rosewood-plain.jpg', 3, 2, 100, NULL),
+			       ($10, $2, $3, $4, 'image/jpeg', 'rosewood-delete.jpg', 3, 2, 100, 40),
+			       ($11, $6, $7, $8, 'image/jpeg', 'fairview-delete.jpg', 3, 2, 100, 40)`,
+			[]any{rosewoodPhotoID, rosewoodID, rosewoodPlantID, sitterPrincipal().User.ID, fairviewPhotoID, fairviewID, fairviewPlantID, fairviewMemberID, rosewoodPlainPhotoID, rosewoodDeletePhotoID, fairviewDeletePhotoID}},
 	}
 
 	for _, row := range seed {

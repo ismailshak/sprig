@@ -1,0 +1,21 @@
+{{define "title"}}sprig — add a photo of {{.Name}}{{end}}
+
+{{/* Cancel rather than a back arrow, because leaving discards a chosen photo.
+     The form is the photo field the plant form uses, on a page of its own. */}}
+{{define "main"}}
+<header class="topbar topbar--form">
+<h1 class="topbar__title">Add a photo</h1>
+<a class="topbar__cancel" href="{{.Back}}">Cancel</a>
+</header>
+<form class="app__body app__body--form" method="post" action="{{.Action}}" enctype="multipart/form-data">
+{{/* The server never decodes an image, so a photo can only be added from a
+     browser that can resize one. The script hides this line once its check
+     passes. */}}
+<p class="note" id="photo-unsupported">This browser can't resize a photo before sending it, so a photo can't be added from it.</p>
+{{template "photo-field" .PhotoField}}
+</form>
+{{end}}
+
+{{define "nav"}}{{template "tabs" "Plants"}}{{end}}
+
+{{define "script"}}<script src="{{asset "photo-field.js"}}" defer></script>{{end}}

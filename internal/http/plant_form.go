@@ -32,9 +32,9 @@ func archivePlantPath(plantID uuid.UUID) string {
 	return plantPath(plantID) + "/archive"
 }
 
-// plantFormMaxBytes is the largest plant form post accepted, the two photo
-// files included.
-const plantFormMaxBytes = 10 << 20
+// formMaxBytes is the largest post accepted on the plant form and on Add a
+// photo, the two photo files included.
+const formMaxBytes = 10 << 20
 
 // waterSlug is the schedule row the add form opens with, since every plant is
 // watered and no other care is that common.
@@ -188,17 +188,17 @@ func (f plantFields) update(gardenID, plantID uuid.UUID) store.UpdatePlantParams
 	}
 }
 
-// readPlantForm parses a plant form post into r.PostForm, whether it is
-// encoded as multipart/form-data or as a query string. It writes the response
-// itself and returns false when the body was over the size cap or did not
-// parse.
-func readPlantForm(w http.ResponseWriter, r *http.Request) bool {
-	r.Body = http.MaxBytesReader(w, r.Body, plantFormMaxBytes)
+// readMultipartForm parses a post into r.PostForm, whether it is encoded as
+// multipart/form-data or as a query string. The plant form and Add a photo
+// both post this way. It writes the response itself and returns false when the
+// body was over the size cap or did not parse.
+func readMultipartForm(w http.ResponseWriter, r *http.Request) bool {
+	r.Body = http.MaxBytesReader(w, r.Body, formMaxBytes)
 	// ParseForm runs first because ParseMultipartForm discards its error and
 	// returns ErrNotMultipart when the post is a query string.
 	err := r.ParseForm()
 	if err == nil {
-		if err = r.ParseMultipartForm(plantFormMaxBytes); errors.Is(err, http.ErrNotMultipart) {
+		if err = r.ParseMultipartForm(formMaxBytes); errors.Is(err, http.ErrNotMultipart) {
 			err = nil
 		}
 	}
@@ -212,6 +212,38 @@ func readPlantForm(w http.ResponseWriter, r *http.Request) bool {
 		return false
 	}
 	return true
+}
+
+// photoField is the data the photo-field template renders. Its fields are
+// where the plant form and Add a photo differ.
+type photoField struct {
+	// Choose is the label on the button that opens the file chooser: "Add a
+	// photo" on the plant form and "Choose a photo" on Add a photo.
+	Choose string
+	// Picture is the URL of the plant's current profile picture, shown in the
+	// preview when the plant form opens. It is empty on Add a photo, because
+	// that page does not set the picture.
+	Picture string
+	// Removable renders the hidden photo-removed input. Add a photo leaves it
+	// out, because it has no picture to clear. Removed is that input's value.
+	Removable bool
+	Removed   bool
+	// NeedsChoosing renders "The photo needs choosing again."
+	NeedsChoosing bool
+	// Missing renders "Choose a photo first."
+	Missing bool
+	// Full is the message shown when the garden has no room for the photo,
+	// empty otherwise.
+	Full string
+	// PreviewNote renders "This is the photo that will be sent." under the
+	// preview. The plant form leaves it out, because its preview can hold the
+	// picture the plant already has.
+	PreviewNote bool
+	// Submit is the label on the submit button rendered inside the field. It
+	// is empty on the plant form, which has its own submit button below. Add a
+	// photo puts its button here so that a browser which cannot resize a photo
+	// has nothing to post.
+	Submit string
 }
 
 // photoPosted reports whether the post had a photo file. Go parses a part
@@ -390,9 +422,9 @@ type plantFormPage struct {
 	// PhotoFull is the message shown under the photo field when the garden has
 	// no room for the photo. It is empty otherwise.
 	PhotoFull string
-	// PhotoField is whether the form renders the photo field. It is true only
+	// showPhoto is whether the form renders the photo field. It is true only
 	// for a member who may set the plant's profile picture.
-	PhotoField bool
+	showPhoto bool
 	// Picture is the URL of the plant's current profile picture, shown in the
 	// photo field with Replace and Remove. Empty on the add form and for a
 	// plant with no picture.
@@ -401,6 +433,22 @@ type plantFormPage struct {
 	// pressed. The form renders the hidden photo-removed input set to 1, so
 	// saving again still removes the picture.
 	PictureRemoved bool
+}
+
+// PhotoField is the photo field's data for the template. It is nil for a form
+// that does not render the field.
+func (p plantFormPage) PhotoField() *photoField {
+	if !p.showPhoto {
+		return nil
+	}
+	return &photoField{
+		Choose:        "Add a photo",
+		Picture:       p.Picture,
+		Removable:     true,
+		Removed:       p.PictureRemoved,
+		NeedsChoosing: p.PhotoNeedsChoosing,
+		Full:          p.PhotoFull,
+	}
 }
 
 type factField struct {
@@ -433,7 +481,7 @@ func addPlantPage(principal auth.Principal, f plantFields, rows []scheduleDraft,
 	page.Action = newPlantPath
 	page.Back = plantsPath
 	page.Submit = "Add plant"
-	page.PhotoField = canSetPicture(principal)
+	page.showPhoto = canSetPicture(principal)
 	for _, row := range rows {
 		page.Schedules = append(page.Schedules, newScheduleField(row, newPlantPath, now))
 	}
@@ -446,7 +494,7 @@ func editPlantPage(principal auth.Principal, f plantFields, plant store.Plant, n
 	page.Action = editPlantPath(plant.ID)
 	page.Back = plantPath(plant.ID)
 	page.Submit = "Save changes"
-	page.PhotoField = canSetPicture(principal)
+	page.showPhoto = canSetPicture(principal)
 	page.Picture = picturePath(plant)
 	if principal.Can(auth.PlantArchive) {
 		page.Archive = archivePlantPath(plant.ID)
@@ -566,7 +614,7 @@ func (h *plants) newPlant(w http.ResponseWriter, r *http.Request) {
 // transaction.
 func (h *plants) create(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
-	if !readPlantForm(w, r) {
+	if !readMultipartForm(w, r) {
 		return
 	}
 	// The route admits anyone who may add a plant. A posted photo becomes the
@@ -696,7 +744,7 @@ func (h *plants) update(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if !readPlantForm(w, r) {
+	if !readMultipartForm(w, r) {
 		return
 	}
 	if (photoPosted(r) || pictureRemoved(r)) && !canSetPicture(principal) {
@@ -821,23 +869,14 @@ func (h *plants) archive(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, plantsPath, http.StatusSeeOther)
 }
 
-// editable resolves the plant for the two edit routes. It writes the response
-// itself and returns false when there is nothing to edit. An archived plant is
-// a 404 like a plant the garden does not have, since the form would otherwise
-// save a plant that is no longer on the Plants list.
+// editable resolves the plant for the routes that change it: the plant form
+// and Add a photo. It writes the response itself and returns false when there
+// is nothing to edit. An archived plant is a 404 like a plant the garden does
+// not have, since the form would otherwise save a plant that is no longer on
+// the Plants list.
 func (h *plants) editable(w http.ResponseWriter, r *http.Request, principal auth.Principal) (store.Plant, bool) {
-	plantID, err := uuid.Parse(r.PathValue("plant"))
-	if err != nil {
-		http.NotFound(w, r)
-		return store.Plant{}, false
-	}
-	plant, err := h.queries.GetPlant(r.Context(), principal.Garden.ID, plantID)
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-		http.NotFound(w, r)
-		return store.Plant{}, false
-	case err != nil:
-		serverError(h.logger, w, r, "load the plant", err)
+	plant, ok := h.resolvePlant(w, r, principal)
+	if !ok {
 		return store.Plant{}, false
 	}
 	if plant.ArchivedAt != nil {

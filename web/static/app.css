@@ -831,7 +831,7 @@ a.foot-link { text-decoration: none; color: var(--ink-2); }
 .hero__pic > svg { width: 62%; max-width: 260px; height: auto; }
 
 /* A photo of any shape is cropped to the 5:3 box rather than squashed. */
-img.hero__pic { object-fit: cover; }
+.hero__img { width: 100%; height: 100%; object-fit: cover; }
 
 /* A plant with no picture shows a leaf in the box. */
 .hero__pic--none { color: var(--ink-3); }
@@ -1174,6 +1174,12 @@ img.hero__pic { object-fit: cover; }
 }
 
 .shot__pic svg { width: 100%; height: 100%; }
+
+.shot__pic img { display: block; width: 100%; height: 100%; object-fit: cover; }
+
+/* "No photos yet." under the Photos heading, for a plant with no photos and a
+   reader who may not add one. */
+.strip__none { margin: 0; font-size: 14px; color: var(--ink-3); }
 
 .shot--add {
   gap: 4px;
@@ -2227,4 +2233,67 @@ a.wide-action {
   font-size: 13px;
   line-height: 1.5;
   text-align: center;
+}
+
+/* ------------------------------------------------------------ the photo pages */
+
+/* The Photos page is a grid of squares, three across on a phone and four on a
+   wide screen. */
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 3px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.tile { margin: 0; }
+
+.tile > a {
+  display: block;
+  aspect-ratio: 1;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--surface-2);
+}
+
+.tile__pic { display: block; width: 100%; height: 100%; object-fit: cover; }
+
+.tile--add > a {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 4px;
+  border: 1px dashed var(--line-strong);
+  background: none;
+  color: var(--ink-2);
+  font-size: 12px;
+}
+
+.tile--add svg { width: 20px; height: 20px; }
+
+/* The Older photos tile spans the width of the grid. */
+.tile--more {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: center;
+  padding: 10px 0;
+}
+
+/* One photo at the width of the page. */
+.photo__pic {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: var(--radius);
+  border: var(--card-border);
+  background: var(--surface-2);
+}
+
+.photo__meta { margin: 12px 0 0; font-size: 14px; color: var(--ink-2); }
+
+@media (min-width: 900px) {
+  .tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }
+  .app__body--photo, .app__body--photos { max-width: 980px; }
 }
