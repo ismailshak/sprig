@@ -603,9 +603,8 @@ func TestInvited_ABrowserAlreadySignedInGetsANewSessionInPlaceOfItsOld(t *testin
 // wraps it in. The trusted header is empty, so an address is the request's
 // RemoteAddr.
 //
-// The handlers inside New run on the wall clock and not on the fixture's
-// Thursday, so the sitter's link is re-dated from now. On the fixture's dates
-// it ran out on 8 September 2026.
+// New builds its handlers on time.Now, not the fixture's Thursday, so the
+// sitter's invite gets an expiry and an access end counted from now.
 func invitedMux(t *testing.T, f *invitedFixture) http.Handler {
 	t.Helper()
 	f.exec(t, `UPDATE invite SET expires_at = now() + interval '7 days', membership_expires_at = now() + interval '14 days' WHERE token_hash = $1`, auth.HashToken(sitterLink))
@@ -628,8 +627,8 @@ func TestInvited_TheSeventhPostInAMinuteFromOneAddressIsRefusedWithTheSentenceAb
 	f := invitedGarden(t)
 	handler := invitedMux(t, f)
 
-	// A post with no ceremony cookie is refused as expired, and each one spends
-	// from the address's budget.
+	// A post with no ceremony cookie is refused as expired. Each one still
+	// spends from the address's budget.
 	for i := range 6 {
 		if rec := postFrom(t, handler, invitedPath(sitterLink), "203.0.113.1", aJoinForm()); rec.Code != http.StatusUnprocessableEntity {
 			t.Fatalf("post %d: status = %d, want %d:\n%s", i+1, rec.Code, http.StatusUnprocessableEntity, text(rec.Body.String()))
