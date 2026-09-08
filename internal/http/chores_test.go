@@ -55,7 +55,7 @@ func decodeChores(t *testing.T, body string) choresResponse {
 	return response
 }
 
-func TestChores_OnlyTheOverdueAndDueTodayCaresAreListed(t *testing.T) {
+func TestChores_TheOverdueAndDueTodayCaresAreTheChoresAndTheRestAreUpcoming(t *testing.T) {
 	_, handler, principal := choresGarden(t)
 
 	body := poll(t, handler, principal).Body.String()
@@ -65,9 +65,29 @@ func TestChores_OnlyTheOverdueAndDueTodayCaresAreListed(t *testing.T) {
 	want := `{"garden":"Rosewood","date":"2026-09-03","chores":[` +
 		`{"plant":"Big Fella","location":"Living room","care":"Water","due":"2026-09-01","late":"2 days late"},` +
 		`{"plant":"Doris","location":"Bedroom","care":"Water","due":"2026-09-03","late":""},` +
-		`{"plant":"Nigel","location":"Bathroom","care":"Water","due":"2026-09-03","late":""}]}`
+		`{"plant":"Nigel","location":"Bathroom","care":"Water","due":"2026-09-03","late":""}],` +
+		`"upcoming":[` +
+		`{"plant":"Trail Mix","location":"Kitchen","care":"Water","due":"2026-09-04","when":"tomorrow"},` +
+		`{"plant":"Opuntia microdasys","location":"Windowsill","care":"Water","due":"2026-09-07","when":"Monday"},` +
+		`{"plant":"Sprout","location":"","care":"Water","due":"2026-09-08","when":"Tuesday"},` +
+		`{"plant":"Nigel","location":"Bathroom","care":"Feed","due":"2026-09-10","when":"in 7 days"},` +
+		`{"plant":"Spike","location":"Windowsill","care":"Water","due":"2026-09-15","when":"in 12 days"}]}`
 	if body != want {
 		t.Errorf("the body reads\n%s\nwant\n%s", body, want)
+	}
+}
+
+func TestChores_TwoCaresDueTheSameDayAreListedByPlantName(t *testing.T) {
+	f, handler, principal := choresGarden(t)
+	// Spike's watering is due on the 15th. Moving Sprout's from the 8th to
+	// the 15th puts two plants on one day, and Spike's row is inserted first.
+	f.exec(t, "UPDATE care_schedule SET interval_count = 18 WHERE plant_id = $1", sproutID)
+
+	got := decodeChores(t, poll(t, handler, principal).Body.String())
+
+	last := got.Upcoming[len(got.Upcoming)-2:]
+	if last[0].Plant != "Spike" || last[1].Plant != "Sprout" {
+		t.Errorf("the two cares due on the 15th read %s then %s, want Spike then Sprout", last[0].Plant, last[1].Plant)
 	}
 }
 
@@ -147,13 +167,13 @@ func TestChores_APlantInAnotherGardenIsNotInTheList(t *testing.T) {
 	}
 }
 
-func TestChores_AGardenWithNothingDueSendsAnEmptyListRatherThanNull(t *testing.T) {
+func TestChores_AGardenWithNothingScheduledSendsEmptyListsRatherThanNull(t *testing.T) {
 	f, handler, principal := choresGarden(t)
 	f.exec(t, "DELETE FROM care_schedule WHERE garden_id = $1", rosewoodID)
 
 	body := poll(t, handler, principal).Body.String()
 
-	want := `{"garden":"Rosewood","date":"2026-09-03","chores":[]}`
+	want := `{"garden":"Rosewood","date":"2026-09-03","chores":[],"upcoming":[]}`
 	if body != want {
 		t.Errorf("the body reads\n%s\nwant\n%s", body, want)
 	}
