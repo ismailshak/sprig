@@ -24,6 +24,17 @@ func (q *Queries) CreateGarden(ctx context.Context, name string) (Garden, error)
 	return i, err
 }
 
+const getGarden = `-- name: GetGarden :one
+SELECT id, name, created_at FROM garden WHERE id = $1
+`
+
+func (q *Queries) GetGarden(ctx context.Context, gardenID uuid.UUID) (Garden, error) {
+	row := q.db.QueryRow(ctx, getGarden, gardenID)
+	var i Garden
+	err := row.Scan(&i.ID, &i.Name, &i.CreatedAt)
+	return i, err
+}
+
 const renameGarden = `-- name: RenameGarden :exec
 UPDATE garden SET name = $1 WHERE id = $2
 `

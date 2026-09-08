@@ -176,10 +176,12 @@ func (h *more) renderTokens(w http.ResponseWriter, r *http.Request, page tokensP
 	h.templates.render(w, r, view{page: "tokens", status: status}, page)
 }
 
+// tokens holds no revoked rows, so a row that is not live is one past its
+// expires_at.
 func tokenRows(tokens []store.APIToken, now time.Time) []tokenRow {
 	rows := make([]tokenRow, 0, len(tokens))
 	for _, token := range tokens {
-		expired := !now.Before(token.ExpiresAt)
+		expired := !auth.APITokenLive(token, now)
 		row := tokenRow{
 			Name:    token.Name,
 			Prefix:  token.Prefix,

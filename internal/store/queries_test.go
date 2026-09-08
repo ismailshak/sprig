@@ -406,12 +406,12 @@ func TestSetProfilePhoto_APhotoWithNoSquareVariantIsRefusedAndThePictureIsUnchan
 // reads more than one scoped table must scope each of them, because scoping
 // only the driving table leaves a join free to cross gardens.
 //
-// Three tables are exempt when read alone, because they are how a request
-// finds out which garden it is on, so the lookup cannot take the garden as
-// input. A read of session alone or of invite alone binds @token_hash, and a
-// read of membership alone binds @user_id, so every row returned belongs to
-// the caller. A query joining any of them to another scoped table binds
-// @garden_id like any other.
+// Four tables are exempt when a query names one of them alone, because they
+// are how a request finds out which garden it is on, so the lookup cannot
+// take the garden as input. A query on session, invite or api_token alone
+// binds @token_hash, and one on membership alone binds @user_id, so every row
+// it touches belongs to the caller. A query joining any of them to another
+// scoped table binds @garden_id like any other.
 func TestQueries_EveryQueryOnAGardenScopedTableBindsTheGarden(t *testing.T) {
 	tx := sharedTx(t)
 
@@ -458,6 +458,12 @@ func TestQueries_EveryQueryOnAGardenScopedTableBindsTheGarden(t *testing.T) {
 		// token in the URL, before any garden is known. Every other read of
 		// invite binds @garden_id.
 		if slices.Equal(touched, []string{"invite"}) && strings.Contains(query.sql, "@token_hash") {
+			continue
+		}
+		// A bearer token is found by its hash before any garden is known, so
+		// the lookup and the last_used_at write beside it bind @token_hash.
+		// Every other query on api_token binds @garden_id.
+		if slices.Equal(touched, []string{"api_token"}) && strings.Contains(query.sql, "@token_hash") {
 			continue
 		}
 		if slices.Equal(touched, []string{"membership"}) && strings.Contains(query.sql, "@user_id") {

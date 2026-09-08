@@ -17,3 +17,12 @@ RETURNING *;
 -- name: RevokeAPIToken :execrows
 UPDATE api_token SET revoked_at = @now::timestamptz
 WHERE garden_id = @garden_id AND id = @token_id AND revoked_at IS NULL;
+
+-- Returns revoked and expired rows too, so the caller decides whether the
+-- token still works. It binds no garden_id because this row is what tells a
+-- request which garden it is on.
+-- name: GetAPITokenByHash :one
+SELECT * FROM api_token WHERE token_hash = @token_hash;
+
+-- name: TouchAPIToken :exec
+UPDATE api_token SET last_used_at = @now::timestamptz WHERE token_hash = @token_hash;

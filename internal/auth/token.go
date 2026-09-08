@@ -1,11 +1,16 @@
 package auth
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"time"
+
+	"github.com/jackc/pgx/v5"
+
+	"github.com/ismailshak/sprig/internal/store"
 )
 
 // MaxTokenLifetime is the longest an API token may be valid for. It is a
@@ -66,4 +71,53 @@ func randomHex(n int) string {
 	// the system source of randomness fails.
 	_, _ = rand.Read(raw)
 	return hex.EncodeToString(raw)[:n]
+}
+
+// ErrNoAPIToken is returned for a bearer token with no live row. A token that
+// was never issued, one revoked and one past its expiry all get this error, so
+// a caller cannot tell which tokens were once real.
+var ErrNoAPIToken = errors.New("no live token")
+
+// APITokenLive reports whether token still works at now. A revoked token is
+// never live, whatever now is. Any other is live strictly before its
+// expires_at.
+func APITokenLive(token store.APIToken, now time.Time) bool {
+	return token.RevokedAt == nil && now.Before(token.ExpiresAt)
+}
+
+// APITokens looks up the Principal for a bearer token.
+type APITokens struct {
+	queries *store.Queries
+}
+
+// NewAPITokens returns APITokens over queries.
+func NewAPITokens(queries *store.Queries) *APITokens {
+	return &APITokens{queries: queries}
+}
+
+// Resolve returns the Principal for a bearer token at now and sets the row's
+// last_used_at to now. It returns ErrNoAPIToken when the token matches no row,
+// or matches one that is revoked or expired.
+//
+// The Principal holds the token's garden and the token row and nothing else.
+// It has no capabilities, so a route that checks one refuses the request.
+func (t *APITokens) Resolve(ctx context.Context, now time.Time, token string) (Principal, error) {
+	row, err := t.queries.GetAPITokenByHash(ctx, HashToken(token))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Principal{}, ErrNoAPIToken
+	}
+	if err != nil {
+		return Principal{}, fmt.Errorf("read the token: %w", err)
+	}
+	if !APITokenLive(row, now) {
+		return Principal{}, ErrNoAPIToken
+	}
+	if err := t.queries.TouchAPIToken(ctx, now, row.TokenHash); err != nil {
+		return Principal{}, fmt.Errorf("record the token's use: %w", err)
+	}
+	garden, err := t.queries.GetGarden(ctx, row.GardenID)
+	if err != nil {
+		return Principal{}, fmt.Errorf("read the token's garden: %w", err)
+	}
+	return Principal{Garden: garden, APIToken: &row}, nil
 }

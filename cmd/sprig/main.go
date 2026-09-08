@@ -155,6 +155,7 @@ func run(ctx context.Context, getenv func(string) string, stdout io.Writer) erro
 	queries := store.New(pool)
 	sessions := auth.NewSessions(queries, cfg.sessionTTL, cfg.cookie)
 	resolver := auth.NewResolver(sessions, queries)
+	tokens := auth.NewAPITokens(queries)
 	passkeys, err := auth.NewPasskeys(queries, cfg.rpID, "sprig", cfg.baseURL.String(), cfg.cookie)
 	if err != nil {
 		return err
@@ -176,7 +177,7 @@ func run(ctx context.Context, getenv func(string) string, stdout io.Writer) erro
 		wake = digest.Wake
 		notify = activity.Send
 	}
-	handler := sprighttp.New(logger, sessions, passkeys, resolver, queries, photos, templates, assets, cfg.trustedIPHeader, cfg.signupEnabled, pushKey, wake, notify)
+	handler := sprighttp.New(logger, sessions, passkeys, resolver, tokens, queries, photos, templates, assets, cfg.trustedIPHeader, cfg.signupEnabled, pushKey, wake, notify)
 	if !cfg.pushEnabled {
 		return serve(ctx, logger, listener, handler)
 	}
