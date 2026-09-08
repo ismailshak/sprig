@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"slices"
 	"testing"
 	"time"
 
@@ -77,17 +78,23 @@ func TestChores_TheOverdueAndDueTodayCaresAreTheChoresAndTheRestAreUpcoming(t *t
 	}
 }
 
-func TestChores_TwoCaresDueTheSameDayAreListedByPlantName(t *testing.T) {
+func TestChores_CaresDueTheSameDayAreListedByPlantName(t *testing.T) {
 	f, handler, principal := choresGarden(t)
-	// Spike's watering is due on the 15th. Moving Sprout's from the 8th to
-	// the 15th puts two plants on one day, and Spike's row is inserted first.
-	f.exec(t, "UPDATE care_schedule SET interval_count = 18 WHERE plant_id = $1", sproutID)
+	// Spike's watering is due on the 15th. These intervals move Big Fella's
+	// and Doris's there too. The schedules arrive ordered by location, so Doris
+	// in the Bedroom comes before Big Fella in the Living room, and a sort on
+	// the day alone would leave her first.
+	f.exec(t, "UPDATE care_schedule SET interval_count = 24 WHERE plant_id = $1", bigFellaID)
+	f.exec(t, "UPDATE care_schedule SET interval_count = 33 WHERE plant_id = $1", dorisID)
 
 	got := decodeChores(t, poll(t, handler, principal).Body.String())
 
-	last := got.Upcoming[len(got.Upcoming)-2:]
-	if last[0].Plant != "Spike" || last[1].Plant != "Sprout" {
-		t.Errorf("the two cares due on the 15th read %s then %s, want Spike then Sprout", last[0].Plant, last[1].Plant)
+	var names []string
+	for _, u := range got.Upcoming[len(got.Upcoming)-3:] {
+		names = append(names, u.Plant)
+	}
+	if want := []string{"Big Fella", "Doris", "Spike"}; !slices.Equal(names, want) {
+		t.Errorf("the three cares due on the 15th read %v, want %v", names, want)
 	}
 }
 

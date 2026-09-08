@@ -35,8 +35,8 @@ type choresResponse struct {
 	// Chores is every care that is overdue or due today, most overdue first.
 	// It is an empty array rather than null when there is nothing to do.
 	Chores []chore `json:"chores"`
-	// Upcoming is every care still to come, soonest first. It is an empty
-	// array rather than null when nothing is scheduled.
+	// Upcoming is every care not yet due, soonest first. It is an empty array
+	// rather than null when there is none.
 	Upcoming []upcomingCare `json:"upcoming"`
 }
 
@@ -65,9 +65,8 @@ type upcomingCare struct {
 	// Due is the day the care falls due, as YYYY-MM-DD. For a schedule
 	// precise only to a month it is the first of that month.
 	Due string `json:"due"`
-	// When is the due day in words, as the Today page writes it: "tomorrow",
-	// a weekday name within the week, "in 12 days", or "in March" for a
-	// schedule precise only to a month.
+	// When is the due day in the words the Today page uses: "tomorrow", a
+	// weekday name, "in 12 days" or "in March".
 	When string `json:"when"`
 }
 
@@ -108,7 +107,8 @@ func (h *chores) show(w http.ResponseWriter, r *http.Request) {
 
 // newChoresResponse lists the overdue plants first and then those due today,
 // in the same order as the Today page. A plant with two cares due gets a chore
-// for each, the overdue one first. The upcoming cares follow, soonest first.
+// for each, the overdue one first. Upcoming holds the cares that are not yet
+// due, soonest first.
 func newChoresResponse(principal auth.Principal, lines []schedule.Line, now time.Time) choresResponse {
 	response := choresResponse{
 		Garden:   principal.Garden.Name,
@@ -162,9 +162,9 @@ func newUpcomingCare(line schedule.Line, now time.Time) upcomingCare {
 	return c
 }
 
-// upcomingLines returns the lines still to come, soonest first. Two cares due
-// the same day are ordered by plant name, then plant id, then care name, so
-// the list is stable between polls.
+// upcomingLines returns the lines not yet due, soonest first. Two cares due on
+// the same day are ordered by plant name, then plant id, then care name, so the
+// order does not change between polls.
 func upcomingLines(lines []schedule.Line) []schedule.Line {
 	var out []schedule.Line
 	for _, line := range lines {

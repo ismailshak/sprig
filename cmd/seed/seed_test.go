@@ -391,8 +391,8 @@ func TestSeed_TodayPlacesEachPlantInTheSectionItsDueInImplies(t *testing.T) {
 			t.Errorf("Gerald's row is about %s, want feed", r.Care.CareType.Slug)
 		}
 	}
-	// Ferngully and the unnamed pothos are both due in 8 days, the day after
-	// Coming up ends, so the empty state names the two of them.
+	// Ferngully and the pothos with no nickname are both due in 8 days, one
+	// day past the end of Coming up, so Next holds both rows.
 	next := make([]string, 0, len(day.Next))
 	for _, r := range day.Next {
 		next = append(next, r.Plant.DisplayName())

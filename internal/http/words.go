@@ -45,10 +45,9 @@ func comingWord(line schedule.Line, now time.Time) string {
 	return whenWord(line.Days, now)
 }
 
-// nextLine is the empty state's sentence naming what is due soonest beyond
-// the week: "Spike is next, in 12 days." One plant is named, two are both
-// named, and three or more are the first and a count. rows is Day.Next, so
-// every row is due on the same day.
+// nextLine returns the line the Today page shows when nothing is due in the
+// next week: "Spike is next, in 12 days." Every row has to be due on the same
+// day, because the wording comes from the first row.
 func nextLine(rows []schedule.Row, now time.Time) string {
 	when := comingWord(rows[0].Care, now)
 	first := rows[0].Plant.DisplayName()

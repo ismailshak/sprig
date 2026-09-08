@@ -135,9 +135,9 @@ type Day struct {
 	Overdue  []Row
 	DueToday []Row
 	ComingUp []Row
-	// Next is every plant due on the soonest day after the ComingUp window,
-	// in the same order as a section. The empty state names them. It is
-	// empty when nothing is scheduled beyond the week.
+	// Next is every plant due on the soonest day beyond the ComingUp window,
+	// in name order. It is empty when nothing is due beyond the week. The Today
+	// page names these plants when the three sections are all empty.
 	Next []Row
 }
 
