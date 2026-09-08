@@ -12,6 +12,18 @@ import (
 	"uuid"
 )
 
+const countPlantPhotos = `-- name: CountPlantPhotos :one
+SELECT count(*) FROM photo
+WHERE garden_id = $1 AND plant_id = $2
+`
+
+func (q *Queries) CountPlantPhotos(ctx context.Context, gardenID uuid.UUID, plantID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countPlantPhotos, gardenID, plantID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createPhoto = `-- name: CreatePhoto :one
 INSERT INTO photo (id, garden_id, plant_id, uploaded_by, taken_at, kind, path, width, height, bytes, square_bytes)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
@@ -66,6 +78,50 @@ func (q *Queries) CreatePhoto(ctx context.Context, arg CreatePhotoParams) (Photo
 	return i, err
 }
 
+const deletePhoto = `-- name: DeletePhoto :one
+DELETE FROM photo
+WHERE garden_id = $1 AND plant_id = $2 AND id = $3
+  AND ($4::boolean OR uploaded_by = $5)
+RETURNING id, garden_id, plant_id, uploaded_by, taken_at, uploaded_at, kind, path, width, height, bytes, square_bytes
+`
+
+type DeletePhotoParams struct {
+	GardenID     uuid.UUID
+	PlantID      uuid.UUID
+	PhotoID      uuid.UUID
+	MayDeleteAny bool
+	UploadedBy   uuid.UUID
+}
+
+// Matches on uploaded_by unless may_delete_any is set, so the ownership check
+// is in the query and cannot be forgotten by a caller. A plant whose profile
+// picture this was loses the picture through the foreign key.
+func (q *Queries) DeletePhoto(ctx context.Context, arg DeletePhotoParams) (Photo, error) {
+	row := q.db.QueryRow(ctx, deletePhoto,
+		arg.GardenID,
+		arg.PlantID,
+		arg.PhotoID,
+		arg.MayDeleteAny,
+		arg.UploadedBy,
+	)
+	var i Photo
+	err := row.Scan(
+		&i.ID,
+		&i.GardenID,
+		&i.PlantID,
+		&i.UploadedBy,
+		&i.TakenAt,
+		&i.UploadedAt,
+		&i.Kind,
+		&i.Path,
+		&i.Width,
+		&i.Height,
+		&i.Bytes,
+		&i.SquareBytes,
+	)
+	return i, err
+}
+
 const getPhoto = `-- name: GetPhoto :one
 SELECT id, garden_id, plant_id, uploaded_by, taken_at, uploaded_at, kind, path, width, height, bytes, square_bytes FROM photo
 WHERE garden_id = $1 AND id = $2
@@ -87,6 +143,46 @@ func (q *Queries) GetPhoto(ctx context.Context, gardenID uuid.UUID, photoID uuid
 		&i.Height,
 		&i.Bytes,
 		&i.SquareBytes,
+	)
+	return i, err
+}
+
+const getPlantPhoto = `-- name: GetPlantPhoto :one
+SELECT photo.id, photo.garden_id, photo.plant_id, photo.uploaded_by, photo.taken_at, photo.uploaded_at, photo.kind, photo.path, photo.width, photo.height, photo.bytes, photo.square_bytes, app_user.display_name AS uploaded_by_name
+FROM photo
+JOIN app_user ON app_user.id = photo.uploaded_by
+WHERE photo.garden_id = $1 AND photo.plant_id = $2 AND photo.id = $3
+`
+
+type GetPlantPhotoParams struct {
+	GardenID uuid.UUID
+	PlantID  uuid.UUID
+	PhotoID  uuid.UUID
+}
+
+type GetPlantPhotoRow struct {
+	Photo          Photo
+	UploadedByName string
+}
+
+// One photo with the name of whoever uploaded it, for the photo's own page.
+func (q *Queries) GetPlantPhoto(ctx context.Context, arg GetPlantPhotoParams) (GetPlantPhotoRow, error) {
+	row := q.db.QueryRow(ctx, getPlantPhoto, arg.GardenID, arg.PlantID, arg.PhotoID)
+	var i GetPlantPhotoRow
+	err := row.Scan(
+		&i.Photo.ID,
+		&i.Photo.GardenID,
+		&i.Photo.PlantID,
+		&i.Photo.UploadedBy,
+		&i.Photo.TakenAt,
+		&i.Photo.UploadedAt,
+		&i.Photo.Kind,
+		&i.Photo.Path,
+		&i.Photo.Width,
+		&i.Photo.Height,
+		&i.Photo.Bytes,
+		&i.Photo.SquareBytes,
+		&i.UploadedByName,
 	)
 	return i, err
 }
@@ -119,6 +215,75 @@ func (q *Queries) ListPhotoFiles(ctx context.Context) ([]ListPhotoFilesRow, erro
 			&i.PlantID,
 			&i.Path,
 			&i.SquareBytes,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPlantPhotos = `-- name: ListPlantPhotos :many
+SELECT photo.id, photo.garden_id, photo.plant_id, photo.uploaded_by, photo.taken_at, photo.uploaded_at, photo.kind, photo.path, photo.width, photo.height, photo.bytes, photo.square_bytes, app_user.display_name AS uploaded_by_name
+FROM photo
+JOIN app_user ON app_user.id = photo.uploaded_by
+WHERE photo.garden_id = $1 AND photo.plant_id = $2
+  AND ($3::timestamptz IS NULL
+       OR (photo.uploaded_at, photo.id) < ($3, $4::uuid))
+ORDER BY photo.uploaded_at DESC, photo.id DESC
+LIMIT $5
+`
+
+type ListPlantPhotosParams struct {
+	GardenID uuid.UUID
+	PlantID  uuid.UUID
+	BeforeAt *time.Time
+	BeforeID *uuid.UUID
+	Count    int32
+}
+
+type ListPlantPhotosRow struct {
+	Photo          Photo
+	UploadedByName string
+}
+
+// A plant's photos, newest first, with the name of whoever uploaded each.
+// before_at and before_id are null for the first page and otherwise hold the
+// uploaded_at and id of the last photo on the previous page. Both columns are
+// compared because two photos can share an uploaded_at. It defaults to now(),
+// the same value for every row inserted in one transaction.
+func (q *Queries) ListPlantPhotos(ctx context.Context, arg ListPlantPhotosParams) ([]ListPlantPhotosRow, error) {
+	rows, err := q.db.Query(ctx, listPlantPhotos,
+		arg.GardenID,
+		arg.PlantID,
+		arg.BeforeAt,
+		arg.BeforeID,
+		arg.Count,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPlantPhotosRow
+	for rows.Next() {
+		var i ListPlantPhotosRow
+		if err := rows.Scan(
+			&i.Photo.ID,
+			&i.Photo.GardenID,
+			&i.Photo.PlantID,
+			&i.Photo.UploadedBy,
+			&i.Photo.TakenAt,
+			&i.Photo.UploadedAt,
+			&i.Photo.Kind,
+			&i.Photo.Path,
+			&i.Photo.Width,
+			&i.Photo.Height,
+			&i.Photo.Bytes,
+			&i.Photo.SquareBytes,
+			&i.UploadedByName,
 		); err != nil {
 			return nil, err
 		}
