@@ -7,14 +7,14 @@ export class GardenScreen {
     await this.page.goto('/more/garden');
   }
 
-  // The hint is inside the label, so the field's accessible name is "Name what
-  // the top of Today says".
   name(): Locator {
-    return this.page.getByLabel(/^Name\b/);
+    return this.page.getByLabel('Name', { exact: true });
   }
 
+  // The Save button under the garden's name. The open care type row has a Save
+  // of its own, so this one is found through the form the name field is in.
   saveName(): Locator {
-    return this.page.getByRole('button', { name: 'Save the name' });
+    return this.page.locator('form', { has: this.name() }).getByRole('button', { name: 'Save' });
   }
 
   // A closed row is a link to the care type's own URL, and its text is the
@@ -27,7 +27,7 @@ export class GardenScreen {
   }
 
   addType(): Locator {
-    return this.page.getByRole('link', { name: 'Add a care type' });
+    return this.page.getByRole('link', { name: 'Add care type' });
   }
 
   // The open row's field. Only one row is open at a time, so the page has one.
@@ -36,14 +36,14 @@ export class GardenScreen {
   }
 
   save(): Locator {
-    return this.page.getByRole('button', { name: 'Save', exact: true });
+    return this.page.locator('form', { has: this.typeName() }).getByRole('button', { name: 'Save' });
   }
 
   cancel(): Locator {
     return this.page.getByRole('link', { name: 'Cancel' });
   }
 
-  // Turn it off, Turn it back on or Delete, whichever the open row offers.
+  // Turn off, Turn on or Delete, whichever the open row offers.
   drop(label: string): Locator {
     return this.page.getByRole('button', { name: label, exact: true });
   }

@@ -1,4 +1,4 @@
-{{define "title"}}sprig — recover an account{{end}}
+{{define "title"}}Recover an account · sprig{{end}}
 
 {{define "app-class"}}app app--bare{{end}}
 
@@ -14,7 +14,7 @@
 <p class="bare__line">{{.Line}}</p>
 <a class="wide-action" href="{{.TryAnother}}">Try another code</a>
 {{else if .AddDevice}}
-<p class="lead">The code worked. Register a passkey on this device now, then sign in with it.</p>
+<p class="lead">Code accepted. Add a passkey on this device, then sign in with it.</p>
 {{/* The paragraph below is rendered even when Refusal is empty, because the
      page's script writes the browser's refusal into it. The button starts
      disabled and the note stays under it until that script runs, because the
@@ -23,20 +23,20 @@
 <form method="post" action="{{.Action}}" novalidate data-passkey="create" data-challenge="{{.Challenge}}" data-field="{{.Field}}" data-message="passkey-error" data-note="passkey-noscript">
 <input type="hidden" name="{{.CodeField}}" value="{{.Code}}">
 <input type="hidden" name="{{.Field}}">
-<button class="wide-action" type="submit" disabled>Register a passkey</button>
-<p class="note" id="passkey-noscript">Registering a passkey needs JavaScript and a browser that supports passkeys.</p>
+<button class="wide-action" type="submit" disabled>Add passkey</button>
+<p class="note" id="passkey-noscript">Requires JavaScript and a browser with passkey support.</p>
 </form>
-<p class="note">The code is used up once the passkey is registered. The device you enrol here will appear on your Passkeys page, which is where to check if you ever wonder whether somebody else has been in.</p>
+<p class="note">The code is used up once the passkey is added. The new passkey will be listed on your Passkeys page.</p>
 {{else}}
-<p class="lead">Paste one of your recovery codes. It does not sign you in — it lets this device register a passkey, and you sign in with that.</p>
+<p class="lead">Enter a recovery code to add a passkey on this device.</p>
 <form method="post" action="{{.Action}}" novalidate>
 <div class="field">
-<label class="field__label" for="code">Recovery code <span class="field__hint">one of the ten you were shown</span></label>
+<label class="field__label" for="code">Recovery code <span class="field__hint">one of the ten you saved</span></label>
 <input class="input" id="code" name="{{.CodeField}}" type="text" autocomplete="off" autocapitalize="off" spellcheck="false">
 </div>
-<button class="wide-action" type="submit">Use this code</button>
+<button class="wide-action" type="submit">Continue</button>
 </form>
-<p class="note">If you never made any codes, this page cannot help you and nothing on it will. Ask whoever runs the garden for a new invite link; if the garden is your own, the only way back is a shell on the machine sprig runs on.</p>
+<p class="note">No recovery codes? Ask the garden’s owner for a new invite link. If you are the owner, one can be issued from the server.</p>
 {{end}}
 </div>
 {{end}}

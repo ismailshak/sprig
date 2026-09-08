@@ -34,11 +34,10 @@ func invitedChallengePath(token string) string { return invitedPath(token) + "/c
 const afterInvitePath = installPath + "?after=" + afterInvite
 
 const (
-	// tooManyInviteTries is the message shown when either rate limiter refuses
+	// tooManyInviteAttempts is the message shown when either rate limiter refuses
 	// a request.
-	tooManyInviteTries = "Too many tries. Wait a few minutes and try again. This limit is on the page rather than on your link, so it can be somebody else's attempts you are waiting out."
-	joinLabel          = "Join with a passkey"
-	addDeviceLabel     = "Add this device"
+	tooManyInviteAttempts = "Too many attempts. Wait a few minutes and try again."
+	addDeviceLabel        = "Add this device"
 )
 
 // errInviteUsed is returned inside the transaction that redeems an invite when
@@ -113,7 +112,7 @@ type invitedPage struct {
 	// script posts the form to for a registration challenge.
 	Action    string
 	Challenge string
-	// Field is the name of the hidden input the browser's answer goes in.
+	// Field is the name of the hidden input the browser's credential goes in.
 	Field string
 	// Joining is the sentence under the join form. It names the role, what the
 	// role can do, and the day access ends when the invite sets one.
@@ -274,7 +273,7 @@ func (h *invited) challenge(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "the form did not parse", http.StatusBadRequest)
+		badRequest(w)
 		return
 	}
 
@@ -300,7 +299,7 @@ func (h *invited) challenge(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !slices.Contains(zones, form.zone) {
-		http.Error(w, "the form did not offer that", http.StatusBadRequest)
+		badRequest(w)
 		return
 	}
 	// The account has no row yet. Its id is chosen here and stored with the
@@ -330,7 +329,7 @@ func (h *invited) redeem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "the form did not parse", http.StatusBadRequest)
+		badRequest(w)
 		return
 	}
 	token := r.PathValue("token")
@@ -342,12 +341,12 @@ func (h *invited) redeem(w http.ResponseWriter, r *http.Request) {
 
 	if open.reenrol() {
 		user, passkey, err := h.addDevice(r, open)
-		h.finish(w, r, page, addDeviceLabel, "add the device", user, open.row.Invite.GardenID, passkey, todayPath, err)
+		h.finish(w, r, page, "add the device", user, open.row.Invite.GardenID, passkey, todayPath, err)
 		return
 	}
 
 	if form.zone != "" && !slices.Contains(zones, form.zone) {
-		http.Error(w, "the form did not offer that", http.StatusBadRequest)
+		badRequest(w)
 		return
 	}
 	page.NameError, page.Zone.Error = form.errors()
@@ -356,7 +355,7 @@ func (h *invited) redeem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	user, passkey, err := h.join(r, open, form)
-	h.finish(w, r, page, joinLabel, "join the garden", user, open.row.Invite.GardenID, passkey, afterInvitePath, err)
+	h.finish(w, r, page, "join the garden", user, open.row.Invite.GardenID, passkey, afterInvitePath, err)
 }
 
 // join redeems a join invite: the account, the membership and the passkey are
@@ -436,15 +435,14 @@ func markRedeemed(ctx context.Context, q *store.Queries, now time.Time, invite s
 // finish writes the response to a redeem post. On success it starts a session
 // for user on the garden and redirects to next. The session replaces any the
 // browser arrived with. A refusal renders the page again with the reason above
-// the form. button is the label the refusal tells the person to press again.
-// what names the step in a 500's log line.
-func (h *invited) finish(w http.ResponseWriter, r *http.Request, page invitedPage, button, what string, user store.AppUser, gardenID uuid.UUID, passkey store.PasskeyCredential, next string, err error) {
+// the form. what names the step in a 500's log line.
+func (h *invited) finish(w http.ResponseWriter, r *http.Request, page invitedPage, what string, user store.AppUser, gardenID uuid.UUID, passkey store.PasskeyCredential, next string, err error) {
 	if errors.Is(err, errInviteUsed) {
 		h.renderUnusable(w, r)
 		return
 	}
 	if err != nil {
-		page.Refusal = registrationRefusal(h.logger, w, r, err, button, what)
+		page.Refusal = registrationRefusal(h.logger, w, r, err, what)
 		if page.Refusal == "" {
 			return
 		}
@@ -479,11 +477,11 @@ func (h *invited) tooManyAnswers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "the form did not parse", http.StatusBadRequest)
+		badRequest(w)
 		return
 	}
 	page := newInvitedPage(r.PathValue("token"), open, readJoinForm(r), false)
-	page.Refusal = tooManyInviteTries
+	page.Refusal = tooManyInviteAttempts
 	h.templates.render(w, r, view{page: "invited", status: http.StatusTooManyRequests}, page)
 }
 
@@ -491,5 +489,5 @@ func (h *invited) tooManyAnswers(w http.ResponseWriter, r *http.Request) {
 // the budget. The line is plain text, because the page's script fetches this
 // URL and puts the body above the form.
 func tooManyChallenges(w http.ResponseWriter, _ *http.Request) {
-	http.Error(w, tooManyInviteTries, http.StatusTooManyRequests)
+	http.Error(w, tooManyInviteAttempts, http.StatusTooManyRequests)
 }

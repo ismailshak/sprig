@@ -1,4 +1,4 @@
-{{define "title"}}sprig — plants{{end}}
+{{define "title"}}Plants · sprig{{end}}
 
 {{/* Add is an outlined button rather than a filled one, because people open
      this page to look up a plant far more often than to add one. */}}
@@ -16,8 +16,8 @@
 <div class="empty">
 <span class="empty__mark">{{template "icon-plants"}}</span>
 <h2 class="empty__title">No plants yet</h2>
-<p class="empty__line">Add a plant and sprig will remind you when to water it.</p>
-{{if .Add}}<a class="empty__action" href="/plants/new">Add a plant</a>{{end}}
+<p class="empty__line">Add a plant to see its tasks here.</p>
+{{if .Add}}<a class="empty__action" href="/plants/new">Add plant</a>{{end}}
 </div>
 {{end}}
 </div>

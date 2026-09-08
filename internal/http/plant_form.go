@@ -44,11 +44,11 @@ const waterSlug = "water"
 // included.
 const acquiredSpan = 21
 
-// referenceFields is the Reference fields in the order the plant's page shows
-// them, each with its input name. Water and Feed repeat the care types above
-// because a schedule says how often and a reference field says what this plant
-// needs.
-var referenceFields = [...]struct{ name, label string }{
+// detailFields are the fields under Details, in the order the plant's page
+// shows them, with the name each input posts under. Water and Feed repeat two
+// care type names because a schedule says how often and a Details field says
+// what this plant needs.
+var detailFields = [...]struct{ name, label string }{
 	{"sun", "Sun"},
 	{"water", "Water"},
 	{"feed", "Feed"},
@@ -62,7 +62,7 @@ type plantFields struct {
 	nickname  string
 	common    string
 	botanical string
-	location  string
+	room      string
 	sun       string
 	water     string
 	feed      string
@@ -75,9 +75,9 @@ type plantFields struct {
 	year  int
 }
 
-// facts returns a pointer to the field for each of referenceFields, in the same
+// facts returns a pointer to the field for each of detailFields, in the same
 // order, so reading and rendering the form iterate one list.
-func (f *plantFields) facts() [len(referenceFields)]*string {
+func (f *plantFields) facts() [len(detailFields)]*string {
 	return [...]*string{&f.sun, &f.water, &f.feed, &f.soil, &f.climate, &f.pot}
 }
 
@@ -88,11 +88,11 @@ func readPlantFields(values url.Values, now time.Time) (plantFields, bool) {
 		nickname:  strings.TrimSpace(values.Get("nickname")),
 		common:    strings.TrimSpace(values.Get("common")),
 		botanical: strings.TrimSpace(values.Get("botanical")),
-		location:  strings.TrimSpace(values.Get("where")),
+		room:      strings.TrimSpace(values.Get("room")),
 		notes:     strings.TrimSpace(values.Get("notes")),
 	}
 	for i, held := range f.facts() {
-		*held = strings.TrimSpace(values.Get(referenceFields[i].name))
+		*held = strings.TrimSpace(values.Get(detailFields[i].name))
 	}
 
 	// A missing select stays at zero, because a schedule row's own request
@@ -116,7 +116,7 @@ func plantFieldsOf(plant store.Plant) plantFields {
 		nickname:  value(plant.Nickname),
 		common:    value(plant.CommonName),
 		botanical: value(plant.BotanicalName),
-		location:  value(plant.Location),
+		room:      value(plant.Location),
 		notes:     value(plant.Notes),
 	}
 	stored := [...]*string{plant.Sun, plant.WaterNeeds, plant.FeedNeeds, plant.Soil, plant.Climate, plant.Pot}
@@ -136,12 +136,12 @@ func plantFieldsOf(plant store.Plant) plantFields {
 // under Acquired. Both are empty when the post is valid.
 func (f plantFields) refuse() (name, acquired string) {
 	if f.nickname == "" && f.common == "" && f.botanical == "" {
-		name = "Give it at least one name. Any of the three will do."
+		name = "Enter at least one name."
 	}
 	// A month with no year is an error rather than dropped silently, since the
 	// plant's page shows nothing for it.
 	if f.month != 0 && f.year == 0 {
-		acquired = "Give the year as well as the month."
+		acquired = "Choose a year as well as a month."
 	}
 	return name, acquired
 }
@@ -152,7 +152,7 @@ func (f plantFields) create(gardenID uuid.UUID) store.CreatePlantParams {
 		Nickname:      set(f.nickname),
 		CommonName:    set(f.common),
 		BotanicalName: set(f.botanical),
-		Location:      set(f.location),
+		Location:      set(f.room),
 		Sun:           set(f.sun),
 		WaterNeeds:    set(f.water),
 		FeedNeeds:     set(f.feed),
@@ -205,10 +205,10 @@ func readMultipartForm(w http.ResponseWriter, r *http.Request) bool {
 	var tooLarge *http.MaxBytesError
 	switch {
 	case errors.As(err, &tooLarge):
-		http.Error(w, "the form is too large", http.StatusRequestEntityTooLarge)
+		http.Error(w, "The photo is too large.", http.StatusRequestEntityTooLarge)
 		return false
 	case err != nil:
-		http.Error(w, "the form did not parse", http.StatusBadRequest)
+		badRequest(w)
 		return false
 	}
 	return true
@@ -217,8 +217,8 @@ func readMultipartForm(w http.ResponseWriter, r *http.Request) bool {
 // photoField is the data the photo-field template renders. Its fields are
 // where the plant form and Add a photo differ.
 type photoField struct {
-	// Choose is the label on the button that opens the file chooser: "Add a
-	// photo" on the plant form and "Choose a photo" on Add a photo.
+	// Choose is the label on the button that opens the file chooser: "Add
+	// photo" on the plant form and "Choose photo" on Add a photo.
 	Choose string
 	// Picture is the URL of the plant's current profile picture, shown in the
 	// preview when the plant form opens. It is empty on Add a photo, because
@@ -228,17 +228,13 @@ type photoField struct {
 	// out, because it has no picture to clear. Removed is that input's value.
 	Removable bool
 	Removed   bool
-	// NeedsChoosing renders "The photo needs choosing again."
+	// NeedsChoosing renders "Choose the photo again."
 	NeedsChoosing bool
-	// Missing renders "Choose a photo first."
+	// Missing renders "Choose a photo."
 	Missing bool
 	// Full is the message shown when the garden has no room for the photo,
 	// empty otherwise.
 	Full string
-	// PreviewNote renders "This is the photo that will be sent." under the
-	// preview. The plant form leaves it out, because its preview can hold the
-	// picture the plant already has.
-	PreviewNote bool
 	// Submit is the label on the submit button rendered inside the field. It
 	// is empty on the plant form, which has its own submit button below. Add a
 	// photo puts its button here so that a browser which cannot resize a photo
@@ -274,19 +270,19 @@ func postedPhoto(w http.ResponseWriter, r *http.Request, principal auth.Principa
 	}
 	upload = photo.Upload{GardenID: principal.Garden.ID, PlantID: plantID, UploadedBy: principal.User.ID}
 	if len(r.MultipartForm.File["photo-square"]) == 0 {
-		http.Error(w, "the photo needs its square variant", http.StatusBadRequest)
+		badRequest(w)
 		return upload, closeFiles, false
 	}
 	file, header, err := r.FormFile("photo")
 	if err != nil {
-		http.Error(w, "the photo did not parse", http.StatusBadRequest)
+		badRequest(w)
 		return upload, closeFiles, false
 	}
 	opened = append(opened, file)
 	upload.File, upload.Size = file, header.Size
 	square, header, err := r.FormFile("photo-square")
 	if err != nil {
-		http.Error(w, "the photo did not parse", http.StatusBadRequest)
+		badRequest(w)
 		return upload, closeFiles, false
 	}
 	opened = append(opened, square)
@@ -314,9 +310,7 @@ func pictureRemoved(r *http.Request) bool {
 
 // photoQuotaFull is the message shown under the photo field when the garden
 // has no room for the photo.
-func photoQuotaFull(garden string) string {
-	return garden + "'s photo storage is full. Deleting progress photos is what makes room."
-}
+const photoQuotaFull = "Photo storage is full. Delete some photos to make room."
 
 // photoRefused writes the response for a photo the store refused and reports
 // whether err was such a refusal. The caller reports any other error itself.
@@ -327,12 +321,12 @@ func photoQuotaFull(garden string) string {
 func (h *plants) photoRefused(w http.ResponseWriter, r *http.Request, err error, page plantFormPage) bool {
 	switch {
 	case errors.Is(err, photo.ErrQuotaFull):
-		page.PhotoFull = photoQuotaFull(PrincipalFrom(r).Garden.Name)
+		page.PhotoFull = photoQuotaFull
 		h.templates.render(w, r, view{page: plantFormPageName, status: http.StatusUnprocessableEntity}, page)
 	case errors.Is(err, photo.ErrTooLarge):
-		http.Error(w, "the photo is too large", http.StatusRequestEntityTooLarge)
+		http.Error(w, "The photo is too large.", http.StatusRequestEntityTooLarge)
 	case errors.Is(err, photo.ErrNotImage):
-		http.Error(w, "the photo is not a JPEG or a WebP", http.StatusBadRequest)
+		http.Error(w, "The photo must be a JPEG or WebP.", http.StatusBadRequest)
 	default:
 		return false
 	}
@@ -401,8 +395,8 @@ type plantFormPage struct {
 	// NameError is shown under all three name fields, since any one of them
 	// satisfies the requirement.
 	NameError string
-	Location  string
-	// Rooms fills the <datalist> under the Location field.
+	Room      string
+	// Rooms fills the <datalist> under the Room field.
 	Rooms []string
 	// Schedules is empty on the edit form. Schedules are edited on the plant's
 	// page, beside the due date they change.
@@ -413,8 +407,8 @@ type plantFormPage struct {
 	Years     []option
 	// AcquiredError is shown under the month and year selects.
 	AcquiredError string
-	// Reference is true when the Reference disclosure starts open.
-	Reference bool
+	// Details is true when the Details disclosure starts open.
+	Details bool
 	// PhotoNeedsChoosing is true when a refused post had a photo. The form is
 	// rendered again with an empty file input, because a server cannot fill
 	// one.
@@ -442,7 +436,7 @@ func (p plantFormPage) PhotoField() *photoField {
 		return nil
 	}
 	return &photoField{
-		Choose:        "Add a photo",
+		Choose:        "Add photo",
 		Picture:       p.Picture,
 		Removable:     true,
 		Removed:       p.PictureRemoved,
@@ -462,22 +456,22 @@ func newPlantFormPage(f plantFields, now time.Time) plantFormPage {
 		Nickname:  f.nickname,
 		Common:    f.common,
 		Botanical: f.botanical,
-		Location:  f.location,
+		Room:      f.room,
 		Notes:     f.notes,
 		Months:    append([]option{{Value: "0", Label: "Month", On: f.month == 0}}, monthOptions(f.month)...),
 		Years:     append([]option{{Value: "0", Label: "Year", On: f.year == 0}}, numberOptions(acquiredYears(now), f.year)...),
-		Reference: f.notes != "" || f.month != 0 || f.year != 0,
+		Details:   f.notes != "" || f.month != 0 || f.year != 0,
 	}
 	for i, held := range f.facts() {
-		page.Facts = append(page.Facts, factField{Name: referenceFields[i].name, Label: referenceFields[i].label, Value: *held})
-		page.Reference = page.Reference || *held != ""
+		page.Facts = append(page.Facts, factField{Name: detailFields[i].name, Label: detailFields[i].label, Value: *held})
+		page.Details = page.Details || *held != ""
 	}
 	return page
 }
 
 func addPlantPage(principal auth.Principal, f plantFields, rows []scheduleDraft, now time.Time) plantFormPage {
 	page := newPlantFormPage(f, now)
-	page.Title = "Add a plant"
+	page.Title = "Add plant"
 	page.Action = newPlantPath
 	page.Back = plantsPath
 	page.Submit = "Add plant"
@@ -551,7 +545,7 @@ func swappedRow(rows []scheduleField, values url.Values) (scheduleField, bool) {
 	return scheduleField{}, false
 }
 
-// gardenRooms returns the rooms for the Location field. It writes the response
+// gardenRooms returns the rooms for the Room field. It writes the response
 // itself and returns false when the query fails.
 func (h *plants) gardenRooms(w http.ResponseWriter, r *http.Request, gardenID uuid.UUID) ([]string, bool) {
 	rooms, err := h.queries.ListRooms(r.Context(), gardenID)
@@ -582,7 +576,7 @@ func (h *plants) newPlant(w http.ResponseWriter, r *http.Request) {
 		fields, fieldsOK = readPlantFields(query, now)
 		rows, rowsOK = readScheduleRows(query, cares, now)
 		if !fieldsOK || !rowsOK {
-			http.Error(w, "the form did not offer that", http.StatusBadRequest)
+			badRequest(w)
 			return
 		}
 	}
@@ -593,7 +587,7 @@ func (h *plants) newPlant(w http.ResponseWriter, r *http.Request) {
 	if isHTMX(r) {
 		row, ok := swappedRow(page.Schedules, query)
 		if !ok {
-			http.Error(w, "the form has no such row", http.StatusBadRequest)
+			badRequest(w)
 			return
 		}
 		page.Schedules = []scheduleField{row}
@@ -606,7 +600,7 @@ func (h *plants) newPlant(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	page.Rooms = rooms
-	page.Location = canonicalRoom(rooms, page.Location)
+	page.Room = canonicalRoom(rooms, page.Room)
 	h.templates.render(w, r, view{page: plantFormPageName}, page)
 }
 
@@ -621,7 +615,7 @@ func (h *plants) create(w http.ResponseWriter, r *http.Request) {
 	// plant's profile picture, so the post is checked for the two capabilities
 	// that takes.
 	if photoPosted(r) && !canSetPicture(principal) {
-		http.NotFound(w, r)
+		notFound(w)
 		return
 	}
 	cares, err := h.queries.ListCareTypes(r.Context(), principal.Garden.ID)
@@ -634,14 +628,14 @@ func (h *plants) create(w http.ResponseWriter, r *http.Request) {
 	fields, fieldsOK := readPlantFields(r.PostForm, now)
 	rows, rowsOK := readScheduleRows(r.PostForm, cares, now)
 	if !fieldsOK || !rowsOK {
-		http.Error(w, "the form did not offer that", http.StatusBadRequest)
+		badRequest(w)
 		return
 	}
 	rooms, ok := h.gardenRooms(w, r, principal.Garden.ID)
 	if !ok {
 		return
 	}
-	fields.location = canonicalRoom(rooms, fields.location)
+	fields.room = canonicalRoom(rooms, fields.room)
 
 	schedules, messages, refused := checkSchedules(rows, principal.Garden.ID)
 	page := addPlantPage(principal, fields, rows, now)
@@ -748,20 +742,20 @@ func (h *plants) update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if (photoPosted(r) || pictureRemoved(r)) && !canSetPicture(principal) {
-		http.NotFound(w, r)
+		notFound(w)
 		return
 	}
 	now := h.now().In(locationFor(principal.User))
 	fields, fieldsOK := readPlantFields(r.PostForm, now)
 	if !fieldsOK {
-		http.Error(w, "the form did not offer that", http.StatusBadRequest)
+		badRequest(w)
 		return
 	}
 	rooms, ok := h.gardenRooms(w, r, principal.Garden.ID)
 	if !ok {
 		return
 	}
-	fields.location = canonicalRoom(rooms, fields.location)
+	fields.room = canonicalRoom(rooms, fields.room)
 
 	page := editPlantPage(principal, fields, plant, now)
 	page.Rooms = rooms
@@ -804,7 +798,7 @@ func (h *plants) update(w http.ResponseWriter, r *http.Request) {
 	}
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		http.NotFound(w, r)
+		notFound(w)
 		return
 	case err != nil:
 		serverError(h.logger, w, r, "save the plant", err)
@@ -820,13 +814,13 @@ func (h *plants) confirmArchive(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	plantID, err := uuid.Parse(r.PathValue("plant"))
 	if err != nil {
-		http.NotFound(w, r)
+		notFound(w)
 		return
 	}
 	detail, err := loadPlant(r.Context(), h.queries, principal, plantID, h.now())
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		http.NotFound(w, r)
+		notFound(w)
 		return
 	case err != nil:
 		serverError(h.logger, w, r, "load the plant", err)
@@ -835,7 +829,7 @@ func (h *plants) confirmArchive(w http.ResponseWriter, r *http.Request) {
 	// An archived plant has no buttons at the bottom of its page, so there is
 	// nothing to confirm.
 	if detail.plant.ArchivedAt != nil {
-		http.NotFound(w, r)
+		notFound(w)
 		return
 	}
 
@@ -843,7 +837,7 @@ func (h *plants) confirmArchive(w http.ResponseWriter, r *http.Request) {
 	page.Foot = page.Foot.asking()
 	fragment, ok := plantSwap(r, &page)
 	if !ok {
-		http.NotFound(w, r)
+		notFound(w)
 		return
 	}
 	h.templates.render(w, r, view{page: "plant", fragment: fragment}, page)
@@ -855,12 +849,12 @@ func (h *plants) archive(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	plantID, err := uuid.Parse(r.PathValue("plant"))
 	if err != nil {
-		http.NotFound(w, r)
+		notFound(w)
 		return
 	}
 	if _, err := h.queries.ArchivePlant(r.Context(), principal.Garden.ID, plantID); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			http.NotFound(w, r)
+			notFound(w)
 			return
 		}
 		serverError(h.logger, w, r, "archive the plant", err)
@@ -880,7 +874,7 @@ func (h *plants) editable(w http.ResponseWriter, r *http.Request, principal auth
 		return store.Plant{}, false
 	}
 	if plant.ArchivedAt != nil {
-		http.NotFound(w, r)
+		notFound(w)
 		return store.Plant{}, false
 	}
 	return plant, true

@@ -22,7 +22,7 @@ test("a new plant's page shows the watering schedule entered on the form @swap",
   await page.waitForLoadState();
 
   await plantForm.field('Nickname').fill('Ada');
-  await plantForm.field('Location').fill('Study');
+  await plantForm.field('Room').fill('Study');
   await plantForm.every('Water').fill('10');
   await plantForm.unit('Water').selectOption('day');
   await plantForm.submit('Add plant');
@@ -32,14 +32,14 @@ test("a new plant's page shows the watering schedule entered on the form @swap",
   await expect(plant.scheduleRow('Water')).toContainText('Due in 10 days');
 });
 
-test('a plant with no name is refused and the location typed is kept', async ({ page, plantForm }) => {
+test('a plant with no name is refused and the room typed is kept', async ({ page, plantForm }) => {
   await plantForm.openNew();
-  await plantForm.field('Location').fill('Study');
+  await plantForm.field('Room').fill('Study');
 
   await plantForm.submit('Add plant');
 
-  await expect(page.getByText('Give it at least one name. Any of the three will do.')).toBeVisible();
-  await expect(plantForm.field('Location')).toHaveValue('Study');
+  await expect(page.getByText('Enter at least one name.')).toBeVisible();
+  await expect(plantForm.field('Room')).toHaveValue('Study');
 });
 
 test('pressing Enter in a name field adds the plant', async ({ plantForm, plant }) => {
@@ -94,7 +94,7 @@ test('a one-off schedule posted without a date is refused until a date is given 
 
   await plantForm.submit('Add plant');
 
-  await expect(page.getByText('Give it a date.')).toBeVisible();
+  await expect(page.getByText('Choose a date.')).toBeVisible();
   await plantForm.date('Repot', 'month').selectOption({ label: 'March' });
   await plantForm.date('Repot', 'year').selectOption({ label: springYear });
   await plantForm.submit('Add plant');
@@ -102,8 +102,8 @@ test('a one-off schedule posted without a date is refused until a date is given 
   await expect(plant.scheduleRow('Repot')).toContainText(`Due in March ${springYear}`);
 });
 
-// Big Fella has all six reference fields set.
-test('the edit form shows the reference fields for a plant that has reference notes', async ({ plantForm }) => {
+// Big Fella has all six detail fields set.
+test('the edit form shows the detail fields for a plant that has details', async ({ plantForm }) => {
   await plantForm.openEdit(seeded.bigFella);
 
   await expect(plantForm.field('Sun')).toBeVisible();
@@ -111,7 +111,7 @@ test('the edit form shows the reference fields for a plant that has reference no
 });
 
 // Sprout has a nickname and nothing else.
-test('the edit form hides the reference fields for a plant with no reference notes', async ({ plantForm }) => {
+test('the edit form hides the detail fields for a plant with no details', async ({ plantForm }) => {
   await plantForm.openEdit(seeded.sprout);
 
   await expect(plantForm.field('Sun')).toBeHidden();
@@ -157,27 +157,27 @@ test('Archive asks for confirmation and the plant stays listed until it is given
   await plant.askToArchive();
 
   await expect(plant.foot()).toContainText(`Archive ${seeded.doris.name}?`);
-  await expect(plant.foot()).toContainText('Its history is kept');
+  await expect(plant.foot()).toContainText('keeps its activity and photos');
   await expect(plant.heading()).toHaveText(seeded.doris.name);
   await plants.open();
   await expect(plants.row(seeded.doris)).toHaveCount(1);
 });
 
-test('choosing Keep after Archive leaves the plant listed @swap', async ({ plant, plants }) => {
+test('choosing Cancel after Archive leaves the plant listed @swap', async ({ plant, plants }) => {
   await plant.open(seeded.doris);
   await plant.askToArchive();
 
-  await plant.keepIt();
+  await plant.cancelArchive();
 
   await expect(plant.foot()).toContainText('Edit plant');
   await plants.open();
   await expect(plants.row(seeded.doris)).toHaveCount(1);
 });
 
-test('typing in Location lists the rooms that match and offers the text as a new room @js', async ({ plantForm }) => {
+test('typing in Room lists the rooms that match and offers the text as a new room @js', async ({ plantForm }) => {
   await plantForm.openNew();
 
-  await plantForm.field('Location').fill('b');
+  await plantForm.field('Room').fill('b');
 
   // Bathroom and Bedroom both contain a b. The option for a room that does not
   // exist yet is always last.
@@ -189,21 +189,21 @@ test('typing in Location lists the rooms that match and offers the text as a new
 test("the browser's own room list is gone once the listbox opens @js", async ({ plantForm }) => {
   await plantForm.openNew();
 
-  await plantForm.field('Location').focus();
+  await plantForm.field('Room').focus();
 
   await expect(plantForm.roomList()).toBeVisible();
-  await expect(plantForm.field('Location')).not.toHaveAttribute('list');
+  await expect(plantForm.field('Room')).not.toHaveAttribute('list');
 });
 
 test('a room picked with the arrow keys is the room the plant is added to @js', async ({ plantForm, plants }) => {
   await plantForm.openNew();
   await plantForm.field('Nickname').fill('Ada');
-  await plantForm.field('Location').fill('b');
+  await plantForm.field('Room').fill('b');
 
   // The first press lands on Bathroom and the second on Bedroom.
-  await plantForm.field('Location').press('ArrowDown');
-  await plantForm.field('Location').press('ArrowDown');
-  await plantForm.field('Location').press('Enter');
+  await plantForm.field('Room').press('ArrowDown');
+  await plantForm.field('Room').press('ArrowDown');
+  await plantForm.field('Room').press('Enter');
   await plantForm.submit('Add plant');
 
   await plants.open();
@@ -213,7 +213,7 @@ test('a room picked with the arrow keys is the room the plant is added to @js', 
 test('a plant is added to a new room by choosing the option that names it @js', async ({ plantForm, plants }) => {
   await plantForm.openNew();
   await plantForm.field('Nickname').fill('Ada');
-  await plantForm.field('Location').fill('Potting shed');
+  await plantForm.field('Room').fill('Potting shed');
 
   await plantForm.roomOption('Add “Potting shed” as a new room').click();
   await plantForm.submit('Add plant');
@@ -228,7 +228,7 @@ test('a room typed in a different case adds the plant to the room the garden alr
 }) => {
   await plantForm.openNew();
   await plantForm.field('Nickname').fill('Ada');
-  await plantForm.field('Location').fill('bathroom');
+  await plantForm.field('Room').fill('bathroom');
 
   await plantForm.submit('Add plant');
 
@@ -247,7 +247,7 @@ test('a room typed in a different case adds the plant to the room the garden alr
 
 // The photo field is shown by the page's script, because the resize happens
 // in the browser.
-test('with no JavaScript there is no Add a photo button and the plant is still added @nojs', async ({
+test('with no JavaScript there is no Add photo button and the plant is still added @nojs', async ({
   plantForm,
   plant,
 }) => {
@@ -269,7 +269,7 @@ test('the photo the app serves back is 2048 pixels on its long edge with its EXI
 }) => {
   await plantForm.openNew();
   await plantForm.field('Nickname').fill('Ada');
-  await plantForm.choosePhoto('Add a photo', photos.gpsTagged);
+  await plantForm.choosePhoto('Add photo', photos.gpsTagged);
   await expect(plantForm.photoPreview()).toBeVisible();
   await plantForm.submit('Add plant');
   await expect(plant.heading()).toHaveText('Ada');
@@ -285,7 +285,7 @@ test('the photo the app serves back is 2048 pixels on its long edge with its EXI
 test('a photo stored sideways with an orientation tag is upright after the resize @js', async ({ plantForm }) => {
   await plantForm.openNew();
 
-  await plantForm.choosePhoto('Add a photo', photos.sideways);
+  await plantForm.choosePhoto('Add photo', photos.sideways);
 
   await expect(plantForm.photoPreview()).toBeVisible();
   expect(dimensions(await heldFile(plantForm.photoInput('photo')))).toEqual({ width: 800, height: 1200 });
@@ -294,7 +294,7 @@ test('a photo stored sideways with an orientation tag is upright after the resiz
 test('a chosen photo puts a 192 pixel square in the photo-square input @js', async ({ plantForm }) => {
   await plantForm.openNew();
 
-  await plantForm.choosePhoto('Add a photo', photos.gpsTagged);
+  await plantForm.choosePhoto('Add photo', photos.gpsTagged);
 
   await expect(plantForm.photoPreview()).toBeVisible();
   const square = await heldFile(plantForm.photoInput('photo-square'));
@@ -304,7 +304,7 @@ test('a chosen photo puts a 192 pixel square in the photo-square input @js', asy
 
 test('Remove after choosing a photo leaves the form with no photo to post @js', async ({ plantForm }) => {
   await plantForm.openNew();
-  await plantForm.choosePhoto('Add a photo', photos.gpsTagged);
+  await plantForm.choosePhoto('Add photo', photos.gpsTagged);
   await expect(plantForm.photoPreview()).toBeVisible();
 
   await plantForm.removePhoto();
@@ -318,7 +318,7 @@ test('Remove after choosing a photo leaves the form with no photo to post @js', 
 test('a plant added with a photo chosen lands on its page @js', async ({ plantForm, plant }) => {
   await plantForm.openNew();
   await plantForm.field('Nickname').fill('Ada');
-  await plantForm.choosePhoto('Add a photo', photos.gpsTagged);
+  await plantForm.choosePhoto('Add photo', photos.gpsTagged);
   await expect(plantForm.photoPreview()).toBeVisible();
 
   await plantForm.submit('Add plant');
@@ -328,7 +328,7 @@ test('a plant added with a photo chosen lands on its page @js', async ({ plantFo
 
 test('a second photo chosen through Replace is the one the form posts @js', async ({ plantForm }) => {
   await plantForm.openNew();
-  await plantForm.choosePhoto('Add a photo', photos.gpsTagged);
+  await plantForm.choosePhoto('Add photo', photos.gpsTagged);
   await expect(plantForm.photoPreview()).toBeVisible();
 
   await plantForm.choosePhoto('Replace', photos.sideways);
@@ -338,16 +338,16 @@ test('a second photo chosen through Replace is the one the form posts @js', asyn
   expect(dimensions(await heldFile(plantForm.photoInput('photo-square')))).toEqual({ width: 192, height: 192 });
 });
 
-test('a file that is not a photo reads "That file could not be read as a photo." @js', async ({ page, plantForm }) => {
+test('a file that is not a photo reads "This file couldn’t be opened as a photo." @js', async ({ page, plantForm }) => {
   await plantForm.openNew();
 
-  await plantForm.choosePhoto('Add a photo', {
+  await plantForm.choosePhoto('Add photo', {
     name: 'notes.txt',
     mimeType: 'text/plain',
     buffer: Buffer.from('not a photo'),
   });
 
-  await expect(page.getByText('That file could not be read as a photo.')).toBeVisible();
+  await expect(page.getByText('This file couldn’t be opened as a photo.')).toBeVisible();
   await expect(plantForm.addPhoto()).toBeVisible();
   expect(await heldCount(plantForm.photoInput('photo'))).toBe(0);
   expect(await heldCount(plantForm.photoInput('photo-square'))).toBe(0);
@@ -355,13 +355,13 @@ test('a file that is not a photo reads "That file could not be read as a photo."
 
 test('a form refused for having no name says the photo needs choosing again @js', async ({ page, plantForm }) => {
   await plantForm.openNew();
-  await plantForm.choosePhoto('Add a photo', photos.gpsTagged);
+  await plantForm.choosePhoto('Add photo', photos.gpsTagged);
   await expect(plantForm.photoPreview()).toBeVisible();
 
   await plantForm.submit('Add plant');
 
-  await expect(page.getByText('Give it at least one name. Any of the three will do.')).toBeVisible();
-  await expect(page.getByText('The photo needs choosing again.')).toBeVisible();
+  await expect(page.getByText('Enter at least one name.')).toBeVisible();
+  await expect(page.getByText('Choose the photo again.')).toBeVisible();
   await expect(plantForm.addPhoto()).toBeVisible();
   await expect(plantForm.photoPreview()).toBeHidden();
 });
@@ -373,7 +373,7 @@ test('a plant added with a photo shows it on its page and beside its name on Pla
 }) => {
   await plantForm.openNew();
   await plantForm.field('Nickname').fill('Ada');
-  await plantForm.choosePhoto('Add a photo', photos.gpsTagged);
+  await plantForm.choosePhoto('Add photo', photos.gpsTagged);
   await expect(plantForm.photoPreview()).toBeVisible();
 
   await plantForm.submit('Add plant');
@@ -388,7 +388,7 @@ test('a plant added with a photo shows it on its page and beside its name on Pla
 test("Remove on the edit form takes the picture off the plant's page @js", async ({ plantForm, plant }) => {
   await plantForm.openNew();
   await plantForm.field('Nickname').fill('Ada');
-  await plantForm.choosePhoto('Add a photo', photos.gpsTagged);
+  await plantForm.choosePhoto('Add photo', photos.gpsTagged);
   await expect(plantForm.photoPreview()).toBeVisible();
   await plantForm.submit('Add plant');
   await expect.poll(() => loaded(plant.picture())).toBe(true);

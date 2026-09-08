@@ -58,15 +58,15 @@ func TestTokens_TheNoteUnderTheListSaysWhatHasHappenedOnceARowHasRunOut(t *testi
 	f := tokenGarden(t)
 
 	page := f.page(t, f.handler.tokens, tokensPath)
-	if !strings.Contains(page, "An expired token stopped working on its own") {
+	if !strings.Contains(page, "An expired token no longer works") {
 		t.Errorf("the note does not say a row has already run out:\n%s", page)
 	}
 
 	f.exec(t, "DELETE FROM api_token WHERE id = $1", spareTokenID)
 	page = f.page(t, f.handler.tokens, tokensPath)
 
-	if !strings.Contains(page, "Make its replacement before then") {
-		t.Errorf("with every token working, the note does not say to replace one before its date:\n%s", page)
+	if strings.Contains(page, "An expired token no longer works") {
+		t.Errorf("with every token working, the page still has the note about an expired one:\n%s", page)
 	}
 }
 
@@ -95,7 +95,7 @@ func TestTokens_ANewTokenIsShownOnceAndOnlyItsHashIsStored(t *testing.T) {
 	if want := thursday.AddDate(0, 0, 30); !expires.Equal(want) {
 		t.Errorf("the token stops working at %s, want %s", expires, want)
 	}
-	if !strings.Contains(page, "It stops working on 3 Oct") {
+	if !strings.Contains(page, "It expires on 3 Oct") {
 		t.Errorf("the sentence under the token does not name the day it stops working:\n%s", page)
 	}
 	if strings.Contains(f.page(t, f.handler.tokens, tokensPath), token) {

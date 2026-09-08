@@ -1,4 +1,4 @@
-{{define "title"}}sprig — tokens{{end}}
+{{define "title"}}Tokens · sprig{{end}}
 
 {{/* The API tokens a device sends instead of signing in as a person. A token
      can only read and works for this garden alone, so Revoke and Remove act
@@ -9,7 +9,7 @@
 {{if .Secret}}
 {{template "secret" .Secret}}
 {{else}}
-<p class="lead">A token lets a machine read what is due without signing in as a person. It can only read, it works for this garden alone, and it stops working on a date you choose.</p>
+<p class="lead">Tokens let a device or script read what’s due in this garden. They are read-only and expire on the date you choose.</p>
 {{end}}
 {{if .Tokens}}
 <ul class="list">
@@ -27,9 +27,7 @@
 </li>
 {{end}}</ul>
 {{if .AnyExpired}}
-<p class="note">An expired token stopped working on its own. Nothing told the device — it simply started being refused — so make a new one and paste it in, then remove the old row.</p>
-{{else}}
-<p class="note">A token stops working on its date whether or not anybody is watching, and the device it is in will not say so. Make its replacement before then.</p>
+<p class="note">An expired token no longer works. Create a new one and update the device that used it.</p>
 {{end}}
 {{else}}
 <p class="note">No tokens yet.</p>
@@ -37,15 +35,15 @@
 <form class="section" method="post" action="{{.Action}}" novalidate>
 <div class="section__head"><h2 class="section__title">New token</h2></div>
 <div class="field">
-<label class="field__label" for="name">What is it for <span class="field__hint">so a row can be told from the next one</span></label>
+<label class="field__label" for="name">Name <span class="field__hint">e.g. Kitchen display</span></label>
 <input class="input" id="name" name="name" type="text" value="{{.Name}}">
 {{with .NameError}}<p class="field__error">{{.}}</p>{{end}}
 </div>
 <div class="field">
-<label class="field__label" for="expiry">Stops working <span class="field__hint">ninety days is the longest one can live</span></label>
+<label class="field__label" for="expiry">Expires</label>
 <select class="input" id="expiry" name="expiry">{{template "options" .Lives}}</select>
 </div>
-<button class="wide-action" type="submit">Create a token</button>
+<button class="wide-action" type="submit">Create token</button>
 </form>
 </div>
 {{end}}

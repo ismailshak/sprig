@@ -82,7 +82,7 @@ func (h *plants) photoGrid(w http.ResponseWriter, r *http.Request) {
 	if s := r.URL.Query().Get(beforeParam); s != "" {
 		c, ok := parseCursor(s)
 		if !ok {
-			http.NotFound(w, r)
+			notFound(w)
 			return
 		}
 		before = &c
@@ -148,13 +148,13 @@ func photoDateWord(p store.Photo, now time.Time) string {
 func (h *plants) resolvePlant(w http.ResponseWriter, r *http.Request, principal auth.Principal) (store.Plant, bool) {
 	plantID, err := uuid.Parse(r.PathValue("plant"))
 	if err != nil {
-		http.NotFound(w, r)
+		notFound(w)
 		return store.Plant{}, false
 	}
 	plant, err := h.queries.GetPlant(r.Context(), principal.Garden.ID, plantID)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		http.NotFound(w, r)
+		notFound(w)
 		return store.Plant{}, false
 	case err != nil:
 		serverError(h.logger, w, r, "load the plant", err)

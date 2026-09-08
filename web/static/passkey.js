@@ -62,7 +62,7 @@
 
         // parseCreationOptionsFromJSON and parseRequestOptionsFromJSON decode
         // the base64url the server sent into the buffers the credential API
-        // takes. toJSON encodes the answer the same way.
+        // takes. toJSON encodes the credential the same way.
         const credential =
           form.dataset.passkey === 'create'
             ? await navigator.credentials.create({
@@ -74,7 +74,7 @@
 
         field.value = JSON.stringify(credential.toJSON());
         // submit() does not fire this event again, so the post goes straight
-        // out with the answer in the field.
+        // out with the credential in the field.
         form.submit();
       } catch (error) {
         button.disabled = false;
@@ -107,18 +107,18 @@
         return error.message.trim();
       case 'NotAllowedError':
         if (ceremony === 'get') {
-          return 'Nothing signed in. Either you cancelled, or this device holds no passkey for sprig. The browser does not say which.';
+          return 'Sign-in was cancelled, or this device has no passkey for sprig.';
         }
-        return 'No passkey was added. Either you cancelled, or this device cannot do what sprig needs: store the passkey itself, and check that it is you with a screen lock, a fingerprint or a PIN. The browser does not say which.';
+        return 'No passkey was added. You may have cancelled, or this device can’t store passkeys.';
       case 'InvalidStateError':
         return 'This device already has a passkey for sprig.';
       case 'NotSupportedError':
       case 'ConstraintError':
-        return 'This device cannot store a passkey that sprig can use. It has to be able to save the passkey and to check that it is you, with a screen lock, a fingerprint or a PIN.';
+        return 'This device can’t store a passkey. It needs a screen lock, fingerprint or PIN.';
       case 'SecurityError':
-        return 'Passkeys need a secure connection and a domain the browser accepts for this page. Either this page is not on https, or sprig is set up under a domain that does not match it.';
+        return 'Passkeys need a secure (https) connection to the address sprig is configured for.';
       default:
-        return 'Something went wrong talking to this device. Try again.';
+        return 'Something went wrong. Try again.';
     }
   }
 })();

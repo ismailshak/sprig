@@ -41,7 +41,7 @@
 <div class="app__main">
 {{/* offline.js unhides this line when the service worker serves the page from
      its cache, and fills the time in from the copy's Date header. */}}
-<p class="offline" id="offline" role="status" hidden>You're offline. This page was last fetched <time></time>.</p>
+<p class="offline" id="offline" role="status" hidden>You’re offline. This page was last loaded <time></time>.</p>
 {{/* Each page renders its own topbar and app__body, because their max width
      above 900px differs by page and is set by a modifier class on them. */}}
 {{block "main" .}}{{end}}

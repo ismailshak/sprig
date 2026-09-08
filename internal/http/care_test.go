@@ -178,26 +178,26 @@ func TestSheet_OpensOnTheCareOfTheRowItWasOpenedFrom(t *testing.T) {
 	}
 
 	by := fields(dialog)
-	if got := chips(by["What"]); strings.Join(got, "|") != "Water|Feed" {
-		t.Errorf("What offers %v, want the two cares Nigel is scheduled for", got)
+	if got := chips(by["Care"]); strings.Join(got, "|") != "Water|Feed" {
+		t.Errorf("Care offers %v, want the two cares Nigel is scheduled for", got)
 	}
-	if m := pressedButton.FindStringSubmatch(by["What"]); m == nil || m[1] != "Water" {
-		t.Errorf("What does not have Water pressed:\n%s", by["What"])
+	if m := pressedButton.FindStringSubmatch(by["Care"]); m == nil || m[1] != "Water" {
+		t.Errorf("Care does not have Water pressed:\n%s", by["Care"])
 	}
 	if got := checked(by["Outcome"]); got != "Done" {
 		t.Errorf("Outcome starts on %q, want Done", got)
 	}
-	if got := chips(by["When it happened"]); strings.Join(got, "|") != "Just now|Earlier today|Yesterday|Another day" {
+	if got := chips(by["When"]); strings.Join(got, "|") != "Just now|Earlier today|Yesterday|Another day" {
 		t.Errorf("When offers %v", got)
 	}
-	if got := checked(by["When it happened"]); got != "Just now" {
+	if got := checked(by["When"]); got != "Just now" {
 		t.Errorf("When starts on %q, want Just now", got)
 	}
-	if got := chips(by["Ask again in"]); strings.Join(got, "|") != "1 day|2 days|3 days|The usual 4 days" {
-		t.Errorf("Ask again in offers %v, want three short re-checks and Nigel's own four days", got)
+	if got := chips(by["Remind me in"]); strings.Join(got, "|") != "1 day|2 days|3 days|4 days (usual)" {
+		t.Errorf("Remind me in offers %v, want three short re-checks and Nigel's own four days", got)
 	}
-	if got := checked(by["Ask again in"]); got != "2 days" {
-		t.Errorf("Ask again in starts on %q, want 2 days", got)
+	if got := checked(by["Remind me in"]); got != "2 days" {
+		t.Errorf("Remind me in starts on %q, want 2 days", got)
 	}
 	if !strings.Contains(dialog, `<button class="sheet__go sheet__done" name="care" value="water">Log watering</button>`) {
 		t.Error("the primary button is not Log watering carrying the care")
@@ -207,15 +207,15 @@ func TestSheet_OpensOnTheCareOfTheRowItWasOpenedFrom(t *testing.T) {
 	}
 	// 08:00 UTC on the fixture's Thursday is 09:00 in London.
 	if !strings.Contains(dialog, `name="time" value="09:00"`) || !strings.Contains(dialog, `name="at" value="2026-09-03T09:00"`) {
-		t.Errorf("the pickers do not start at now in London:\n%s", by["When it happened"])
+		t.Errorf("the pickers do not start at now in London:\n%s", by["When"])
 	}
 }
 
 func TestSheet_APlantWithOneCareHasNoCareTypeChoice(t *testing.T) {
 	f := rosewood(t)
 	dialog := dialogElement.FindString(f.sheet(t, sheetPath(dorisID, "water"), false).Body.String())
-	if _, ok := fields(dialog)["What"]; ok {
-		t.Error("Doris is only watered, and the sheet asks What")
+	if _, ok := fields(dialog)["Care"]; ok {
+		t.Error("Doris is only watered, and the sheet asks Care")
 	}
 	if !strings.Contains(dialog, ">Log watering</button>") {
 		t.Error("the primary button is not Log watering")
@@ -230,23 +230,23 @@ func TestSheet_SwitchingCareTypeKeepsTheDraftAndShowsThatTypesUsualInterval(t *t
 	dialog := dialogElement.FindString(f.sheet(t, logPath(nigelID)+"?"+query.Encode(), false).Body.String())
 	by := fields(dialog)
 
-	if m := pressedButton.FindStringSubmatch(by["What"]); m == nil || m[1] != "Feed" {
-		t.Errorf("What does not have Feed pressed:\n%s", by["What"])
+	if m := pressedButton.FindStringSubmatch(by["Care"]); m == nil || m[1] != "Feed" {
+		t.Errorf("Care does not have Feed pressed:\n%s", by["Care"])
 	}
 	if got := checked(by["Outcome"]); got != "Skipped" {
 		t.Errorf("Outcome is %q after the switch, want Skipped kept", got)
 	}
-	if got := chips(by["Ask again in"]); strings.Join(got, "|") != "1 day|2 days|3 days|The usual 21 days" {
-		t.Errorf("Ask again in offers %v, want the feeding's three weeks as the usual", got)
+	if got := chips(by["Remind me in"]); strings.Join(got, "|") != "1 day|2 days|3 days|21 days (usual)" {
+		t.Errorf("Remind me in offers %v, want the feeding's three weeks as the usual", got)
 	}
-	if got := checked(by["Ask again in"]); got != "3 days" {
-		t.Errorf("Ask again in is %q after the switch, want 3 days kept", got)
+	if got := checked(by["Remind me in"]); got != "3 days" {
+		t.Errorf("Remind me in is %q after the switch, want 3 days kept", got)
 	}
 	if !strings.Contains(dialog, `value="Soil still damp"`) {
 		t.Error("the note was lost in the switch")
 	}
-	if !strings.Contains(dialog, `<button class="sheet__go sheet__skipped" name="care" value="feed">Record a skip</button>`) {
-		t.Error("the primary button is not Record a skip carrying the feed")
+	if !strings.Contains(dialog, `<button class="sheet__go sheet__skipped" name="care" value="feed">Log skip</button>`) {
+		t.Error("the primary button is not Log skip carrying the feed")
 	}
 	if !strings.Contains(dialog, `<input type="hidden" name="row" value="water">`) || !strings.Contains(dialog, `hx-target="#`+rowID(nigelID)+`"`) {
 		t.Error("the sheet forgot which row it was opened from")
@@ -257,14 +257,14 @@ func TestSheet_ACareWithNoIntervalInDaysOffersSevenDays(t *testing.T) {
 	f := rosewood(t)
 	f.exec(t, "UPDATE care_schedule SET interval_count = 1, interval_unit = 'month' WHERE plant_id = $1", spikeID)
 	dialog := dialogElement.FindString(f.sheet(t, sheetPath(spikeID, "water"), false).Body.String())
-	if got := chips(fields(dialog)["Ask again in"]); strings.Join(got, "|") != "1 day|2 days|3 days|7 days" {
-		t.Errorf("Ask again in offers %v, want a plain week where a month is not a number of days", got)
+	if got := chips(fields(dialog)["Remind me in"]); strings.Join(got, "|") != "1 day|2 days|3 days|7 days" {
+		t.Errorf("Remind me in offers %v, want a plain week where a month is not a number of days", got)
 	}
 
 	f.exec(t, "UPDATE care_schedule SET interval_count = 2, interval_unit = 'day' WHERE plant_id = $1", spikeID)
 	dialog = dialogElement.FindString(f.sheet(t, sheetPath(spikeID, "water"), false).Body.String())
-	if got := chips(fields(dialog)["Ask again in"]); strings.Join(got, "|") != "1 day|The usual 2 days|3 days" {
-		t.Errorf("Ask again in offers %v, want the usual to take the short chip's place", got)
+	if got := chips(fields(dialog)["Remind me in"]); strings.Join(got, "|") != "1 day|2 days (usual)|3 days" {
+		t.Errorf("Remind me in offers %v, want the usual to take the short chip's place", got)
 	}
 }
 
@@ -428,10 +428,10 @@ func TestLog_ATimeInTheFutureIsRefused(t *testing.T) {
 		form url.Values
 		want string
 	}{
-		{"a clock later than now", url.Values{"when": {"today"}, "time": {"23:00"}}, "That is later than now."},
-		{"a day later than now", url.Values{"when": {"other"}, "at": {"2026-09-04T09:00"}}, "That is later than now."},
-		{"no clock", url.Values{"when": {"yesterday"}, "time": {""}}, "Give a time."},
-		{"no day", url.Values{"when": {"other"}, "at": {"soon"}}, "Give a day and a time."},
+		{"a clock later than now", url.Values{"when": {"today"}, "time": {"23:00"}}, "That time is in the future."},
+		{"a day later than now", url.Values{"when": {"other"}, "at": {"2026-09-04T09:00"}}, "That time is in the future."},
+		{"no clock", url.Values{"when": {"yesterday"}, "time": {""}}, "Enter a time."},
+		{"no day", url.Values{"when": {"other"}, "at": {"soon"}}, "Enter a day and time."},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -448,10 +448,10 @@ func TestLog_ATimeInTheFutureIsRefused(t *testing.T) {
 				t.Error("the refusal is not aimed back at the sheet")
 			}
 			dialog := dialogElement.FindString(rec.Body.String())
-			if !strings.Contains(fields(dialog)["When it happened"], `<p class="field__error">`+c.want+`</p>`) {
+			if !strings.Contains(fields(dialog)["When"], `<p class="field__error">`+c.want+`</p>`) {
 				t.Errorf("the sheet does not say %q under When:\n%s", c.want, text(dialog))
 			}
-			if checked(fields(dialog)["When it happened"]) != map[string]string{"today": "Earlier today", "yesterday": "Yesterday", "other": "Another day"}[c.form.Get("when")] {
+			if checked(fields(dialog)["When"]) != map[string]string{"today": "Earlier today", "yesterday": "Yesterday", "other": "Another day"}[c.form.Get("when")] {
 				t.Error("the sheet came back on a different day")
 			}
 			if n := len(f.events(t, dorisID)); n != 1 {
@@ -478,12 +478,12 @@ func TestLog_ASkipStoresTheOverrideIntervalInDays(t *testing.T) {
 		}
 		e := f.latest(t, nigelID)
 		if e.Done || e.OverrideIntervalDays == nil || *e.OverrideIntervalDays != 2 {
-			t.Errorf("the event is %+v, want a skip asking again in 2 days", e)
+			t.Errorf("the event is %+v, want a skip with a reminder in 2 days", e)
 		}
 		if e.Note == nil || *e.Note != "Soil still damp" {
 			t.Errorf("the note is %v, want it trimmed", e.Note)
 		}
-		if got := text(rowElement.FindString(rec.Body.String())); got != "Nigel Skipped · asking again in 2 days Undo" {
+		if got := text(rowElement.FindString(rec.Body.String())); got != "Nigel Skipped · reminder in 2 days Undo" {
 			t.Errorf("the row says %q", got)
 		}
 	})
@@ -728,7 +728,7 @@ func TestWindow_TheHeadingIsReturnedWithTheRow(t *testing.T) {
 	t.Run("a day with cares outstanding shows the count", func(t *testing.T) {
 		f := rosewood(t)
 		head := headElement.FindString(f.post(t, dorisID.String(), url.Values{"care": {"water"}}, true).Body.String())
-		if got := text(head); got != "2 plants need you today, 1 of them overdue." {
+		if got := text(head); got != "2 plants due today, 1 of them overdue." {
 			t.Errorf("the head says %q, want the count without Doris", got)
 		}
 		if !strings.Contains(head, `hx-swap-oob="true"`) {
@@ -754,7 +754,7 @@ func TestWindow_TheHeadingIsReturnedWithTheRow(t *testing.T) {
 		f.post(t, dorisID.String(), url.Values{"row": {"water"}, "care": {"water"}}, true)
 		event := f.latest(t, dorisID)
 		head := headElement.FindString(f.undo(t, dorisID, event.ID, "water", true).Body.String())
-		if got := text(head); got != "3 plants need you today, 1 of them overdue." {
+		if got := text(head); got != "3 plants due today, 1 of them overdue." {
 			t.Errorf("the head says %q, want Doris counted again", got)
 		}
 	})
@@ -912,8 +912,8 @@ func TestLog_ASkipIsNotifiedAsSkipped(t *testing.T) {
 
 	f.post(t, nigelID.String(), url.Values{"row": {"water"}, "care": {"feed"}, "outcome": {"skipped"}, "again": {"3"}}, true)
 
-	if len(*got) != 1 || (*got)[0].n.Body != "Ellie skipped Nigel." {
-		t.Errorf("notified %+v, want one notification saying Ellie skipped Nigel.", *got)
+	if len(*got) != 1 || (*got)[0].n.Body != "Ellie skipped feeding Nigel." {
+		t.Errorf("notified %+v, want one notification saying Ellie skipped feeding Nigel.", *got)
 	}
 }
 

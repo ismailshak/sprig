@@ -34,9 +34,9 @@ var seededCareTypes = [...]struct{ name, slug string }{
 
 // The message shown under a field that was posted empty.
 const (
-	setupGardenMissing = "Give the garden a name."
-	setupNameMissing   = "Give yourself a name to sign your care with."
-	zoneMissing        = "Pick a timezone."
+	setupGardenMissing = "Enter a name for your garden."
+	setupNameMissing   = "Enter a display name."
+	zoneMissing        = "Choose a timezone."
 )
 
 // errSetupClosed is returned inside the transaction that creates the garden
@@ -93,7 +93,7 @@ type setupPage struct {
 	// Challenge is the URL the page's script posts the form to for a
 	// registration challenge.
 	Challenge string
-	// Field is the name of the hidden input the browser's answer goes in. It
+	// Field is the name of the hidden input the browser's credential goes in. It
 	// is rendered on the input and again as the form's data-field, so the
 	// script does not have the name written into it.
 	Field string
@@ -167,7 +167,7 @@ func (h *setup) show(w http.ResponseWriter, r *http.Request) {
 		serverError(h.logger, w, r, "open the setup page", err)
 		return
 	} else if !open {
-		http.NotFound(w, r)
+		notFound(w)
 		return
 	}
 	if hasSession(r, h.sessions, h.resolver, h.now()) {
@@ -189,11 +189,11 @@ func (h *setup) challenge(w http.ResponseWriter, r *http.Request) {
 		serverError(h.logger, w, r, "start the setup", err)
 		return
 	} else if !open {
-		http.NotFound(w, r)
+		notFound(w)
 		return
 	}
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "the form did not parse", http.StatusBadRequest)
+		badRequest(w)
 		return
 	}
 	form := readSetupForm(r)
@@ -202,7 +202,7 @@ func (h *setup) challenge(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !slices.Contains(zones, form.zone) {
-		http.Error(w, "the form did not offer that", http.StatusBadRequest)
+		badRequest(w)
 		return
 	}
 
@@ -227,16 +227,16 @@ func (h *setup) create(w http.ResponseWriter, r *http.Request) {
 		serverError(h.logger, w, r, "set up the garden", err)
 		return
 	} else if !open {
-		http.NotFound(w, r)
+		notFound(w)
 		return
 	}
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "the form did not parse", http.StatusBadRequest)
+		badRequest(w)
 		return
 	}
 	form := readSetupForm(r)
 	if form.zone != "" && !slices.Contains(zones, form.zone) {
-		http.Error(w, "the form did not offer that", http.StatusBadRequest)
+		badRequest(w)
 		return
 	}
 	page := newSetupPage(form, false, h.enabled)
@@ -292,7 +292,7 @@ func (h *setup) create(w http.ResponseWriter, r *http.Request) {
 		return err
 	})
 	if errors.Is(err, errSetupClosed) {
-		http.NotFound(w, r)
+		notFound(w)
 		return
 	}
 	if err != nil {
@@ -339,7 +339,7 @@ func createGardenOwnedBy(ctx context.Context, q *store.Queries, name string, use
 // and the reason the device was not enrolled above the form. A post with no
 // credential in it gets a 400 instead, and anything else a 500.
 func (h *setup) refuse(w http.ResponseWriter, r *http.Request, page setupPage, err error) {
-	page.Refusal = registrationRefusal(h.logger, w, r, err, "Create the garden", "set up the garden")
+	page.Refusal = registrationRefusal(h.logger, w, r, err, "set up the garden")
 	if page.Refusal == "" {
 		return
 	}

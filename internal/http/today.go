@@ -185,9 +185,9 @@ type todayPage struct {
 }
 
 type todayHead struct {
-	// Exactly one of Summary, Clear and Empty is set. Clear stands in for
-	// Empty while logged rows are still inside their grace windows, because
-	// the empty state would say they had gone.
+	// Exactly one of Summary, Clear and Empty is set. Clear is used instead of
+	// Empty while logged rows are still inside their grace windows, because the
+	// empty state would say they had gone.
 	Summary *todaySummary
 	Clear   bool
 	Empty   *todayEmpty
@@ -234,7 +234,7 @@ type careSwap struct {
 // careSettled is the response when a row's grace window has closed. Only the
 // heading is sent while other rows are still inside their windows, because
 // replacing the body would remove them too. The feed is left out because a
-// closing window records nothing.
+// window closing adds no line to it.
 type careSettled struct {
 	Head todayHead
 	Body *todayPage
@@ -262,7 +262,7 @@ type careRow struct {
 	Name string
 	// Botanical is true when Name is the botanical name, shown in italics.
 	Botanical bool
-	Location  string
+	Room      string
 	// Picture is the URL of the plant's profile picture as a square, empty for
 	// a plant with no picture.
 	Picture string
@@ -349,15 +349,15 @@ func newTodayEmpty(principal auth.Principal, day schedule.Day, latest []store.Ca
 		// route refuses anyone else.
 		empty := &todayEmpty{
 			Title: "No plants yet",
-			Line:  "Add a plant and sprig will remind you when to water it.",
+			Line:  "Add a plant to see its tasks here.",
 		}
 		if principal.Can(auth.PlantCreate) {
-			empty.Action = &link{Label: "Add a plant", Href: newPlantPath}
+			empty.Action = &link{Label: "Add plant", Href: newPlantPath}
 		}
 		return empty
 	}
 
-	empty := &todayEmpty{Title: "Nothing needs you today", Line: "Nothing is due, and nothing is overdue."}
+	empty := &todayEmpty{Title: "Nothing due today", Line: "Nothing is due or overdue."}
 	if caredForOn(latest, now) {
 		empty.Done = true
 		empty.Title = "All done for today"
@@ -406,7 +406,7 @@ func newCareRow(row schedule.Row, now time.Time) careRow {
 		Slug:      row.Care.CareType.Slug,
 	}
 	if row.Plant.Location != nil {
-		r.Location = *row.Plant.Location
+		r.Room = *row.Plant.Location
 	}
 	switch row.Care.State {
 	case schedule.Overdue:
@@ -460,7 +460,7 @@ func newFeedLine(principal auth.Principal, e store.ListRecentCareEventsRow, now 
 }
 
 // mayUndo reports whether a feed line shows Undo. The event has to be the
-// reader's own and inside undoWindow, since undo is for a care just recorded.
+// reader's own and inside undoWindow, since undo is for a care just logged.
 // The delete itself is limited only by capability, so a button rendered inside
 // the window still works after it closes.
 func mayUndo(principal auth.Principal, e store.CareEvent, now time.Time) bool {

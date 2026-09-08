@@ -7,22 +7,22 @@ export class TokensScreen {
     await this.page.goto('/more/tokens');
   }
 
-  // A token's row, found by what it is for. The name is the first thing in the
+  // A token's row, found by its name. The name is the first thing in the
   // row, so the pattern is anchored to it.
   row(name: string): Locator {
     return this.page.getByRole('listitem').filter({ has: this.page.getByText(new RegExp(`^${name}$`)) });
   }
 
   name(): Locator {
-    return this.page.getByLabel(/^What is it for\b/);
+    return this.page.getByLabel(/^Name\b/);
   }
 
   expiry(): Locator {
-    return this.page.getByLabel(/^Stops working\b/);
+    return this.page.getByLabel(/^Expires\b/);
   }
 
   create(): Locator {
-    return this.page.getByRole('button', { name: 'Create a token' });
+    return this.page.getByRole('button', { name: 'Create token' });
   }
 
   // The token, shown once. Every token starts with the scheme, and the prefixes

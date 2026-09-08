@@ -118,8 +118,8 @@ func (f *recoverFixture) challenge(t *testing.T, code string) (*protocol.Credent
 	return &creation, cookie
 }
 
-// answer posts device's answer to creation, with code in the form's hidden
-// input and cookie as the ceremony cookie.
+// answer posts the credential device made for creation, with code in the form's
+// hidden input and cookie as the ceremony cookie.
 func (f *recoverFixture) answer(t *testing.T, code string, creation *protocol.CredentialCreation, cookie *http.Cookie, device *passkeytest.Authenticator) *httptest.ResponseRecorder {
 	t.Helper()
 
@@ -128,8 +128,8 @@ func (f *recoverFixture) answer(t *testing.T, code string, creation *protocol.Cr
 	return f.request(t, f.handler.register, recoverPasskeyPath, form, cookie)
 }
 
-// register runs the whole ceremony for code with device answering: the post
-// for the challenge, then the post with the device's answer.
+// register runs the whole ceremony for code on device: the post for the
+// challenge, then the post with the credential it made.
 func (f *recoverFixture) register(t *testing.T, code string, device *passkeytest.Authenticator) *httptest.ResponseRecorder {
 	t.Helper()
 
@@ -213,13 +213,13 @@ func TestRecover_ThePageIsOneCodeFieldAndSaysItCannotHelpSomebodyWhoNeverMadeCod
 	if !strings.Contains(page, `name="`+codeField+`" type="text"`) {
 		t.Errorf("the page has no field for the code:\n%s", page)
 	}
-	if !strings.Contains(page, `action="`+recoverPath+`"`) || !strings.Contains(page, ">Use this code</button>") {
+	if !strings.Contains(page, `action="`+recoverPath+`"`) || !strings.Contains(page, ">Continue</button>") {
 		t.Errorf("the form does not post the code to the page's own URL:\n%s", page)
 	}
 	if strings.Contains(page, "<nav") {
 		t.Errorf("the page has a tab bar, and nobody here is signed in:\n%s", page)
 	}
-	if !strings.Contains(page, "If you never made any codes, this page cannot help you") {
+	if !strings.Contains(page, "No recovery codes? Ask the garden’s owner for a new invite link.") {
 		t.Errorf("the page does not say who it cannot help:\n%s", text(page))
 	}
 }
@@ -230,7 +230,7 @@ func TestRecover_ALiveCodeTypedInCapitalsAndSpacesOpensAddThisDevice(t *testing.
 	rec := f.check(t, " K4RT 9WME3XQD\n")
 
 	addDevice(t, rec, http.StatusOK, elliesCode)
-	if !strings.Contains(rec.Body.String(), "The code worked. Register a passkey on this device now, then sign in with it.") {
+	if !strings.Contains(rec.Body.String(), "Code accepted. Add a passkey on this device, then sign in with it.") {
 		t.Errorf("the page does not say the code worked:\n%s", text(rec.Body.String()))
 	}
 	if at := f.usedAt(t, elliesCode); at != nil {
@@ -342,7 +342,7 @@ func TestRecover_ADeviceThatDidNotCheckWhoWasUsingItIsRefusedAndTheCodeStaysLive
 	rec := f.register(t, elliesCode, device)
 
 	page := addDevice(t, rec, http.StatusUnprocessableEntity, elliesCode)
-	if !strings.Contains(page, "This device did not check that it was you.") {
+	if !strings.Contains(page, "This device didn’t verify you.") {
 		t.Errorf("the page does not say the device did not verify:\n%s", text(page))
 	}
 	if at := f.usedAt(t, elliesCode); at != nil {
@@ -376,7 +376,7 @@ func TestRecover_AnAnswerWithNoCeremonyLeavesTheCodeLiveAndSaysToPressAgain(t *t
 	rec := f.request(t, f.handler.register, recoverPasskeyPath, url.Values{codeField: {elliesCode}, credentialField: {"{}"}})
 
 	page := addDevice(t, rec, http.StatusUnprocessableEntity, elliesCode)
-	if !strings.Contains(page, "That took too long, so the request has expired. Press "+registerLabel+" again.") {
+	if !strings.Contains(page, "The request timed out. Try again.") {
 		t.Errorf("the page does not say the request expired:\n%s", text(page))
 	}
 	if at := f.usedAt(t, elliesCode); at != nil {
@@ -393,7 +393,7 @@ func recoverMux(t *testing.T, f *recoverFixture) http.Handler {
 	return New(testLogger, testSessions(), f.handler.passkeys, rejectEveryToken, noLiveToken, f.queries, testPhotos(t), testTemplates(), testAssets(), "", false, testPushKey, nil, nil, nil)
 }
 
-func TestRecover_TheNinthCodePostedFromOneAddressInAMinuteIsRefusedWithTooManyTries(t *testing.T) {
+func TestRecover_TheNinthCodePostedFromOneAddressInAMinuteIsRefusedWithTooManyAttempts(t *testing.T) {
 	f := recoverGarden(t)
 	handler := recoverMux(t, f)
 
@@ -408,8 +408,8 @@ func TestRecover_TheNinthCodePostedFromOneAddressInAMinuteIsRefusedWithTooManyTr
 		t.Fatalf("the ninth post: status = %d, want %d", rec.Code, http.StatusTooManyRequests)
 	}
 	page := rec.Body.String()
-	if !strings.Contains(page, `<h1 class="bare__title">`+tooManyTriesTitle+`</h1>`) || !strings.Contains(text(page), tooManyTriesLine) {
-		t.Errorf("the page does not say there were too many tries:\n%s", text(page))
+	if !strings.Contains(page, `<h1 class="bare__title">`+tooManyAttemptsTitle+`</h1>`) || !strings.Contains(text(page), tooManyAttemptsLine) {
+		t.Errorf("the page does not say there were too many attempts:\n%s", text(page))
 	}
 	if strings.Contains(page, "<form") || strings.Contains(page, addThisDevice) {
 		t.Errorf("the ninth post checked the code, and a live one opened the registration form:\n%s", text(page))
@@ -437,7 +437,7 @@ func TestRecover_TheThreeRoutesShareOneBudgetOfTenAMinuteAcrossEveryAddress(t *t
 	if rec.Code != http.StatusTooManyRequests {
 		t.Fatalf("the eleventh post: status = %d, want %d", rec.Code, http.StatusTooManyRequests)
 	}
-	if strings.TrimSpace(rec.Body.String()) != tooManyTriesTitle+". "+tooManyTriesLine {
+	if strings.TrimSpace(rec.Body.String()) != tooManyAttemptsTitle+". "+tooManyAttemptsLine {
 		t.Errorf("the body is %q, want the rate-limit sentence alone, because the page's script shows it as it is", rec.Body.String())
 	}
 	if n := f.count(t, "webauthn_ceremony"); n != 0 {

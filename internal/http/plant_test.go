@@ -183,8 +183,8 @@ func TestPlant_ABotanicalOnlyNameIsTheHeadingInItalics(t *testing.T) {
 }
 
 // Sprout has a nickname and nothing else: no second name, no room, no
-// reference fields.
-func TestPlant_APlantWithOneNameAndNoReferenceHasNoEmptySections(t *testing.T) {
+// detail fields.
+func TestPlant_APlantWithOneNameAndNoDetailsHasNoEmptySections(t *testing.T) {
 	page := rosewoodPlant(t).page(t, sproutID)
 
 	if name := heroName.FindStringSubmatch(page); name == nil || text(name[2]) != "Sprout" {
@@ -196,12 +196,12 @@ func TestPlant_APlantWithOneNameAndNoReferenceHasNoEmptySections(t *testing.T) {
 	if heroWhere.MatchString(page) {
 		t.Error("the page drew a room for a plant that has none")
 	}
-	if strings.Contains(page, "Reference") {
-		t.Errorf("a plant with nothing written down drew a Reference section:\n%s", text(page))
+	if strings.Contains(page, "Details") {
+		t.Errorf("a plant with nothing written down drew a Details section:\n%s", text(page))
 	}
 }
 
-func TestPlant_ReferenceShowsOnlySetFieldsInAFixedOrder(t *testing.T) {
+func TestPlant_DetailsShowsOnlySetFieldsInAFixedOrder(t *testing.T) {
 	f := rosewoodPlant(t)
 	f.exec(t, `UPDATE plant SET sun = 'Bright indirect.', feed_needs = 'Half strength.', pot = '30cm terracotta.',
 		notes = 'Wipe the leaves.', acquired_year = 2024, acquired_month = 3 WHERE id = $1`, bigFellaID)
@@ -217,7 +217,7 @@ func TestPlant_ReferenceShowsOnlySetFieldsInAFixedOrder(t *testing.T) {
 		{"Pot", "30cm terracotta."},
 	}
 	if !slices.Equal(facts, want) {
-		t.Errorf("the reference reads %v, want %v", facts, want)
+		t.Errorf("the details read %v, want %v", facts, want)
 	}
 	if note := panelNote.FindStringSubmatch(page); note == nil || text(note[1]) != "Wipe the leaves." {
 		t.Errorf("the note reads %v, want Wipe the leaves.", note)
@@ -378,7 +378,7 @@ func TestPlant_APlantWithCareEventsLinksToItsOwnActivityLog(t *testing.T) {
 
 	label, href := allActivity(f.page(t, bigFellaID))
 
-	if want := "All activity for Big Fella"; label != want {
+	if want := "All activity"; label != want {
 		t.Errorf("the link under Recent reads %q, want %q", label, want)
 	}
 	if want := plantActivityPath(bigFellaID); href != want {
@@ -395,12 +395,12 @@ func TestPlant_APlantWithNoCareEventsHasNoActivityLink(t *testing.T) {
 	}
 }
 
-func TestPlant_APlantWithNoEventsSaysNothingRecorded(t *testing.T) {
+func TestPlant_APlantWithNoEventsSaysNoActivityYet(t *testing.T) {
 	f := rosewoodPlant(t)
 	f.exec(t, "DELETE FROM care_event WHERE plant_id = $1", sproutID)
 
-	if got := recentOf(f.page(t, sproutID)); !slices.Equal(got, []string{"Nothing recorded yet."}) {
-		t.Errorf("Recent reads %v, want Nothing recorded yet.", got)
+	if got := recentOf(f.page(t, sproutID)); !slices.Equal(got, []string{"No activity yet."}) {
+		t.Errorf("Recent reads %v, want No activity yet.", got)
 	}
 }
 
@@ -578,7 +578,7 @@ func TestPlantSheet_ARefusedTimeReRendersThePlantsPage(t *testing.T) {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusUnprocessableEntity)
 	}
 	body := rec.Body.String()
-	if !strings.Contains(body, "That is later than now.") {
+	if !strings.Contains(body, "That time is in the future.") {
 		t.Errorf("the refusal says nothing:\n%s", text(body))
 	}
 	if name := heroName.FindStringSubmatch(body); name == nil || text(name[2]) != "Big Fella" {

@@ -110,7 +110,7 @@ func cannotAccept(t *testing.T, rec *httptest.ResponseRecorder) string {
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("status = %d, want %d", rec.Code, http.StatusNotFound)
 	}
-	if !strings.Contains(page, "This link cannot be used") {
+	if !strings.Contains(page, "This invite link can’t be used") {
 		t.Errorf("the page does not say the link cannot be used:\n%s", text(page))
 	}
 	if strings.Contains(page, "<form") {
@@ -134,9 +134,9 @@ func TestAccept_ThePageOffersJoinWithTheEndDateInTheAccountsOwnZone(t *testing.T
 	page := rec.Body.String()
 	for _, want := range []string{
 		"Join Rosewood as Sam?",
-		"Ellie invited you to Rosewood. You&#39;ll join as a sitter. Logs care and sees everything. Adds no photos and no plants. Your access ends on 17 Sep.",
+		"Ellie invited you to Rosewood. You’ll join as a sitter. Sitters can log care and view everything, but not add plants or photos. Your access ends on 17 Sep.",
 		`<form method="post" action="` + acceptPath(sitterLink) + `">`,
-		"Not Sam? <a href=\"" + signInToAcceptPath(sitterLink) + "\">Sign in as somebody else</a>.",
+		"Not Sam? <a href=\"" + signInToAcceptPath(sitterLink) + "\">Sign in as someone else</a>.",
 	} {
 		if !strings.Contains(page, want) {
 			t.Errorf("the page lacks %s:\n%s", want, page)
@@ -272,8 +272,8 @@ func TestAccept_AnAccountAlreadyInTheGardenIsToldSoAndTheLinkStaysUnused(t *test
 	}
 	page := rec.Body.String()
 	for _, want := range []string{
-		"You&rsquo;re already in Rosewood",
-		"This account is already in Rosewood, so there is nothing to join. The link has not been used.",
+		"You’re already in Rosewood",
+		"This account is already a member. The link hasn’t been used.",
 		`<form method="post" action="` + gardensPath + `">`,
 		`<input type="hidden" name="` + gardenField + `" value="` + moreGardenID.String() + `">`,
 	} {
@@ -361,7 +361,7 @@ func TestInvited_AJoinLinkOffersSignInForSomebodyWithAnAccountAndAReenrolmentLin
 	f := invitedGarden(t)
 
 	page := f.show(t, sitterLink).Body.String()
-	if !strings.Contains(page, `Already have a sprig account? <a href="`+signInToAcceptPath(sitterLink)+`">Sign in to join as yourself</a>.`) {
+	if !strings.Contains(page, `Already have an account? <a href="`+signInToAcceptPath(sitterLink)+`">Sign in to join</a>.`) {
 		t.Errorf("the join page does not offer sign in for somebody with an account:\n%s", page)
 	}
 	if !strings.Contains(signInToAcceptPath(sitterLink), signInPath+"?"+nextField+"=") {

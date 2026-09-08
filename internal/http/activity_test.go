@@ -179,7 +179,7 @@ func daysBack(newest, oldest int) []int {
 
 // railItemElement matches every item in the log, whichever of the three kinds
 // it is. The classes are captured rather than listed, because a deleted row
-// carries row--done as well.
+// has row--done as well.
 var railItemElement = regexp.MustCompile(`(?s)<li class="([^"]*)"[^>]*>(.*?)</li>`)
 
 type logEntry struct {
@@ -260,7 +260,7 @@ func TestActivity_AGapMarkerSaysHowManyDaysHadNothing(t *testing.T) {
 
 	got := textOf(logEntries(f.show(t)), gapKind)
 
-	want := []string{"nothing for 11 days", "nothing for 3 days"}
+	want := []string{"No activity for 11 days", "No activity for 3 days"}
 	if !slices.Equal(got, want) {
 		t.Errorf("the log marks %v, want %v", got, want)
 	}
@@ -284,7 +284,7 @@ func TestActivity_AGapMarkerIsPlacedBetweenTheDaysItSeparates(t *testing.T) {
 
 	var before, after string
 	for i, l := range lines {
-		if l.kind != gapKind || l.text != "nothing for 11 days" {
+		if l.kind != gapKind || l.text != "No activity for 11 days" {
 			continue
 		}
 		before, after = lines[i-1].text, lines[i+1].text
@@ -341,7 +341,7 @@ func TestActivity_ASkipSaysWhenItWillBeAskedAgain(t *testing.T) {
 
 	got := textOf(logEntries(f.show(t)), eventKind)[1]
 
-	if want := "Doris Sam skipped · 6:15am Asking again in 2 days"; got != want {
+	if want := "Doris Sam skipped · 6:15am Reminder in 2 days"; got != want {
 		t.Errorf("the skipped row reads %q, want %q", got, want)
 	}
 }
@@ -400,14 +400,14 @@ func TestActivity_AnotherGardensEventsAreNotListed(t *testing.T) {
 	}
 }
 
-func TestActivity_AGardenWithNothingRecordedSaysSo(t *testing.T) {
+func TestActivity_AGardenWithNothingLoggedSaysNoActivityYet(t *testing.T) {
 	f := rosewoodLog(t)
 	f.exec(t, "DELETE FROM care_event WHERE garden_id = $1", rosewoodID)
 
 	page := f.show(t)
 
-	if got := text(page); !strings.Contains(got, "Nothing recorded yet") {
-		t.Errorf("the empty log reads %q, want it to say nothing is recorded", got)
+	if got := text(page); !strings.Contains(got, "No activity yet") {
+		t.Errorf("the empty log reads %q, want it to say there is no activity yet", got)
 	}
 	if logEntries(page) != nil {
 		t.Error("the empty log renders a list")
@@ -593,7 +593,7 @@ func TestActivity_ASkippedCareOnAFilteredRowIsShownAsSkipped(t *testing.T) {
 
 	page := f.get(t, plantActivityPath(dorisID))
 
-	if got := textOf(logEntries(page), eventKind)[0]; got != "Skipped Sam · today, 6:15am Asking again in 2 days" {
+	if got := textOf(logEntries(page), eventKind)[0]; got != "Skipped Sam · today, 6:15am Reminder in 2 days" {
 		t.Errorf("the skipped row reads %q, want it to say Skipped", got)
 	}
 }
@@ -605,7 +605,7 @@ func TestActivity_AFilteredLogLabelsAGapTwiceThePlantsUsualInterval(t *testing.T
 
 	got := textOf(logEntries(f.get(t, plantActivityPath(bigFellaID))), gapKind)
 
-	want := []string{"nothing for 30 days"}
+	want := []string{"No activity for 30 days"}
 	if !slices.Equal(got, want) {
 		t.Errorf("the filtered log labels the gaps %v, want %v", got, want)
 	}
@@ -694,14 +694,14 @@ func TestActivity_AFilteredCursorWithNoEventsLeftRedirectsToThePlantsLatestActiv
 	}
 }
 
-func TestActivity_AFilteredLogWithNoEventsSaysNothingIsRecorded(t *testing.T) {
+func TestActivity_AFilteredLogWithNoEventsSaysNoActivityYet(t *testing.T) {
 	f := rosewoodLog(t)
 	f.exec(t, "DELETE FROM care_event WHERE plant_id = $1", bigFellaID)
 
 	page := f.get(t, plantActivityPath(bigFellaID))
 
-	if got := text(page); !strings.Contains(got, "Nothing recorded yet") {
-		t.Errorf("the filtered log with no events reads %q, want it to say nothing is recorded", got)
+	if got := text(page); !strings.Contains(got, "No activity yet") {
+		t.Errorf("the filtered log with no events reads %q, want it to say there is no activity yet", got)
 	}
 	if logEntries(page) != nil {
 		t.Error("the filtered log with no events still renders a list of rows")

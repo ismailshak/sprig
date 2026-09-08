@@ -21,7 +21,7 @@ test('a page opened before is shown offline with the time it was fetched @offlin
   await page.goto('/');
 
   await expect(page.getByRole('heading', { name: gardens.home.name })).toBeVisible();
-  await expect(offlinePage.line()).toHaveText(/^You're offline\. This page was last fetched at \d{1,2}:\d{2}/);
+  await expect(offlinePage.line()).toHaveText(/^You’re offline\. This page was last loaded at \d{1,2}:\d{2}/);
 });
 
 test('a page opened before today is shown offline with the day it was fetched @offline', async ({
@@ -35,7 +35,7 @@ test('a page opened before today is shown offline with the day it was fetched @o
   await context.setOffline(true);
   await page.goto('/');
 
-  await expect(offlinePage.line()).toHaveText(/^You're offline\. This page was last fetched on .+ at \d{1,2}:\d{2}/);
+  await expect(offlinePage.line()).toHaveText(/^You’re offline\. This page was last loaded on .+ at \d{1,2}:\d{2}/);
 });
 
 test('a page never opened shows the offline page @offline', async ({ page, context, offlinePage }) => {

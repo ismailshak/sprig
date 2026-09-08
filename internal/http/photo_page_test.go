@@ -155,7 +155,7 @@ func TestPhoto_DeleteAsksFirstAndAnHTMXRequestGetsTheFootAlone(t *testing.T) {
 	whole := f.photoPage(t, bigFellaID, photoID, true, "")
 	foot := f.photoPage(t, bigFellaID, photoID, true, photoFootID)
 
-	if !strings.Contains(text(whole.Body.String()), "Delete this photo? It is removed from Big Fella's photos and cannot be brought back. Keep it Delete") {
+	if !strings.Contains(text(whole.Body.String()), "Delete this photo? This can’t be undone. Cancel Delete") {
 		t.Errorf("the page does not ask:\n%s", text(whole.Body.String()))
 	}
 	if !strings.Contains(whole.Body.String(), "<html") {

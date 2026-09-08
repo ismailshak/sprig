@@ -56,7 +56,7 @@ test('an account signed in from Set up your garden gets a garden of its own and 
     await signin.signIn().click();
 
     await expect(page).toHaveURL('/setup/signed-in');
-    await expect(page.getByRole('heading', { name: `Set up a garden as ${people.robin.name}?` })).toBeVisible();
+    await expect(page.getByRole('heading', { name: `Set up a garden as ${people.robin.name}` })).toBeVisible();
     await expect(setup.name()).toHaveCount(0);
     await setup.garden().fill('Greenhouse');
     await setup.create().click();
@@ -85,12 +85,12 @@ test('a signed-in browser opening Set up your garden is sent to set one up as th
   await setup.open();
 
   await expect(page).toHaveURL('/setup/signed-in');
-  await expect(page.getByRole('heading', { name: `Set up a garden as ${people.robin.name}?` })).toBeVisible();
+  await expect(page.getByRole('heading', { name: `Set up a garden as ${people.robin.name}` })).toBeVisible();
 
   await setup.create().click();
 
   await expect(page).toHaveURL('/setup/signed-in');
-  await expect(page.getByText('Give the garden a name.')).toBeVisible();
+  await expect(page.getByText('Enter a name for your garden.')).toBeVisible();
 
   await setup.garden().fill('Greenhouse');
   await setup.create().click();
@@ -110,7 +110,7 @@ test('an account in no garden is told so on every page and sets up a garden of i
   await signIn(page, people.clare.handle);
 
   await expect(noGarden.heading()).toBeVisible();
-  await expect(page.getByText(`You are signed in as ${people.clare.name}`)).toBeVisible();
+  await expect(page.getByText(`You’re signed in as ${people.clare.name}`)).toBeVisible();
   await page.goto('/plants');
   await expect(noGarden.heading()).toBeVisible();
 
@@ -149,7 +149,7 @@ test('an empty garden name is refused under the field and the rest of the form i
   await setup.create().click();
 
   await expect(page).toHaveURL('/setup');
-  await expect(page.getByText('Give the garden a name.')).toBeVisible();
+  await expect(page.getByText('Enter a name for your garden.')).toBeVisible();
   await expect(setup.name()).toHaveValue('Robin');
   await expect(setup.timezone()).toHaveValue('Asia/Tokyo');
 });
@@ -172,5 +172,5 @@ test('with no JavaScript the timezone select stays on Timezone and the page says
 
   await expect(setup.timezone()).toHaveValue('');
   await expect(setup.create()).toBeDisabled();
-  await expect(page.getByText('Setting up needs JavaScript and a browser that supports passkeys')).toBeVisible();
+  await expect(page.getByText('Requires JavaScript and a browser with passkey support')).toBeVisible();
 });

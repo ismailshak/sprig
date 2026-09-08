@@ -23,7 +23,7 @@ test('the recovery codes page says how much of the batch is left and that a new 
   await account.recoveryCodes().click();
   await expect(page.getByRole('heading', { name: 'Recovery codes' })).toBeVisible();
   await expect(page.getByText(`${recoveryBatch.left} of ${recoveryBatch.size} left`)).toBeVisible();
-  await expect(page.getByText('Creating a new set destroys this one')).toBeVisible();
+  await expect(page.getByText('Creating new codes replaces the current set')).toBeVisible();
   await expect(recovery.create()).toHaveText('Create new codes');
 });
 
@@ -40,14 +40,14 @@ test('creating codes shows ten once, and the page then reads 10 of 10 left', asy
   await recovery.create().click();
 
   await expect(recovery.codes()).toHaveCount(recoveryBatch.size);
-  await expect(page.getByText('This is the only time they are shown')).toBeVisible();
+  await expect(page.getByText('These codes are shown only once')).toBeVisible();
   await expect(recovery.create()).toHaveCount(0);
 
   await recovery.done().click();
   await expect(account.handle()).toHaveValue(people.ellie.handle);
 
   await account.recoveryCodes().click();
-  await expect(page.getByText('This is the only time they are shown')).toHaveCount(0);
+  await expect(page.getByText('These codes are shown only once')).toHaveCount(0);
   await expect(page.getByText(`${recoveryBatch.size} of ${recoveryBatch.size} left`)).toBeVisible();
   await expect(recovery.create()).toHaveText('Create new codes');
 });

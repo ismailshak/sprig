@@ -137,7 +137,9 @@ func editorOf(t *testing.T, page, slug string) testEditor {
 		e.ask = text(ask[1])
 	}
 	e.remove = strings.Contains(m[2], ">Remove<")
-	e.cancel = strings.Contains(m[2], ">Cancel<")
+	// The editor's Cancel is a link. The confirmation's Cancel is a button,
+	// so the link's closing tag tells the editor's buttons from the question.
+	e.cancel = strings.Contains(m[2], ">Cancel</a>")
 	return e
 }
 
@@ -177,7 +179,7 @@ func TestScheduleEditor_TheEditorOpensOnTheCurrentSchedule(t *testing.T) {
 	if editor.picked["shape"] != shapeCadence || editor.every != "10" || editor.picked["unit"] != "day" {
 		t.Errorf("the editor opened on %v every %q, want a cadence of 10 days", editor.picked, editor.every)
 	}
-	if editor.hint != "Counted from the last time it was done" {
+	if editor.hint != "Counted from the last time it was logged" {
 		t.Errorf("the sentence under the select reads %q", editor.hint)
 	}
 	if !editor.remove || !editor.cancel {
@@ -212,7 +214,7 @@ func TestScheduleEditor_ChoosingAShapeReRendersTheRowWithThatShapesFields(t *tes
 	if editor.picked["month"] == "" || editor.picked["year"] == "" {
 		t.Errorf("a one-off drew no date, and picked %v", editor.picked)
 	}
-	if editor.hint != "One date, and then nothing" {
+	if editor.hint != "A single date" {
 		t.Errorf("the sentence under the select reads %q", editor.hint)
 	}
 }
@@ -308,7 +310,7 @@ func TestScheduleEditor_AnIntervalOfZeroIsRefusedAndShownBackInTheField(t *testi
 		t.Errorf("status = %d, want %d", rec.Code, http.StatusUnprocessableEntity)
 	}
 	editor := editorOf(t, rec.Body.String(), "water")
-	if editor.message != "Give a number between 1 and 999." {
+	if editor.message != "Enter a number between 1 and 999." {
 		t.Errorf("the row says %q, want a sentence naming the range", editor.message)
 	}
 	if editor.every != "0" {
@@ -328,7 +330,7 @@ func TestScheduleEditor_AShapeWithNoDateIsRefusedWithTheDateFieldsShown(t *testi
 	rec := f.save(t, bigFellaID, "water", url.Values{"water-shape": {shapeOnce}}, true)
 
 	editor := editorOf(t, rec.Body.String(), "water")
-	if editor.message != "Give it a date." {
+	if editor.message != "Choose a date." {
 		t.Errorf("the row says %q, want a sentence asking for the date", editor.message)
 	}
 	if editor.picked["month"] == "" || editor.picked["year"] == "" {
@@ -382,7 +384,7 @@ func TestScheduleEditor_AnHTMXRequestGetsTheRowAlone(t *testing.T) {
 
 	body := f.save(t, bigFellaID, "water", cadence("water", "20", "day"), true).Body.String()
 
-	if strings.Contains(body, "<h1") || strings.Contains(body, "Reference") {
+	if strings.Contains(body, "<h1") || strings.Contains(body, "Details") {
 		t.Errorf("the swap carried the page around the row:\n%s", body)
 	}
 	if rows := scheduleOf(t, body); len(rows) != 1 {

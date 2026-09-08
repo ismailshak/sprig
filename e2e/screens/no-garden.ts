@@ -7,13 +7,13 @@ export class NoGardenScreen {
   constructor(private readonly page: Page) {}
 
   heading(): Locator {
-    return this.page.getByRole('heading', { name: 'You’re in no garden' });
+    return this.page.getByRole('heading', { name: 'No garden yet' });
   }
 
   // The link to Set up your garden as this account. Rendered only when
   // sign-up is on.
   setUp(): Locator {
-    return this.page.getByRole('link', { name: 'Set up a garden of your own' });
+    return this.page.getByRole('link', { name: 'Set up a garden' });
   }
 
   signOut(): Locator {

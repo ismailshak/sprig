@@ -52,7 +52,7 @@ func (h *setup) signedInOpen() bool {
 // showSignedIn handles GET /setup/signed-in.
 func (h *setup) showSignedIn(w http.ResponseWriter, r *http.Request) {
 	if !h.signedInOpen() {
-		http.NotFound(w, r)
+		notFound(w)
 		return
 	}
 	h.templates.render(w, r, view{page: "setup-signed-in"}, newSetupSignedInPage(PrincipalFrom(r), ""))
@@ -64,12 +64,12 @@ func (h *setup) showSignedIn(w http.ResponseWriter, r *http.Request) {
 // holds is left as it is.
 func (h *setup) createSignedIn(w http.ResponseWriter, r *http.Request) {
 	if !h.signedInOpen() {
-		http.NotFound(w, r)
+		notFound(w)
 		return
 	}
 	principal := PrincipalFrom(r)
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "the form did not parse", http.StatusBadRequest)
+		badRequest(w)
 		return
 	}
 	name := strings.TrimSpace(r.PostForm.Get("garden"))

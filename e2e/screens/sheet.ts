@@ -7,9 +7,9 @@ export class SheetScreen {
     return this.page.getByRole('dialog');
   }
 
-  // A What chip is a button, not a radio, because clicking it fetches the sheet
-  // again for that care type.
-  what(care: string): Locator {
+  // A chip under Care is a button, not a radio, because clicking it fetches
+  // the sheet again for that care type.
+  careChip(care: string): Locator {
     return this.dialog().getByRole('button', { name: care, exact: true });
   }
 
@@ -25,19 +25,19 @@ export class SheetScreen {
     return this.dialog().getByLabel('Note');
   }
 
-  // Only one primary button shows, "Log watering" or "Record a skip".
+  // Only one primary button shows, "Log watering" or "Log skip".
   async submit(label: string): Promise<void> {
     await this.dialog().getByRole('button', { name: label, exact: true }).click();
   }
 
-  // Opened over a recorded event the sheet saves rather than logs, and Delete
-  // sits beside the primary button.
+  // Opened over an event already logged, the sheet saves rather than logs and
+  // Delete is beside the primary button.
   deleteButton(): Locator {
     return this.dialog().getByRole('button', { name: 'Delete' });
   }
 
-  recorded(): Locator {
-    return this.dialog().getByText(/^Recorded by /);
+  loggedBy(): Locator {
+    return this.dialog().getByText(/^Logged by /);
   }
 
   async cancel(): Promise<void> {

@@ -15,13 +15,13 @@ export class RecoverScreen {
   }
 
   use(): Locator {
-    return this.page.getByRole('button', { name: 'Use this code' });
+    return this.page.getByRole('button', { name: 'Continue' });
   }
 
   // The button on the form a matched code opens. It is disabled until the
   // page's script enables it.
   registerPasskey(): Locator {
-    return this.page.getByRole('button', { name: 'Register a passkey' });
+    return this.page.getByRole('button', { name: 'Add passkey' });
   }
 
   // The link under the sentence on a page that turned the person away. It

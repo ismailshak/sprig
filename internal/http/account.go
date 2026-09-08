@@ -11,17 +11,17 @@ import (
 )
 
 // nameMissing is shown under Display name when the field is posted empty.
-const nameMissing = "Give a display name. Every row in the log is signed with it."
+const nameMissing = "Enter a display name."
 
 // handleMissing is shown under Handle when the field normalises to nothing:
 // empty, or with no letter or digit in it.
-const handleMissing = "Give a handle. It is what tells two accounts with the same display name apart."
+const handleMissing = "Enter a handle."
 
 // handleTakenMessage is the message shown under Handle when another account
 // already has the handle. It repeats the handle, because normalising can
 // change what was typed before the save is refused.
 func handleTakenMessage(handle string) string {
-	return handle + " is taken. Pick a different one."
+	return handle + " is already taken."
 }
 
 // accountForm is the three values the Account form posts. Opening the page
@@ -38,11 +38,6 @@ type accountPage struct {
 	// NameError is shown under Display name, empty when the form is valid.
 	NameError string
 	Handle    string
-	// HandleHint is the hint beside the Handle label, reading "what tells you
-	// from another Ellie". It uses the stored display name and not the one just
-	// posted, because a post refused for an empty display name would leave it
-	// reading "what tells you from another ".
-	HandleHint string
 	// HandleError is shown under Handle, empty when the form is valid.
 	HandleError string
 	Zone        timezoneField
@@ -67,7 +62,7 @@ func (h *more) account(w http.ResponseWriter, r *http.Request) {
 func (h *more) saveAccount(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "the form did not parse", http.StatusBadRequest)
+		badRequest(w)
 		return
 	}
 	// A handle is normalised rather than rejected for its shape, so "Emma
@@ -79,7 +74,7 @@ func (h *more) saveAccount(w http.ResponseWriter, r *http.Request) {
 		zone:   r.PostForm.Get("timezone"),
 	}
 	if !slices.Contains(zonesFor(principal.User.Timezone), form.zone) {
-		http.Error(w, "the form did not offer that", http.StatusBadRequest)
+		badRequest(w)
 		return
 	}
 
@@ -139,11 +134,10 @@ func handleErrorFor(handle string) string {
 // page is opened, and the posted values when a save was refused.
 func (h *more) newAccountPage(ctx context.Context, principal auth.Principal, form accountForm) (accountPage, error) {
 	page := accountPage{
-		Bar:        moreBar("Account"),
-		Name:       form.name,
-		Handle:     form.handle,
-		HandleHint: "what tells you from another " + principal.User.DisplayName,
-		Codes:      linkRow{Label: "Recovery codes", Href: recoveryPath},
+		Bar:    moreBar("Account"),
+		Name:   form.name,
+		Handle: form.handle,
+		Codes:  linkRow{Label: "Recovery codes", Href: recoveryPath},
 	}
 	page.Zone.Zones = zoneOptions(form.zone)
 

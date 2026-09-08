@@ -25,7 +25,7 @@ var (
 
 // careTypeGarden gives Ellie's garden the four care types the Garden page has
 // to tell apart: Water with two events behind it, Feed with none, Mist turned
-// off with one event still recorded against it, and Prune in the other garden.
+// off with one event still logged against it, and Prune in the other garden.
 func careTypeGarden(t *testing.T) *moreFixture {
 	t.Helper()
 
@@ -272,7 +272,7 @@ func TestGarden_TheCareTypesAreLeftOffForAReaderWhoCannotManageThem(t *testing.T
 	}
 }
 
-func TestGarden_ARowWithEventsBehindItOffersTurningItOffAndSaysHowMany(t *testing.T) {
+func TestGarden_ARowWithEventsBehindItOffersTurningItOffAndSaysHowManyTimesItWasUsed(t *testing.T) {
 	f := careTypeGarden(t)
 
 	rec := f.careType(t, f.handler.editCareType, "water", careTypePath("water"), nil)
@@ -281,15 +281,15 @@ func TestGarden_ARowWithEventsBehindItOffersTurningItOffAndSaysHowMany(t *testin
 	if open.name != "Water" {
 		t.Errorf("the field holds %q, want Water", open.name)
 	}
-	if open.drop != "Turn it off" || open.dropTo != offCareTypePath("water") {
-		t.Errorf("the button says %q and posts to %q, want %q to %s", open.drop, open.dropTo, "Turn it off", offCareTypePath("water"))
+	if open.drop != "Turn off" || open.dropTo != offCareTypePath("water") {
+		t.Errorf("the button says %q and posts to %q, want %q to %s", open.drop, open.dropTo, "Turn off", offCareTypePath("water"))
 	}
-	if !strings.HasPrefix(open.why, "Recorded 2 times, so it can be renamed or turned off but never deleted") {
-		t.Errorf("the row says %q, want it to open on the two events recorded", open.why)
+	if !strings.HasPrefix(open.why, "Used 2 times, so it can be renamed or turned off but not deleted") {
+		t.Errorf("the row says %q, want it to open on the two events logged", open.why)
 	}
 }
 
-func TestGarden_ARowWithNothingRecordedAgainstItOffersDeleting(t *testing.T) {
+func TestGarden_ARowWithNothingLoggedAgainstItOffersDeleting(t *testing.T) {
 	f := careTypeGarden(t)
 
 	rec := f.careType(t, f.handler.editCareType, "feed", careTypePath("feed"), nil)
@@ -298,8 +298,8 @@ func TestGarden_ARowWithNothingRecordedAgainstItOffersDeleting(t *testing.T) {
 	if open.drop != "Delete" || open.dropTo != deleteCareTypePath("feed") {
 		t.Errorf("the button says %q and posts to %q, want %q to %s", open.drop, open.dropTo, "Delete", deleteCareTypePath("feed"))
 	}
-	if open.why != "Nothing has been recorded against it yet, so it can go for good." {
-		t.Errorf("the row says %q, want it to say nothing has been recorded", open.why)
+	if open.why != "Not used yet, so it can be deleted." {
+		t.Errorf("the row says %q, want it to say the care type is not used yet", open.why)
 	}
 }
 
@@ -309,17 +309,17 @@ func TestGarden_ARowThatIsOffOffersTurningItBackOn(t *testing.T) {
 	rec := f.careType(t, f.handler.editCareType, "mist", careTypePath("mist"), nil)
 
 	open := editorOn(t, rec.Body.String())
-	if open.drop != "Turn it back on" || open.dropTo != onCareTypePath("mist") {
-		t.Errorf("the button says %q and posts to %q, want %q to %s", open.drop, open.dropTo, "Turn it back on", onCareTypePath("mist"))
+	if open.drop != "Turn on" || open.dropTo != onCareTypePath("mist") {
+		t.Errorf("the button says %q and posts to %q, want %q to %s", open.drop, open.dropTo, "Turn on", onCareTypePath("mist"))
 	}
 }
 
-func TestGarden_ARowThatIsOffSaysItIsOutOfEverySchedule(t *testing.T) {
+func TestGarden_ARowThatIsOffSaysItIsHiddenFromSchedulesAndLogCare(t *testing.T) {
 	f := careTypeGarden(t)
 
 	rec := f.careType(t, f.handler.editCareType, "mist", careTypePath("mist"), nil)
 
-	want := "It is off, so it is out of every schedule and out of the sheet. Turning it back on puts it in both."
+	want := "Turned off. It’s hidden from schedules and Log care until turned on again."
 	if got := editorOn(t, rec.Body.String()).why; got != want {
 		t.Errorf("the row says %q, want %q", got, want)
 	}
@@ -472,7 +472,7 @@ func TestGarden_AnEmptyNewCareTypeIsRefusedWithTheReasonUnderTheField(t *testing
 	}
 }
 
-func TestGarden_TurningACareTypeOffKeepsTheEventsRecordedAgainstIt(t *testing.T) {
+func TestGarden_TurningACareTypeOffKeepsTheEventsLoggedAgainstIt(t *testing.T) {
 	f := careTypeGarden(t)
 
 	rec := f.careType(t, f.handler.turnOffCareType, "water", offCareTypePath("water"), url.Values{})
@@ -543,7 +543,7 @@ func TestGarden_DeletingACareTypeWithEventsBehindItIsRefused(t *testing.T) {
 	}
 }
 
-func TestGarden_DeletingACareTypeWithNothingRecordedAgainstItRemovesIt(t *testing.T) {
+func TestGarden_DeletingACareTypeWithNothingLoggedAgainstItRemovesIt(t *testing.T) {
 	f := careTypeGarden(t)
 
 	rec := f.careType(t, f.handler.deleteCareType, "feed", deleteCareTypePath("feed"), url.Values{})
@@ -627,14 +627,14 @@ func TestGarden_ThePhotosLineSaysHowMuchOfTheGardensStorageIsUsed(t *testing.T) 
 	}
 }
 
-func TestGarden_NearlyFullThePhotosLineSaysUploadsStopAndWhatToDelete(t *testing.T) {
+func TestGarden_NearlyFullThePhotosLineSaysToDeletePhotosToMakeRoom(t *testing.T) {
 	f := careTypeGarden(t)
 	f.photoQuota(t, 4<<20)
 	f.insertPhoto(t, moreGardenID, morePlantID, 3700<<10, nil)
 
 	got := storageLineOn.FindStringSubmatch(f.page(t, f.handler.garden, gardenPath))
 
-	want := "4 MB of 4 MB of photo storage used. Uploads stop when it is full, and deleting progress photos is what makes room."
+	want := "4 MB of 4 MB of photo storage used. When it’s full, delete photos to make room."
 	if got == nil || got[1] != want {
 		t.Errorf("the Photos line reads %v, want %q", got, want)
 	}
@@ -676,8 +676,8 @@ func TestStorageLine_TheLineAddsWhatToDeleteFromNineTenthsOfTheQuota(t *testing.
 		want        string
 	}{
 		{921 << 20, 1 << 30, "921 MB of 1 GB of photo storage used."},
-		{922 << 20, 1 << 30, "922 MB of 1 GB of photo storage used. Uploads stop when it is full, and deleting progress photos is what makes room."},
-		{2 << 30, 1 << 30, "2 GB of 1 GB of photo storage used. Uploads stop when it is full, and deleting progress photos is what makes room."},
+		{922 << 20, 1 << 30, "922 MB of 1 GB of photo storage used. When it’s full, delete photos to make room."},
+		{2 << 30, 1 << 30, "2 GB of 1 GB of photo storage used. When it’s full, delete photos to make room."},
 	} {
 		if got := storageLine(photo.Usage{Used: c.used, Quota: c.quota}); got != c.want {
 			t.Errorf("storageLine(%d of %d) = %q, want %q", c.used, c.quota, got, c.want)

@@ -74,7 +74,7 @@ func Authenticate(logger *slog.Logger, sessions *auth.Sessions, resolver Resolve
 				return
 			case err != nil:
 				logger.ErrorContext(r.Context(), "resolve the session", slog.Any("error", err))
-				http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+				http.Error(w, serverErrorText, http.StatusInternalServerError)
 				return
 			}
 
@@ -195,7 +195,7 @@ func PrincipalFrom(r *http.Request) auth.Principal {
 func require(capability auth.Capability, h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !PrincipalFrom(r).Can(capability) {
-			http.NotFound(w, r)
+			notFound(w)
 			return
 		}
 		h.ServeHTTP(w, r)

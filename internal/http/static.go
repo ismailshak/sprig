@@ -128,7 +128,7 @@ func (a *Assets) handler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		f, ok := a.files[r.URL.Path]
 		if !ok {
-			http.NotFound(w, r)
+			notFound(w)
 			return
 		}
 		cacheControl := plainCacheControl

@@ -1,4 +1,4 @@
-{{define "title"}}sprig — invite{{end}}
+{{define "title"}}Invite someone · sprig{{end}}
 
 {{/* Two steps on one page. Only a hash of the link is stored, so the link
      itself exists in the one response that created it. Creating it replaces the
@@ -17,7 +17,7 @@
 <p class="note">{{.Made}}</p>
 <a class="wide-action" href="{{.Done}}">Done</a>
 {{else}}
-<p class="lead">They open the link, pick a name, and their phone registers a passkey. There is nothing for them to remember and nothing for you to send twice.</p>
+<p class="lead">Create a link to send them. They’ll choose a name and set up a passkey.</p>
 <form method="post" action="{{.Action}}" novalidate>
 {{/* Enter in the end date submits through the form's first submit button.
      Without this hidden one that would be a role chip. A chip sends the form as
@@ -25,20 +25,20 @@
      the class for a hidden default button; no sheet is involved here. */}}
 <button class="sheet__default" type="submit" name="role" value="{{.Chosen}}" tabindex="-1" aria-hidden="true"></button>
 <div class="field">
-<span class="field__label">What can they do</span>
+<span class="field__label">Role</span>
 <div class="chips">{{range .Roles}}<button class="chip" name="role" value="{{.Value}}" formmethod="get" formaction="{{$.Action}}" aria-pressed="{{.On}}">{{.Label}}</button>{{end}}</div>
 <p class="note">{{.What}}</p>
 </div>
 <div class="field">
-<label class="field__label" for="until">Until <span class="field__hint">optional</span></label>
+<label class="field__label" for="until">Access ends <span class="field__hint">optional</span></label>
 <input class="input input--narrow" id="until" name="until" type="date" min="{{.UntilMin}}" value="{{.Until}}">
 {{with .UntilError}}<p class="field__error">{{.}}</p>{{end}}
-<p class="note">Leave it empty unless their access should stop on a day you already know. It can be set or changed later.</p>
+<p class="note">Leave empty for no end date. You can change this later.</p>
 </div>
-{{/* Create the link posts the chosen role as its own value. A button posts its
+{{/* Create link posts the chosen role as its own value. A button posts its
      name and value only when it is the one pressed, so exactly one role reaches
      the server whether a chip or this button was used. */}}
-<button class="wide-action" type="submit" name="role" value="{{.Chosen}}">Create the link</button>
+<button class="wide-action" type="submit" name="role" value="{{.Chosen}}">Create link</button>
 </form>
 {{end}}
 </div>

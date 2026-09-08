@@ -207,7 +207,7 @@ func TestInvite_AnEndDateThatHasAlreadyBegunIsRefusedAndTomorrowIsNot(t *testing
 				t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusUnprocessableEntity, text(rec.Body.String()))
 			}
 			page := rec.Body.String()
-			if !strings.Contains(page, untilPassed) {
+			if !strings.Contains(page, untilTooEarly) {
 				t.Errorf("the message under the end date is missing:\n%s", text(page))
 			}
 			if !strings.Contains(page, `value="`+c.posted+`"`) {

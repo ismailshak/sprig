@@ -1,4 +1,4 @@
-{{define "title"}}sprig — set up your garden{{end}}
+{{define "title"}}Set up your garden · sprig{{end}}
 
 {{define "app-class"}}app app--bare{{end}}
 
@@ -11,7 +11,7 @@
 {{define "main"}}
 <div class="app__body app__body--bare">
 <h1 class="bare__title">Set up your garden</h1>
-<p class="lead">Name the garden, pick a name to sign your care with, and this device will make a passkey to sign in with. You&rsquo;ll own the garden, and you can invite people to it afterwards.</p>
+<p class="lead">Name your garden and choose a display name. A passkey is created on this device for signing in. You can invite people once it’s set up.</p>
 {{/* The paragraph below is rendered even when Refusal is empty, because the
      page's script writes the browser's refusal into it. The button starts
      disabled and the note stays under it until that script runs, because the
@@ -24,16 +24,16 @@
 {{with .GardenError}}<p class="field__error">{{.}}</p>{{end}}
 </div>
 <div class="field">
-<label class="field__label" for="name">Display name <span class="field__hint">what every log row is signed with</span></label>
+<label class="field__label" for="name">Display name <span class="field__hint">shown on what you log</span></label>
 <input class="input" id="name" name="name" type="text" value="{{.Name}}" autocomplete="nickname" spellcheck="false">
 {{with .NameError}}<p class="field__error">{{.}}</p>{{end}}
 </div>
 {{template "timezone-field" .Zone}}
 <input type="hidden" name="{{.Field}}">
-<button class="wide-action" type="submit" disabled>Create the garden</button>
-<p class="note" id="passkey-noscript">Setting up needs JavaScript and a browser that supports passkeys.</p>
+<button class="wide-action" type="submit" disabled>Create garden</button>
+<p class="note" id="passkey-noscript">Requires JavaScript and a browser with passkey support.</p>
 </form>
-{{with .SignIn}}<p class="note">Already have a sprig account? <a href="{{.}}">Sign in to set up a garden as yourself</a>.</p>{{end}}
+{{with .SignIn}}<p class="note">Already have an account? <a href="{{.}}">Sign in</a>.</p>{{end}}
 </div>
 {{end}}
 

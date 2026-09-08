@@ -11,7 +11,7 @@
 {{define "day-head"}}
 {{- with .Summary}}<div class="summary" id="day-head"{{if $.OOB}} hx-swap-oob="true"{{end}}>
 <span class="summary__count">{{.Outstanding}}</span>
-<span>{{if eq .Outstanding 1}}plant needs{{else}}plants need{{end}} you today{{if .Overdue}}, {{.Overdue}} of them overdue{{end}}.</span>
+<span>{{if eq .Outstanding 1}}plant{{else}}plants{{end}} due today{{if .Overdue}}, {{.Overdue}} of them overdue{{end}}.</span>
 </div>{{end}}
 {{- if .Clear}}<div class="summary summary--clear" id="day-head"{{if .OOB}} hx-swap-oob="true"{{end}}>
 <span class="summary__count">{{template "icon-check"}}</span>

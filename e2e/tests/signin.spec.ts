@@ -25,7 +25,7 @@ test('with no JavaScript the sign-in button is disabled and the page says it nee
   await signin.open();
 
   await expect(signin.signIn()).toBeDisabled();
-  await expect(page.getByText('Signing in needs JavaScript and a browser that supports passkeys')).toBeVisible();
+  await expect(page.getByText('Requires JavaScript and a browser with passkey support')).toBeVisible();
 });
 
 // addedRow is the Passkeys row for the device the test registered. A row is
@@ -70,9 +70,7 @@ test('a device with no passkey signs nobody in, and the page says the browser do
 
     await signin.signIn().click();
 
-    await expect(signin.refusal()).toHaveText(
-      'Nothing signed in. Either you cancelled, or this device holds no passkey for sprig. The browser does not say which.',
-    );
+    await expect(signin.refusal()).toHaveText('Sign-in was cancelled, or this device has no passkey for sprig.');
     await expect(page).toHaveURL('/signin');
     await expect(signin.signIn()).toBeEnabled();
   } finally {

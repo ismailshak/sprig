@@ -93,7 +93,7 @@ func TestInstall_AfterAnInviteHasNoTabBarAndNoBackLinkAndEndsInALinkIntoTheGarde
 	if strings.Contains(page, `class="backlink"`) {
 		t.Error("the page has a back link, and it was not reached from More")
 	}
-	if !strings.Contains(page, `href="/">Go to the garden<`) {
+	if !strings.Contains(page, `href="/">Continue<`) {
 		t.Errorf("the page does not end in a link into the garden:\n%s", page)
 	}
 	if !strings.Contains(page, `<input type="hidden" name="after" value="invite">`) {

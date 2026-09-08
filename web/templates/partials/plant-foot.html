@@ -10,10 +10,10 @@
 {{define "plant-foot"}}{{with .Foot}}<div class="plant__foot{{if .Asking}} plant__foot--asking{{end}}" id="plant-foot">
 {{if .Asking}}
 <span class="plant__ask">Archive {{.Name}}?</span>
-<span class="plant__note">Its history is kept. You can restore it from the archive.</span>
-{{/* Keep it swaps the buttons back. Archive is a full navigation, because the
+<span class="plant__note">It’s removed from Plants but keeps its activity and photos. You can restore it later.</span>
+{{/* Cancel swaps the buttons back. Archive is a full navigation, because the
      plant leaves the Plants list and its page has to be left too. */}}
-<form method="get" action="{{.Keep}}"><button class="plant__keep" hx-get="{{.Keep}}" hx-target="#plant-foot" hx-swap="outerHTML settle:0ms">Keep it</button></form>
+<form method="get" action="{{.Keep}}"><button class="plant__keep" hx-get="{{.Keep}}" hx-target="#plant-foot" hx-swap="outerHTML settle:0ms">Cancel</button></form>
 <form method="post" action="{{.Archive}}"><button class="care care--small">Archive</button></form>
 {{else}}
 {{with .Edit}}<a class="care care--outline" href="{{.}}">Edit plant</a>{{end}}

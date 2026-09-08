@@ -64,7 +64,7 @@ func ownerWord(m store.ListMembershipsWithGardensForUserRow) string {
 	case m.ReaderOwns:
 		return "Your garden"
 	case m.OwnerName != "":
-		return m.OwnerName + "'s garden"
+		return m.OwnerName + "’s garden"
 	}
 	return ""
 }
@@ -115,25 +115,25 @@ func (h *today) gardenSheet(w http.ResponseWriter, r *http.Request) {
 func (h *today) switchGarden(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "the form did not parse", http.StatusBadRequest)
+		badRequest(w)
 		return
 	}
 	gardenID, err := uuid.Parse(r.PostForm.Get(gardenField))
 	if err != nil {
-		http.NotFound(w, r)
+		notFound(w)
 		return
 	}
 
 	membership, err := h.queries.GetMembershipWithUserAndGarden(r.Context(), gardenID, principal.User.ID)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		http.NotFound(w, r)
+		notFound(w)
 		return
 	case err != nil:
 		serverError(h.logger, w, r, "read the membership", err)
 		return
 	case auth.MembershipEnded(membership.Membership, h.now()):
-		http.NotFound(w, r)
+		notFound(w)
 		return
 	}
 

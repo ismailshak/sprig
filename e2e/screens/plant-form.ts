@@ -17,12 +17,13 @@ export class PlantFormScreen {
     await this.page.goto(`/plants/${plant.id}/edit`);
   }
 
-  // The label has a hint after the field name, so this matches on part of it.
+  // A label may have a hint after the field name, so this matches on the start
+  // of it. The word boundary keeps Room from matching the Rooms listbox.
   field(name: string): Locator {
-    return this.page.getByLabel(name);
+    return this.page.getByLabel(new RegExp(`^${name}\\b`));
   }
 
-  // The listbox of rooms under the Location field. It is empty until the field
+  // The listbox of rooms under the Room field. It is empty until the field
   // is focused and the script fills it, so it stays empty in a browser running
   // no script.
   roomList(): Locator {
@@ -52,9 +53,9 @@ export class PlantFormScreen {
 
   // dontSchedule clicks Don't schedule and waits for the row to show Not
   // scheduled. With JavaScript the click is a swap. A form posted before the
-  // swap has replaced the row still carries the open row's fields.
+  // swap has replaced the row still posts the open row's fields.
   async dontSchedule(care: string): Promise<void> {
-    await this.row(care).getByRole('button', { name: "Don't schedule" }).click();
+    await this.row(care).getByRole('button', { name: 'Don’t schedule' }).click();
     await this.row(care).getByRole('button', { name: 'Not scheduled' }).waitFor();
   }
 
@@ -76,10 +77,10 @@ export class PlantFormScreen {
     return this.page.getByLabel(`${care} ${part}`);
   }
 
-  // The Add a photo button. The server renders it hidden and the page's
+  // The Add photo button. The server renders it hidden and the page's
   // script shows it, so with JavaScript off it stays hidden.
   addPhoto(): Locator {
-    return this.page.getByRole('button', { name: 'Add a photo' });
+    return this.page.getByRole('button', { name: 'Add photo' });
   }
 
   photoPreview(): Locator {
@@ -89,10 +90,10 @@ export class PlantFormScreen {
   // The plant's stored picture, shown in the photo field when the edit form
   // opens on a plant that has one.
   currentPicture(): Locator {
-    return this.page.getByRole('img', { name: 'Current picture' });
+    return this.page.getByRole('img', { name: 'Current photo' });
   }
 
-  async choosePhoto(button: 'Add a photo' | 'Replace', file: ChosenFile): Promise<void> {
+  async choosePhoto(button: 'Add photo' | 'Replace', file: ChosenFile): Promise<void> {
     const chooser = this.page.waitForEvent('filechooser');
     await this.page.getByRole('button', { name: button }).click();
     await (await chooser).setFiles(file);

@@ -27,9 +27,9 @@ type shape struct {
 }
 
 var shapes = []shape{
-	{shapeCadence, "Repeats", "Counted from the last time it was done"},
-	{shapeDate, "On a fixed date", "The same date each time, however late you are"},
-	{shapeOnce, "Just once", "One date, and then nothing"},
+	{shapeCadence, "Repeats", "Counted from the last time it was logged"},
+	{shapeDate, "On a fixed date", "Due on the same date each time"},
+	{shapeOnce, "Just once", "A single date"},
 }
 
 // anyDay is the day select's first option, meaning a month with no specific
@@ -159,11 +159,11 @@ func (f scheduleDraft) params(gardenID uuid.UUID) (store.CreateCareScheduleParam
 
 	if f.shape != shapeOnce {
 		if !f.hasInterval {
-			return p, "Say how often it repeats."
+			return p, "Enter how often it repeats."
 		}
 		count, err := strconv.ParseInt(f.every, 10, 32)
 		if err != nil || count < 1 || count > maxInterval {
-			return p, fmt.Sprintf("Give a number between 1 and %d.", maxInterval)
+			return p, fmt.Sprintf("Enter a number between 1 and %d.", maxInterval)
 		}
 		p.IntervalCount = ptr(int32(count))
 		p.IntervalUnit = &f.unit
@@ -180,7 +180,7 @@ func (f scheduleDraft) params(gardenID uuid.UUID) (store.CreateCareScheduleParam
 	}
 
 	if !f.hasAnchor {
-		return p, "Give it a date."
+		return p, "Choose a date."
 	}
 	// A month-only anchor is stored on the 1st of its month with month
 	// precision, so the schedule engine knows to ignore the day.
@@ -190,7 +190,7 @@ func (f scheduleDraft) params(gardenID uuid.UUID) (store.CreateCareScheduleParam
 	}
 	anchor := time.Date(f.year, time.Month(f.month), day, 0, 0, 0, 0, time.UTC)
 	if anchor.Day() != day {
-		return p, fmt.Sprintf("There is no %d %s.", f.day, time.Month(f.month))
+		return p, "Invalid date."
 	}
 	p.AnchorDate = &anchor
 	p.AnchorPrecision = &precision

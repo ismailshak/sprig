@@ -13,13 +13,13 @@ const defaultInviteRole = "sitter"
 // untilUnusable is the message under the Until field when what was posted is
 // not a date. A date input cannot produce one, so this is for a browser that
 // renders the field as plain text.
-const untilUnusable = "Give the last day as a date, or leave it empty."
+const untilUnusable = "Enter a date or leave it empty."
 
-// untilPassed is the message under the Until field when the day posted has
+// untilTooEarly is the message under the Until field when the day posted has
 // already begun in the inviter's timezone. Access ends when the chosen day
 // begins, so a link made with today's date would be refused the moment it is
 // opened.
-const untilPassed = "Pick a day after today. Access ends when the day you pick begins."
+const untilTooEarly = "Choose a date after today. Access ends at the start of that day."
 
 // invitePage is the Invite someone page. It is two steps in one page: the form
 // until the link is created, then the link in place of it. The second step is
@@ -79,12 +79,12 @@ func (h *more) earliestAccessEnd(r *http.Request) string {
 // nowhere else.
 func (h *more) createInviteLink(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "the form did not parse", http.StatusBadRequest)
+		badRequest(w)
 		return
 	}
 	role := r.PostForm.Get("role")
 	if !slices.Contains(offeredRoles, role) {
-		http.Error(w, "the form did not offer that", http.StatusBadRequest)
+		badRequest(w)
 		return
 	}
 
@@ -99,7 +99,7 @@ func (h *more) createInviteLink(w http.ResponseWriter, r *http.Request) {
 		case err != nil:
 			message = untilUnusable
 		case !at.After(h.now()):
-			message = untilPassed
+			message = untilTooEarly
 		}
 		if message != "" {
 			page := newInvitePage(role, posted, message, h.earliestAccessEnd(r))
@@ -143,17 +143,17 @@ func newInvitePage(role, until, message, earliest string) invitePage {
 // under it, and Done. ends is the day the membership the link creates stops on,
 // and nil when the invite set no date.
 func madeInvitePage(link string, ends *time.Time, location *time.Location) invitePage {
-	made := "It works once, for one person, and expires in 7 days. Until they open it, it sits on People and can be revoked."
+	made := "It works once and expires in 7 days. Until it’s used, you can revoke it from People."
 	if ends != nil {
-		made += " Their access ends on " + dateWord(*ends, location) + ", whenever they take it up."
+		made += " Their access ends on " + dateWord(*ends, location) + "."
 	}
 	return invitePage{
 		Bar:    peopleBar("Invite someone"),
 		Action: invitePath,
 		Secret: &secretBox{
-			Label: "The link",
+			Label: "Invite link",
 			Value: link,
-			Why:   "This is the only time it is shown — sprig keeps a hash of it and nothing else. Send it however you already message them.",
+			Why:   "This link is shown only once. Copy it now and send it to them.",
 		},
 		Made: made,
 		Done: peoplePath,

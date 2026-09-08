@@ -21,7 +21,7 @@ import (
 )
 
 // createLabel is the label on the Set up your garden submit button.
-const createLabel = "Create the garden"
+const createLabel = "Create garden"
 
 // setupFixture is the Set up your garden handler over an empty database,
 // inside a transaction rolled back when the test ends. Nothing is seeded,
@@ -109,8 +109,8 @@ func (f *setupFixture) challenge(t *testing.T, form url.Values) (*protocol.Crede
 	return &creation, cookie
 }
 
-// create runs the whole flow with device answering: the post for the
-// challenge, then the post with the device's answer in the credential field.
+// create runs the whole flow on device: the post for the challenge, then the
+// post with the credential it made in the credential field.
 func (f *setupFixture) create(t *testing.T, form url.Values, device *passkeytest.Authenticator) *httptest.ResponseRecorder {
 	t.Helper()
 
@@ -184,7 +184,7 @@ func TestSetup_WithSignUpOffAnEmptyInstallServesTheFormWithACreateButtonThatStar
 		`id="name" name="name"`,
 		`name="timezone" data-propose`,
 		`<input type="hidden" name="` + credentialField + `">`,
-		"Setting up needs JavaScript and a browser that supports passkeys.",
+		"Requires JavaScript and a browser with passkey support.",
 	} {
 		if !strings.Contains(page, want) {
 			t.Errorf("the page lacks %s:\n%s", want, page)
@@ -384,9 +384,9 @@ func TestSetup_AnEmptyFieldIsRefusedOnTheChallengeAndTheMessageIsUnderItOnThePos
 		posted  string
 		message string
 	}{
-		{"garden", "  ", "Give the garden a name."},
-		{"name", "  ", "Give yourself a name to sign your care with."},
-		{"timezone", "", "Pick a timezone."},
+		{"garden", "  ", "Enter a name for your garden."},
+		{"name", "  ", "Enter a display name."},
+		{"timezone", "", "Choose a timezone."},
 	}
 	for _, c := range cases {
 		t.Run(c.field+" empty", func(t *testing.T) {
@@ -464,7 +464,7 @@ func TestSetup_AnAnswerWithNoChallengeBehindItSaysTheRequestExpiredAndWritesNoth
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusUnprocessableEntity, text(rec.Body.String()))
 	}
-	if !strings.Contains(rec.Body.String(), "That took too long, so the request has expired. Press Create the garden again.") {
+	if !strings.Contains(rec.Body.String(), "The request timed out. Try again.") {
 		t.Errorf("the page does not say the request expired:\n%s", text(rec.Body.String()))
 	}
 	if got := valueOf(t, rec.Body.String(), "garden"); got != "Greenhouse" {
@@ -484,13 +484,13 @@ func TestSetup_ADeviceThatDidNotCheckItWasYouLeavesNoGardenBehind(t *testing.T) 
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusUnprocessableEntity, text(rec.Body.String()))
 	}
-	if !strings.Contains(rec.Body.String(), "This device did not check that it was you.") {
+	if !strings.Contains(rec.Body.String(), "This device didn’t verify you.") {
 		t.Errorf("the page does not say the device did not verify:\n%s", text(rec.Body.String()))
 	}
 	if cookieNamed(t, rec, "__Host-sprig_session") != nil {
 		t.Error("a refused registration set a session cookie")
 	}
-	// The rows were written before the answer was checked, in the same
+	// The rows were written before the credential was checked, in the same
 	// transaction, so the refusal rolled them back.
 	f.nothingWritten(t)
 	// The install is still empty, so the page is still served.
@@ -520,7 +520,7 @@ func TestSetup_AChallengeFromThePasskeysPageDoesNotCreateAGarden(t *testing.T) {
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusUnprocessableEntity, text(rec.Body.String()))
 	}
-	if !strings.Contains(rec.Body.String(), "the request has expired") {
+	if !strings.Contains(rec.Body.String(), "The request timed out") {
 		t.Errorf("the page does not say the request expired:\n%s", text(rec.Body.String()))
 	}
 	if n := f.count(t, "garden"); n != 0 {

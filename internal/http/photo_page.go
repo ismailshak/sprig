@@ -40,7 +40,8 @@ type photoFoot struct {
 	// POST deletes.
 	Delete string
 	// Asking is true while the confirmation replaces the button. Keep is the
-	// URL the Keep it button goes to, the photo's page with the button back.
+	// URL the confirmation's Cancel button goes to, the photo's page with the
+	// Delete button back.
 	Asking bool
 	Keep   string
 }
@@ -94,7 +95,7 @@ func (h *plants) renderPhoto(w http.ResponseWriter, r *http.Request, asking bool
 	}
 	// A reader who may not delete the photo has no confirmation to render.
 	if asking && page.Foot == nil {
-		http.NotFound(w, r)
+		notFound(w)
 		return
 	}
 	v := view{page: "photo"}
@@ -131,7 +132,7 @@ func (h *plants) deletePhoto(w http.ResponseWriter, r *http.Request) {
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		http.NotFound(w, r)
+		notFound(w)
 		return
 	case err != nil:
 		serverError(h.logger, w, r, "delete the photo", err)
@@ -149,13 +150,13 @@ func (h *plants) resolvePhoto(w http.ResponseWriter, r *http.Request, principal 
 	}
 	photoID, err := uuid.Parse(r.PathValue("photo"))
 	if err != nil {
-		http.NotFound(w, r)
+		notFound(w)
 		return store.Plant{}, store.GetPlantPhotoRow{}, false
 	}
 	row, err := h.queries.GetPlantPhoto(r.Context(), store.GetPlantPhotoParams{GardenID: principal.Garden.ID, PlantID: plant.ID, PhotoID: photoID})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		http.NotFound(w, r)
+		notFound(w)
 		return store.Plant{}, store.GetPlantPhotoRow{}, false
 	case err != nil:
 		serverError(h.logger, w, r, "load the photo", err)

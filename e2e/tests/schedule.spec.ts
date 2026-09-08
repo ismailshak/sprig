@@ -17,7 +17,7 @@ test('clicking a schedule row opens the editor in place', async ({ plant }) => {
 
   await expect(plant.shape('Water')).toBeVisible();
   await expect(plant.every('Water')).toHaveValue('10');
-  await expect(plant.scheduleRow('Water')).toContainText('Counted from the last time it was done');
+  await expect(plant.scheduleRow('Water')).toContainText('Counted from the last time it was logged');
 });
 
 test('changing the interval updates the due date on the row @swap', async ({ plant }) => {
@@ -73,13 +73,13 @@ test('a removed schedule leaves the care type listed as Not scheduled @swap', as
   await expect(plant.scheduleRow('Water')).not.toContainText('Every 10 days');
 });
 
-test('Keep it after Remove leaves the schedule unchanged @swap', async ({ plant }) => {
+test('Cancel after Remove leaves the schedule unchanged @swap', async ({ plant }) => {
   await plant.open(seeded.bigFella);
   await plant.editSchedule('Water');
 
   await plant.askToRemoveSchedule('Water');
   await expect(plant.scheduleRow('Water')).toContainText('Remove this schedule?');
-  await plant.keepSchedule('Water');
+  await plant.cancelRemoveSchedule('Water');
   await plant.cancelSchedule('Water');
 
   await expect(plant.scheduleRow('Water')).toContainText('Every 10 days');
@@ -106,7 +106,7 @@ test('choosing a one-off replaces the interval fields with a date @js', async ({
 
   await expect(plant.every('Repot')).toHaveCount(0);
   await expect(plant.date('Repot', 'month')).toBeVisible();
-  await expect(plant.scheduleRow('Repot')).toContainText('One date, and then nothing');
+  await expect(plant.scheduleRow('Repot')).toContainText('A single date');
 });
 
 test('a one-off with a month and no day is due for the whole month @js', async ({ plant }) => {

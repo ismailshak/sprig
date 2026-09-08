@@ -15,7 +15,7 @@
 {{template "avatar" .Picture}}
 <span class="row__text">
 <span class="row__name{{if .Botanical}} row__name--sp{{end}}">{{.Name}}</span>
-<span class="row__meta">{{if .Done}}<span class="row__part row__said">{{.Said}}</span>{{else}}{{if .Location}}<span class="row__part">{{.Location}}</span>{{end}}{{if and .Location (or .Late .When)}}<span class="dot">&middot;</span>{{end}}{{if .Late}}<span class="row__part"><span class="late">{{.Late}}</span></span>{{else if .When}}<span class="row__part">{{.Care}} {{.When}}</span>{{end}}{{end}}</span>
+<span class="row__meta">{{if .Done}}<span class="row__part row__said">{{.Said}}</span>{{else}}{{if .Room}}<span class="row__part">{{.Room}}</span>{{end}}{{if and .Room (or .Late .When)}}<span class="dot">&middot;</span>{{end}}{{if .Late}}<span class="row__part"><span class="late">{{.Late}}</span></span>{{else if .When}}<span class="row__part">{{.Care}} {{.When}}</span>{{end}}{{end}}</span>
 </span>
 {{if .Done}}</span>
 <button class="care care--undo" hx-delete="{{.Undo}}" hx-target="#{{.ID}}" hx-swap="outerHTML settle:0ms">{{template "icon-undo"}}<span>Undo</span></button>

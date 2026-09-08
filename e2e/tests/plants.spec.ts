@@ -29,7 +29,7 @@ test('rooms are listed alphabetically with No room last', async ({ plants }) => 
   ]);
 });
 
-test('a plant with no location is listed under No room', async ({ plants }) => {
+test('a plant with no room is listed under No room', async ({ plants }) => {
   await plants.open();
 
   await expect(plants.room(rooms.noRoom).getByRole('link', { name: seeded.sprout.name })).toBeVisible();

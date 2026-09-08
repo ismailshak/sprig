@@ -1,4 +1,4 @@
-{{define "title"}}sprig — account{{end}}
+{{define "title"}}Account · sprig{{end}}
 
 {{/* The account's display name, handle and timezone. There is no email or
      password to change, because sprig has neither.
@@ -10,18 +10,16 @@
 <div class="app__body app__body--sub">
 <form method="post" action="/more/account" novalidate>
 <div class="field">
-<label class="field__label" for="name">Display name <span class="field__hint">what every log row is signed with</span></label>
+<label class="field__label" for="name">Display name <span class="field__hint">shown on what you log</span></label>
 <input class="input" id="name" name="name" type="text" value="{{.Name}}">
 {{with .NameError}}<p class="field__error">{{.}}</p>{{end}}
 </div>
 <div class="field">
-<label class="field__label" for="handle">Handle <span class="field__hint">{{.HandleHint}}</span></label>
+<label class="field__label" for="handle">Handle <span class="field__hint">unique to you</span></label>
 <input class="input" id="handle" name="handle" type="text" value="{{.Handle}}">
 {{with .HandleError}}<p class="field__error">{{.}}</p>{{end}}
 </div>
-{{/* The note opens by saying what a handle is not, because a field called
-     Handle reads as a username. */}}
-<p class="note">Nothing signs in with a handle and there is no password behind it. It is a name for your account that a person can say out loud, and it is what People shows when two of you are called the same thing.</p>
+<p class="note">Your handle identifies your account. It’s shown on People when two members have the same display name.</p>
 {{template "timezone-field" .Zone}}
 <button class="wide-action" type="submit">Save changes</button>
 </form>

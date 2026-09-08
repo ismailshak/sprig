@@ -1,32 +1,30 @@
-{{define "title"}}sprig — notifications{{end}}
+{{define "title"}}Notifications · sprig{{end}}
 
-{{/* Three things, in the order they stop mattering: which types to send, the
-     hour the digest arrives, and which browsers are subscribed. */}}
 {{define "main"}}
 {{template "more-topbar" .Bar}}
 <div class="app__body app__body--sub">
 {{if not .Key}}
-<p class="lead">Notifications are not set up on this sprig, so there is nothing here to switch on.</p>
+<p class="lead">Notifications aren’t enabled on this server.</p>
 {{else}}
 {{/* The script shows this block and hides the form in a browser with no push
      API. On an iPhone that is a browser where sprig is not on the Home
      Screen. */}}
 <div id="push-unavailable" hidden>
-<p class="lead">On an iPhone, notifications only work once sprig is on your Home Screen. Until it is there, there is nothing here to switch on — the browser has no notifications to give.</p>
+<p class="lead">On iPhone, notifications only work once sprig is added to your Home Screen.</p>
 <a class="wide-action" href="{{.Install}}">Install sprig</a>
 </div>
 {{/* data-key is the VAPID public key this browser subscribes with, and
      data-subscribe the URL the script posts the subscription to. */}}
 <form method="post" action="{{.Action}}" novalidate id="push-form" data-key="{{.Key}}" data-subscribe="{{.Subscribe}}">
 <div class="section">
-<div class="section__head"><h2 class="section__title">What to send</h2></div>
+<div class="section__head"><h2 class="section__title">Send me</h2></div>
 <ul class="list">
 <li class="row row--check">
 <label class="check" for="digest">
 <input type="checkbox" id="digest" name="digest" data-notify{{if .Digest}} checked{{end}}>
 <span class="row__text">
-<span class="row__name">What needs doing</span>
-<span class="row__meta"><span class="row__part">One digest a day, and nothing on a day with nothing due.</span></span>
+<span class="row__name">Daily digest</span>
+<span class="row__meta"><span class="row__part">One a day, listing what’s due. Skipped on days with nothing due.</span></span>
 </span>
 </label>
 </li>
@@ -35,7 +33,6 @@
 <input type="checkbox" id="activity" name="activity" data-notify{{if .Activity}} checked{{end}}>
 <span class="row__text">
 <span class="row__name">When someone else logs care</span>
-<span class="row__meta"><span class="row__part">Your own watering is not news to you, so it is never sent.</span></span>
 </span>
 </label>
 </li>
@@ -49,16 +46,16 @@
 {{with .Hours}}
 <div class="section">
 <div class="field">
-<label class="field__label" for="hour">The digest arrives at</label>
+<label class="field__label" for="hour">Send the digest at</label>
 <select class="input input--narrow" id="hour" name="hour">{{template "options" .}}</select>
 </div>
-<p class="note">In {{$.Zone}}, which is <a href="{{$.Account}}">on your account</a>.</p>
+<p class="note">{{$.Zone}} time. Change it in <a href="{{$.Account}}">Account</a>.</p>
 </div>
 {{end}}
 <button class="wide-action" type="submit">Save changes</button>
 </form>
 <div class="section">
-<div class="section__head"><h2 class="section__title">Where they arrive</h2></div>
+<div class="section__head"><h2 class="section__title">Subscribed devices</h2></div>
 {{if .Browsers}}
 <ul class="list">
 {{range .Browsers}}<li class="row row--setting row--stack">
@@ -71,16 +68,15 @@
 <form method="post" action="{{.Remove}}" data-endpoint="{{.Endpoint}}"><button class="row__drop" type="submit">Remove</button></form>
 </li>
 {{end}}</ul>
-<p class="note">One for each browser you have allowed notifications in. Removing one stops them arriving there.</p>
 {{/* The script fills endpoint with this browser's push subscription URL.
      Without JavaScript it stays empty, so the page says this browser is not
      subscribed. */}}
 <form method="post" action="{{.Test}}" id="push-test">
 <input type="hidden" name="endpoint" value="">
-<button class="wide-action" type="submit">Send a test</button>
+<button class="wide-action" type="submit">Send test notification</button>
 </form>
 {{else}}
-<p class="note">No browser is subscribed yet, so nothing is being delivered. Saving with a type on asks this browser for permission.</p>
+<p class="note">No devices are subscribed. Turn on a notification and save to subscribe this device.</p>
 {{end}}
 {{with .TestResult}}<p class="note" role="status">{{.}}</p>{{end}}
 </div>

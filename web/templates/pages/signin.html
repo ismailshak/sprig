@@ -1,4 +1,4 @@
-{{define "title"}}sprig — sign in{{end}}
+{{define "title"}}Sign in · sprig{{end}}
 
 {{define "app-class"}}app app--bare{{end}}
 
@@ -10,7 +10,7 @@
 {{define "main"}}
 <div class="app__body app__body--bare">
 <h1 class="bare__title">Sign in to sprig</h1>
-<p class="lead">Sign in with the passkey on this device. There is nothing to type: your phone or laptop unlocks it the way it unlocks itself.</p>
+<p class="lead">Use the passkey saved on this device.</p>
 {{/* The paragraph below is rendered even when Refusal is empty, because the
      page's script writes the browser's refusal into it. The button starts
      disabled and the note stays under it until that script runs, because the
@@ -20,9 +20,9 @@
 <input type="hidden" name="{{.Field}}">
 {{with .Next}}<input type="hidden" name="{{$.NextField}}" value="{{.}}">{{end}}
 <button class="wide-action" type="submit" disabled>Sign in with a passkey</button>
-<p class="note" id="passkey-noscript">Signing in needs JavaScript and a browser that supports passkeys.</p>
+<p class="note" id="passkey-noscript">Requires JavaScript and a browser with passkey support.</p>
 </form>
-<p class="note">No passkey on this device? Ask whoever runs the garden for a new invite link. If the garden is your own and you kept recovery codes, <a href="{{.Recover}}">use one</a>.</p>
+<p class="note">No passkey on this device? Ask the garden’s owner for a new invite link, or <a href="{{.Recover}}">use a recovery code</a>.</p>
 </div>
 {{end}}
 

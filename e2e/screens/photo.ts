@@ -26,8 +26,8 @@ export class PhotoScreen {
     await this.page.waitForLoadState();
   }
 
-  async keepIt(): Promise<void> {
-    await this.foot().getByRole('button', { name: 'Keep it' }).click();
+  async cancelDelete(): Promise<void> {
+    await this.foot().getByRole('button', { name: 'Cancel' }).click();
     await this.page.waitForLoadState();
   }
 

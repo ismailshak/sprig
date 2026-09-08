@@ -80,8 +80,8 @@ func moreGarden(t *testing.T) *moreFixture {
 	exec(`INSERT INTO notification_preference (membership_id, kind, enabled)
 		VALUES ($1, 'digest', true), ($1, 'activity', false)`, moreMembershipID)
 
-	// The laptop has never been used, which is the row that says so instead of
-	// a date.
+	// The laptop's last_used_at is null, so its row says "Never used" in place
+	// of a date.
 	exec(`INSERT INTO passkey_credential (id, user_id, credential_id, name, public_key, last_used_at)
 		VALUES ($1, $2, 'phone', 'iPhone', '\x00', $3),
 		       ($4, $2, 'laptop', 'MacBook Air', '\x00', NULL),
@@ -94,10 +94,10 @@ func moreGarden(t *testing.T) *moreFixture {
 		phonePushID, moreUserID, safariOniPhone, thursday, laptopPushID, chromeOnMac, strangerPushID, otherUserID,
 		phoneEndpoint, laptopEndpoint, strangerEndpoint)
 
-	// One invite waiting, beside three that are not: one that has run out, one
+	// One pending invite, beside three that are not: one that has run out, one
 	// that has been redeemed, and one in the other garden.
 	exec(`INSERT INTO invite (garden_id, token_hash, role, created_by, expires_at, redeemed_at)
-		VALUES ($1, 'waiting', 'sitter', $2, $3, NULL),
+		VALUES ($1, 'pending', 'sitter', $2, $3, NULL),
 		       ($1, 'expired', 'sitter', $2, $4, NULL),
 		       ($1, 'redeemed', 'sitter', $2, $3, $4),
 		       ($5, 'other-garden', 'sitter', $6, $3, NULL)`,
@@ -308,14 +308,14 @@ func TestMore_TheNotificationsRowSaysOffOnlyWhenBothTypesAreOff(t *testing.T) {
 func TestMore_ThePeopleRowCountsOnlyInvitesThatCanStillBeRedeemed(t *testing.T) {
 	f := moreGarden(t)
 
-	if got := noteOn(t, f.page(t, f.handler.show, morePath), "People"); got != "1 invite waiting" {
-		t.Errorf("the row says %q, want %q", got, "1 invite waiting")
+	if got := noteOn(t, f.page(t, f.handler.show, morePath), "People"); got != "1 invite pending" {
+		t.Errorf("the row says %q, want %q", got, "1 invite pending")
 	}
 
 	f.exec(t, `INSERT INTO invite (garden_id, token_hash, role, created_by, expires_at)
 		VALUES ($1, 'second', 'member', $2, $3)`, moreGardenID, moreUserID, thursday.AddDate(0, 0, 5))
-	if got := noteOn(t, f.page(t, f.handler.show, morePath), "People"); got != "2 invites waiting" {
-		t.Errorf("with two out the row says %q, want %q", got, "2 invites waiting")
+	if got := noteOn(t, f.page(t, f.handler.show, morePath), "People"); got != "2 invites pending" {
+		t.Errorf("with two out the row says %q, want %q", got, "2 invites pending")
 	}
 
 	f.exec(t, "DELETE FROM invite WHERE garden_id = $1 AND redeemed_at IS NULL", moreGardenID)
@@ -330,8 +330,8 @@ func TestMore_ThePeopleRowDoesNotCountAReenrolmentLink(t *testing.T) {
 	f.exec(t, `INSERT INTO invite (garden_id, token_hash, role, user_id, created_by, expires_at)
 		VALUES ($1, 'reenrolment', 'member', $2, $3, $4)`, moreGardenID, otherUserID, moreUserID, thursday.AddDate(0, 0, 5))
 
-	if got := noteOn(t, f.page(t, f.handler.show, morePath), "People"); got != "1 invite waiting" {
-		t.Errorf("the row says %q, want %q; a re-enrolment link goes to somebody already in the garden", got, "1 invite waiting")
+	if got := noteOn(t, f.page(t, f.handler.show, morePath), "People"); got != "1 invite pending" {
+		t.Errorf("the row says %q, want %q; a re-enrolment link goes to somebody already in the garden", got, "1 invite pending")
 	}
 }
 

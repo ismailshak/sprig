@@ -78,7 +78,7 @@ test('a row on the activity log opens a sheet filled in from the event', async (
   await expect(sheet.dialog()).toContainText(seeded.bigFella.name);
   await expect(sheet.dialog().getByRole('button', { name: 'Save changes' })).toBeVisible();
   await expect(sheet.deleteButton()).toBeVisible();
-  await expect(sheet.recorded()).toBeVisible();
+  await expect(sheet.loggedBy()).toBeVisible();
 });
 
 test('a correction files the event under the day it was saved with @swap', async ({ activity, sheet }) => {
@@ -100,14 +100,14 @@ test('a correction files the event under the day it was saved with @swap', async
   expect(day).toContain('Yesterday');
 });
 
-test('an event recorded as the wrong care is corrected to the right one @swap', async ({ page, activity, sheet }) => {
+test('an event logged as the wrong care is corrected to the right one @swap', async ({ page, activity, sheet }) => {
   await page.goto(`/activity?plant=${seeded.bigFella.id}`);
   await activity.openSheet(activity.rows().first());
 
-  await sheet.what('Feed').click();
-  // The chip fetches the sheet again, and the Save button carries the care it
-  // will record, so the submit has to wait for the chip that came back.
-  await expect(sheet.what('Feed')).toHaveAttribute('aria-pressed', 'true');
+  await sheet.careChip('Feed').click();
+  // The chip fetches the sheet again, and the Save button posts the care it
+  // will log, so the submit has to wait for the sheet that comes back.
+  await expect(sheet.careChip('Feed')).toHaveAttribute('aria-pressed', 'true');
   await sheet.submit('Save changes');
 
   // The log filtered to one plant heads each row with the care rather than the

@@ -361,7 +361,7 @@ func TestRequireGarden_ASessionInAGardenReachesTheRoute(t *testing.T) {
 
 // onNoGardenPage reports whether body is the "You're in no garden" page.
 func onNoGardenPage(body string) bool {
-	return strings.Contains(body, "You&rsquo;re in no garden")
+	return strings.Contains(body, "No garden yet")
 }
 
 func TestRequireGarden_ASessionOnNoGardenIsToldSoAndIsOfferedSetUpOnlyWhenSignUpIsOn(t *testing.T) {
@@ -382,7 +382,7 @@ func TestRequireGarden_ASessionOnNoGardenIsToldSoAndIsOfferedSetUpOnlyWhenSignUp
 			if !onNoGardenPage(page) {
 				t.Errorf("the page does not say the account is in no garden:\n%s", page)
 			}
-			for _, want := range []string{"You are signed in as Ellie", `<form method="post" action="` + signOutPath + `">`} {
+			for _, want := range []string{"You’re signed in as Ellie", `<form method="post" action="` + signOutPath + `">`} {
 				if !strings.Contains(page, want) {
 					t.Errorf("the page lacks %s:\n%s", want, page)
 				}
@@ -393,7 +393,7 @@ func TestRequireGarden_ASessionOnNoGardenIsToldSoAndIsOfferedSetUpOnlyWhenSignUp
 					t.Errorf("the page links to %s, and there is no garden to open", tab)
 				}
 			}
-			if linkTo(page, setupSignedInPath, "Set up a garden of your own") != signupEnabled {
+			if linkTo(page, setupSignedInPath, "Set up a garden") != signupEnabled {
 				t.Errorf("the page offers to set up a garden = %v, want %v", !signupEnabled, signupEnabled)
 			}
 		})
@@ -455,8 +455,15 @@ func TestRequire_AMissingCapabilityIsTheSame404AsAnUnknownPath(t *testing.T) {
 	})))
 	handler := Authenticate(slog.New(slog.DiscardHandler), testSessions(), acceptEveryToken(sitterPrincipal()), sessionOnly)(mux)
 
+	// The unknown path goes through the whole app. The comparison is then
+	// against the 404 the route table serves and not one this test wrote.
+	app := New(testLogger, testSessions(), testPasskeys(), acceptEveryToken(sitterPrincipal()), noLiveToken, nil,
+		testPhotos(t), testTemplates(), testAssets(), "", false, testPushKey, nil, nil, nil)
 	unknown := httptest.NewRecorder()
-	handler.ServeHTTP(unknown, signedIn(httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/nope", nil)))
+	app.ServeHTTP(unknown, signedIn(httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/nope", nil)))
+	if unknown.Code != http.StatusNotFound {
+		t.Fatalf("an unknown path got %d, want %d", unknown.Code, http.StatusNotFound)
+	}
 
 	refused := httptest.NewRecorder()
 	handler.ServeHTTP(refused, signedIn(httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/plants", nil)))

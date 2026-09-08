@@ -21,12 +21,12 @@ type passkeysPage struct {
 	// Error is the message shown above Add a passkey when a device was refused.
 	// Empty otherwise.
 	Error string
-	// Add is the URL the Add a passkey form posts the browser's answer to.
+	// Add is the URL the Add a passkey form posts the browser's credential to.
 	Add string
 	// Challenge is the URL the page's script posts to for a challenge, before it
 	// calls the browser's credential API.
 	Challenge string
-	// Field is the name of the hidden input the browser's answer goes in. The
+	// Field is the name of the hidden input the browser's credential goes in. The
 	// script reads it off the form, so the name is written once.
 	Field string
 }
@@ -62,7 +62,7 @@ func (h *more) removePasskey(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	passkeyID, err := uuid.Parse(r.PathValue("key"))
 	if err != nil {
-		http.NotFound(w, r)
+		notFound(w)
 		return
 	}
 	var removed int64
@@ -81,7 +81,7 @@ func (h *more) removePasskey(w http.ResponseWriter, r *http.Request) {
 	// Another account's credential, one already removed and the last one left
 	// are all 404, since none of the three was a button this page offered.
 	if removed == 0 {
-		http.NotFound(w, r)
+		notFound(w)
 		return
 	}
 	http.Redirect(w, r, passkeysPath, http.StatusSeeOther)

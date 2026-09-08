@@ -16,7 +16,7 @@
 {{/* Don't schedule closes the row. There is no Cancel, because nothing has
      been saved to go back to. */}}
 <button class="sched__cancel" type="submit" name="close" value="{{.Slug}}" formmethod="get" formaction="{{.Path}}"
- hx-get="{{.Path}}?close={{.Slug}}" hx-target="#{{.ID}}" hx-swap="outerHTML settle:0ms">Don't schedule</button>
+ hx-get="{{.Path}}?close={{.Slug}}" hx-target="#{{.ID}}" hx-swap="outerHTML settle:0ms">Don’t schedule</button>
 </div>
 </li>{{else}}<li class="sched sched--add" id="{{.ID}}">
 {{/* The whole row is one submit button, so a press anywhere on it opens the
@@ -59,7 +59,7 @@
 <input class="input input--tiny" id="{{.Slug}}-every" name="{{.Slug}}-every" type="number" min="1" max="{{.Max}}" value="{{.Every}}" aria-label="How often {{.Care}} repeats">
 <select class="input input--unit" id="{{.Slug}}-unit" name="{{.Slug}}-unit" aria-label="{{.Care}} interval">{{template "options" .Units}}</select>
 </span>{{end}}
-{{if .Dated}}<span class="sched__field">Next one
+{{if .Dated}}<span class="sched__field">Next due
 <select class="input input--unit" id="{{.Slug}}-day" name="{{.Slug}}-day" aria-label="{{.Care}} day">{{template "options" .Days}}</select>
 <select class="input input--unit" id="{{.Slug}}-month" name="{{.Slug}}-month" aria-label="{{.Care}} month">{{template "options" .Months}}</select>
 <select class="input input--unit" id="{{.Slug}}-year" name="{{.Slug}}-year" aria-label="{{.Care}} year">{{template "options" .Years}}</select>
@@ -67,7 +67,7 @@
 <label class="sched__season">
 <input type="checkbox" id="{{.Slug}}-seasonal" name="{{.Slug}}-seasonal"{{if .Seasonal}} checked{{end}}
  hx-get="{{.Path}}" hx-trigger="change" hx-include="#{{.ID}}" hx-target="#{{.ID}}" hx-swap="outerHTML settle:0ms">
-Only part of the year
+Seasonal
 </label>
 {{if .Seasonal}}<span class="sched__months">
 <select class="input input--unit" id="{{.Slug}}-from" name="{{.Slug}}-from" aria-label="{{.Care}} season from">{{template "options" .From}}</select>

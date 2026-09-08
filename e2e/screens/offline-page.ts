@@ -10,6 +10,6 @@ export class OfflinePageScreen {
   }
 
   heading(): Locator {
-    return this.page.getByRole('heading', { name: "You're offline" });
+    return this.page.getByRole('heading', { name: 'You’re offline' });
   }
 }

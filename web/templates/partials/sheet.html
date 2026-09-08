@@ -11,7 +11,7 @@
 {{template "avatar" .Plant.Picture}}
 <span class="row__text">
 <span class="row__name{{if .Plant.Botanical}} row__name--sp{{end}}">{{.Plant.Name}}</span>
-<span class="row__meta"><span class="row__part">{{with .Plant.Sub}}{{if $s.Plant.Italic}}<i>{{.}}</i>{{else}}{{.}}{{end}}{{end}}{{if and .Plant.Sub .Plant.Location}} &middot; {{end}}{{.Plant.Location}}</span></span>
+<span class="row__meta"><span class="row__part">{{with .Plant.Sub}}{{if $s.Plant.Italic}}<i>{{.}}</i>{{else}}{{.}}{{end}}{{end}}{{if and .Plant.Sub .Plant.Room}} &middot; {{end}}{{.Plant.Room}}</span></span>
 </span>
 {{if .Plant.Href}}<span class="sheet__chevron">{{template "icon-chevron"}}</span></a>{{else}}</div>{{end}}
 {{template "sheet-form" $}}
@@ -20,20 +20,20 @@
 </dialog>{{else}}<div id="sheet"></div>{{end}}{{end}}
 
 {{/* The stylesheet shows the fieldset for the selected outcome, sheet__done or
-     sheet__skipped. A What chip submits the form as a GET because the usual
-     interval on the skip chip depends on the selected care type and only the
-     server knows it. The form has its own id because swapping the whole dialog
-     would replay its entrance animation and reset the panel's scroll. The post
-     uses settle:0ms because it replaces a care row. */}}
+     sheet__skipped. A chip under Care submits the form as a GET because the
+     usual interval on the reminder chip depends on the selected care type and
+     only the server knows it. The form has its own id because swapping the
+     whole dialog would replay its entrance animation and reset the panel's
+     scroll. The post uses settle:0ms because it replaces a care row. */}}
 {{define "sheet-form"}}{{with .Sheet}}{{$s := .}}<form class="sheet__form" id="sheet-form" method="post" action="{{.Path}}"{{with .Target}} hx-post="{{$s.Path}}" hx-target="#{{.}}" hx-swap="outerHTML settle:0ms"{{end}}>
 {{/* Enter in the note field submits through the form's first submit button.
-     Without this hidden one, that would be a What chip. */}}
+     Without this hidden one, that would be a chip under Care. */}}
 <button class="sheet__default" name="care" value="{{.Care}}" tabindex="-1" aria-hidden="true"></button>
 {{with .Row}}<input type="hidden" name="row" value="{{.}}">{{end}}
 {{with .Over}}<input type="hidden" name="over" value="{{.}}">{{end}}
 {{range .Query}}<input type="hidden" name="{{.Name}}" value="{{.Value}}">{{end}}
 {{if gt (len .Cares) 1}}<fieldset class="field">
-<legend class="field__label">What</legend>
+<legend class="field__label">Care</legend>
 <div class="chips">{{range .Cares}}<button class="chip" name="care" value="{{.Value}}" formmethod="get" formaction="{{$s.Path}}" aria-pressed="{{.On}}" hx-get="{{$s.Path}}" hx-include="closest form" hx-target="#sheet-form" hx-swap="outerHTML">{{.Label}}</button>{{end}}</div>
 </fieldset>{{end}}
 <fieldset class="field">
@@ -44,26 +44,26 @@
 </div>
 </fieldset>
 <fieldset class="field sheet__done">
-<legend class="field__label">When it happened</legend>
+<legend class="field__label">When</legend>
 <div class="chips">{{range .Whens}}<label class="chip"><input type="radio" name="when" value="{{.Value}}"{{if .On}} checked{{end}}>{{.Label}}</label>{{end}}</div>
 <input class="input input--narrow sheet__clock" type="time" name="time" value="{{.Clock}}" aria-label="Time">
 <input class="input input--narrow sheet__at" type="datetime-local" name="at" value="{{.At}}" aria-label="Day and time">
 {{with .WhenError}}<p class="field__error">{{.}}</p>{{end}}
 </fieldset>
 <fieldset class="field sheet__skipped">
-<legend class="field__label">Ask again in</legend>
-<div class="chips">{{range .Snoozes}}<label class="chip"><input type="radio" name="again" value="{{.Value}}"{{if .On}} checked{{end}}>{{.Label}}</label>{{end}}</div>
+<legend class="field__label">Remind me in</legend>
+<div class="chips">{{range .Reminders}}<label class="chip"><input type="radio" name="again" value="{{.Value}}"{{if .On}} checked{{end}}>{{.Label}}</label>{{end}}</div>
 </fieldset>
 <div class="field">
 <label class="field__label" for="sheet-note">Note <span class="field__hint">optional</span></label>
-<input class="input" id="sheet-note" name="note" type="text" placeholder="{{if .Skipped}}Soil still damp{{else}}Anything worth remembering{{end}}" value="{{.Note}}">
+<input class="input" id="sheet-note" name="note" type="text" placeholder="{{if .Skipped}}Soil still damp{{else}}Add a note{{end}}" value="{{.Note}}">
 </div>
 {{if .Correcting}}
 {{/* Correcting an event says who wrote it down and when. That is the only
      place both of an event's times are shown. Its one button saves whatever the
      outcome is. Delete posts the same form to its own URL, so it works without
      JavaScript, and swaps the row it came from when htmx is running. */}}
-<p class="sheet__record">{{.Recorded}}</p>
+<p class="sheet__logged">{{.Logged}}</p>
 <div class="sheet__foot">
 <button class="sheet__go" name="care" value="{{.Care}}">Save changes</button>
 {{with .Delete}}<button class="sheet__delete" formaction="{{.}}" hx-post="{{.}}" hx-target="#{{$s.DeleteTarget}}" hx-swap="outerHTML settle:0ms">Delete</button>{{end}}
@@ -72,6 +72,6 @@
 {{/* Both buttons are rendered. The stylesheet shows the one matching the
      selected outcome. */}}
 <button class="sheet__go sheet__done" name="care" value="{{.Care}}">Log {{.Noun}}</button>
-<button class="sheet__go sheet__skipped" name="care" value="{{.Care}}">Record a skip</button>
+<button class="sheet__go sheet__skipped" name="care" value="{{.Care}}">Log skip</button>
 {{end}}
 </form>{{end}}{{end}}

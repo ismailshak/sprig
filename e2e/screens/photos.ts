@@ -25,8 +25,8 @@ export class PhotosScreen {
   }
 
   // The action under "No photos yet" for a member who may add photos.
-  addAPhoto(): Locator {
-    return this.page.getByRole('link', { name: 'Add a photo' });
+  addPhoto(): Locator {
+    return this.page.getByRole('link', { name: 'Add photo' });
   }
 
   // The back link, named after the plant.

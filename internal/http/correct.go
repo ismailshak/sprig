@@ -16,7 +16,7 @@ import (
 	"github.com/ismailshak/sprig/internal/store"
 )
 
-// eventRowPrefix starts the HTML id of every row on the activity log. A delete
+// eventRowPrefix starts the HTML id of every row on the Activity page. A delete
 // swaps the row it was made from, so the row needs an id the server assigns.
 const eventRowPrefix = "event-"
 
@@ -24,11 +24,10 @@ func eventRowID(eventID uuid.UUID) string {
 	return eventRowPrefix + eventID.String()
 }
 
-// eventPath is the URL of one event already recorded. With an empty suffix it
-// is the correcting sheet on GET and the save on POST; the two other posts are
-// "/delete" and "/restore". Every one of them carries the log's own query
-// string, so the response can render the page the sheet was opened over,
-// filter and paging cursor included.
+// eventPath is the URL of one event already logged: the correcting sheet on
+// GET, the save on POST, and "/delete" and "/restore" for the two other posts.
+// Each one keeps the Activity page's own query string, so the response can
+// render the page the sheet was opened over, with its filter and paging cursor.
 func eventPath(plantID, eventID uuid.UUID, suffix string, q logQuery) string {
 	path := logPath(plantID) + "/" + eventID.String() + suffix
 	if values := q.values(); len(values) > 0 {
@@ -37,7 +36,7 @@ func eventPath(plantID, eventID uuid.UUID, suffix string, q logQuery) string {
 	return path
 }
 
-// correctHref is the URL a row on the log points at, which is the sheet that
+// correctHref is the URL a row on the Activity page points at, the sheet that
 // corrects the event. It is empty for a reader who may not correct that event,
 // and the row is then not pressable.
 func correctHref(principal auth.Principal, q logQuery, e store.CareEvent) string {
@@ -57,14 +56,14 @@ func mayCorrect(principal auth.Principal, e store.CareEvent) bool {
 
 // mayDelete reports whether the sheet shows Delete. It repeats
 // DeleteCareEvent's own test, so the button and the 404 agree. Unlike the Undo
-// on Today's feed it has no time limit, because this sheet is where care
-// recorded days ago is removed.
+// on Today's feed it has no time limit, because this sheet is where care logged
+// days ago is removed.
 func mayDelete(principal auth.Principal, e store.CareEvent) bool {
 	return principal.Can(auth.CareDeleteAny) ||
 		(e.PerformedBy == principal.User.ID && principal.Can(auth.CareDeleteOwn))
 }
 
-// event is one recorded event and the page it was opened from. Every route
+// event is one logged event and the page it was opened from. Every route
 // under /plants/{plant}/log/{event} starts by reading one.
 type event struct {
 	row store.GetCareEventRow
@@ -102,7 +101,7 @@ func (h *activity) readEvent(w http.ResponseWriter, r *http.Request) (event, boo
 	principal := PrincipalFrom(r)
 	plantID, eventID, q, ok := readEventPath(r)
 	if !ok {
-		http.NotFound(w, r)
+		notFound(w)
 		return event{}, false
 	}
 
@@ -113,7 +112,7 @@ func (h *activity) readEvent(w http.ResponseWriter, r *http.Request) (event, boo
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		http.NotFound(w, r)
+		notFound(w)
 		return event{}, false
 	case err != nil:
 		serverError(h.logger, w, r, "read the care", err)
@@ -125,7 +124,7 @@ func (h *activity) readEvent(w http.ResponseWriter, r *http.Request) (event, boo
 // correct handles GET /plants/{plant}/log/{event} and opens the sheet over the
 // row, filled in from the event. A page navigation gets the whole activity page
 // with the sheet on it, the swap that opens the sheet gets the dialog, and the
-// swap that switches What gets the form alone.
+// swap that switches the care type gets the form alone.
 func (h *activity) correct(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	e, ok := h.readEvent(w, r)
@@ -133,18 +132,18 @@ func (h *activity) correct(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !mayCorrect(principal, e.care()) {
-		http.NotFound(w, r)
+		notFound(w)
 		return
 	}
 
 	// A GET with no "when" is a row opening the sheet for the first time, so
-	// the fields come from the event. With one it is a What chip fetching the
-	// sheet again, and the fields come from the form it submitted.
+	// the fields come from the event. With one it is a chip under Care fetching
+	// the sheet again, and the fields come from the form it submitted.
 	d := draftOf(e)
 	if r.URL.Query().Get("when") != "" {
 		d, ok = readDraft(r.URL.Query())
 		if !ok {
-			http.Error(w, "the sheet did not send that", http.StatusBadRequest)
+			badRequest(w)
 			return
 		}
 	}
@@ -152,7 +151,7 @@ func (h *activity) correct(w http.ResponseWriter, r *http.Request) {
 	s, err := h.sheetOver(r, principal, e, d)
 	switch {
 	case errors.Is(err, errNotOffered):
-		http.Error(w, "the garden has no such care", http.StatusBadRequest)
+		badRequest(w)
 		return
 	case err != nil:
 		serverError(h.logger, w, r, "load the plant", err)
@@ -178,23 +177,23 @@ func (h *activity) save(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !mayCorrect(principal, e.care()) {
-		http.NotFound(w, r)
+		notFound(w)
 		return
 	}
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "the form did not parse", http.StatusBadRequest)
+		badRequest(w)
 		return
 	}
 	d, ok := readDraft(r.PostForm)
 	if !ok {
-		http.Error(w, "the sheet did not send that", http.StatusBadRequest)
+		badRequest(w)
 		return
 	}
 
 	s, err := h.sheetOver(r, principal, e, d)
 	switch {
 	case errors.Is(err, errNotOffered):
-		http.Error(w, "the garden has no such care", http.StatusBadRequest)
+		badRequest(w)
 		return
 	case err != nil:
 		serverError(h.logger, w, r, "load the plant", err)
@@ -219,7 +218,7 @@ func (h *activity) save(w http.ResponseWriter, r *http.Request) {
 		h.templates.render(w, r, view{page: "activity", fragment: "sheet", status: http.StatusUnprocessableEntity}, page)
 		return
 	case err != nil:
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		badRequest(w)
 		return
 	}
 
@@ -242,7 +241,7 @@ func (h *activity) save(w http.ResponseWriter, r *http.Request) {
 	switch _, err := h.queries.UpdateCareEvent(r.Context(), params); {
 	case errors.Is(err, pgx.ErrNoRows):
 		// The event was deleted between reading it and writing the correction.
-		http.NotFound(w, r)
+		notFound(w)
 		return
 	case err != nil:
 		serverError(h.logger, w, r, "save the correction", err)
@@ -287,7 +286,7 @@ func (h *activity) remove(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		// Somebody else's event is a 404, the same as one that does not exist.
-		http.NotFound(w, r)
+		notFound(w)
 		return
 	case err != nil:
 		serverError(h.logger, w, r, "delete the care", err)
@@ -310,7 +309,7 @@ func (h *activity) restore(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	plantID, eventID, q, ok := readEventPath(r)
 	if !ok {
-		http.NotFound(w, r)
+		notFound(w)
 		return
 	}
 	// The plant is read first because the restore inserts a row against it, and
@@ -318,19 +317,19 @@ func (h *activity) restore(w http.ResponseWriter, r *http.Request) {
 	// fails a foreign key.
 	if _, err := h.queries.GetPlant(r.Context(), principal.Garden.ID, plantID); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			http.NotFound(w, r)
+			notFound(w)
 			return
 		}
 		serverError(h.logger, w, r, "read the plant", err)
 		return
 	}
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "the form did not parse", http.StatusBadRequest)
+		badRequest(w)
 		return
 	}
 	params, ok := restoreParams(r.PostForm, h.now())
 	if !ok {
-		http.Error(w, "the row did not send that", http.StatusBadRequest)
+		badRequest(w)
 		return
 	}
 	params.ID = eventID
@@ -342,10 +341,10 @@ func (h *activity) restore(w http.ResponseWriter, r *http.Request) {
 	// The care type is checked here for the same reason as the plant: the
 	// insert references it, and one the garden does not have is a 404 rather
 	// than a row that fails a foreign key. An archived care type counts, since
-	// the event being restored can be one of the last recorded under it.
+	// the event being restored can be one of the last logged under it.
 	if _, err := h.queries.GetCareType(r.Context(), principal.Garden.ID, params.CareTypeID); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			http.NotFound(w, r)
+			notFound(w)
 			return
 		}
 		serverError(h.logger, w, r, "read the care type", err)
@@ -357,7 +356,7 @@ func (h *activity) restore(w http.ResponseWriter, r *http.Request) {
 		// one performed by somebody else. Both are a 404, the same as an event
 		// that does not exist.
 		if errors.Is(err, pgx.ErrNoRows) {
-			http.NotFound(w, r)
+			notFound(w)
 			return
 		}
 		serverError(h.logger, w, r, "restore the care", err)
@@ -429,7 +428,7 @@ func restoreParams(values url.Values, now time.Time) (store.RestoreCareEventPara
 		p.OverrideIntervalDays = &days
 	}
 	// A skip is the interval it put the care off by. The log-care sheet always
-	// records one, so a skip arriving without it is not a row this app wrote.
+	// sets one, so a skip arriving without it is not a row this app wrote.
 	if !p.Done && p.OverrideIntervalDays == nil {
 		return p, false
 	}
@@ -444,9 +443,9 @@ func (h *activity) sheetOver(r *http.Request, principal auth.Principal, e event,
 		return nil, err
 	}
 	// The sheet offers every care type in the garden rather than the ones this
-	// plant is scheduled for, because an event can be of any type and "I
-	// recorded a watering and it was actually a feed" has to be a correction
-	// the sheet can make.
+	// plant is scheduled for, because an event can be of any type and "I logged
+	// a watering and it was actually a feed" has to be a correction the sheet
+	// can make.
 	offers := withEventCare(detail.offers(), e.row.CareType)
 	care, ok := offerFor(offers, d.Care)
 	if !ok {
@@ -458,7 +457,7 @@ func (h *activity) sheetOver(r *http.Request, principal auth.Principal, e event,
 	return s, nil
 }
 
-// withEventCare adds the care type an event was recorded under to the ones the
+// withEventCare adds the care type an event was logged under to the ones the
 // sheet lists, when the garden's list has left it out. A care type archived
 // since is no longer listed, and without this the sheet could not open on an
 // event holding one, let alone save it again. The chip keeps its place in
@@ -477,7 +476,7 @@ func withEventCare(offers []offer, careType store.CareType) []offer {
 	return slices.Insert(offers, at, offer{CareType: careType})
 }
 
-// draftOf fills the sheet's fields from an event already recorded. The day chip
+// draftOf fills the sheet's fields from an event already logged. The day chip
 // is picked from how many days ago the care happened, because the chip owns the
 // date and the picker under it edits only the time. "Just now" is not a value a
 // past event produces, though it stays on offer, since "no, I did it just now"
@@ -507,19 +506,19 @@ func draftOf(e event) draft {
 	return d
 }
 
-// recordedLine is the line above the sheet's buttons saying who wrote the event
-// down and when. It is the only place the app shows both of the times an event
-// holds: care given yesterday evening can have been entered this morning.
-func recordedLine(principal auth.Principal, e event) string {
+// loggedLine is the line above the sheet's buttons saying who logged the event
+// and when. It is the only place the app shows both of the times an event
+// holds: care given yesterday evening can have been logged this morning.
+func loggedLine(principal auth.Principal, e event) string {
 	who := e.row.PerformedByName
 	if e.care().PerformedBy == principal.User.ID {
 		who = "you"
 	}
 	performed := agoWord(e.care().PerformedAt, e.now) + " at " + clockWord(e.care().PerformedAt, e.now)
 	if schedule.DaysBetween(e.care().RecordedAt, e.now) == schedule.DaysBetween(e.care().PerformedAt, e.now) {
-		return "Recorded by " + who + ", " + performed + "."
+		return "Logged by " + who + " " + performed + "."
 	}
-	return "Recorded by " + who + " " + agoWord(e.care().RecordedAt, e.now) + ", for " + performed + "."
+	return "Logged by " + who + " " + agoWord(e.care().RecordedAt, e.now) + " for " + performed + "."
 }
 
 // eventRowOf builds one event as the log renders it, so that a swap can replace
@@ -538,8 +537,8 @@ func eventRowOf(principal auth.Principal, e event) *eventRow {
 }
 
 // deletedRow builds the row a delete leaves in place of the event. It keeps the
-// lead the row already had, so nothing on the page moves, and carries the
-// deleted event as hidden fields on the Undo form.
+// name and picture the row already had, so nothing on the page moves. The Undo
+// form holds the deleted event in hidden fields.
 func deletedRow(principal auth.Principal, e event) *eventRow {
 	row := eventRowOf(principal, e)
 	row.Href = ""

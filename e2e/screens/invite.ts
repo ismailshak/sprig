@@ -13,14 +13,14 @@ export class InviteScreen {
     return this.page.getByRole('button', { name: role, exact: true });
   }
 
-  // The hint is inside the label, so the field's accessible name is "Until
-  // optional".
+  // The hint is inside the label, so the field's accessible name is "Access
+  // ends optional".
   until(): Locator {
-    return this.page.getByLabel(/^Until\b/);
+    return this.page.getByLabel(/^Access ends\b/);
   }
 
   create(): Locator {
-    return this.page.getByRole('button', { name: 'Create the link' });
+    return this.page.getByRole('button', { name: 'Create link' });
   }
 
   // The link, shown once. It is matched on the path that redeems it, because

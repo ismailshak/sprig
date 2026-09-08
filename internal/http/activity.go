@@ -31,8 +31,8 @@ func plantActivityPath(plantID uuid.UUID) string {
 // a few days for a garden that logs about five cares a day.
 const logPageSize = 20
 
-// gardenSilence is the shortest gap between days that gets a "nothing for N
-// days" marker. A minimum of one would put a marker between most days, since
+// gardenSilence is the shortest gap between days that gets a "No activity for
+// N days" marker. A minimum of one would put a marker between most days, since
 // something is logged most days.
 const gardenSilence = 3
 
@@ -86,9 +86,9 @@ func parseLogQuery(r *http.Request) (logQuery, bool) {
 	return q, true
 }
 
-// values is the query string as parameters. The correcting sheet's URLs carry
-// the same ones, so that a save or a delete can render the page the sheet was
-// opened over.
+// values is the query string as parameters. The correcting sheet's URLs repeat
+// the same ones, so a save or a delete can render the page the sheet was opened
+// over.
 func (q logQuery) values() url.Values {
 	values := url.Values{}
 	if q.plant != nil {
@@ -150,13 +150,13 @@ func (h *activity) show(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	q, ok := parseLogQuery(r)
 	if !ok {
-		http.NotFound(w, r)
+		notFound(w)
 		return
 	}
 	page, err := h.page(r.Context(), principal, q)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		http.NotFound(w, r)
+		notFound(w)
 		return
 	case err != nil:
 		serverError(h.logger, w, r, "load the log", err)
@@ -304,8 +304,8 @@ type eventRow struct {
 	Extra string
 
 	// Deleted is true for the row a delete leaves in place of the event while
-	// its undo window runs. The row keeps its lead and says "Deleted", with an
-	// Undo button where the event's own line was.
+	// its undo window runs. The row keeps the name and icon it had and says
+	// "Deleted", with an Undo button where the event's own line was.
 	Deleted bool
 	// Restore is the URL the Undo button posts to, set only on a deleted row.
 	Restore string
@@ -376,16 +376,16 @@ func newActivityEmpty(principal auth.Principal, plants int64) *activityEmpty {
 		empty := &activityEmpty{
 			NoPlants: true,
 			Title:    "No plants yet",
-			Line:     "Add a plant and sprig will remind you when to water it.",
+			Line:     "Add a plant to see its tasks here.",
 		}
 		if principal.Can(auth.PlantCreate) {
-			empty.Action = &link{Label: "Add a plant", Href: newPlantPath}
+			empty.Action = &link{Label: "Add plant", Href: newPlantPath}
 		}
 		return empty
 	}
 	return &activityEmpty{
-		Title: "Nothing recorded yet",
-		Line:  "Water or feed something and it will show up here, with who did it and when.",
+		Title: "No activity yet",
+		Line:  "Anything you log shows up here.",
 	}
 }
 
@@ -440,7 +440,7 @@ func plantLogItems(principal auth.Principal, q logQuery, events []store.ListCare
 }
 
 func silenceLabel(days int) string {
-	return "nothing for " + daysWord(days)
+	return "No activity for " + daysWord(days)
 }
 
 // plantSilenceFloor is the smallest gap this page will label, in days: twice the
@@ -497,7 +497,7 @@ func newPlantEventRow(principal auth.Principal, q logQuery, e store.ListCareEven
 func eventExtra(e store.CareEvent) string {
 	var parts []string
 	if !e.Done && e.OverrideIntervalDays != nil {
-		parts = append(parts, "Asking again in "+daysWord(int(*e.OverrideIntervalDays)))
+		parts = append(parts, "Reminder in "+daysWord(int(*e.OverrideIntervalDays)))
 	}
 	if e.Note != nil && *e.Note != "" {
 		parts = append(parts, "“"+*e.Note+"”")

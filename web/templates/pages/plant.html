@@ -1,4 +1,4 @@
-{{define "title"}}sprig — {{.Name}}{{end}}
+{{define "title"}}{{.Name}} · sprig{{end}}
 
 {{/* The top bar holds only the back link. The heading below it already names
      the plant. */}}
@@ -7,7 +7,7 @@
 <a class="backlink" href="/plants">{{template "icon-back"}}Plants</a>
 </header>
 {{/* Sections are in phone order. Above 900px the stylesheet's grid areas move
-     the picture and the reference into their own column, so the wide layout
+     the picture and the details into their own column, so the wide layout
      reuses this markup. */}}
 <div class="app__body app__body--plant">
 <div class="hero">
@@ -33,10 +33,10 @@
 
 {{with .Log}}<a class="wide-action" href="{{.}}" hx-get="{{.}}" hx-target="#sheet" hx-swap="outerHTML">Log care</a>{{end}}
 
-{{with .Reference}}
-<section class="section section--reference" aria-labelledby="reference">
+{{with .Details}}
+<section class="section section--details" aria-labelledby="details">
 <div class="section__head">
-<h2 class="section__title" id="reference">Reference</h2>
+<h2 class="section__title" id="details">Details</h2>
 </div>
 <div class="panel">
 {{with .Facts}}<dl class="facts">
@@ -65,13 +65,13 @@
 
 {{/* Recent lines say who did what, without the plant's name, because every
      line is about this plant. */}}
-<section class="section section--history" aria-labelledby="recent">
+<section class="section section--activity" aria-labelledby="recent">
 <div class="section__head">
-<h2 class="section__title" id="recent">Recent</h2>
+<h2 class="section__title" id="recent">Recent activity</h2>
 </div>
 <ul class="loglist">
 {{range .Recent}}<li class="logline"><b>{{.Who}}</b> {{.Did}} &middot; {{.When}}</li>
-{{else}}<li class="logline logline--none">Nothing recorded yet.</li>
+{{else}}<li class="logline logline--none">No activity yet.</li>
 {{end}}</ul>
 {{with .Activity}}<a class="foot-link" href="{{.Href}}">{{.Label}}{{template "icon-chevron"}}</a>{{end}}
 </section>
@@ -108,9 +108,9 @@
      time because the plant already exists. One URL serves the editor and the
      save, and a second serves the remove confirmation and the removal.
 
-     Save is the only submit button while editing, and Keep it is the first
-     while the confirmation is showing, so Enter in a field never triggers
-     Remove. Cancel and Remove are GET links.
+     Save is the only submit button while editing, and the confirmation's Cancel
+     is the first while that is showing, so Enter in a field never triggers
+     Remove. The editor's own Cancel and Remove are GET links.
 
      Remove asks for confirmation, and the confirmation replaces the buttons
      rather than opening a dialog, so the schedule stays visible above it.
@@ -124,7 +124,7 @@
 {{if .Asking}}<div class="sched__confirm">
 <span class="sched__ask">Remove this schedule?</span>
 <button class="sched__cancel" type="submit" formmethod="get" formaction="{{.Path}}"
- hx-get="{{.Path}}" hx-include="#{{.ID}}" hx-target="#{{.ID}}" hx-swap="outerHTML settle:0ms">Keep it</button>
+ hx-get="{{.Path}}" hx-include="#{{.ID}}" hx-target="#{{.ID}}" hx-swap="outerHTML settle:0ms">Cancel</button>
 <button class="care care--small" type="submit" formaction="{{.Remove}}"
  hx-post="{{.Remove}}" hx-target="#{{.ID}}" hx-swap="outerHTML settle:0ms">Remove</button>
 </div>{{else}}<div class="sched__buttons">
