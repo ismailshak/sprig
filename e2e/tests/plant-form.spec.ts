@@ -260,17 +260,26 @@ test('with no JavaScript there is no Add a photo button and the plant is still a
   await expect(plant.heading()).toHaveText('Ada');
 });
 
-test('a chosen photo is resized to 2048 pixels on its long edge with its EXIF block gone @js', async ({
+// The bytes are fetched from the app rather than read from the file input,
+// so the check covers the whole path from the resize to the stored file.
+test('the photo the app serves back is 2048 pixels on its long edge with its EXIF block gone @js', async ({
+  page,
   plantForm,
+  plant,
 }) => {
   await plantForm.openNew();
-
+  await plantForm.field('Nickname').fill('Ada');
   await plantForm.choosePhoto('Add a photo', photos.gpsTagged);
-
   await expect(plantForm.photoPreview()).toBeVisible();
-  const posted = await heldFile(plantForm.photoInput('photo'));
-  expect(dimensions(posted)).toEqual({ width: 2048, height: 1365 });
-  expect(hasExif(posted)).toBe(false);
+  await plantForm.submit('Add plant');
+  await expect(plant.heading()).toHaveText('Ada');
+
+  const served = await page.request.get((await plant.picture().getAttribute('src')) ?? '');
+
+  expect(served.ok()).toBe(true);
+  const bytes = await served.body();
+  expect(dimensions(bytes)).toEqual({ width: 2048, height: 1365 });
+  expect(hasExif(bytes)).toBe(false);
 });
 
 test('a photo stored sideways with an orientation tag is upright after the resize @js', async ({ plantForm }) => {
