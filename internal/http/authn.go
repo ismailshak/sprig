@@ -185,7 +185,7 @@ func locationFor(user store.AppUser) *time.Location {
 func PrincipalFrom(r *http.Request) auth.Principal {
 	principal, ok := r.Context().Value(principalKey).(auth.Principal)
 	if !ok {
-		panic("PrincipalFrom on a request that did not pass through Authenticate")
+		panic("PrincipalFrom on a request that passed through neither Authenticate nor requireToken")
 	}
 	return principal
 }

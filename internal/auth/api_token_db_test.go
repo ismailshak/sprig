@@ -56,7 +56,7 @@ func TestAPITokens_ALiveTokenResolvesToItsGardenWithNoCapabilities(t *testing.T)
 		t.Errorf("resolved to %s with token %+v, want Rosewood with the kitchen display", principal.Garden.Name, principal.APIToken)
 	}
 	if principal.User != (store.AppUser{}) || principal.Session != (store.Session{}) || principal.Membership.Role != "" {
-		t.Errorf("the principal carries a user, session or membership, and a token is none of those: %+v", principal)
+		t.Errorf("the principal holds a user, session or membership, and a token is none of those: %+v", principal)
 	}
 	for _, c := range allCapabilities {
 		if principal.Can(c) {
