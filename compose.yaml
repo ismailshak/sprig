@@ -28,8 +28,8 @@ services:
     build:
       context: .
       args:
-        # The suite signs in through the development sign-in, which only a dev build has
-        GO_TAGS: dev
+        # The development build is not compiled to the default image location
+        DIST: dist/dev
     environment:
       SPRIG_DATABASE_URL: postgres://sprig:sprig@db:5432/sprig?sslmode=disable
       SPRIG_LOG_FORMAT: text

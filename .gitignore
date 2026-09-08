@@ -1,6 +1,7 @@
-# Compiled binaries, if anybody builds one outside the image
+# Compiled binaries. dist/ holds the ones the Dockerfile copies
 /sprig
 /seed
+/dist/
 
 # SPRIG_PHOTO_DIR's default. The deployment mounts its own directory here
 /photos/
