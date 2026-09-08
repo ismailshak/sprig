@@ -255,3 +255,18 @@ func (s *Store) remove(p string) {
 func (s *Store) full(p string) string {
 	return filepath.Join(s.dir, filepath.FromSlash(p))
 }
+
+// Delete removes the photo's row through q and then its files. The row goes
+// first, so a crash between the two leaves a file no row points at rather than
+// a row without its file. The sweep removes that file once it is an hour old.
+func (s *Store) Delete(ctx context.Context, q *store.Queries, params store.DeletePhotoParams) error {
+	row, err := q.DeletePhoto(ctx, params)
+	if err != nil {
+		return err
+	}
+	s.remove(row.Path)
+	if row.SquareBytes != nil {
+		s.remove(SquarePath(row.Path))
+	}
+	return nil
+}

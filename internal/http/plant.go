@@ -19,6 +19,10 @@ import (
 // a plant watered weekly, enough to see the pattern.
 const recentLength = 4
 
+// stripLength is how many photos the Photos strip shows, newest first. Six is
+// what fits across a wide screen and a scroll and a half on a phone.
+const stripLength = 6
+
 func plantSheetPath(plantID uuid.UUID) string {
 	return logPath(plantID) + "?over=" + overPlant
 }
@@ -32,6 +36,10 @@ type plantDetail struct {
 	// offers all of them.
 	cares  []store.CareType
 	recent []store.ListPlantCareEventsRow
+	// photos is the newest stripLength photos, and photoCount how many the
+	// plant has in all.
+	photos     []store.ListPlantPhotosRow
+	photoCount int64
 	// now is in the reader's timezone.
 	now time.Time
 }
@@ -68,6 +76,18 @@ func loadPlant(ctx context.Context, queries *store.Queries, principal auth.Princ
 	if err != nil {
 		return d, fmt.Errorf("list the plant's care: %w", err)
 	}
+	d.photos, err = queries.ListPlantPhotos(ctx, store.ListPlantPhotosParams{
+		GardenID: principal.Garden.ID,
+		PlantID:  plantID,
+		Count:    stripLength,
+	})
+	if err != nil {
+		return d, fmt.Errorf("list the plant's photos: %w", err)
+	}
+	d.photoCount, err = queries.CountPlantPhotos(ctx, principal.Garden.ID, plantID)
+	if err != nil {
+		return d, fmt.Errorf("count the plant's photos: %w", err)
+	}
 
 	d.lines = plantLines(schedule.Resolve(schedules, latest, d.now), plantID)
 	return d, nil
@@ -93,8 +113,10 @@ type plantPage struct {
 	// in italics.
 	Botanical bool
 	// Picture is the URL of the plant's profile picture at its uploaded size,
-	// empty for a plant with no picture.
-	Picture string
+	// empty for a plant with no picture. PictureHref is the URL of that
+	// photo's own page. The picture is a link to it.
+	Picture     string
+	PictureHref string
 	// Names is the plant's other names, the common name before the botanical.
 	Names    []plantName
 	Room     string
@@ -108,6 +130,13 @@ type plantPage struct {
 	// is not rendered.
 	Reference *plantReference
 	Recent    []recentLine
+	// Photos is the Photos strip, newest first. AddPhoto is the URL of the Add
+	// a photo page at the start of the strip, empty for a reader who may not
+	// add photos and for an archived plant. SeeAll is the link to the Photos
+	// page, nil while the strip holds every photo.
+	Photos   []photoTile
+	AddPhoto string
+	SeeAll   *link
 	// Activity is the link under Recent to the log filtered to this plant. Nil
 	// for a plant with nothing recorded, since that page would only repeat the
 	// line above the link.
@@ -173,6 +202,15 @@ func newPlantPage(principal auth.Principal, d plantDetail) plantPage {
 		Reference: newPlantReference(plant),
 		Recent:    recentLines(principal, d.recent, d.now),
 	}
+	if plant.ProfilePhotoID != nil {
+		page.PictureHref = photoPath(plant.ID, *plant.ProfilePhotoID)
+	}
+	for _, row := range d.photos {
+		page.Photos = append(page.Photos, newPhotoTile(plant, row.Photo, d.now))
+	}
+	if d.photoCount > stripLength {
+		page.SeeAll = &link{Label: fmt.Sprintf("See all %d", d.photoCount), Href: photosPath(plant.ID)}
+	}
 	if plant.Location != nil {
 		page.Room = *plant.Location
 	}
@@ -184,6 +222,9 @@ func newPlantPage(principal auth.Principal, d plantDetail) plantPage {
 	}
 	if principal.Can(auth.CareLog) {
 		page.Log = plantSheetPath(plant.ID)
+	}
+	if principal.Can(auth.PhotoAdd) {
+		page.AddPhoto = newPhotoPath(plant.ID)
 	}
 	page.Foot = newPlantFoot(principal, plant)
 	return page

@@ -22,6 +22,24 @@ export class PlantScreen {
     return this.page.getByRole('region', { name: title });
   }
 
+  // Pressing the picture goes to that photo's own page.
+  async openPicture(): Promise<void> {
+    await this.picture().click();
+    await this.page.waitForLoadState();
+  }
+
+  // The Add tile at the head of the Photos strip, for a member who may add
+  // photos.
+  addPhoto(): Locator {
+    return this.section('Photos').getByRole('link', { name: 'Add', exact: true });
+  }
+
+  // The photos in the strip, newest first. Each is a link to its own page,
+  // named by its image.
+  stripPhotos(): Locator {
+    return this.section('Photos').getByRole('link', { name: /^Photo of / });
+  }
+
   // A schedule row is found by its care type, the one part that does not change
   // when the plant is watered.
   scheduleRow(care: string): Locator {

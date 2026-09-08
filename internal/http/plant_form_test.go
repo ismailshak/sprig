@@ -527,7 +527,7 @@ func TestPlantForm_APostOverTheBodyCapIsRefusedInEitherEncoding(t *testing.T) {
 	f := plantFormOn(t)
 	values := addValues()
 	values.Set("nickname", "Ada")
-	values.Set("notes", strings.Repeat("x", plantFormMaxBytes+1))
+	values.Set("notes", strings.Repeat("x", formMaxBytes+1))
 	before := f.countPlants(t)
 
 	for name, rec := range map[string]*httptest.ResponseRecorder{

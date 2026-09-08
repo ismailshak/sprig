@@ -1,0 +1,36 @@
+import type { Locator, Page } from '@playwright/test';
+import type { Plant } from '../harness/garden';
+
+// A plant's Photos page, the grid of every photo newest first.
+export class PhotosScreen {
+  constructor(private readonly page: Page) {}
+
+  async open(plant: Plant): Promise<void> {
+    await this.page.goto(`/plants/${plant.id}/photos`);
+  }
+
+  // Each photo in the grid is a link to its own page, named by its image.
+  tiles(): Locator {
+    return this.page.getByRole('link', { name: /^Photo of / });
+  }
+
+  async openTile(index: number): Promise<void> {
+    await this.tiles().nth(index).click();
+    await this.page.waitForLoadState();
+  }
+
+  // The tile at the head of the grid for a member who may add photos.
+  addTile(): Locator {
+    return this.page.getByRole('link', { name: 'Add', exact: true });
+  }
+
+  // The action under "No photos yet" for a member who may add photos.
+  addAPhoto(): Locator {
+    return this.page.getByRole('link', { name: 'Add a photo' });
+  }
+
+  // The back link, named after the plant.
+  back(plant: Plant): Locator {
+    return this.page.getByRole('link', { name: plant.name, exact: true });
+  }
+}

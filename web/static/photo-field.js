@@ -1,7 +1,9 @@
-/* The photo field on the plant form. The server renders it hidden and this
-   script shows it once it has checked the browser for the APIs a resize
-   needs. The server never decodes an image, so on a browser without them the
-   field stays hidden and the plant is added with no photo.
+/* The photo field on the plant form and on Add a photo. The server renders it
+   hidden and this script shows it once it has checked the browser for the
+   APIs a resize needs. The server never decodes an image, so on a browser
+   without them the field stays hidden. The plant form then saves the plant
+   with no photo, and Add a photo shows a line saying a photo cannot be added
+   from that browser.
 
    A chosen photo is re-encoded into two JPEGs and put in the form's file
    inputs: one bounded to 2048 pixels on its long edge under photo, and a 192
@@ -18,9 +20,13 @@
   const replace = document.getElementById('photo-replace');
   const remove = document.getElementById('photo-remove');
   const error = document.getElementById('photo-error');
-  // removeFlag is the hidden input the server reads to clear the plant's
-  // stored profile picture.
+  // removeFlag is the hidden input the plant form posts to clear the plant's
+  // stored profile picture. Add a photo has no picture to clear, so the input
+  // is not on that page.
   const removeFlag = document.getElementById('photo-removed');
+  // unsupported is the line Add a photo shows in a browser that cannot resize
+  // an image. It is hidden once the check below passes.
+  const unsupported = document.getElementById('photo-unsupported');
   // again is the "The photo needs choosing again." line the server renders
   // when a post with a photo was refused for another field. Choosing a photo
   // removes it.
@@ -34,6 +40,7 @@
     typeof URL.createObjectURL === 'function';
   if (!canResize) return;
   field.hidden = false;
+  if (unsupported) unsupported.hidden = true;
 
   const longEdge = 2048;
   const squareEdge = 192;
@@ -128,7 +135,7 @@
     previewURL = URL.createObjectURL(photo);
     preview.src = previewURL;
     preview.alt = 'Chosen photo';
-    removeFlag.value = '';
+    if (removeFlag) removeFlag.value = '';
     add.hidden = true;
     chosen.hidden = false;
   };
@@ -162,7 +169,7 @@
   replace.addEventListener('click', () => input.click());
   remove.addEventListener('click', () => {
     error.hidden = true;
-    removeFlag.value = '1';
+    if (removeFlag) removeFlag.value = '1';
     clear();
   });
 })();

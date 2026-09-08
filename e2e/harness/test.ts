@@ -12,6 +12,9 @@ import { NotificationsScreen } from '../screens/notifications';
 import { OfflinePageScreen } from '../screens/offline-page';
 import { PasskeysScreen } from '../screens/passkeys';
 import { PeopleScreen } from '../screens/people';
+import { PhotoScreen } from '../screens/photo';
+import { PhotoFormScreen } from '../screens/photo-form';
+import { PhotosScreen } from '../screens/photos';
 import { PlantScreen } from '../screens/plant';
 import { PlantFormScreen } from '../screens/plant-form';
 import { PlantsScreen } from '../screens/plants';
@@ -38,6 +41,9 @@ type Screens = {
   offlinePage: OfflinePageScreen;
   passkeys: PasskeysScreen;
   people: PeopleScreen;
+  photo: PhotoScreen;
+  photoForm: PhotoFormScreen;
+  photos: PhotosScreen;
   plant: PlantScreen;
   plantForm: PlantFormScreen;
   plants: PlantsScreen;
@@ -128,6 +134,15 @@ export const test = base.extend<{ seededGarden: void; cspViolations: void } & Sc
   },
   people: async ({ page }, use) => {
     await use(new PeopleScreen(page));
+  },
+  photo: async ({ page }, use) => {
+    await use(new PhotoScreen(page));
+  },
+  photoForm: async ({ page }, use) => {
+    await use(new PhotoFormScreen(page));
+  },
+  photos: async ({ page }, use) => {
+    await use(new PhotosScreen(page));
   },
   plant: async ({ page }, use) => {
     await use(new PlantScreen(page));

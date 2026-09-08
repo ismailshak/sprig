@@ -642,11 +642,16 @@ func TestPlant_APlantWithAPictureShowsItAtTheTop(t *testing.T) {
 
 	page := f.page(t, bigFellaID)
 
-	if got, want := images(page), []string{photoFullPath(bigFellaID, photoID)}; !slices.Equal(got, want) {
-		t.Errorf("the page's images are %v, want the picture at %v", got, want)
+	// The strip below shows the same photo again, so only the first image is
+	// the picture.
+	if got := images(page); len(got) == 0 || got[0] != photoFullPath(bigFellaID, photoID) {
+		t.Errorf("the page's images are %v, want the picture at %s first", got, photoFullPath(bigFellaID, photoID))
 	}
 	if !strings.Contains(page, `alt="Picture of Big Fella"`) {
 		t.Error("the picture does not say whose it is")
+	}
+	if !strings.Contains(page, `<a class="hero__pic" href="`+photoPath(bigFellaID, photoID)+`"`) {
+		t.Error("the picture is not a link to its photo's page")
 	}
 }
 
@@ -655,5 +660,119 @@ func TestPlant_APlantWithNoPictureHasNoImage(t *testing.T) {
 
 	if got := images(page); len(got) != 0 {
 		t.Errorf("the page's images are %v, want none", got)
+	}
+}
+
+// givePhoto inserts a photo of the plant uploaded by the user at the given
+// time and returns its id. Nothing is written to disk.
+func givePhoto(t *testing.T, tx pgx.Tx, plantID, uploadedBy uuid.UUID, uploadedAt time.Time) uuid.UUID {
+	t.Helper()
+
+	var photoID uuid.UUID
+	err := tx.QueryRow(t.Context(),
+		`INSERT INTO photo (garden_id, plant_id, uploaded_by, uploaded_at, kind, path, width, height, bytes, square_bytes)
+		 VALUES ($1, $2, $3, $4, 'image/jpeg', $5, 3, 2, 100, 40) RETURNING id`,
+		rosewoodID, plantID, uploadedBy, uploadedAt, plantID.String()+"/"+uploadedAt.Format(time.RFC3339Nano)+".jpg").Scan(&photoID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return photoID
+}
+
+// strip returns the href of every link in the Photos section, in order.
+func strip(t *testing.T, page string) []string {
+	t.Helper()
+
+	byID, _ := sections(page)
+	section, ok := byID["photos"]
+	if !ok {
+		t.Fatal("the page has no Photos section")
+	}
+	var hrefs []string
+	for _, m := range stripLink.FindAllStringSubmatch(section, -1) {
+		hrefs = append(hrefs, m[1])
+	}
+	return hrefs
+}
+
+var stripLink = regexp.MustCompile(`<a class="shot[^"]*" href="([^"]*)"`)
+
+func TestPlant_TheStripShowsTheNewestPhotosFirstAfterTheAddTile(t *testing.T) {
+	f := rosewoodPlant(t)
+	older := givePhoto(t, f.tx, bigFellaID, readerID, thursday.AddDate(0, 0, -30))
+	newer := givePhoto(t, f.tx, bigFellaID, readerID, thursday.AddDate(0, 0, -1))
+	givePhoto(t, f.tx, dorisID, readerID, thursday)
+
+	page := f.page(t, bigFellaID)
+
+	want := []string{newPhotoPath(bigFellaID), photoPath(bigFellaID, newer), photoPath(bigFellaID, older)}
+	if got := strip(t, page); !slices.Equal(got, want) {
+		t.Errorf("the strip links to %v, want %v", got, want)
+	}
+	if !strings.Contains(page, ">yesterday</span>") || !strings.Contains(page, ">4 Aug</span>") {
+		t.Errorf("the captions do not say yesterday and 4 Aug:\n%s", text(page))
+	}
+}
+
+func TestPlant_TheStripHoldsSixPhotosAndThenLinksToSeeAll(t *testing.T) {
+	f := rosewoodPlant(t)
+	for i := range 7 {
+		givePhoto(t, f.tx, bigFellaID, readerID, thursday.AddDate(0, 0, -i))
+	}
+
+	page := f.page(t, bigFellaID)
+
+	if got := strip(t, page); len(got) != 7 {
+		t.Errorf("the strip has %d links, want the add tile and 6 photos", len(got))
+	}
+	if !strings.Contains(page, `href="`+photosPath(bigFellaID)+`">See all 7</a>`) {
+		t.Errorf("the Photos head does not link to all 7:\n%s", text(page))
+	}
+}
+
+func TestPlant_TheStripHasNoSeeAllLinkWhileItHoldsEveryPhoto(t *testing.T) {
+	f := rosewoodPlant(t)
+	givePhoto(t, f.tx, bigFellaID, readerID, thursday)
+
+	page := f.page(t, bigFellaID)
+
+	if strings.Contains(page, "See all") {
+		t.Error("the Photos head links to See all for a plant whose photos all fit in the strip")
+	}
+}
+
+func TestPlant_ASitterSeesTheStripWithoutTheAddTile(t *testing.T) {
+	f := rosewoodPlant(t)
+	f.principal.Capabilities = auth.Capabilities{auth.CareLog: true}
+	photoID := givePhoto(t, f.tx, bigFellaID, readerID, thursday)
+
+	page := f.page(t, bigFellaID)
+
+	if got, want := strip(t, page), []string{photoPath(bigFellaID, photoID)}; !slices.Equal(got, want) {
+		t.Errorf("the strip links to %v, want %v", got, want)
+	}
+}
+
+func TestPlant_ASitterOnAPlantWithNoPhotosReadsNoPhotosYet(t *testing.T) {
+	f := rosewoodPlant(t)
+	f.principal.Capabilities = auth.Capabilities{auth.CareLog: true}
+
+	page := f.page(t, bigFellaID)
+
+	byID, _ := sections(page)
+	if got := text(byID["photos"]); got != "Photos No photos yet." {
+		t.Errorf("the Photos section reads %q, want the heading and No photos yet.", got)
+	}
+}
+
+func TestPlant_AnArchivedPlantHasNoAddTile(t *testing.T) {
+	f := rosewoodPlant(t)
+	f.exec(t, "UPDATE plant SET archived_at = now() WHERE id = $1", bigFellaID)
+	photoID := givePhoto(t, f.tx, bigFellaID, readerID, thursday)
+
+	page := f.page(t, bigFellaID)
+
+	if got, want := strip(t, page), []string{photoPath(bigFellaID, photoID)}; !slices.Equal(got, want) {
+		t.Errorf("the strip links to %v, want %v", got, want)
 	}
 }
