@@ -48,6 +48,7 @@ func routes(logger *slog.Logger, sessions *auth.Sessions, passkeys *auth.Passkey
 	todayHandler := &today{logger: logger, queries: queries, templates: templates, now: time.Now, notify: notify}
 	plantsHandler := &plants{logger: logger, queries: queries, photos: photos, templates: templates, now: time.Now}
 	activityHandler := &activity{logger: logger, queries: queries, templates: templates, now: time.Now}
+	choresHandler := &chores{logger: logger, queries: queries, now: time.Now}
 	// The setup and invite pages use the resolver to tell whether the browser
 	// is already signed in.
 	resolver := auth.NewResolver(sessions, queries)
@@ -146,6 +147,7 @@ func routes(logger *slog.Logger, sessions *auth.Sessions, passkeys *auth.Passkey
 		{pattern: "GET " + tokensPath, capability: auth.TokenManage, handler: http.HandlerFunc(moreHandler.tokens)},
 		{pattern: "POST " + tokensPath, capability: auth.TokenManage, handler: http.HandlerFunc(moreHandler.createToken)},
 		{pattern: "POST " + tokensPath + "/{token}/revoke", capability: auth.TokenManage, handler: http.HandlerFunc(moreHandler.revokeToken)},
+		{pattern: "GET " + choresPath, bearer: true, limits: choresLimits(), handler: http.HandlerFunc(choresHandler.show)},
 	}
 	return append(base, devRoutes(sessions, queries, templates)...)
 }

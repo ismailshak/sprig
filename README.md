@@ -135,6 +135,28 @@ docker compose exec sprig /sprig sweep
 
 Back up the Postgres database and the photo directory together.
 
+### The chores endpoint
+
+`GET /api/chores` returns what is overdue and due today in one garden as JSON, for a display such as a TRMNL to poll. It takes an API token from the garden's Tokens page in the `Authorization: Bearer` header. A session cookie is not accepted. A missing, revoked or expired token gets a 401.
+
+```sh
+curl -H "Authorization: Bearer sprg_..." https://sprig.example.com/api/chores
+```
+
+```json
+{
+  "garden": "Rosewood",
+  "date": "2026-09-03",
+  "chores": [
+    { "plant": "Big Fella", "location": "Living room", "care": "Water", "due": "2026-09-01", "late": "2 days late" },
+    { "plant": "Doris", "location": "Bedroom", "care": "Water", "due": "2026-09-03", "late": "" },
+    { "plant": "Nigel", "location": "Bathroom", "care": "Water", "due": "2026-09-03", "late": "" }
+  ]
+}
+```
+
+The list is in the order the Today page shows, most overdue first. A plant with two cares due appears once per care. `date` is today in the timezone of the account that created the token. The endpoint allows six requests a minute per token and returns 429 with `Retry-After` past that. It is not counted per address, so a proxy setting is not needed for it.
+
 ## Developing
 
 Everything runs through [mise](https://mise.jdx.dev). It installs the toolchain and holds the commands. Run `mise install` to get started. A few useful commands:

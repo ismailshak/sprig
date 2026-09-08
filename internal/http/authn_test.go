@@ -80,11 +80,12 @@ func withToken(r *http.Request) *http.Request {
 }
 
 // tokenPrincipal is the principal testAPIToken resolves to: Rosewood, the
-// token row, and nothing else.
+// token row, and nothing else. CreatedBy is the sitter's id, the account the
+// route tests seed, so a handler that looks up the token's creator finds a row.
 func tokenPrincipal() auth.Principal {
 	return auth.Principal{
 		Garden:   store.Garden{ID: uuid.MustParse("00000000-0000-7000-8000-000000000001"), Name: "Rosewood"},
-		APIToken: &store.APIToken{Name: "The kitchen display", TokenHash: auth.HashToken(testAPIToken), Prefix: "sprg_7c1f"},
+		APIToken: &store.APIToken{Name: "The kitchen display", TokenHash: auth.HashToken(testAPIToken), Prefix: "sprg_7c1f", CreatedBy: sitterPrincipal().User.ID},
 	}
 }
 
