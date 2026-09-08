@@ -169,6 +169,7 @@ func run(ctx context.Context, getenv func(string) string, stdout io.Writer) erro
 	var activity *push.Activity
 	var wake func()
 	var notify func(context.Context, uuid.UUID, uuid.UUID, push.Notification)
+	var test func(context.Context, store.PushSubscription, push.Notification) error
 	if cfg.pushEnabled {
 		pushKey = cfg.push.Public
 		sender := push.NewSender(cfg.push, nil)
@@ -176,8 +177,9 @@ func run(ctx context.Context, getenv func(string) string, stdout io.Writer) erro
 		activity = push.NewActivity(logger, queries, sender, cfg.baseURL.String())
 		wake = digest.Wake
 		notify = activity.Send
+		test = push.NewTestMessage(queries, sender, cfg.baseURL.String()).Send
 	}
-	handler := sprighttp.New(logger, sessions, passkeys, resolver, tokens, queries, photos, templates, assets, cfg.trustedIPHeader, cfg.signupEnabled, pushKey, wake, notify)
+	handler := sprighttp.New(logger, sessions, passkeys, resolver, tokens, queries, photos, templates, assets, cfg.trustedIPHeader, cfg.signupEnabled, pushKey, wake, notify, test)
 	if !cfg.pushEnabled {
 		return serve(ctx, logger, listener, handler)
 	}

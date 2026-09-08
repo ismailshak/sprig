@@ -62,12 +62,16 @@ func (a *Activity) Wait() {
 	a.sends.Wait()
 }
 
-// absolute puts the base URL in front of a path. An empty path stays empty.
 func (a *Activity) absolute(path string) string {
+	return absolute(a.baseURL, path)
+}
+
+// absolute puts baseURL in front of path. An empty path stays empty.
+func absolute(baseURL, path string) string {
 	if path == "" {
 		return ""
 	}
-	return a.baseURL + path
+	return baseURL + path
 }
 
 func (a *Activity) send(ctx context.Context, gardenID, actor uuid.UUID, n Notification) {
@@ -91,7 +95,7 @@ func (a *Activity) send(ctx context.Context, gardenID, actor uuid.UUID, n Notifi
 			subscriptions = append(subscriptions, rows[i].PushSubscription)
 			i++
 		}
-		sent, err := deliver(ctx, a.logger, a.queries, a.sender, member.PushSubscription.UserID, member.Handle, subscriptions, n, now)
+		sent, err := deliver(ctx, a.logger, a.queries, a.sender, member.Handle, subscriptions, n, now)
 		if err != nil {
 			a.logger.Error("activity not sent", "user", member.Handle, "garden", member.GardenName, "err", err)
 			continue

@@ -80,3 +80,23 @@ test('an iPhone that has not installed sprig is offered Install sprig instead of
   await notifications.install().click();
   await expect(page).toHaveURL('/install');
 });
+
+test('a test sent from a browser that has never subscribed says the browser is not subscribed @push', async ({
+  notifications,
+}) => {
+  await notifications.open();
+
+  await notifications.sendTest().click();
+
+  await expect(notifications.testResult()).toContainText('This browser is not subscribed');
+});
+
+// With JavaScript off the form posts with no endpoint, because only the push
+// API knows the browser's own subscription.
+test('a test sent with no JavaScript says this browser is not subscribed @nojs', async ({ notifications }) => {
+  await notifications.open();
+
+  await notifications.sendTest().click();
+
+  await expect(notifications.testResult()).toContainText('This browser is not subscribed');
+});

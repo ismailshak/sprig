@@ -43,6 +43,9 @@ type more struct {
 	// notifications are not set up.
 	pushKey string
 	wake    wakeDigest
+	// test sends the Notifications page's test message to one browser. It is
+	// nil when push is off.
+	test sendTest
 }
 
 type morePage struct {

@@ -25,6 +25,29 @@ func (q *Queries) DeletePushSubscription(ctx context.Context, userID uuid.UUID, 
 	return result.RowsAffected(), nil
 }
 
+const getPushSubscriptionByEndpoint = `-- name: GetPushSubscriptionByEndpoint :one
+SELECT id, user_id, endpoint, p256dh_key, auth_key, user_agent, created_at, last_sent_at FROM push_subscription
+WHERE user_id = $1 AND endpoint = $2
+`
+
+// Send a test looks the row up by endpoint, because the browser's push API
+// reads its own endpoint and not the row's id.
+func (q *Queries) GetPushSubscriptionByEndpoint(ctx context.Context, userID uuid.UUID, endpoint string) (PushSubscription, error) {
+	row := q.db.QueryRow(ctx, getPushSubscriptionByEndpoint, userID, endpoint)
+	var i PushSubscription
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Endpoint,
+		&i.P256dhKey,
+		&i.AuthKey,
+		&i.UserAgent,
+		&i.CreatedAt,
+		&i.LastSentAt,
+	)
+	return i, err
+}
+
 const listActivitySubscriptions = `-- name: ListActivitySubscriptions :many
 SELECT push_subscription.id, push_subscription.user_id, push_subscription.endpoint, push_subscription.p256dh_key, push_subscription.auth_key, push_subscription.user_agent, push_subscription.created_at, push_subscription.last_sent_at, app_user.handle, garden.name AS garden_name
 FROM membership

@@ -41,3 +41,9 @@ WHERE membership.garden_id = @garden_id
   AND membership.user_id <> @actor_id
   AND (membership.expires_at IS NULL OR membership.expires_at > @now::timestamptz)
 ORDER BY membership.created_at, membership.id, push_subscription.created_at, push_subscription.id;
+
+-- name: GetPushSubscriptionByEndpoint :one
+-- Send a test looks the row up by endpoint, because the browser's push API
+-- reads its own endpoint and not the row's id.
+SELECT * FROM push_subscription
+WHERE user_id = @user_id AND endpoint = @endpoint;
