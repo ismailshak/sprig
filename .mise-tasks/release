@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+#MISE description="Tag main with the next version and push the tag. GitHub then builds the image and creates the release"
+#USAGE arg "<bump>" help="Which part of the highest existing version goes up" { choices "patch" "minor" "major" }
+#USAGE flag "--dry-run" help="Run every check and print the tag, without creating or pushing it"
+set -euo pipefail
+
+cd "${MISE_PROJECT_ROOT:?}"
+
+bump="${usage_bump:?}"
+
+branch="$(git rev-parse --abbrev-ref HEAD)"
+if [ "$branch" != "main" ]; then
+  echo "release: on $branch. A version is tagged on main" >&2
+  exit 1
+fi
+if [ -n "$(git status --porcelain)" ]; then
+  echo "release: the working tree has uncommitted changes" >&2
+  exit 1
+fi
+
+git fetch --quiet origin main "+refs/tags/*:refs/tags/*"
+head="$(git rev-parse HEAD)"
+if [ "$head" != "$(git rev-parse origin/main)" ]; then
+  echo "release: main is not at origin/main. Pull or push first" >&2
+  exit 1
+fi
+
+# Only vX.Y.Z tags count, so a hand-made prerelease like v0.2.0-rc1 does not sort above v0.2.0.
+# With no tag yet, latest is empty and the version counts from 0.0.0.
+latest="$(git tag --list 'v[0-9]*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort --version-sort | tail -1 || true)"
+IFS=. read -r major minor patch <<<"${latest#v}"
+: "${major:=0}" "${minor:=0}" "${patch:=0}"
+case "$bump" in
+major)
+  major=$((major + 1))
+  minor=0
+  patch=0
+  ;;
+minor)
+  minor=$((minor + 1))
+  patch=0
+  ;;
+patch) patch=$((patch + 1)) ;;
+*)
+  echo "release: the bump must be patch, minor or major, got '$bump'" >&2
+  exit 1
+  ;;
+esac
+tag="v$major.$minor.$patch"
+echo "release: the highest tag is ${latest:-none}. The next $bump is $tag"
+
+# Pushing the tag builds and publishes without running CI, so the commit's CI run on main is
+# checked here. A run still in progress is refused, because its result is not known.
+state="$(gh run list --workflow CI --branch main --commit "$head" --event push --limit 1 --json status,conclusion \
+  -q 'if length == 0 then "not run" elif .[0].status != "completed" then .[0].status else .[0].conclusion end')"
+if [ "$state" != "success" ]; then
+  echo "release: CI on $head is $state. A version is tagged on a green main" >&2
+  exit 1
+fi
+
+if [ "${usage_dry_run:-false}" = "true" ]; then
+  echo "release: would tag $head as $tag and push it"
+  exit 0
+fi
+
+echo "release: $tag would be $(git log -1 --format='%h %s' "$head")"
+# Declining exits 0 because nothing failed.
+read -r -p "release: tag it and push? [y/N] " answer
+if [ "$answer" != "y" ] && [ "$answer" != "Y" ]; then
+  echo "release: nothing pushed"
+  exit 0
+fi
+
+git tag --annotate --message "$tag" "$tag" "$head"
+git push origin "refs/tags/$tag"
+echo "release: pushed $tag. The image and the release are building at https://github.com/ismailshak/sprig/actions"

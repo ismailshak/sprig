@@ -19,6 +19,7 @@ mise run format    # prettier over e2e and the app's scripts in web/static
 mise run hooks     # point git at .githooks, once per clone
 mise run migrate
 mise run migrate:new <name>
+mise run release   # <bump> is patch, minor or major. Tag main with the next version and push it
 ```
 
 A command you would type twice becomes a task in `mise.toml`.
