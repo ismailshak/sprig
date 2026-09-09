@@ -9,13 +9,14 @@
    service URL of its row. */
 (function () {
   const form = document.getElementById('push-form');
-  if (!form) return;
+  if (!form || !window.sprigPush) return;
+  const push = window.sprigPush;
   const unavailable = document.getElementById('push-unavailable');
   const message = document.getElementById('push-error');
 
   // On an iPhone the push API only exists once sprig is on the Home Screen.
   // Without it the form is hidden and the Install sprig block is shown.
-  if (!('PushManager' in window) || !('serviceWorker' in navigator)) {
+  if (!push.supported) {
     form.hidden = true;
     unavailable.hidden = false;
     return;
@@ -36,11 +37,6 @@
     });
   }
 
-  // subscribeWait is how long to wait on pushManager.subscribe before posting
-  // the form without a subscription. The call never settles when the push
-  // service cannot be reached.
-  const subscribeWait = 10_000;
-
   // Subscribing on submit, rather than when a box is checked, also covers a
   // browser whose boxes were already checked on another device. The form is
   // posted whether or not the subscribe worked, because the checkboxes and the
@@ -52,7 +48,7 @@
     saving = true;
     if (form.querySelector('input[data-notify]:checked')) {
       try {
-        if ((await Notification.requestPermission()) === 'granted') await subscribe();
+        await push.subscribe(form.dataset.key, form.dataset.subscribe);
       } catch {
         // Nothing is shown, because the form post below replaces the page.
       }
@@ -60,47 +56,12 @@
     form.submit();
   });
 
-  // subscribe subscribes this browser and posts the subscription to the
-  // server. Calling it for a browser that is already subscribed is safe,
-  // because pushManager.subscribe returns the subscription it has.
-  async function subscribe() {
-    const registration = await navigator.serviceWorker.ready;
-    const subscription = await Promise.race([
-      registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: decode(form.dataset.key),
-      }),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('the push service did not answer')), subscribeWait)),
-    ]);
-    const { endpoint, keys } = subscription.toJSON();
-    const response = await fetch(form.dataset.subscribe, {
-      method: 'POST',
-      body: new URLSearchParams({
-        endpoint,
-        p256dh: keys.p256dh,
-        auth: keys.auth,
-      }),
-    });
-    if (!response.ok) throw new Error('the subscription was refused with ' + response.status);
-  }
-
-  // thisBrowsersSubscription returns this browser's push subscription, or null
-  // when it has none and when the push API throws.
-  async function thisBrowsersSubscription() {
-    try {
-      const registration = await navigator.serviceWorker.getRegistration();
-      return (registration && (await registration.pushManager.getSubscription())) || null;
-    } catch {
-      return null;
-    }
-  }
-
   // Remove on this browser's own row unsubscribes it from the push service
   // before the post deletes the row. Another browser's row is only the post.
   for (const remove of document.querySelectorAll('form[data-endpoint]')) {
     remove.addEventListener('submit', async (event) => {
       event.preventDefault();
-      const subscription = await thisBrowsersSubscription();
+      const subscription = await push.current();
       if (subscription && subscription.endpoint === remove.dataset.endpoint) {
         // A failed unsubscribe is ignored. The row is deleted either way, so
         // nothing will be sent to the subscription again.
@@ -117,16 +78,9 @@
   if (test) {
     test.addEventListener('submit', async (event) => {
       event.preventDefault();
-      const subscription = await thisBrowsersSubscription();
+      const subscription = await push.current();
       if (subscription) test.elements.endpoint.value = subscription.endpoint;
       test.submit();
     });
-  }
-
-  // decode turns the base64url key into the bytes the push API takes. Safari
-  // does not accept the string form.
-  function decode(key) {
-    const binary = atob(key.replace(/-/g, '+').replace(/_/g, '/'));
-    return Uint8Array.from(binary, (char) => char.charCodeAt(0));
   }
 })();

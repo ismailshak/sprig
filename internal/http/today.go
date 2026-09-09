@@ -23,6 +23,10 @@ type today struct {
 	// now supplies the current time, so a test can fix the day.
 	now    func() time.Time
 	notify notifyActivity
+	// pushKey is the VAPID public key the reminders banner gives the browser
+	// to subscribe with. It is empty when push is off, and the banner is not
+	// rendered then.
+	pushKey string
 }
 
 func (h *today) show(w http.ResponseWriter, r *http.Request) {
@@ -102,6 +106,11 @@ type gardenDay struct {
 	// here because the log-care sheet and a rejected care time both render the
 	// whole page when JavaScript is off.
 	bar todayBar
+	// reminders is the banner offering to turn on reminders in this browser.
+	// It is nil with push off, and nil when the reader has turned every
+	// notification type off, because subscribing a browser then sends it
+	// nothing.
+	reminders *remindersOffer
 }
 
 func (h *today) load(ctx context.Context, principal auth.Principal) (gardenDay, error) {
@@ -128,6 +137,16 @@ func (h *today) load(ctx context.Context, principal auth.Principal) (gardenDay, 
 	g.plants, err = h.queries.CountPlants(ctx, principal.Garden.ID)
 	if err != nil {
 		return g, fmt.Errorf("count the plants: %w", err)
+	}
+
+	if h.pushKey != "" {
+		preferences, err := h.queries.ListNotificationPreferences(ctx, principal.Membership.ID)
+		if err != nil {
+			return g, fmt.Errorf("read the notification preferences: %w", err)
+		}
+		if anyNotificationOn(preferences) {
+			g.reminders = &remindersOffer{Key: h.pushKey, Subscribe: subscribePath}
+		}
 	}
 
 	g.lines = schedule.Resolve(schedules, g.latest, g.now)
@@ -176,9 +195,12 @@ type todayPage struct {
 	Field       string
 	GardenSheet bool
 	Sheet       *sheet
-	Head        todayHead
-	Sections    []todaySection
-	Feed        todayFeed
+	// Reminders is the banner offering to turn on reminders in this browser.
+	// It is nil when the page does not offer it.
+	Reminders *remindersOffer
+	Head      todayHead
+	Sections  []todaySection
+	Feed      todayFeed
 	// OOB is true when the body is rendered as an out-of-band swap, so a
 	// response to one row can also replace the rest of the page.
 	OOB bool
@@ -295,13 +317,14 @@ func careRowID(plant store.Plant, careType store.CareType) string {
 func newTodayPage(principal auth.Principal, g gardenDay) todayPage {
 	day, latest, plants, now := g.day, g.latest, g.plants, g.now
 	page := todayPage{
-		Date:    now.Format("Monday 2 January"),
-		Garden:  principal.Garden.Name,
-		Owner:   g.bar.owner,
-		Gardens: g.bar.gardens,
-		Action:  gardensPath,
-		Field:   gardenField,
-		Feed:    newTodayFeed(principal, g),
+		Date:      now.Format("Monday 2 January"),
+		Garden:    principal.Garden.Name,
+		Owner:     g.bar.owner,
+		Gardens:   g.bar.gardens,
+		Action:    gardensPath,
+		Field:     gardenField,
+		Reminders: g.reminders,
+		Feed:      newTodayFeed(principal, g),
 	}
 	if len(g.bar.gardens) > 1 {
 		page.Switch = gardensPath

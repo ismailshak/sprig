@@ -38,9 +38,9 @@ export default defineConfig({
   // redirect, and the no-JavaScript project runs only those tests. @js marks
   // behaviour that exists only with JavaScript on, and @nojs behaviour that
   // exists only with it off. @offline marks a test that cuts the network and
-  // reads what the service worker serves. @push marks a test of the
-  // Notifications form. The page only shows the form in a browser with the
-  // push API, and the emulated iPhone runs as a Safari tab that has none.
+  // reads what the service worker serves. @push marks a test that needs the
+  // push API: the Notifications form, the Reminders page's offer and the
+  // banner on Today. The emulated iPhone runs as a Safari tab that has none.
   projects: [
     {
       name: 'phone',

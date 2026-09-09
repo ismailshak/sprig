@@ -2,29 +2,38 @@ package http
 
 import "net/http"
 
-// platforms is the three sets of steps, in the order the chips offer them. The
-// platform is chosen on the page rather than read off the User-Agent, because
-// this URL is often sent in a message and opened on a device other than the one
-// being set up.
-var platforms = []struct {
+// installPlatform is one device's chip label, install steps and the note under
+// them.
+type installPlatform struct {
 	value string
 	label string
 	steps []string
 	// why is the note under the steps. On iPhone an installed app is the only
 	// way to get notifications. On Android and desktop it is a preference.
 	why string
-}{
-	{
-		value: "iphone",
-		label: "iPhone",
-		steps: []string{
-			"Open sprig in Safari. Other iOS browsers can’t install it.",
-			"Tap the Share button at the bottom of the screen.",
-			"Scroll down and choose Add to Home Screen.",
-			"Open sprig from your Home Screen from now on.",
-		},
-		why: "On iPhone, notifications only work from the installed app.",
+}
+
+// iPhonePlatform is the iPhone's steps and note, rendered by the Install page
+// and the Reminders page. On an iPhone an installed app is the only way to get
+// notifications.
+var iPhonePlatform = installPlatform{
+	value: "iphone",
+	label: "iPhone",
+	steps: []string{
+		"Open sprig in Safari. Other iOS browsers can’t install it.",
+		"Tap the Share button at the bottom of the screen.",
+		"Scroll down and choose Add to Home Screen.",
+		"Open sprig from your Home Screen from now on.",
 	},
+	why: "On iPhone, notifications only work from the installed app.",
+}
+
+// platforms is the three sets of steps, in the order the chips offer them. The
+// platform is chosen on the page rather than read off the User-Agent, because
+// this URL is often sent in a message and opened on a device other than the one
+// being set up.
+var platforms = []installPlatform{
+	iPhonePlatform,
 	{
 		value: "android",
 		label: "Android",
@@ -46,10 +55,6 @@ var platforms = []struct {
 	},
 }
 
-// afterInvite is the value of the after query parameter that /install takes
-// when it is reached at the end of redeeming an invite.
-const afterInvite = "invite"
-
 type installPage struct {
 	Bar topbar
 	// Action is the URL the chips submit to. It is this page, with the chosen
@@ -58,25 +63,17 @@ type installPage struct {
 	Chips  []chip
 	Steps  []string
 	Why    string
-	// AfterInvite is true when the page is reached at the end of redeeming an
-	// invite. It is then rendered with no tab bar and no back link, and ends in
-	// the Continue link. The form the chips submit keeps the after parameter in
-	// a hidden input, so choosing a platform stays on this version of the page.
-	AfterInvite bool
-	// Today is the URL the Continue link points at.
-	Today string
 }
 
 // install renders the steps for the platform in the query string, and the
 // iPhone's for anything else, including a first visit with no query string at
 // all.
 func (h *more) install(w http.ResponseWriter, r *http.Request) {
-	query := r.URL.Query()
-	h.templates.render(w, r, view{page: "install"}, newInstallPage(query.Get("platform"), query.Get("after") == afterInvite))
+	h.templates.render(w, r, view{page: "install"}, newInstallPage(r.URL.Query().Get("platform")))
 }
 
-func newInstallPage(chosen string, fromInvite bool) installPage {
-	page := installPage{Bar: moreBar("Install sprig"), Action: installPath, AfterInvite: fromInvite, Today: todayPath}
+func newInstallPage(chosen string) installPage {
+	page := installPage{Bar: moreBar("Install sprig"), Action: installPath}
 	offered := false
 	for _, platform := range platforms {
 		on := platform.value == chosen
@@ -90,7 +87,7 @@ func newInstallPage(chosen string, fromInvite bool) installPage {
 	// string, both get the iPhone's steps with its own chip pressed.
 	if !offered {
 		page.Chips[0].On = true
-		page.Steps, page.Why = platforms[0].steps, platforms[0].why
+		page.Steps, page.Why = iPhonePlatform.steps, iPhonePlatform.why
 	}
 	return page
 }
