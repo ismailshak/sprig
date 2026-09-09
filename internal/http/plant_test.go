@@ -655,6 +655,50 @@ func TestPlant_APlantWithAPictureShowsItAtTheTop(t *testing.T) {
 	}
 }
 
+func TestPlant_ThePictureIsPositionedAtItsFocalPoint(t *testing.T) {
+	f := rosewoodPlant(t)
+	photoID := givePicture(t, f.tx, bigFellaID)
+
+	centred := f.page(t, bigFellaID)
+	f.exec(t, "UPDATE photo SET focus_x = 0, focus_y = 100 WHERE id = $1", photoID)
+	moved := f.page(t, bigFellaID)
+
+	if !strings.Contains(centred, `style="object-position:50% 50%"`) {
+		t.Errorf("a photo with no focal point set is not centred:\n%s", hero(centred))
+	}
+	if !strings.Contains(moved, `style="object-position:0% 100%"`) {
+		t.Errorf("the picture is not positioned at the bottom left:\n%s", hero(moved))
+	}
+}
+
+func TestPlant_APlantWithSeveralPhotosPositionsThePictureAtItsOwnFocalPoint(t *testing.T) {
+	f := rosewoodPlant(t)
+	pictureID := givePicture(t, f.tx, bigFellaID)
+	newer := givePhoto(t, f.tx, bigFellaID, readerID, time.Now().AddDate(0, 0, 1))
+	f.exec(t, "UPDATE photo SET focus_x = 0, focus_y = 100 WHERE id = $1", pictureID)
+	f.exec(t, "UPDATE photo SET focus_x = 100, focus_y = 0 WHERE id = $1", newer)
+
+	page := f.page(t, bigFellaID)
+
+	if !strings.Contains(page, `style="object-position:0% 100%"`) {
+		t.Errorf("the picture is not positioned at the bottom left:\n%s", hero(page))
+	}
+}
+
+// hero returns the block at the top of the plant's page, where the picture is,
+// to print in a failure message.
+func hero(page string) string {
+	start := strings.Index(page, `<div class="hero">`)
+	if start < 0 {
+		return page
+	}
+	end := strings.Index(page[start:], "</div>")
+	if end < 0 {
+		return page
+	}
+	return page[start : start+end]
+}
+
 func TestPlant_APlantWithNoPictureHasNoImage(t *testing.T) {
 	page := rosewoodPlant(t).page(t, bigFellaID)
 

@@ -13,7 +13,7 @@
 <div class="hero">
 {{/* The picture is a link to that photo's own page. The expand mark in the
      corner is the only sign it is a link. */}}
-{{if .Picture}}<a class="hero__pic" href="{{.PictureHref}}"><img class="hero__img" src="{{.Picture}}" alt="Picture of {{.Name}}"><span class="hero__zoom">{{template "icon-expand"}}</span></a>{{else}}<span class="hero__pic hero__pic--none">{{template "icon-plant"}}</span>{{end}}
+{{if .Picture}}<a class="hero__pic" href="{{.PictureHref}}"><img class="hero__img" src="{{.Picture}}" alt="Picture of {{.Name}}" style="object-position:{{.PictureFocus}}"><span class="hero__zoom">{{template "icon-expand"}}</span></a>{{else}}<span class="hero__pic hero__pic--none">{{template "icon-plant"}}</span>{{end}}
 <h1 class="hero__name{{if .Botanical}} hero__name--sp{{end}}">{{.Name}}</h1>
 {{with .Names}}<p class="hero__meta">{{range $i, $name := .}}{{if $i}} &middot; {{end}}{{if $name.Italic}}<i>{{$name.Text}}</i>{{else}}{{$name.Text}}{{end}}{{end}}</p>{{end}}
 {{/* The room is on its own line rather than as a third item in the names line

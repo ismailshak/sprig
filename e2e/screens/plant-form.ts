@@ -93,6 +93,27 @@ export class PlantFormScreen {
     return this.page.getByRole('img', { name: 'Current photo' });
   }
 
+  // The box the form's script puts over the photo preview, marking the part
+  // the plant's page shows. Its value is 0 at the top or left edge of the
+  // photo and 100 at the bottom or right, on the one axis it moves along.
+  frame(): Locator {
+    return this.page.getByRole('slider', { name: /^Part shown on the plant/ });
+  }
+
+  // Drags the frame by a share of its own height, or width when it moves
+  // sideways. A positive share drags down or right.
+  async dragFrame(share: number): Promise<void> {
+    const box = await this.frame().boundingBox();
+    if (!box) throw new Error('the frame has no box on the page');
+    const vertical = (await this.frame().getAttribute('aria-orientation')) === 'vertical';
+    const from = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+    const to = vertical ? { x: from.x, y: from.y + box.height * share } : { x: from.x + box.width * share, y: from.y };
+    await this.page.mouse.move(from.x, from.y);
+    await this.page.mouse.down();
+    await this.page.mouse.move(to.x, to.y, { steps: 5 });
+    await this.page.mouse.up();
+  }
+
   async choosePhoto(button: 'Add photo' | 'Replace', file: ChosenFile): Promise<void> {
     const chooser = this.page.waitForEvent('filechooser');
     await this.page.getByRole('button', { name: button }).click();

@@ -3,10 +3,12 @@ package http
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"math"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 	"uuid"
@@ -228,6 +230,11 @@ type photoField struct {
 	// out, because it has no picture to clear. Removed is that input's value.
 	Removable bool
 	Removed   bool
+	// Focus is the value of the hidden focus input, which part of the picture
+	// the plant's page shows, as "x,y" in percentages. It is empty on Add a
+	// photo. That page renders no focus input, because a progress photo is
+	// never cropped.
+	Focus string
 	// NeedsChoosing renders "Choose the photo again."
 	NeedsChoosing bool
 	// Missing renders "Choose a photo."
@@ -290,15 +297,69 @@ func postedPhoto(w http.ResponseWriter, r *http.Request, principal auth.Principa
 	return upload, closeFiles, true
 }
 
-// savePicture stores the photo and makes it the plant's profile picture. Both
-// writes go through q, so they join the caller's transaction.
-func (h *plants) savePicture(ctx context.Context, q *store.Queries, upload photo.Upload) error {
+// savePicture stores the photo, makes it the plant's profile picture and
+// records which part of it the plant's page shows. Every write goes through
+// q, so they join the caller's transaction.
+func (h *plants) savePicture(ctx context.Context, q *store.Queries, upload photo.Upload, focus focusPoint) error {
 	row, err := h.photos.Save(ctx, q, upload)
 	if err != nil {
 		return err
 	}
-	_, err = q.SetProfilePhoto(ctx, store.SetProfilePhotoParams{PhotoID: &row.ID, GardenID: upload.GardenID, PlantID: upload.PlantID})
-	return err
+	if _, err := q.SetProfilePhoto(ctx, store.SetProfilePhotoParams{PhotoID: &row.ID, GardenID: upload.GardenID, PlantID: upload.PlantID}); err != nil {
+		return err
+	}
+	return q.SetPhotoFocus(ctx, store.SetPhotoFocusParams{FocusX: focus.x, FocusY: focus.y, GardenID: upload.GardenID, PlantID: upload.PlantID, PhotoID: row.ID})
+}
+
+// focusPoint is which part of the picture the plant's page shows, as
+// percentages across and down. 50 and 50 is the centre.
+type focusPoint struct {
+	x, y int16
+}
+
+var centre = focusPoint{50, 50}
+
+// String returns the point as "x,y" in percentages, the value the form's focus
+// field holds.
+func (f focusPoint) String() string {
+	return fmt.Sprintf("%d,%d", f.x, f.y)
+}
+
+// postedFocus reads the form's focus field. posted is false when the post had
+// no such field. A member who may not set the picture posts none, because
+// their form is rendered without the photo field. ok is false unless the value
+// is two whole numbers from 0 to 100.
+func postedFocus(r *http.Request) (focus focusPoint, posted, ok bool) {
+	if !r.PostForm.Has("focus") {
+		return centre, false, true
+	}
+	xs, ys, found := strings.Cut(r.PostForm.Get("focus"), ",")
+	if !found {
+		return focus, true, false
+	}
+	x, errX := strconv.ParseInt(xs, 10, 16)
+	y, errY := strconv.ParseInt(ys, 10, 16)
+	if errX != nil || errY != nil || x < 0 || x > 100 || y < 0 || y > 100 {
+		return focus, true, false
+	}
+	return focusPoint{x: int16(x), y: int16(y)}, true, true
+}
+
+// pictureFocus returns the focal point stored for the plant's profile picture,
+// for the edit form's hidden field. It returns the centre for a plant with no
+// picture and for a picture whose row has since been deleted.
+func (h *plants) pictureFocus(ctx context.Context, principal auth.Principal, plant store.Plant) (focusPoint, error) {
+	if plant.ProfilePhotoID == nil {
+		return centre, nil
+	}
+	picture, err := h.queries.GetPhoto(ctx, principal.Garden.ID, *plant.ProfilePhotoID)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return centre, nil
+	case err != nil:
+		return focusPoint{}, err
+	}
+	return focusPoint{x: picture.FocusX, y: picture.FocusY}, nil
 }
 
 // pictureRemoved reports whether the post asks for the plant's profile picture
@@ -384,11 +445,8 @@ type plantFormPage struct {
 	// Action is the URL the form posts to and a schedule row re-renders from.
 	Action string
 	// Back is the URL the Cancel link points at.
-	Back   string
-	Submit string
-	// Archive is the URL of the Archive link at the bottom of the edit form.
-	// Empty on the add form and for a reader who may not archive.
-	Archive   string
+	Back      string
+	Submit    string
 	Nickname  string
 	Common    string
 	Botanical string
@@ -427,6 +485,11 @@ type plantFormPage struct {
 	// pressed. The form renders the hidden photo-removed input set to 1, so
 	// saving again still removes the picture.
 	PictureRemoved bool
+	// PictureFocus is which part of the picture the plant's page shows, as
+	// "x,y" in percentages. It is the centre on the add form, the stored pair
+	// on the edit form, and the posted pair on a form rendered again after a
+	// refused save.
+	PictureFocus string
 }
 
 // PhotoField is the photo field's data for the template. It is nil for a form
@@ -440,6 +503,7 @@ func (p plantFormPage) PhotoField() *photoField {
 		Picture:       p.Picture,
 		Removable:     true,
 		Removed:       p.PictureRemoved,
+		Focus:         p.PictureFocus,
 		NeedsChoosing: p.PhotoNeedsChoosing,
 		Full:          p.PhotoFull,
 	}
@@ -476,6 +540,7 @@ func addPlantPage(principal auth.Principal, f plantFields, rows []scheduleDraft,
 	page.Back = plantsPath
 	page.Submit = "Add plant"
 	page.showPhoto = canSetPicture(principal)
+	page.PictureFocus = centre.String()
 	for _, row := range rows {
 		page.Schedules = append(page.Schedules, newScheduleField(row, newPlantPath, now))
 	}
@@ -490,9 +555,6 @@ func editPlantPage(principal auth.Principal, f plantFields, plant store.Plant, n
 	page.Submit = "Save changes"
 	page.showPhoto = canSetPicture(principal)
 	page.Picture = picturePath(plant)
-	if principal.Can(auth.PlantArchive) {
-		page.Archive = archivePlantPath(plant.ID)
-	}
 	return page
 }
 
@@ -611,10 +673,12 @@ func (h *plants) create(w http.ResponseWriter, r *http.Request) {
 	if !readMultipartForm(w, r) {
 		return
 	}
+	focus, focusPosted, focusOK := postedFocus(r)
 	// The route admits anyone who may add a plant. A posted photo becomes the
-	// plant's profile picture, so the post is checked for the two capabilities
-	// that takes.
-	if photoPosted(r) && !canSetPicture(principal) {
+	// plant's profile picture and the focus field positions it, so either one
+	// is refused unless the member may also add a photo and set the profile
+	// picture.
+	if (photoPosted(r) || focusPosted) && !canSetPicture(principal) {
 		notFound(w)
 		return
 	}
@@ -627,7 +691,7 @@ func (h *plants) create(w http.ResponseWriter, r *http.Request) {
 
 	fields, fieldsOK := readPlantFields(r.PostForm, now)
 	rows, rowsOK := readScheduleRows(r.PostForm, cares, now)
-	if !fieldsOK || !rowsOK {
+	if !fieldsOK || !rowsOK || !focusOK {
 		badRequest(w)
 		return
 	}
@@ -640,6 +704,7 @@ func (h *plants) create(w http.ResponseWriter, r *http.Request) {
 	schedules, messages, refused := checkSchedules(rows, principal.Garden.ID)
 	page := addPlantPage(principal, fields, rows, now)
 	page.Rooms = rooms
+	page.PictureFocus = focus.String()
 	page.NameError, page.AcquiredError = fields.refuse()
 	for i := range page.Schedules {
 		page.Schedules[i].Error = messages[page.Schedules[i].Slug]
@@ -672,7 +737,7 @@ func (h *plants) create(w http.ResponseWriter, r *http.Request) {
 			if !ok {
 				return errResponded
 			}
-			return h.savePicture(r.Context(), q, upload)
+			return h.savePicture(r.Context(), q, upload, focus)
 		}
 		return nil
 	})
@@ -726,6 +791,12 @@ func (h *plants) edit(w http.ResponseWriter, r *http.Request) {
 	now := h.now().In(locationFor(principal.User))
 	page := editPlantPage(principal, plantFieldsOf(plant), plant, now)
 	page.Rooms = rooms
+	focus, err := h.pictureFocus(r.Context(), principal, plant)
+	if err != nil {
+		serverError(h.logger, w, r, "load the plant's picture", err)
+		return
+	}
+	page.PictureFocus = focus.String()
 	h.templates.render(w, r, view{page: plantFormPageName}, page)
 }
 
@@ -741,13 +812,14 @@ func (h *plants) update(w http.ResponseWriter, r *http.Request) {
 	if !readMultipartForm(w, r) {
 		return
 	}
-	if (photoPosted(r) || pictureRemoved(r)) && !canSetPicture(principal) {
+	focus, focusPosted, focusOK := postedFocus(r)
+	if (photoPosted(r) || pictureRemoved(r) || focusPosted) && !canSetPicture(principal) {
 		notFound(w)
 		return
 	}
 	now := h.now().In(locationFor(principal.User))
 	fields, fieldsOK := readPlantFields(r.PostForm, now)
-	if !fieldsOK {
+	if !fieldsOK || !focusOK {
 		badRequest(w)
 		return
 	}
@@ -759,6 +831,7 @@ func (h *plants) update(w http.ResponseWriter, r *http.Request) {
 
 	page := editPlantPage(principal, fields, plant, now)
 	page.Rooms = rooms
+	page.PictureFocus = focus.String()
 	page.NameError, page.AcquiredError = fields.refuse()
 	if pictureRemoved(r) {
 		page.Picture = ""
@@ -771,7 +844,8 @@ func (h *plants) update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// A posted photo becomes the picture. Remove clears profile_photo_id and
-	// keeps the photo row as one of the plant's photos.
+	// keeps the photo row as one of the plant's photos. With neither, the
+	// focus field moves the picture the plant already has.
 	err := h.queries.InTx(r.Context(), func(q *store.Queries) error {
 		if _, err := q.UpdatePlant(r.Context(), fields.update(principal.Garden.ID, plant.ID)); err != nil {
 			return err
@@ -783,10 +857,12 @@ func (h *plants) update(w http.ResponseWriter, r *http.Request) {
 			if !ok {
 				return errResponded
 			}
-			return h.savePicture(r.Context(), q, upload)
+			return h.savePicture(r.Context(), q, upload, focus)
 		case pictureRemoved(r):
 			_, err := q.SetProfilePhoto(r.Context(), store.SetProfilePhotoParams{GardenID: principal.Garden.ID, PlantID: plant.ID})
 			return err
+		case focusPosted && plant.ProfilePhotoID != nil:
+			return q.SetPhotoFocus(r.Context(), store.SetPhotoFocusParams{FocusX: focus.x, FocusY: focus.y, GardenID: principal.Garden.ID, PlantID: plant.ID, PhotoID: *plant.ProfilePhotoID})
 		}
 		return nil
 	})

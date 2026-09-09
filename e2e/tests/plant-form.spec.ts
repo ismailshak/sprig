@@ -385,6 +385,72 @@ test('a plant added with a photo shows it on its page and beside its name on Pla
   await expect.poll(() => loaded(plants.picture('Ada'))).toBe(true);
 });
 
+// The sideways photo is taller than the 5:3 box once upright, so the frame
+// moves up and down.
+test('the frame placed on the add form is where the edit form opens it @js', async ({ page, plantForm, plant }) => {
+  await plantForm.openNew();
+  await plantForm.field('Nickname').fill('Ada');
+  await plantForm.choosePhoto('Add photo', photos.sideways);
+  await expect(plantForm.photoPreview()).toBeVisible();
+  await expect(plantForm.frame()).toHaveAttribute('aria-valuenow', '50');
+
+  await plantForm.frame().focus();
+  await page.keyboard.press('End');
+  await expect(plantForm.frame()).toHaveAttribute('aria-valuenow', '100');
+  await plantForm.submit('Add plant');
+
+  await expect(plant.heading()).toHaveText('Ada');
+  await plant.edit();
+  await expect(plantForm.frame()).toHaveAttribute('aria-valuenow', '100');
+});
+
+test('the frame moved on the edit form is saved without a new photo @js', async ({ page, plantForm, plant }) => {
+  await plantForm.openNew();
+  await plantForm.field('Nickname').fill('Ada');
+  await plantForm.choosePhoto('Add photo', photos.sideways);
+  await expect(plantForm.photoPreview()).toBeVisible();
+  await plantForm.submit('Add plant');
+  await plant.edit();
+  await expect(plantForm.frame()).toHaveAttribute('aria-valuenow', '50');
+
+  await plantForm.frame().focus();
+  await page.keyboard.press('Home');
+  await expect(plantForm.frame()).toHaveAttribute('aria-valuenow', '0');
+  await plantForm.submit('Save changes');
+
+  await expect(plant.heading()).toHaveText('Ada');
+  await plant.edit();
+  await expect(plantForm.frame()).toHaveAttribute('aria-valuenow', '0');
+});
+
+// The frame is 5:3 and the photo 2:3, so the frame is 0.4 of the photo's
+// height and the other 0.6 is what it can travel. Dragging it down by a
+// quarter of itself is a tenth of the photo: 50 + 0.1 / 0.6 * 100 is 67.
+test('a pointer drag on the frame moves the part of the photo shown @js', async ({ plantForm }) => {
+  await plantForm.openNew();
+  await plantForm.choosePhoto('Add photo', photos.sideways);
+  await expect(plantForm.photoPreview()).toBeVisible();
+  await expect(plantForm.frame()).toHaveAttribute('aria-valuenow', '50');
+
+  await plantForm.dragFrame(0.25);
+
+  await expect(plantForm.frame()).toHaveAttribute('aria-valuenow', '67');
+});
+
+test('choosing another photo puts the frame back in the centre @js', async ({ page, plantForm }) => {
+  await plantForm.openNew();
+  await plantForm.choosePhoto('Add photo', photos.sideways);
+  await expect(plantForm.photoPreview()).toBeVisible();
+  await plantForm.frame().focus();
+  await page.keyboard.press('End');
+  await expect(plantForm.frame()).toHaveAttribute('aria-valuenow', '100');
+
+  await plantForm.choosePhoto('Replace', photos.gpsTagged);
+
+  await expect(plantForm.photoPreview()).toBeVisible();
+  await expect(plantForm.frame()).toHaveAttribute('aria-valuenow', '50');
+});
+
 test("Remove on the edit form takes the picture off the plant's page @js", async ({ plantForm, plant }) => {
   await plantForm.openNew();
   await plantForm.field('Nickname').fill('Ada');

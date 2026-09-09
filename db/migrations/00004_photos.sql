@@ -29,6 +29,12 @@ CREATE TABLE photo (
     -- The size of the square variant, NULL when none was uploaded. The
     -- garden's storage quota sums both columns.
     square_bytes bigint,
+    -- Which part of the photo the plant's page shows once it has cropped the
+    -- picture to fit, as percentages across and down. 50 and 50 is the centre.
+    -- The 0 to 100 range is checked in the handler rather than by a CHECK
+    -- constraint.
+    focus_x      smallint NOT NULL DEFAULT 50,
+    focus_y      smallint NOT NULL DEFAULT 50,
 
     FOREIGN KEY (plant_id, garden_id) REFERENCES plant (id, garden_id) ON DELETE CASCADE,
     -- The id alone is already unique. This pair is the target of the foreign

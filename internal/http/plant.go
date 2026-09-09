@@ -30,6 +30,8 @@ func plantSheetPath(plantID uuid.UUID) string {
 // plantDetail is everything a plant's page and the sheet it opens render from.
 type plantDetail struct {
 	plant store.Plant
+	// picture is the plant's profile photo, nil for a plant with none.
+	picture *store.Photo
 	// lines is every schedule the plant has, resolved against now.
 	lines []schedule.Line
 	// cares is every care type in the garden, since the sheet on this page
@@ -55,6 +57,19 @@ func loadPlant(ctx context.Context, queries *store.Queries, principal auth.Princ
 		return d, err
 	}
 	d.plant = plant
+	if plant.ProfilePhotoID != nil {
+		picture, err := queries.GetPhoto(ctx, principal.Garden.ID, *plant.ProfilePhotoID)
+		switch {
+		// The photo was deleted between the two reads. The plant renders
+		// without a picture, because callers turn pgx.ErrNoRows from
+		// loadPlant into a 404 for the plant itself.
+		case errors.Is(err, pgx.ErrNoRows):
+		case err != nil:
+			return d, fmt.Errorf("load the plant's picture: %w", err)
+		default:
+			d.picture = &picture
+		}
+	}
 
 	schedules, err := queries.ListCareSchedules(ctx, principal.Garden.ID)
 	if err != nil {
@@ -114,9 +129,12 @@ type plantPage struct {
 	Botanical bool
 	// Picture is the URL of the plant's profile picture at its uploaded size,
 	// empty for a plant with no picture. PictureHref is the URL of that
-	// photo's own page. The picture is a link to it.
-	Picture     string
-	PictureHref string
+	// photo's own page. The picture is a link to it. PictureFocus is the CSS
+	// object-position on the image, such as "50% 0%". It picks which part of
+	// the photo the cropped box at the top of the page shows.
+	Picture      string
+	PictureHref  string
+	PictureFocus string
 	// Names is the plant's other names, the common name before the botanical.
 	Names    []plantName
 	Room     string
@@ -196,14 +214,15 @@ func newPlantPage(principal auth.Principal, d plantDetail) plantPage {
 	page := plantPage{
 		Name:      plant.DisplayName(),
 		Botanical: plant.BotanicalOnly(),
-		Picture:   picturePath(plant),
 		Names:     otherNames(plant),
 		Schedule:  scheduleRows(principal, d),
 		Details:   newPlantDetails(plant),
 		Recent:    recentLines(principal, d.recent, d.now),
 	}
-	if plant.ProfilePhotoID != nil {
-		page.PictureHref = photoPath(plant.ID, *plant.ProfilePhotoID)
+	if d.picture != nil {
+		page.Picture = photoFullPath(plant.ID, d.picture.ID)
+		page.PictureHref = photoPath(plant.ID, d.picture.ID)
+		page.PictureFocus = focusPosition(*d.picture)
 	}
 	for _, row := range d.photos {
 		page.Photos = append(page.Photos, newPhotoTile(plant, row.Photo, d.now))

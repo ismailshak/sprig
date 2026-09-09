@@ -1,9 +1,6 @@
 {{define "title"}}{{.Title}} · sprig{{end}}
 
-{{/* Cancel rather than a back arrow, because a chevron only says the page will
-     be left, and this form has typed input to discard.
-
-     One page and one post rather than a multi-step wizard. The required fields
+{{/* One page and one post rather than a multi-step wizard. The required fields
      are at the top and the rest are behind a disclosure.
 
      novalidate, because otherwise the browser would reject a count of 0 with
@@ -11,7 +8,6 @@
 {{define "main"}}
 <header class="topbar topbar--form">
 <h1 class="topbar__title">{{.Title}}</h1>
-<a class="topbar__cancel" href="{{.Back}}">Cancel</a>
 </header>
 {{/* multipart/form-data so the photo can be posted as a file. The server
      parses a post with no photo the same way. */}}
@@ -98,14 +94,12 @@
 </div>
 </details>
 <button class="wide-action" type="submit">{{.Submit}}</button>
-{{/* A link rather than a button, because archiving asks for confirmation on
-     the plant's own page. It is placed below the submit button rather than
-     beside it, because the two are not equal choices. */}}
-{{with .Archive}}
+{{/* Cancel is below the submit button rather than beside it, because the two
+     are not equal choices. Archiving is on the plant's own page, where it asks
+     for confirmation. */}}
 <div class="form__foot">
-<a class="plant__archive" href="{{.}}">Archive</a>
+<a class="plant__keep" href="{{.Back}}">Cancel</a>
 </div>
-{{end}}
 </form>
 {{end}}
 

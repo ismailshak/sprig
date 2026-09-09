@@ -3,6 +3,7 @@ package http
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io/fs"
 	"mime/multipart"
 	"net/http"
@@ -957,22 +958,12 @@ func TestPlantForm_TheEditFormIsFilledInWithTheDetailsSectionOpen(t *testing.T) 
 	if len(openRows(page)) != 0 || len(closedRows(page)) != 0 {
 		t.Error("the edit form draws schedule rows")
 	}
-	if !strings.Contains(page, archivePlantPath(bigFellaID)) {
-		t.Error("the edit form has no way to archive the plant")
+	// Archive is on the plant's page, where it asks for confirmation.
+	if strings.Contains(page, archivePlantPath(bigFellaID)) {
+		t.Error("the edit form offers to archive the plant")
 	}
-}
-
-func TestPlantForm_AReaderWhoMayNotArchiveSeesNoArchiveLink(t *testing.T) {
-	f := plantFormOn(t)
-	f.principal.Capabilities = auth.Capabilities{auth.PlantEdit: true}
-
-	rec := f.editForm(t, bigFellaID)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
-	}
-	if strings.Contains(rec.Body.String(), archivePlantPath(bigFellaID)) {
-		t.Error("the edit form offers to archive a plant to a reader who may not")
+	if !strings.Contains(page, `href="`+plantPath(bigFellaID)+`">Cancel</a>`) {
+		t.Error("the edit form has no Cancel link back to the plant's page")
 	}
 }
 
@@ -1613,5 +1604,191 @@ func TestPlantForm_AnEditWithAPhotoTheGardenHasNoRoomForLeavesThePlantUnchanged(
 	}
 	if got := f.storedFiles(t); len(got) != 0 {
 		t.Errorf("the directory holds %v, want nothing", got)
+	}
+}
+
+// focusOf reads back which part of the plant's picture its page shows, as
+// "x,y".
+func (f *formFixture) focusOf(t *testing.T, plantID uuid.UUID) string {
+	t.Helper()
+
+	var x, y int16
+	err := f.tx.QueryRow(t.Context(),
+		"SELECT photo.focus_x, photo.focus_y FROM plant JOIN photo ON photo.id = plant.profile_photo_id WHERE plant.id = $1", plantID).Scan(&x, &y)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return fmt.Sprintf("%d,%d", x, y)
+}
+
+// focusField returns the value of the form's hidden focus input, or "" when
+// the form has none.
+func focusField(page string) string {
+	m := focusInput.FindStringSubmatch(page)
+	if m == nil {
+		return ""
+	}
+	return m[1]
+}
+
+var focusInput = regexp.MustCompile(`name="focus"[^>]*value="([^"]*)"`)
+
+func TestPlantForm_APlantAddedWithAPhotoStoresWherePictureIsPositioned(t *testing.T) {
+	f := plantFormOn(t)
+	values := addValues()
+	values.Set("nickname", "Ada")
+	values.Set("focus", "50,100")
+
+	plant := f.created(t, f.postPhoto(t, nil, values, testJPEG(t, 30, 20), testJPEG(t, 8, 8)))
+
+	if got := f.focusOf(t, plant.ID); got != "50,100" {
+		t.Errorf("the picture's focal point is %s, want 50,100", got)
+	}
+}
+
+func TestPlantForm_APhotoPostedWithNoFocusFieldIsCentred(t *testing.T) {
+	f := plantFormOn(t)
+	values := addValues()
+	values.Set("nickname", "Ada")
+
+	plant := f.created(t, f.postPhoto(t, nil, values, testJPEG(t, 30, 20), testJPEG(t, 8, 8)))
+
+	if got := f.focusOf(t, plant.ID); got != "50,50" {
+		t.Errorf("the picture's focal point is %s, want 50,50", got)
+	}
+}
+
+func TestPlantForm_AFocusPostedOnEditMovesThePictureWithoutANewPhoto(t *testing.T) {
+	f := plantFormOn(t)
+	givePicture(t, f.tx, bigFellaID)
+	values := addValues()
+	values.Set("nickname", "Big Fella")
+	values.Set("focus", "0,50")
+
+	rec := f.save(t, bigFellaID, values)
+
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("the save returned %d, want %d:\n%s", rec.Code, http.StatusSeeOther, rec.Body.String())
+	}
+	if got := f.focusOf(t, bigFellaID); got != "0,50" {
+		t.Errorf("the picture's focal point is %s, want 0,50", got)
+	}
+	// photoOf fails unless the plant has exactly one photo.
+	f.photoOf(t, bigFellaID)
+}
+
+func TestPlantForm_ASaveWithNoFocusFieldLeavesThePicturesPositionAlone(t *testing.T) {
+	f := plantFormOn(t)
+	photoID := givePicture(t, f.tx, bigFellaID)
+	f.exec(t, "UPDATE photo SET focus_x = 100, focus_y = 0 WHERE id = $1", photoID)
+
+	values := addValues()
+	values.Set("nickname", "Big Fella")
+
+	rec := f.save(t, bigFellaID, values)
+
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("the save returned %d, want %d", rec.Code, http.StatusSeeOther)
+	}
+	if got := f.focusOf(t, bigFellaID); got != "100,0" {
+		t.Errorf("the picture's focal point is %s, want 100,0 untouched", got)
+	}
+}
+
+func TestPlantForm_AFocusFromAMemberWhoMayNotSetThePictureIs404(t *testing.T) {
+	f := plantFormOn(t)
+	f.principal.Capabilities = auth.Capabilities{auth.PlantEdit: true}
+	givePicture(t, f.tx, bigFellaID)
+	values := addValues()
+	values.Set("nickname", "Big Fella")
+	values.Set("focus", "0,0")
+
+	rec := f.save(t, bigFellaID, values)
+
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("the save returned %d, want %d", rec.Code, http.StatusNotFound)
+	}
+	if got := f.focusOf(t, bigFellaID); got != "50,50" {
+		t.Errorf("the picture's focal point is %s, want 50,50 untouched", got)
+	}
+}
+
+func TestPlantForm_AFocusThatIsNotTwoWholePercentagesIs400(t *testing.T) {
+	f := plantFormOn(t)
+	givePicture(t, f.tx, bigFellaID)
+
+	for _, focus := range []string{"", "50", "0,0,0", "a,b", "-1,50", "101,50", "50, 50", "50.5,50"} {
+		values := addValues()
+		values.Set("nickname", "Big Fella")
+		values.Set("focus", focus)
+
+		rec := f.save(t, bigFellaID, values)
+
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("%q: the save returned %d, want %d", focus, rec.Code, http.StatusBadRequest)
+		}
+	}
+	if got := f.focusOf(t, bigFellaID); got != "50,50" {
+		t.Errorf("the picture's focal point is %s, want 50,50 untouched", got)
+	}
+}
+
+func TestPlantForm_TheEditFormsFocusFieldHoldsThePicturesStoredPosition(t *testing.T) {
+	f := plantFormOn(t)
+	photoID := givePicture(t, f.tx, bigFellaID)
+	f.exec(t, "UPDATE photo SET focus_x = 100, focus_y = 0 WHERE id = $1", photoID)
+
+	page := f.editForm(t, bigFellaID).Body.String()
+
+	if got := focusField(page); got != "100,0" {
+		t.Errorf("the edit form's focus field holds %q, want 100,0", got)
+	}
+}
+
+func TestPlantForm_TheAddFormsFocusFieldHoldsTheCentre(t *testing.T) {
+	f := plantFormOn(t)
+
+	page := f.open(t, newPlantPath, false).Body.String()
+
+	if got := focusField(page); got != "50,50" {
+		t.Errorf("the add form's focus field holds %q, want 50,50", got)
+	}
+}
+
+func TestPlantForm_ARefusedSaveKeepsThePositionThatWasPosted(t *testing.T) {
+	f := plantFormOn(t)
+	givePicture(t, f.tx, bigFellaID)
+	// Every name is empty, so the save is refused and the form is rendered
+	// again with the picture the plant still has.
+	values := addValues()
+	values.Set("focus", "0,100")
+
+	rec := f.save(t, bigFellaID, values)
+
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("the save returned %d, want %d", rec.Code, http.StatusUnprocessableEntity)
+	}
+	if got := focusField(rec.Body.String()); got != "0,100" {
+		t.Errorf("the form rendered again holds %q in its focus field, want 0,100", got)
+	}
+}
+
+func TestPlantForm_AFocusPostedForAPlantWithNoPictureSavesThePlant(t *testing.T) {
+	f := plantFormOn(t)
+	values := addValues()
+	values.Set("nickname", "Big Fella")
+	values.Set("focus", "0,100")
+
+	rec := f.save(t, bigFellaID, values)
+
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("the save returned %d, want %d:\n%s", rec.Code, http.StatusSeeOther, rec.Body.String())
+	}
+	plant, err := store.New(f.tx).GetPlant(t.Context(), rosewoodID, bigFellaID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plant.ProfilePhotoID != nil {
+		t.Error("the plant has a picture, want none")
 	}
 }

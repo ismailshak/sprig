@@ -192,8 +192,36 @@ func TestLoadConfig_OverridesAndTextFormat(t *testing.T) {
 	}
 }
 
-func TestLoadConfig_APhotoQuotaThatIsNotAPositiveWholeNumberIsAProblemNamingTheVariable(t *testing.T) {
-	for _, quota := range []string{"0", "-1", "1GiB", "1.5"} {
+func TestLoadConfig_APhotoQuotaTakesAUnitSuffixAndABareNumberIsBytes(t *testing.T) {
+	for quota, want := range map[string]int64{
+		"1073741824": 1 << 30,
+		"1GiB":       1 << 30,
+		"500MiB":     500 << 20,
+		"2GB":        2_000_000_000,
+		"3TiB":       3 << 40,
+		"4kb":        4_000,
+		"2 GB":       2_000_000_000,
+		"12B":        12,
+	} {
+		env := map[string]string{
+			"SPRIG_DATABASE_URL":      "postgres://example/db",
+			"SPRIG_BASE_URL":          "https://sprig.example.com",
+			"SPRIG_PHOTO_QUOTA_BYTES": quota,
+		}
+		getenv := func(k string) string { return env[k] }
+
+		cfg, err := loadConfig(getenv)
+
+		if err != nil {
+			t.Errorf("%q: loadConfig returned an error: %v", quota, err)
+		} else if cfg.photoQuota != want {
+			t.Errorf("%q: photoQuota = %d, want %d", quota, cfg.photoQuota, want)
+		}
+	}
+}
+
+func TestLoadConfig_APhotoQuotaThatIsNotAWholeNumberWithAKnownUnitIsAProblemNamingTheVariable(t *testing.T) {
+	for _, quota := range []string{"0", "-1", "0GiB", "1.5", "1.5GiB", "GiB", "1XB", "1GiB extra", "9999999999TiB"} {
 		env := map[string]string{
 			"SPRIG_DATABASE_URL":      "postgres://example/db",
 			"SPRIG_BASE_URL":          "https://sprig.example.com",
