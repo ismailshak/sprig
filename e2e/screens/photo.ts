@@ -21,9 +21,12 @@ export class PhotoScreen {
     await this.page.waitForLoadState();
   }
 
+  // The confirmation's Delete button has the same accessible name as the button
+  // clicked here. Waiting for the confirmation's Cancel first stops the
+  // caller's next click pressing this button again before the swap lands.
   async askToDelete(): Promise<void> {
-    await this.page.getByRole('button', { name: 'Delete' }).click();
-    await this.page.waitForLoadState();
+    await this.foot().getByRole('button', { name: 'Delete' }).click();
+    await this.foot().getByRole('button', { name: 'Cancel' }).waitFor();
   }
 
   async cancelDelete(): Promise<void> {

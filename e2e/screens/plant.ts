@@ -89,9 +89,12 @@ export class PlantScreen {
     await this.page.waitForLoadState();
   }
 
+  // The editor's Cancel is a link and the confirmation's is a button, so this
+  // waits for the swap. There is no misclick to guard against here, because the
+  // editor's Remove is a link and the confirmation's is a button too.
   async askToRemoveSchedule(care: string): Promise<void> {
     await this.scheduleRow(care).getByRole('link', { name: 'Remove' }).click();
-    await this.page.waitForLoadState();
+    await this.scheduleRow(care).getByRole('button', { name: 'Cancel' }).waitFor();
   }
 
   async cancelRemoveSchedule(care: string): Promise<void> {
@@ -130,9 +133,12 @@ export class PlantScreen {
     await this.page.waitForLoadState();
   }
 
+  // The confirmation's Archive button has the same accessible name as the
+  // button clicked here. Waiting for the confirmation's Cancel first stops the
+  // caller's next click pressing this button again before the swap lands.
   async askToArchive(): Promise<void> {
-    await this.page.getByRole('button', { name: 'Archive' }).click();
-    await this.page.waitForLoadState();
+    await this.foot().getByRole('button', { name: 'Archive' }).click();
+    await this.foot().getByRole('button', { name: 'Cancel' }).waitFor();
   }
 
   async cancelArchive(): Promise<void> {
