@@ -34,5 +34,9 @@
 </div>
 </div>
 <p class="field__error" id="photo-error" hidden>This file couldn’t be opened as a photo.</p>
+{{/* Shown while the page's script resizes a chosen photo. The form's submit
+     buttons are disabled for as long as it shows, because a post sent before
+     the resize finishes would have no photo in it. */}}
+<p class="note" id="photo-preparing" hidden>Preparing the photo…</p>
 {{with .Submit}}<button class="wide-action" type="submit">{{.}}</button>{{end}}
 </div>{{end}}

@@ -59,6 +59,7 @@ func routes(logger *slog.Logger, sessions *auth.Sessions, passkeys *auth.Passkey
 	setupHandler := &setup{logger: logger, passkeys: passkeys, sessions: sessions, resolver: resolver, queries: queries, templates: templates, now: time.Now, enabled: signupEnabled, wake: wake, pushKey: pushKey}
 	invitedHandler := &invited{logger: logger, passkeys: passkeys, sessions: sessions, resolver: resolver, queries: queries, templates: templates, now: time.Now, wake: wake}
 	recoverHandler := &recoverAccount{logger: logger, passkeys: passkeys, queries: queries, templates: templates, now: time.Now}
+	handleHandler := &handleSuggestions{queries: queries, templates: templates, logger: logger}
 	recoverLimit := newRecoverLimits(trustedIPHeader)
 	base := []route{
 		{pattern: "GET /healthz", handler: http.HandlerFunc(handleHealthz)},
@@ -115,6 +116,7 @@ func routes(logger *slog.Logger, sessions *auth.Sessions, passkeys *auth.Passkey
 		{pattern: "GET " + setupPath, handler: http.HandlerFunc(setupHandler.show)},
 		{pattern: "POST " + setupChallengePath, handler: http.HandlerFunc(setupHandler.challenge)},
 		{pattern: "POST " + setupPath, handler: http.HandlerFunc(setupHandler.create)},
+		{pattern: "GET " + handlePath, limits: handleLimits(trustedIPHeader), handler: http.HandlerFunc(handleHandler.suggest)},
 		{pattern: "GET " + setupSignedInPath, withoutGarden: true, handler: http.HandlerFunc(setupHandler.showSignedIn)},
 		{pattern: "POST " + setupSignedInPath, withoutGarden: true, handler: http.HandlerFunc(setupHandler.createSignedIn)},
 		{pattern: "GET " + remindersPath, handler: http.HandlerFunc(setupHandler.reminders)},
@@ -133,6 +135,7 @@ func routes(logger *slog.Logger, sessions *auth.Sessions, passkeys *auth.Passkey
 		{pattern: "POST " + sendTestPath, handler: http.HandlerFunc(moreHandler.sendTestNotification)},
 		{pattern: "POST " + notificationsPath + "/browsers/{browser}/remove", handler: http.HandlerFunc(moreHandler.removeBrowser)},
 		{pattern: "GET " + installPath, handler: http.HandlerFunc(moreHandler.install)},
+		{pattern: "GET " + appearancePath, handler: http.HandlerFunc(moreHandler.appearance)},
 		{pattern: "GET " + gardensPath, handler: http.HandlerFunc(todayHandler.gardenSheet)},
 		{pattern: "POST " + gardensPath, handler: http.HandlerFunc(todayHandler.switchGarden)},
 		{pattern: "GET " + gardenPath, capability: auth.GardenEdit, handler: http.HandlerFunc(moreHandler.garden)},
@@ -198,6 +201,20 @@ func inviteLimits(trustedIPHeader string, refused http.Handler) []middleware {
 	}
 }
 
+// handleLimits returns the rate limiters wrapped around the handle suggestion.
+// The route is served without a session and its answer says whether a handle
+// is held, so it gets budgets of its own. A form asks once each time the
+// display name is left, so 30 a minute from one address is more than a person
+// editing their name produces. The shared 300 a minute caps how fast a
+// stranger can list handles.
+func handleLimits(trustedIPHeader string) []middleware {
+	refused := http.HandlerFunc(tooManyHandleSuggestions)
+	return []middleware{
+		Limit(NewLimiter(rate.Every(time.Minute/30), 30), ClientAddress(trustedIPHeader), refused),
+		Limit(NewLimiter(rate.Every(time.Minute/300), 300), AnySource, refused),
+	}
+}
+
 // publicRoutes is every route served without a session. Authenticate covers
 // the rest, so a route in routes is protected until it is listed here.
 var publicRoutes = map[string]bool{
@@ -218,6 +235,9 @@ var publicRoutes = map[string]bool{
 	"GET " + setupPath:           true,
 	"POST " + setupChallengePath: true,
 	"POST " + setupPath:          true,
+	// The handle suggestion fills a field on the two setup forms above and on
+	// an invite's join form. All three come before there is a session.
+	"GET " + handlePath: true,
 	// An invite link is opened before there is a session, so the page, the
 	// challenge and the post that redeems it are all public. The handler
 	// returns 404 for a link that cannot be redeemed.

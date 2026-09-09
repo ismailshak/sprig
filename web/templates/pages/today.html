@@ -43,7 +43,8 @@
 
 {{define "nav"}}{{template "tabs" "Today"}}{{end}}
 
-{{define "script"}}{{if .Reminders}}<script src="{{asset "push.js"}}" defer></script>
+{{define "script"}}<script src="{{asset "sheet.js"}}" defer></script>
+{{if .Reminders}}<script src="{{asset "push.js"}}" defer></script>
 <script src="{{asset "reminders.js"}}" defer></script>{{end}}{{end}}
 
 {{define "overlay"}}{{if .GardenSheet}}{{template "garden-sheet" .}}{{else}}{{template "sheet" .}}{{end}}{{end}}

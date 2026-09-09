@@ -243,7 +243,7 @@ func TestMore_AnOwnerSeesEveryRow(t *testing.T) {
 
 	got := labelsOf(linkRowsOf(f.page(t, f.handler.show, morePath)))
 
-	want := []string{"Account", "Passkeys", "Notifications", "Garden", "People", "Tokens"}
+	want := []string{"Account", "Appearance", "Passkeys", "Notifications", "Garden", "People", "Tokens"}
 	if !slices.Equal(got, want) {
 		t.Errorf("the rows are %v, want %v", got, want)
 	}
@@ -255,19 +255,19 @@ func TestMore_AMembersIndexHasTokensAndNeitherGardenNorPeople(t *testing.T) {
 
 	got := labelsOf(linkRowsOf(f.page(t, f.handler.show, morePath)))
 
-	want := []string{"Account", "Passkeys", "Notifications", "Tokens"}
+	want := []string{"Account", "Appearance", "Passkeys", "Notifications", "Tokens"}
 	if !slices.Equal(got, want) {
 		t.Errorf("the rows are %v, want %v", got, want)
 	}
 }
 
-func TestMore_ASittersIndexIsThreeRows(t *testing.T) {
+func TestMore_ASitterSeesNeitherGardenPeopleNorTokens(t *testing.T) {
 	f := moreGarden(t)
 	f.principal.Capabilities = auth.Capabilities{auth.CareLog: true}
 
 	got := labelsOf(linkRowsOf(f.page(t, f.handler.show, morePath)))
 
-	want := []string{"Account", "Passkeys", "Notifications"}
+	want := []string{"Account", "Appearance", "Passkeys", "Notifications"}
 	if !slices.Equal(got, want) {
 		t.Errorf("the rows are %v, want %v", got, want)
 	}
@@ -281,7 +281,7 @@ func TestMore_EachRowLinksToItsPage(t *testing.T) {
 		got = append(got, row.href)
 	}
 
-	want := []string{"/more/account", "/more/passkeys", "/more/notifications", "/more/garden", "/more/people", "/more/tokens"}
+	want := []string{"/more/account", "/more/appearance", "/more/passkeys", "/more/notifications", "/more/garden", "/more/people", "/more/tokens"}
 	if !slices.Equal(got, want) {
 		t.Errorf("the rows point at %v, want %v", got, want)
 	}
@@ -421,5 +421,32 @@ func TestMore_SigningOutDeletesTheSessionAndClearsTheCookie(t *testing.T) {
 	cookie := rec.Result().Cookies()[0]
 	if cookie.Value != "" || cookie.MaxAge >= 0 {
 		t.Errorf("the cookie is %q with MaxAge %d, want an empty value and a negative MaxAge", cookie.Value, cookie.MaxAge)
+	}
+}
+
+// appearanceRadio matches one of the Appearance page's radio buttons and
+// captures its value and whether it is checked.
+var appearanceRadio = regexp.MustCompile(`<input type="radio" id="mode-\w+" name="mode" value="(\w+)"( checked)? disabled>`)
+
+func TestMore_TheAppearancePageOffersLightDarkAndSystemWithSystemChecked(t *testing.T) {
+	f := moreGarden(t)
+
+	page := f.page(t, f.handler.appearance, appearancePath)
+
+	var values, checked []string
+	for _, m := range appearanceRadio.FindAllStringSubmatch(page, -1) {
+		values = append(values, m[1])
+		if m[2] != "" {
+			checked = append(checked, m[1])
+		}
+	}
+	if want := []string{"light", "dark", "system"}; !slices.Equal(values, want) {
+		t.Errorf("the radios are %v, want %v", values, want)
+	}
+	if want := []string{"system"}; !slices.Equal(checked, want) {
+		t.Errorf("the checked radios are %v, want %v, because without a script the page follows the system", checked, want)
+	}
+	if !strings.Contains(text(page), "Without JavaScript, sprig follows your device’s light or dark setting.") {
+		t.Errorf("the page does not say what happens without JavaScript:\n%s", text(page))
 	}
 }

@@ -197,7 +197,7 @@ func TestCorrect_TheSheetsFormSendsBackThePlantTheLogIsFilteredTo(t *testing.T) 
 	}
 }
 
-func TestCorrect_AWhatChipKeepsTheFieldsAlreadyFilledIn(t *testing.T) {
+func TestCorrect_ACareChipKeepsTheFieldsAlreadyFilledIn(t *testing.T) {
 	f := rosewoodCorrections(t)
 	// The chip resubmits the form, so everything on it comes back in the query.
 	extra := url.Values{"care": {"water"}, "outcome": {"skipped"}, "when": {"yesterday"}, "time": {"18:00"}, "again": {"3"}, "note": {"New pot"}}
@@ -439,6 +439,17 @@ func TestCorrect_UndoPutsTheEventBackAsItWasLogged(t *testing.T) {
 	}
 	if !strings.Contains(row, "Reminder in 2 days") {
 		t.Errorf("the restored row says %q, want the two days the skip was recorded with", row)
+	}
+}
+
+func TestCorrect_ASheetOpenedUnderACareTypeTheGardenDoesNotHaveIsNotFound(t *testing.T) {
+	f := rosewoodCorrections(t)
+	eventID := f.eventID(t, bigFellaID)
+
+	rec := f.openSheet(t, bigFellaID, eventID, logQuery{care: "prune"}, nil, false)
+
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want %d, the same as the log itself gives that URL", rec.Code, http.StatusNotFound)
 	}
 }
 

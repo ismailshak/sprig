@@ -50,7 +50,7 @@ test('a plant links to its own activity, and the log links back to the plant', a
   await expect(page).toHaveURL(`/plants/${seeded.bigFella.id}`);
 });
 
-test('older activity opens the page below the newest, and latest activity returns to it', async ({
+test('older activity opens the page below the newest, and latest activity returns to it @swap', async ({
   page,
   activity,
 }) => {
@@ -144,4 +144,38 @@ test('undoing a delete puts the event back on the log @js', async ({ page, activ
   await expect(page.locator(`#${id}`)).not.toContainText('Deleted');
   await activity.open();
   await expect(page.locator(`#${id}`)).toHaveCount(1);
+});
+
+test('the log filtered to one care lists that care alone @swap', async ({ page, activity }) => {
+  await activity.open();
+  await expect(activity.clear()).toHaveCount(0);
+
+  await activity.showFilters();
+  await activity.care().selectOption({ label: 'Feed' });
+  await activity.apply();
+
+  await expect(page).toHaveURL(/\/activity\?.*care=feed/);
+  const rows = await activity.rows().allTextContents();
+  expect(rows.length).toBeGreaterThan(0);
+  for (const row of rows) {
+    expect(row).toContain('fed');
+  }
+  await expect(activity.care()).toHaveValue('feed');
+
+  await activity.clear().click();
+
+  await expect(page).toHaveURL('/activity');
+});
+
+test('a date range with nothing in it says nothing matches @swap', async ({ page, activity }) => {
+  await activity.open();
+
+  await activity.showFilters();
+  await activity.from().fill('2000-01-01');
+  await activity.to().fill('2000-01-31');
+  await activity.apply();
+
+  await expect(page).toHaveURL(/\/activity\?.*from=2000-01-01/);
+  await expect(page.getByText('Nothing matches these filters')).toBeVisible();
+  await expect(activity.rows()).toHaveCount(0);
 });

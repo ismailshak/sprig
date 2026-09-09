@@ -158,7 +158,11 @@ func (h *activity) correct(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	page, err := h.page(r.Context(), principal, e.q)
-	if err != nil {
+	switch {
+	case errors.Is(err, errUnknownCare):
+		h.templates.notFound(w, r)
+		return
+	case err != nil:
 		h.templates.serverError(h.logger, w, r, "load the log", err)
 		return
 	}
@@ -205,7 +209,11 @@ func (h *activity) save(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case errors.As(err, &refused):
 		page, err := h.page(r.Context(), principal, e.q)
-		if err != nil {
+		switch {
+		case errors.Is(err, errUnknownCare):
+			h.templates.notFound(w, r)
+			return
+		case err != nil:
 			h.templates.serverError(h.logger, w, r, "load the log", err)
 			return
 		}
@@ -254,7 +262,11 @@ func (h *activity) save(w http.ResponseWriter, r *http.Request) {
 	}
 	// The log is read again so the row is placed by the time it now holds.
 	saved, err := h.page(r.Context(), principal, e.q)
-	if err != nil {
+	switch {
+	case errors.Is(err, errUnknownCare):
+		h.templates.notFound(w, r)
+		return
+	case err != nil:
 		h.templates.serverError(h.logger, w, r, "load the log", err)
 		return
 	}

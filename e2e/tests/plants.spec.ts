@@ -16,6 +16,15 @@ test('the Plants tab opens the plant list', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Plants' })).toBeVisible();
 });
 
+test("the Plants tab on a plant's page goes back to the list", async ({ page, plant }) => {
+  await plant.open(seeded.bigFella);
+
+  await page.getByRole('navigation').getByRole('link', { name: 'Plants' }).click();
+
+  await expect(page).toHaveURL('/plants');
+  await expect(page.getByRole('heading', { name: 'Plants' })).toBeVisible();
+});
+
 test('rooms are listed alphabetically with No room last', async ({ plants }) => {
   await plants.open();
 

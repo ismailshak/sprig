@@ -116,7 +116,7 @@ func TestSeed_AGardenASeededPersonJoinedBetweenRunsIsDeletedByTheNextRun(t *test
 }
 
 // The seed places a cadence's newest event one interval before its dueIn, so
-// Today shows the same three sections as the prototype. Postgres does the date
+// Today has rows in all three of its sections. Postgres does the date
 // arithmetic here rather than the seed's own advance function, so a mistake in
 // that function is caught.
 func TestSeed_EveryCadenceFallsDueOnItsDueInDay(t *testing.T) {

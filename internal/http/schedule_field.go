@@ -290,13 +290,11 @@ func newScheduleField(f scheduleDraft, path string, now time.Time) scheduleField
 			field.Hint = s.hint
 		}
 	}
-	// The unit is singular after 1, since the label reads with the number.
+	// The unit label reads "day(s)" whatever the number, because typing in the
+	// Every field does not re-render the select. A label matched to the number
+	// would be wrong as soon as the number changed.
 	for _, unit := range units {
-		label := unit
-		if f.every != "1" {
-			label += "s"
-		}
-		field.Units = append(field.Units, option{Value: unit, Label: label, On: unit == f.unit})
+		field.Units = append(field.Units, option{Value: unit, Label: unit + "(s)", On: unit == f.unit})
 	}
 	field.From = monthOptions(f.from)
 	field.To = monthOptions(f.to)

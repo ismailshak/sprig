@@ -129,6 +129,7 @@ type PasskeyCredential struct {
 	SignCount    int64
 	Flags        int16
 	Transports   []string
+	Aaguid       *uuid.UUID
 	CreatedAt    time.Time
 	LastUsedAt   *time.Time
 }

@@ -1,14 +1,17 @@
 {{/* The buttons at the bottom of a plant's page, and the confirmation that
      replaces them when Archive is pressed. Both states share the id plant-foot,
      and settle:0ms stops htmx painting a frame with the old element's classes.
-     An archived plant gets Restore alone. It posts without a confirmation,
-     because archiving the plant again undoes it.
+     show scrolls the confirmation into view. It is taller than the buttons it
+     replaces, which are at the bottom of the page, so its own buttons would
+     otherwise be below the fold. An archived plant gets Restore alone. It posts without a confirmation, because archiving the
+     plant again undoes it.
 
-     Archive is not styled as a warning, because rose means overdue in this app
-     and using it here would make an ordinary tidy-up look like a mistake.
-     Archiving asks for confirmation because it removes the plant from the
-     Plants list and leaves no row to undo from. The confirmation replaces the
-     buttons instead of opening a dialog, so the plant stays visible above it. */}}
+     Archive is outlined like Edit plant and not styled as a warning, because
+     rose means overdue in this app and using it here would make an ordinary
+     tidy-up look like a mistake. Archiving asks for confirmation because it
+     removes the plant from the Plants list and leaves no row to undo from. The
+     confirmation replaces the buttons instead of opening a dialog, so the
+     plant stays visible above it. */}}
 {{define "plant-foot"}}{{with .Foot}}<div class="plant__foot{{if .Asking}} plant__foot--asking{{end}}" id="plant-foot">
 {{if .Restore}}
 <form method="post" action="{{.Restore}}"><button class="care care--outline">Restore</button></form>
@@ -21,6 +24,6 @@
 <form method="post" action="{{.Archive}}"><button class="care care--small">Archive</button></form>
 {{else}}
 {{with .Edit}}<a class="care care--outline" href="{{.}}">Edit plant</a>{{end}}
-{{with .Archive}}<form method="get" action="{{.}}"><button class="plant__archive" hx-get="{{.}}" hx-target="#plant-foot" hx-swap="outerHTML settle:0ms">Archive</button></form>{{end}}
+{{with .Archive}}<form method="get" action="{{.}}"><button class="care care--outline" hx-get="{{.}}" hx-target="#plant-foot" hx-swap="outerHTML settle:0ms show:#plant-foot:bottom">Archive</button></form>{{end}}
 {{end}}
 </div>{{end}}{{end}}

@@ -59,8 +59,9 @@ const defaultAddr = ":8080"
 // refuses a passkey ceremony whose origin is not the one it is on.
 const defaultBaseURL = "http://localhost:8080"
 
-// defaultPhotoQuota is 1 GiB.
-const defaultPhotoQuota = 1 << 30
+// defaultPhotoQuota is 1 GB counted in decimal bytes. The Garden page reports
+// storage in decimal units, so a binary gigabyte would read there as 1.1 GB.
+const defaultPhotoQuota = 1_000_000_000
 
 // defaultSessionTTL is 30 days without use before a session expires. Shorter
 // would prompt for a passkey more often than people tolerate.
@@ -141,9 +142,9 @@ func loadConfig(getenv func(string) string) (config, error) {
 	}
 	cfg.sessionTTL = ttl
 
-	quota, err := parseBytes(withDefault(strings.TrimSpace(getenv("SPRIG_PHOTO_QUOTA_BYTES")), strconv.Itoa(defaultPhotoQuota)))
+	quota, err := parseBytes(withDefault(strings.TrimSpace(getenv("SPRIG_PHOTO_QUOTA")), strconv.Itoa(defaultPhotoQuota)))
 	if err != nil {
-		problems = append(problems, fmt.Sprintf("SPRIG_PHOTO_QUOTA_BYTES must be a whole number of bytes above zero, or a number with a unit such as 1GiB, 500MiB or 2GB, got %q", getenv("SPRIG_PHOTO_QUOTA_BYTES")))
+		problems = append(problems, fmt.Sprintf("SPRIG_PHOTO_QUOTA must be a whole number of bytes above zero, or a number with a unit such as 1GiB, 500MiB or 2GB, got %q", getenv("SPRIG_PHOTO_QUOTA")))
 	}
 	cfg.photoQuota = quota
 

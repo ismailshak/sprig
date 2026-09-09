@@ -12,8 +12,8 @@ import (
 	"github.com/ismailshak/sprig/internal/auth"
 )
 
-// The rows the More screens read belong to Ellie and Home, because the
-// prototype shows each of those screens as Ellie.
+// The rows the More screens read belong to Ellie and Home, so signing in as
+// Ellie shows every one of those screens with something on it.
 
 // An API token is sent to /api/chores as a bearer token. An invite is opened
 // as /invite/<token>.
@@ -74,7 +74,7 @@ type recoveryBatch struct {
 	usedDaysAgo []int
 }
 
-// recovery returns the ten codes the prototype shows, two of them used.
+// recovery returns Ellie's ten recovery codes, two of them used.
 func recovery() recoveryBatch {
 	return recoveryBatch{
 		owner:       &ellie,

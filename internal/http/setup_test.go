@@ -588,3 +588,91 @@ func TestSetup_APersonWhoSignsUpAndIsThenInvitedElsewhereSignsInToTheirOwnGarden
 		t.Errorf("the sign-in landed on %q as %s, want Greenhouse as owner, the older membership", principal.Garden.Name, principal.Membership.Role)
 	}
 }
+
+func TestSetup_ATypedHandleIsStoredAsTyped(t *testing.T) {
+	f := setupOn(t, false)
+	form := aGardenForm()
+	form.Set("handle", "robin_h")
+
+	token := f.mustCreate(t, form, aDevice())
+
+	if handle := f.principalOf(t, token).User.Handle; handle != "robin_h" {
+		t.Errorf("the account's handle is %q, want robin_h", handle)
+	}
+}
+
+func TestSetup_AHandleLeftBlankIsMadeFromTheDisplayName(t *testing.T) {
+	f := setupOn(t, false)
+	form := aGardenForm()
+	form.Set("handle", "   ")
+
+	token := f.mustCreate(t, form, aDevice())
+
+	if handle := f.principalOf(t, token).User.Handle; handle != "robin" {
+		t.Errorf("the account's handle is %q, want robin", handle)
+	}
+}
+
+func TestSetup_AHandleTypedWithCapitalsAndSpacesIsStoredInLowerCaseWithUnderscores(t *testing.T) {
+	f := setupOn(t, false)
+	form := aGardenForm()
+	form.Set("handle", "Robin Hood")
+
+	token := f.mustCreate(t, form, aDevice())
+
+	if handle := f.principalOf(t, token).User.Handle; handle != "robin_hood" {
+		t.Errorf("the account's handle is %q, want robin_hood", handle)
+	}
+}
+
+func TestSetup_AHandleAnotherAccountHoldsIsRefusedOnTheChallengeAndNamedOnThePost(t *testing.T) {
+	f := setupOn(t, true)
+	if _, err := f.queries.CreateAccount(t.Context(), uuid.NewV7(), "Robin", "Europe/London"); err != nil {
+		t.Fatalf("seeding an account: %v", err)
+	}
+	form := aGardenForm()
+	form.Set("name", "Robyn")
+	form.Set("handle", "robin")
+
+	if rec := f.request(t, f.handler.challenge, setupChallengePath, form); rec.Code != http.StatusUnprocessableEntity {
+		t.Errorf("the challenge: status = %d, want %d, so no passkey is made for a handle the post refuses", rec.Code, http.StatusUnprocessableEntity)
+	}
+	if n := f.count(t, "webauthn_ceremony"); n != 0 {
+		t.Errorf("the challenge wrote %d ceremony rows, want none", n)
+	}
+
+	rec := f.request(t, f.handler.create, setupPath, form)
+
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("the post: status = %d, want %d:\n%s", rec.Code, http.StatusUnprocessableEntity, text(rec.Body.String()))
+	}
+	page := rec.Body.String()
+	if got := errorUnder(page, "handle"); got != "robin is already taken." {
+		t.Errorf("under Handle: %q, want the taken message", got)
+	}
+	if got := valueOf(t, page, "handle"); got != "robin" {
+		t.Errorf("Handle came back as %q, want robin", got)
+	}
+	if n := f.count(t, "app_user"); n != 1 {
+		t.Errorf("%d accounts exist, want the seeded one alone", n)
+	}
+}
+
+// A handle another account holds and one a closed account held are both taken,
+// because the closed account keeps its row.
+func TestSetup_AClosedAccountsHandleIsStillTaken(t *testing.T) {
+	f := setupOn(t, true)
+	closed, err := f.queries.CreateAccount(t.Context(), uuid.NewV7(), "Robin", "Europe/London")
+	if err != nil {
+		t.Fatalf("seeding an account: %v", err)
+	}
+	if _, err := f.queries.CloseAccount(t.Context(), thursday, closed.ID); err != nil {
+		t.Fatalf("closing it: %v", err)
+	}
+	form := aGardenForm()
+	form.Set("handle", "robin")
+
+	if rec := f.request(t, f.handler.challenge, setupChallengePath, form); rec.Code != http.StatusUnprocessableEntity {
+		t.Errorf("the challenge: status = %d, want %d", rec.Code, http.StatusUnprocessableEntity)
+	}
+}

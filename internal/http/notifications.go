@@ -73,8 +73,8 @@ var testResultLines = map[string]string{
 // testMessage is the notification Send test notification delivers. Its URL is
 // this page's path, made absolute before it is sent.
 var testMessage = push.Notification{
-	Title: "Notifications are working",
-	Body:  "Test notification from sprig.",
+	Title: "Test notification",
+	Body:  "Notifications are working.",
 	URL:   notificationsPath,
 }
 
@@ -115,6 +115,9 @@ type notificationsPage struct {
 	// TestResult is the line under the Send test notification button saying how
 	// it went. It is empty unless the query string holds a known outcome.
 	TestResult string
+	// Saved is true on the page a save redirects to. "Saved" is shown beside
+	// the button.
+	Saved bool
 }
 
 // browserRow is one push subscription, shown as a row under Subscribed
@@ -149,6 +152,7 @@ func (h *more) notifications(w http.ResponseWriter, r *http.Request) {
 		notificationOn(preferences, activityKind), principal.Membership.DigestHour, subscriptions, now)
 	page.Key = h.pushKey
 	page.TestResult = testResultLines[r.URL.Query().Get(testResultParam)]
+	page.Saved = saved(r)
 	h.templates.render(w, r, view{page: "notifications"}, page)
 }
 
@@ -304,7 +308,7 @@ func (h *more) saveNotifications(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.wake.call()
-	http.Redirect(w, r, notificationsPath, http.StatusSeeOther)
+	http.Redirect(w, r, savedURL(notificationsPath), http.StatusSeeOther)
 }
 
 // removeBrowser deletes one push subscription. Nothing is sent to that

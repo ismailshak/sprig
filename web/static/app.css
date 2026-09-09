@@ -194,14 +194,14 @@ button {
 .list .row + .row,
 .list li + li .row { border-top: var(--row-divider); }
 
-/* The row opens the sheet, so it shows a pointer cursor. Hover styling is
+/* A row that opens something is a link filling its box, so the cursor comes
+   from the link and a row that opens nothing gets none. Hover styling is
    limited to devices that can hover, because on a touchscreen the hover state
    sticks after a tap and the last row touched looks selected. A row inside its
-   undo window cannot be opened and gets neither. */
-.row:not(.row--done) { cursor: pointer; }
-
+   undo window has no link and gets no hover. */
 @media (hover: hover) {
-  .row:not(.row--done):hover { background: var(--surface-2); }
+  .row--link:hover,
+  .row:has(> a.row__open):hover { background: var(--surface-2); }
   /* The button scales on hover so it stays distinguishable from the row
      underneath, highlighted at the same time. */
   .care:hover { transform: scale(1.04); }
@@ -354,7 +354,8 @@ a.empty__action { display: inline-flex; align-items: center; }
 
 .nav__item { text-decoration: none; }
 .nav__item svg { width: 22px; height: 22px; }
-.nav__item[aria-current="page"] { color: var(--accent); }
+/* The page's own tab, and on a page reached from Plants or More that tab. */
+.nav__item[aria-current] { color: var(--accent); }
 
 .summary__count {
   font-variant-numeric: lining-nums tabular-nums;
@@ -487,9 +488,21 @@ a.empty__action { display: inline-flex; align-items: center; }
 @keyframes fade { from { opacity: 0 } }
 @keyframes rise { from { transform: translateY(14px); opacity: 0 } }
 
+/* The grip can be dragged down to close the sheet, so its hit area is made
+   larger than the bar by the pseudo-element. touch-action: none stops the
+   panel scrolling while the grip is dragged. */
 .sheet__grip {
+  position: relative;
   width: 36px; height: 4px; border-radius: 999px;
   background: var(--line); margin: 0 auto 12px;
+  touch-action: none;
+  cursor: grab;
+}
+
+.sheet__grip::before {
+  content: "";
+  position: absolute;
+  inset: -16px -60px -12px;
 }
 
 /* The plant heading is a link to the plant's page. It is one target with one
@@ -517,6 +530,13 @@ a.empty__action { display: inline-flex; align-items: center; }
   text-transform: none; letter-spacing: 0; font-weight: 400; color: var(--ink-3);
 }
 
+/* A value inside a label that has to read exactly as it must be typed: the
+   garden's name on Delete garden, the handle on Close account. The label style
+   uppercases and spaces its text, and both are undone here. */
+.field__name {
+  text-transform: none; letter-spacing: 0; font-size: 13px; color: var(--ink);
+}
+
 .chips { display: flex; flex-wrap: wrap; gap: 8px; }
 
 .chip {
@@ -541,6 +561,43 @@ a.empty__action { display: inline-flex; align-items: center; }
 
 .input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
+/* The Handle field on Set up your garden and an invite's join form: the input
+   and, with JavaScript, a button that asks the server for a free handle. The
+   input is read-only and greyed while the answer is on its way. */
+.handle { display: flex; align-items: flex-end; gap: 8px; }
+.handle > .input { flex: 1; min-width: 0; }
+.handle > .input[aria-busy="true"] { color: var(--ink-3); }
+.handle__again {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--ink-2);
+}
+.handle__again svg { width: 18px; height: 18px; }
+.handle__again:disabled { color: var(--ink-3); }
+
+/* A select styled like the text inputs, rather than as the platform's own
+   control. On a Mac that control is a grey rounded button that matches nothing
+   else on the page. The arrow is two small gradients, because the
+   Content-Security-Policy allows no data: URL for an image. */
+select.input {
+  appearance: none;
+  padding-right: 28px;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--ink-3) 50%),
+    linear-gradient(135deg, var(--ink-3) 50%, transparent 50%);
+  background-position: calc(100% - 15px) 50%, calc(100% - 10px) 50%;
+  background-size: 5px 5px;
+  background-repeat: no-repeat;
+}
+
+select.input--unit { padding-right: 24px; background-position: calc(100% - 13px) 50%, calc(100% - 8px) 50%; }
+
 /* A time or date value has a fixed width. Stretching the field to the panel
    width leaves empty space beside the value and makes it look like a text
    input. */
@@ -563,13 +620,20 @@ a.empty__action { display: inline-flex; align-items: center; }
 /* The built app renders the sheet with real form controls, because the same
    markup has to work with JavaScript off. */
 
-/* These two are links where the prototype has buttons, so the button reset
-   above does not apply to them. */
+/* Both are links, so the button reset above does not reach them. The link
+   colour and underline are removed here instead. */
 .row__open, a.sheet__plant { color: inherit; text-decoration: none; }
+
+/* The link takes the row's padding, so a press anywhere in the row up to the
+   button opens the sheet. The row keeps its right padding for the button, and
+   the link's own right padding is the gap between the two. */
+.row:has(> .row__open) { padding: 0 14px 0 0; gap: 0; }
 
 .row__open {
   display: flex; align-items: center; gap: 13px;
   flex: 1; min-width: 0;
+  padding: 12px 13px 12px 14px;
+  min-height: var(--tap);
 }
 /* display: contents removes the form's box, so the care button inside it is
    laid out as a direct flex child of the row. */
@@ -645,7 +709,7 @@ legend.field__label + * { clear: both; }
     border-radius: var(--radius);
   }
 
-  .nav__item[aria-current="page"] {
+  .nav__item[aria-current] {
     background: var(--accent-soft);
     font-weight: 600;
   }
@@ -880,28 +944,41 @@ a.foot-link { text-decoration: none; color: var(--ink-2); }
   gap: 12px;
   padding: 12px 14px;
   min-height: var(--tap);
-  cursor: pointer;
 }
 
 .list .sched + .sched { border-top: var(--row-divider); }
 
 @media (hover: hover) {
-  .sched:hover { background: var(--surface-2); }
+  .sched:has(> a):hover { background: var(--surface-2); }
 }
 
 /* The whole row is the control and the editor is one form. Without JavaScript a
-   closed row is a link and an open one is a form. display: contents removes the
-   wrapper's box so the row's parts are laid out as direct flex children. */
-.sched > a,
+   closed row is a link and an open one is a form. The link lays the row out
+   itself and takes the row's padding, so a press anywhere in the row opens the
+   editor. display: contents removes the form's box so the editor's parts are
+   laid out as direct flex children. */
+.sched > a {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  min-height: var(--tap);
+  color: inherit;
+  text-decoration: none;
+}
+
+.sched:has(> a) { padding: 0; }
+
 .sched > form {
   display: contents;
   color: inherit;
   text-decoration: none;
 }
 
-/* A link with display: contents has no box to draw a focus ring on, so the row
-   draws it instead, as a chip does for the radio inside it. */
-.sched:has(> a:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* The negative offset puts the focus outline inside the link's edge, because
+   the list around the row cuts off anything drawn outside it. */
+.sched > a:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 
 .sched__icon {
   display: grid;
@@ -1082,6 +1159,16 @@ a.foot-link { text-decoration: none; color: var(--ink-2); }
    broken. */
 .wide-action:disabled { opacity: .5; }
 
+/* "Saved", under a Save button on the page a save redirected to. The wide
+   action's bottom margin is pulled back so the word lands under the button. */
+.saved {
+  margin: -18px 0 26px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--good);
+}
+
 /* ------------------------------------------------------------------- details */
 
 .panel {
@@ -1232,13 +1319,16 @@ a.foot-link { text-decoration: none; color: var(--ink-2); }
    is removed. */
 a.plant__keep { text-decoration: none; }
 
-.plant__archive,
 .plant__keep {
   min-height: var(--tap);
   padding: 0 6px;
   font-size: 14px;
   color: var(--ink-2);
 }
+
+/* The confirmation is scrolled into view by the swap that brings it in. The
+   margin keeps its bottom edge off the very bottom of the screen. */
+.plant__foot--asking { scroll-margin-bottom: 24px; }
 
 /* The confirmation replaces the buttons rather than opening a dialog, as the
    schedule editor's Remove does, so the plant stays visible above it. The
@@ -1555,11 +1645,6 @@ a.plant__keep { text-decoration: none; }
   .app__body--more { max-width: 760px; }
 }
 
-/* When the log is filtered to one plant the row has no picture, so its two
-   lines sit at the left edge. The row keeps its minimum height so it does not
-   collapse to two lines of small text. */
-.row--event { cursor: pointer; }
-
 /* The free-text parts of an event, such as a note. They wrap rather than
    truncate, on their own line under the meta rather than inside it. Same colour
    as the meta, because the quotation marks and the line break already mark the
@@ -1587,6 +1672,67 @@ a.plant__keep { text-decoration: none; }
 /* A deleted row's status is in the muted colour rather than the green a logged
    row uses, because nothing was accomplished. */
 .row__said--gone { color: var(--ink-2); font-weight: 500; }
+
+/* The care type and date range form above the log, in a details element that
+   renders closed so the log opens on its rows. The summary line names what is
+   set, with Clear beside it. The controls wrap onto as many lines as the width
+   needs, with Apply at the end of the last one. */
+.filters {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding-bottom: 0;
+  margin-bottom: 12px;
+}
+
+.filters__details { flex: 1; min-width: 0; }
+
+.filters__summary { color: var(--ink); }
+
+.filters__clear {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--tap);
+  font-size: 14px;
+  color: var(--ink-2);
+}
+
+.filters__toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: fit-content;
+  min-height: var(--tap);
+  font-size: 14px;
+  color: var(--ink-2);
+  cursor: pointer;
+  list-style: none;
+}
+
+.filters__toggle::-webkit-details-marker { display: none; }
+
+.filters__toggle svg { width: 15px; height: 15px; color: var(--ink-3); transition: transform .15s; }
+
+.filters__details[open] > .filters__toggle svg { transform: rotate(90deg); }
+
+.filters__form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px 12px;
+  padding-top: 4px;
+}
+
+.filters__field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+.filters__form .care--small { margin-bottom: 2px; }
 
 /* Usually one control, two on any page after the first. They sit at opposite
    ends rather than stacking. */
@@ -1679,8 +1825,11 @@ a.plant__keep { text-decoration: none; }
 /* The line starts at the first item and stops at the last, rather than running
    off the top of the page and into the pager. The log continues on another URL,
    and a line pointing at the "Older activity" link would promise a continuity
-   that paging does not have. */
+   that paging does not have. On a day heading the line starts under the ring's
+   centre, 18.5px up from the item's bottom edge, so the ring is the line's end
+   and no stretch of line shows above it. */
 .rail > li:first-child::before { top: 14px; }
+.rail > li.rail__day:first-child::before { top: auto; bottom: 0; height: 18.5px; }
 .rail > li:last-child::before { bottom: auto; height: 30px; }
 
 .rail .row {
@@ -1688,6 +1837,12 @@ a.plant__keep { text-decoration: none; }
   gap: 13px;
   border-radius: var(--radius);
 }
+
+/* The link fills the row here as it does on Today, inset to the rail's own
+   padding. A deleted row has Undo beside the text and keeps the right padding
+   for it. */
+.rail .row:has(> .row__open) { padding: 0 10px 0 0; }
+.rail .row__open { padding: 12px 13px 12px 10px; }
 
 /* Small enough to be a node on the line, large enough to identify the plant.
    Positioned so it paints over the line rather than under it. The line is an
@@ -1732,13 +1887,18 @@ a.plant__keep { text-decoration: none; }
 
 .rail > li.rail__day:first-child { padding-top: 4px; }
 
+/* The ring is 10px across with its border, so at left 22px its centre is on
+   the line's centre at 27px. Its centre is 18.5px up from the item's bottom
+   edge, which is where the middle of the heading's capitals falls: 8px of
+   padding, then the 11px text sitting on its baseline inside the 16px line
+   box the item inherits. */
 .rail__day::after {
   content: "";
   position: absolute;
   left: 22px;
-  bottom: 9px;
-  width: 6px;
-  height: 6px;
+  bottom: 13.5px;
+  width: 10px;
+  height: 10px;
   border-radius: 999px;
   background: var(--bg);
   border: 2px solid var(--line);
@@ -1770,7 +1930,7 @@ a.plant__keep { text-decoration: none; }
 /* The hover highlight is inset from the line rather than covering it. That is
    why the list has a negative margin and the rows add the padding back. */
 @media (hover: hover) {
-  .rail .row:not(.row--done):hover { background: var(--surface-2); }
+  .rail .row:has(> a.row__open):hover { background: var(--surface-2); }
 }
 
 /* On the phone the timeline sits directly on the page. On desktop it sits
@@ -1926,18 +2086,11 @@ a.wide-action {
 .row--stack {
   padding: 12px 14px;
   min-height: var(--tap);
-  cursor: default;
-}
-
-@media (hover: hover) {
-  .row--stack:hover { background: none; }
 }
 
 /* A garden in the garden sheet is a button filling its row, so the whole row
-   is the tap target. The two .row--stack rules above set cursor: default and
-   remove the hover colour. These put both back, so they have to come after
-   them. */
-.row--switch { width: 100%; text-align: left; cursor: pointer; }
+   is the tap target. */
+.row--switch { width: 100%; text-align: left; }
 
 @media (hover: hover) {
   .row--switch:hover { background: var(--surface-2); }
@@ -1976,19 +2129,20 @@ a.wide-action {
    the row is easy to hit. */
 .row__drop {
   flex: none;
+  display: inline-flex;
+  align-items: center;
   min-height: var(--tap);
   padding: 0 2px 0 10px;
   font-size: 14px;
   color: var(--ink-2);
+  /* Remove on People is a link. It gets the button's box and no underline,
+     so it lines up with Sign-in link beside it. */
+  text-decoration: none;
 }
 
 /* A checkbox and a sentence saying what it will send. The label fills the row
    so the whole line is the tap target. */
-.row--check { padding: 0; cursor: default; }
-
-@media (hover: hover) {
-  .row--check:hover { background: none; }
-}
+.row--check { padding: 0; }
 
 .check {
   flex: 1;
@@ -2001,7 +2155,8 @@ a.wide-action {
   cursor: pointer;
 }
 
-.check input[type="checkbox"] {
+.check input[type="checkbox"],
+.check input[type="radio"] {
   flex: none;
   margin-top: 2px;
   width: 18px;
@@ -2017,7 +2172,6 @@ a.wide-action {
   align-items: flex-start;
   gap: 8px;
   padding: 14px;
-  cursor: default;
 }
 
 .row--editing > .input { flex: 1 1 100%; margin-top: 0; }
@@ -2349,6 +2503,64 @@ a.wide-action {
 
 .tile__pic { display: block; width: 100%; height: 100%; object-fit: cover; }
 
+/* A photo's box has its size before the bytes arrive: the tile is square, the
+   plant's picture is 5:3, the photo page's box has the photo's proportions.
+   The js attribute on the root says a script is running, and under it a photo
+   stays hidden until the page's script marks it loaded. The hiding is in the
+   stylesheet rather than set by that script, because the browser starts
+   painting a slow JPEG before a deferred script has arrived. The animation
+   shows the photo after 10s in case that script never runs. */
+[data-js] img[data-photo]:not(.photo--loaded) {
+  opacity: 0;
+  animation: photo-reveal 0s linear 10s forwards;
+}
+
+img[data-photo] { transition: opacity .15s; }
+
+@keyframes photo-reveal { to { opacity: 1; } }
+
+/* The spinner is a ring with one accent-coloured quarter, turning, centred in
+   the box. The tile, the strip's thumbnail and the photo page's box are given
+   a position so the ring is placed against them. */
+.tile > a,
+.shot__pic,
+.photo__pic { position: relative; }
+
+[data-js] .tile > a:has(> img[data-photo]:not(.photo--loaded))::after,
+[data-js] .shot__pic:has(> img[data-photo]:not(.photo--loaded))::after,
+[data-js] .hero__pic:has(> img[data-photo]:not(.photo--loaded))::after,
+[data-js] .photo__pic:has(> img[data-photo]:not(.photo--loaded))::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 28px;
+  height: 28px;
+  margin: -14px 0 0 -14px;
+  border-radius: 999px;
+  border: 3px solid var(--line);
+  border-top-color: var(--accent);
+  animation: photo-spin .8s linear infinite;
+}
+
+/* The strip's thumbnails are small, so their ring is too. */
+[data-js] .shot__pic:has(> img[data-photo]:not(.photo--loaded))::after {
+  width: 20px;
+  height: 20px;
+  margin: -10px 0 0 -10px;
+  border-width: 2px;
+}
+
+@keyframes photo-spin { to { transform: rotate(360deg); } }
+
+/* Without motion the ring stays still, with its accent quarter at the top. */
+@media (prefers-reduced-motion: reduce) {
+  [data-js] .tile > a:has(> img[data-photo]:not(.photo--loaded))::after,
+  [data-js] .shot__pic:has(> img[data-photo]:not(.photo--loaded))::after,
+  [data-js] .hero__pic:has(> img[data-photo]:not(.photo--loaded))::after,
+  [data-js] .photo__pic:has(> img[data-photo]:not(.photo--loaded))::after { animation: none; }
+}
+
 .tile--add > a {
   display: grid;
   place-items: center;
@@ -2374,18 +2586,19 @@ a.wide-action {
 .photo__pic {
   display: block;
   width: 100%;
-  height: auto;
   border-radius: var(--radius);
   border: var(--card-border);
   background: var(--surface-2);
+  overflow: hidden;
 }
+
+.photo__img { display: block; width: 100%; height: 100%; }
 
 .photo__meta { margin: 12px 0 0; font-size: 14px; color: var(--ink-2); }
 
-/* Delete is directly under the caption and lines up with it. The side padding
-   that widens the tap target on the plant's page would otherwise indent it. */
-.app__body--photo .plant__foot { margin-top: 0; }
-.app__body--photo .plant__foot:not(.plant__foot--asking) .plant__archive { padding-left: 0; }
+/* Delete and the question that replaces it keep the same gap under the
+   caption, so the buttons do not move when the confirmation comes in. */
+.app__body--photo .plant__foot { margin-top: 16px; }
 
 @media (min-width: 900px) {
   .tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }

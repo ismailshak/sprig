@@ -47,6 +47,9 @@ type accountPage struct {
 	Codes linkRow
 	// Close is the URL of the Close account page, linked at the bottom.
 	Close string
+	// Saved is true on the page a save redirects to. "Saved" is shown beside
+	// the button.
+	Saved bool
 }
 
 func (h *more) account(w http.ResponseWriter, r *http.Request) {
@@ -58,6 +61,7 @@ func (h *more) account(w http.ResponseWriter, r *http.Request) {
 		h.templates.serverError(h.logger, w, r, "open the account", err)
 		return
 	}
+	page.Saved = saved(r)
 	h.templates.render(w, r, view{page: "account"}, page)
 }
 
@@ -112,7 +116,7 @@ func (h *more) saveAccount(w http.ResponseWriter, r *http.Request) {
 	}
 	// The digest hour is read in the timezone just saved.
 	h.wake.call()
-	http.Redirect(w, r, accountPath, http.StatusSeeOther)
+	http.Redirect(w, r, savedURL(accountPath), http.StatusSeeOther)
 }
 
 func nameErrorFor(name string) string {

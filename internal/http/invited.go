@@ -54,14 +54,28 @@ func (o openInvite) reenrol() bool { return o.row.Invite.UserID != nil }
 
 type joinForm struct {
 	name string
-	zone string
+	// handle is the Handle field in its stored form. It is empty when the field
+	// was left blank, and the account then gets the handle made from its
+	// display name.
+	handle string
+	zone   string
 }
 
 func readJoinForm(r *http.Request) joinForm {
 	return joinForm{
-		name: strings.TrimSpace(r.PostForm.Get("name")),
-		zone: r.PostForm.Get("timezone"),
+		name:   strings.TrimSpace(r.PostForm.Get("name")),
+		handle: store.NormaliseHandle(r.PostForm.Get("handle")),
+		zone:   r.PostForm.Get("timezone"),
 	}
+}
+
+// handleOrDefault is the handle the account is created with: the one typed,
+// or the display name's when the field was left blank.
+func (f joinForm) handleOrDefault() string {
+	if f.handle != "" {
+		return f.handle
+	}
+	return store.HandleFor(f.name)
 }
 
 // errors returns the message to show under each empty field, and "" for a
@@ -100,7 +114,14 @@ type invitedPage struct {
 	Garden    string
 	Name      string
 	NameError string
-	Zone      timezoneField
+	Handle    string
+	// HandleError is shown under Handle when another account already holds
+	// the one typed. A blank handle is not an error, because the display
+	// name's handle is used instead.
+	HandleError string
+	// Suggest is the URL the page's script GETs a free handle from.
+	Suggest string
+	Zone    timezoneField
 	// Refusal is the message above the form: why the passkey was not created,
 	// or that too many posts have been made. It is empty until a post is
 	// refused.
@@ -135,6 +156,8 @@ func newInvitedPage(token string, open openInvite, form joinForm, propose bool) 
 		By:        open.row.AppUser.DisplayName,
 		Garden:    open.row.Garden.Name,
 		Name:      form.name,
+		Handle:    form.handle,
+		Suggest:   handlePath,
 		Zone:      timezoneField{Zones: zoneOptions(form.zone), Propose: propose},
 		Action:    InvitedPath(token),
 		Challenge: invitedChallengePath(token),
@@ -305,10 +328,19 @@ func (h *invited) challenge(w http.ResponseWriter, r *http.Request) {
 		h.templates.badRequest(w, r)
 		return
 	}
+	// The handle is checked here as well as on the post, so the browser is not
+	// asked to make a passkey the post will then refuse.
+	if taken, err := handleTaken(r.Context(), h.queries, form.handle); err != nil {
+		h.templates.serverError(h.logger, w, r, "start the registration", err)
+		return
+	} else if taken {
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		return
+	}
 	// The account has no row yet. Its id is chosen here and stored with the
 	// ceremony, so the row the post writes has the id the passkey was
 	// registered under.
-	account := store.AppUser{ID: uuid.NewV7(), DisplayName: form.name, Handle: store.HandleFor(form.name), Timezone: form.zone}
+	account := store.AppUser{ID: uuid.NewV7(), DisplayName: form.name, Handle: form.handleOrDefault(), Timezone: form.zone}
 	creation, cookie, err := h.passkeys.BeginSetup(r.Context(), h.now(), account)
 	if err != nil {
 		h.templates.serverError(h.logger, w, r, "start the registration", err)
@@ -357,6 +389,14 @@ func (h *invited) redeem(w http.ResponseWriter, r *http.Request) {
 		h.templates.render(w, r, view{page: "invited", status: http.StatusUnprocessableEntity}, page)
 		return
 	}
+	if taken, err := handleTaken(r.Context(), h.queries, form.handle); err != nil {
+		h.templates.serverError(h.logger, w, r, "join the garden", err)
+		return
+	} else if taken {
+		page.HandleError = handleTakenMessage(form.handle)
+		h.templates.render(w, r, view{page: "invited", status: http.StatusUnprocessableEntity}, page)
+		return
+	}
 	user, passkey, err := h.join(r, open, form)
 	h.finish(w, r, page, "join the garden", user, open.row.Invite.GardenID, passkey, remindersPath, err)
 }
@@ -382,7 +422,11 @@ func (h *invited) join(r *http.Request, open openInvite, form joinForm) (store.A
 			return err
 		}
 		var err error
-		user, err = q.CreateAccount(ctx, ceremony.AccountID, form.name, form.zone)
+		if form.handle != "" {
+			user, err = q.CreateAccountWithHandle(ctx, ceremony.AccountID, form.name, form.handle, form.zone)
+		} else {
+			user, err = q.CreateAccount(ctx, ceremony.AccountID, form.name, form.zone)
+		}
 		if err != nil {
 			return err
 		}
@@ -442,6 +486,13 @@ func markRedeemed(ctx context.Context, q *store.Queries, now time.Time, invite s
 func (h *invited) finish(w http.ResponseWriter, r *http.Request, page invitedPage, what string, user store.AppUser, gardenID uuid.UUID, passkey store.PasskeyCredential, next string, err error) {
 	if errors.Is(err, errInviteUsed) {
 		h.renderUnusable(w, r)
+		return
+	}
+	// The handle was free when the challenge and the post checked it, and
+	// another account took it between the check and the write.
+	if errors.Is(err, store.ErrHandleTaken) {
+		page.HandleError = handleTakenMessage(page.Handle)
+		h.templates.render(w, r, view{page: "invited", status: http.StatusUnprocessableEntity}, page)
 		return
 	}
 	if err != nil {

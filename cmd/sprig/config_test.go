@@ -75,8 +75,8 @@ func TestLoadConfig_Defaults(t *testing.T) {
 	if cfg.photoDir != "./photos" {
 		t.Errorf("photoDir = %q, want ./photos", cfg.photoDir)
 	}
-	if cfg.photoQuota != 1<<30 {
-		t.Errorf("photoQuota = %d, want 1 GiB", cfg.photoQuota)
+	if cfg.photoQuota != 1_000_000_000 {
+		t.Errorf("photoQuota = %d, want a decimal gigabyte", cfg.photoQuota)
 	}
 	if cfg.signupEnabled {
 		t.Error("signupEnabled = true, want false, so a stranger cannot make a garden on an install nobody opened up")
@@ -164,7 +164,7 @@ func TestLoadConfig_OverridesAndTextFormat(t *testing.T) {
 		"SPRIG_LOG_LEVEL":         "debug",
 		"SPRIG_TRUSTED_IP_HEADER": "CF-Connecting-IP",
 		"SPRIG_PHOTO_DIR":         "/srv/photos",
-		"SPRIG_PHOTO_QUOTA_BYTES": "5368709120",
+		"SPRIG_PHOTO_QUOTA":       "5368709120",
 	}
 	getenv := func(k string) string { return env[k] }
 
@@ -204,9 +204,9 @@ func TestLoadConfig_APhotoQuotaTakesAUnitSuffixAndABareNumberIsBytes(t *testing.
 		"12B":        12,
 	} {
 		env := map[string]string{
-			"SPRIG_DATABASE_URL":      "postgres://example/db",
-			"SPRIG_BASE_URL":          "https://sprig.example.com",
-			"SPRIG_PHOTO_QUOTA_BYTES": quota,
+			"SPRIG_DATABASE_URL": "postgres://example/db",
+			"SPRIG_BASE_URL":     "https://sprig.example.com",
+			"SPRIG_PHOTO_QUOTA":  quota,
 		}
 		getenv := func(k string) string { return env[k] }
 
@@ -223,16 +223,16 @@ func TestLoadConfig_APhotoQuotaTakesAUnitSuffixAndABareNumberIsBytes(t *testing.
 func TestLoadConfig_APhotoQuotaThatIsNotAWholeNumberWithAKnownUnitIsAProblemNamingTheVariable(t *testing.T) {
 	for _, quota := range []string{"0", "-1", "0GiB", "1.5", "1.5GiB", "GiB", "1XB", "1GiB extra", "9999999999TiB"} {
 		env := map[string]string{
-			"SPRIG_DATABASE_URL":      "postgres://example/db",
-			"SPRIG_BASE_URL":          "https://sprig.example.com",
-			"SPRIG_PHOTO_QUOTA_BYTES": quota,
+			"SPRIG_DATABASE_URL": "postgres://example/db",
+			"SPRIG_BASE_URL":     "https://sprig.example.com",
+			"SPRIG_PHOTO_QUOTA":  quota,
 		}
 		getenv := func(k string) string { return env[k] }
 
 		_, err := loadConfig(getenv)
 
-		if err == nil || !strings.Contains(err.Error(), "SPRIG_PHOTO_QUOTA_BYTES") {
-			t.Errorf("%q: err = %v, want one naming SPRIG_PHOTO_QUOTA_BYTES", quota, err)
+		if err == nil || !strings.Contains(err.Error(), "SPRIG_PHOTO_QUOTA") {
+			t.Errorf("%q: err = %v, want one naming SPRIG_PHOTO_QUOTA", quota, err)
 		}
 	}
 }

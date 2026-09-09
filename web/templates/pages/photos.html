@@ -29,8 +29,10 @@
      the id photos-more, so the swap sets settle:0ms: without it htmx holds the
      new tile's class and style at the old tile's values for 20ms. Without
      JavaScript the tile is a link to the next page. */}}
-{{define "photo-tiles"}}{{range .Tiles}}<li class="tile"><a href="{{.Href}}"><img class="tile__pic" src="{{.Src}}" alt="{{.Alt}}" loading="lazy"></a></li>
+{{define "photo-tiles"}}{{range .Tiles}}<li class="tile"><a href="{{.Href}}"><img class="tile__pic" src="{{.Src}}" alt="{{.Alt}}" loading="lazy" data-photo></a></li>
 {{end}}{{with .Older}}<li class="tile tile--more" id="photos-more" hx-get="{{.}}" hx-trigger="revealed" hx-swap="outerHTML settle:0ms"><a class="foot-link" href="{{.}}">Older photos{{template "icon-chevron"}}</a></li>
 {{end}}{{end}}
 
-{{define "nav"}}{{template "tabs" "Plants"}}{{end}}
+{{define "nav"}}{{template "tabs" "Under Plants"}}{{end}}
+
+{{define "script"}}<script src="{{asset "photo-loading.js"}}" defer></script>{{end}}

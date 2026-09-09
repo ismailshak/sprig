@@ -14,6 +14,10 @@ ORDER BY created_at, id;
 SELECT * FROM app_user
 WHERE handle = @handle AND closed_at IS NULL;
 
+-- A closed account keeps its row and its handle, so its handle counts as taken.
+-- name: HandleExists :one
+SELECT EXISTS (SELECT 1 FROM app_user WHERE handle = @handle);
+
 -- name: UpdateAccount :exec
 -- Nothing checks that the handle is free before this runs. The unique index on
 -- app_user.handle rejects a duplicate. A check made first would let two

@@ -21,6 +21,12 @@ export class InvitedScreen {
     return this.page.getByLabel('Display name');
   }
 
+  // The page's script fills this in from the display name until it is typed
+  // into by hand.
+  handle(): Locator {
+    return this.page.getByRole('textbox', { name: /^Handle/ });
+  }
+
   timezone(): Locator {
     return this.page.getByLabel('Timezone');
   }

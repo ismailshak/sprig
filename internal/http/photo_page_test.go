@@ -2,6 +2,7 @@ package http
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -243,5 +244,21 @@ func TestPhoto_APhotoPageUnderAnotherPlantsURLIs404(t *testing.T) {
 
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("status = %d, want %d", rec.Code, http.StatusNotFound)
+	}
+}
+
+func TestPhoto_TheImageHasThePhotosWidthAndHeightOnIt(t *testing.T) {
+	f := plantFormOn(t)
+	photoID := f.storedPhoto(t, bigFellaID, readerID, thursday)
+	row, err := store.New(f.tx).GetPhoto(t.Context(), rosewoodID, photoID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	page := f.photoPage(t, bigFellaID, photoID, false, "").Body.String()
+
+	want := fmt.Sprintf(`width="%d" height="%d"`, row.Width, row.Height)
+	if !strings.Contains(page, want) {
+		t.Errorf("the image does not have %s:\n%s", want, page)
 	}
 }

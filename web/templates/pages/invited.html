@@ -39,6 +39,7 @@
 <input class="input" id="name" name="name" type="text" value="{{.Name}}" autocomplete="nickname" spellcheck="false">
 {{with .NameError}}<p class="field__error">{{.}}</p>{{end}}
 </div>
+{{template "handle-field" .}}
 {{template "timezone-field" .Zone}}
 <input type="hidden" name="{{.Field}}">
 <button class="wide-action" type="submit" disabled>Join {{.Garden}}</button>
@@ -51,4 +52,5 @@
 {{end}}
 
 {{define "script"}}{{if not .Unusable}}<script src="{{asset "passkey.js"}}" defer></script>
-{{if not .Reenrol}}<script src="{{asset "timezone.js"}}" defer></script>{{end}}{{end}}{{end}}
+{{if not .Reenrol}}<script src="{{asset "timezone.js"}}" defer></script>
+<script src="{{asset "handle.js"}}" defer></script>{{end}}{{end}}{{end}}

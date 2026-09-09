@@ -35,6 +35,27 @@ test('a new token is shown once, joins the list, and is gone on the next visit',
   await expect(tokens.row('The greenhouse pi')).toBeVisible();
 });
 
+test('the new token gets a Copy button @js', async ({ tokens }) => {
+  await tokens.open();
+
+  await tokens.name().fill('The greenhouse pi');
+  await tokens.expiry().selectOption('7');
+  await tokens.create().click();
+
+  await expect(tokens.copy()).toBeVisible();
+});
+
+test('without JavaScript the new token has no Copy button @nojs', async ({ tokens }) => {
+  await tokens.open();
+
+  await tokens.name().fill('The greenhouse pi');
+  await tokens.expiry().selectOption('7');
+  await tokens.create().click();
+
+  await expect(tokens.token()).toBeVisible();
+  await expect(tokens.copy()).toBeHidden();
+});
+
 test('a token with no name is refused and says so under the field', async ({ tokens, page }) => {
   await tokens.open();
 

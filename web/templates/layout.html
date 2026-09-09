@@ -20,8 +20,19 @@
      colour as --bg. */}}
 <meta name="theme-color" content="#f8f5ee" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#181c1a" media="(prefers-color-scheme: dark)">
+{{/* Sets data-mode on the html element from the Appearance choice stored in
+     this browser. It is not deferred, so it runs before the first paint. It
+     comes after the theme-color tags above because it edits them. */}}
+<script src="{{asset "appearance.js"}}"></script>
+{{/* The heading font. Without the preload the browser requests it only once
+     it has parsed tokens.css and met a heading, and paints Georgia until it
+     arrives. The href is the unhashed URL, the one tokens.css resolves
+     url(fonts/...) against. Any other URL downloads the file a second time,
+     and so does a font preload without crossorigin, even from this origin. */}}
+<link rel="preload" as="font" type="font/woff2" href="/static/fonts/fraunces-v38-latin-600.woff2" crossorigin>
 <script src="{{asset "vendor/htmx.min.js"}}" defer></script>
 <script src="{{asset "offline.js"}}" defer></script>
+<script src="{{asset "reload.js"}}" defer></script>
 {{/* htmx does not swap a 4xx response by default. A 422 is a form re-rendered
      with an error message, so it has to swap.
 

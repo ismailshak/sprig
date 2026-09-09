@@ -3,6 +3,7 @@ package http
 import (
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -35,9 +36,11 @@ func closableAccount(t *testing.T) *moreFixture {
 	return f
 }
 
+// closeAccount posts the close with the account's handle typed, as the page
+// asks.
 func (f *moreFixture) closeAccount(t *testing.T) *httptest.ResponseRecorder {
 	t.Helper()
-	return f.do(t, f.handler.closeAccount, closeAccountPath, map[string][]string{})
+	return f.do(t, f.handler.closeAccount, closeAccountPath, url.Values{"handle": {f.principal.User.Handle}})
 }
 
 func TestCloseAccount_ThePageSaysWhatIsDeletedAndWhatIsKept(t *testing.T) {
@@ -49,6 +52,33 @@ func TestCloseAccount_ThePageSaysWhatIsDeletedAndWhatIsKept(t *testing.T) {
 		if !strings.Contains(page, want) {
 			t.Errorf("the page lacks %q:\n%s", want, text(page))
 		}
+	}
+	if !strings.Contains(text(page), "Type ellie to confirm") {
+		t.Errorf("the page does not ask for the handle:\n%s", text(page))
+	}
+}
+
+func TestCloseAccount_APostWithoutTheHandleIsRefusedAndNothingIsDeleted(t *testing.T) {
+	f := closableAccount(t)
+
+	rec := f.do(t, f.handler.closeAccount, closeAccountPath, url.Values{"handle": {"elie"}})
+
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusUnprocessableEntity)
+	}
+	page := rec.Body.String()
+	if got := errorUnder(page, "handle"); got != closeAccountMismatch {
+		t.Errorf("the message under the field is %q, want %q", got, closeAccountMismatch)
+	}
+	if got := valueOf(t, page, "handle"); got != "elie" {
+		t.Errorf("the field holds %q after the refusal, want what was typed", got)
+	}
+	if n := countRows(t, f.tx, "passkey_credential"); n != 3 {
+		t.Errorf("%d passkeys remain, want all 3", n)
+	}
+	var closed *time.Time
+	if err := f.tx.QueryRow(t.Context(), "SELECT closed_at FROM app_user WHERE id = $1", moreUserID).Scan(&closed); err != nil || closed != nil {
+		t.Errorf("the account was closed: %v %v", closed, err)
 	}
 }
 

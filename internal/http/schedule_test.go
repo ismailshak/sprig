@@ -575,3 +575,23 @@ func TestPlant_AnHTMXRequestTargetingARowThePageDoesNotHaveIs404(t *testing.T) {
 		t.Errorf("status = %d, want %d", rec.Code, http.StatusNotFound)
 	}
 }
+
+// unitOptions matches the unit select's options in an open editor.
+var unitOptions = regexp.MustCompile(`(?s)<select [^>]*id="water-unit"[^>]*>(.*?)</select>`)
+
+func TestScheduleEditor_TheUnitLabelsDoNotChangeWithTheNumber(t *testing.T) {
+	f := rosewoodPlant(t)
+
+	for _, every := range []string{"1", "10"} {
+		rec := f.open(t, bigFellaID, "water", cadence("water", every, "day"))
+		control := unitOptions.FindStringSubmatch(rec.Body.String())
+		if control == nil {
+			t.Fatalf("every %s: the editor has no unit select:\n%s", every, rec.Body.String())
+		}
+		for _, want := range []string{">day(s)<", ">week(s)<", ">month(s)<", ">year(s)<"} {
+			if !strings.Contains(control[1], want) {
+				t.Errorf("every %s: the unit options lack %s:\n%s", every, want, control[1])
+			}
+		}
+	}
+}

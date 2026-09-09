@@ -80,6 +80,25 @@ func NormaliseHandle(handle string) string {
 	return slugify(handle, maxHandleLength)
 }
 
+// ErrHandleTaken is returned by CreateAccountWithHandle when another account
+// holds the handle.
+var ErrHandleTaken = errors.New("another account holds the handle")
+
+// CreateAccountWithHandle inserts an account under id with the handle typed on
+// Set up your garden or an invite's join form. It tries that one handle and
+// returns ErrHandleTaken when the unique index refuses it, because a person
+// who chose a handle wants to be told rather than given one with a suffix.
+func (q *Queries) CreateAccountWithHandle(ctx context.Context, id uuid.UUID, displayName, handle, timezone string) (AppUser, error) {
+	user, err := q.CreateUser(ctx, CreateUserParams{ID: id, DisplayName: displayName, Handle: handle, Timezone: timezone})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return AppUser{}, ErrHandleTaken
+	}
+	if err != nil {
+		return AppUser{}, fmt.Errorf("writing the account: %w", err)
+	}
+	return user, nil
+}
+
 // handleAttempts is how many candidate handles CreateAccount tries before
 // giving up. The first is the slug alone and the rest end in a random suffix,
 // so running out means the random suffix collided nine times in a row.
@@ -107,4 +126,23 @@ func (q *Queries) CreateAccount(ctx context.Context, id uuid.UUID, displayName, 
 		return user, nil
 	}
 	return AppUser{}, fmt.Errorf("no free handle for %q in %d attempts", displayName, handleAttempts)
+}
+
+// FreeHandle returns a handle no account holds for displayName: the slug of
+// the name, or the slug and a random suffix when another account holds it. It
+// fills the Handle field on Set up your garden and an invite's join form
+// before the account exists. Another account can take the handle between this
+// and the write, so CreateAccountWithHandle still decides.
+func (q *Queries) FreeHandle(ctx context.Context, displayName string) (string, error) {
+	for attempt := 1; attempt <= handleAttempts; attempt++ {
+		candidate := handleCandidate(displayName, attempt)
+		taken, err := q.HandleExists(ctx, candidate)
+		if err != nil {
+			return "", fmt.Errorf("checking the handle: %w", err)
+		}
+		if !taken {
+			return candidate, nil
+		}
+	}
+	return "", fmt.Errorf("no free handle for %q in %d attempts", displayName, handleAttempts)
 }

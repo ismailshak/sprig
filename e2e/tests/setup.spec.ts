@@ -11,12 +11,19 @@ test('setting up a garden signs its owner in, offers reminders, and Today says N
   setup,
   reminders,
   garden,
+  account,
 }) => {
   const detach = await attach(page, aWorkingDevice);
   try {
     await setup.open();
     await setup.garden().fill('Greenhouse');
     await setup.name().fill('Robin');
+    // The handle follows the display name as it is typed, and when the name
+    // is left the server suggests a free one. The seed already has a robin,
+    // so the suggestion has a suffix, and here it is typed over.
+    await setup.name().press('Tab');
+    await expect(setup.handle()).toHaveValue(new RegExp(`^${people.robin.handle}_[a-z2-7]{4}$`));
+    await setup.handle().fill('robin_g');
     await setup.timezone().selectOption('Europe/London');
     await setup.create().click();
 
@@ -34,9 +41,47 @@ test('setting up a garden signs its owner in, offers reminders, and Today says N
     // membership is an owner's.
     await garden.open();
     await expect(garden.name()).toHaveValue('Greenhouse');
+    await account.open();
+    await expect(account.handle()).toHaveValue('robin_g');
   } finally {
     await detach();
   }
+});
+
+test('a handle another account holds is refused on Set up your garden @passkey', async ({ page, setup }) => {
+  const detach = await attach(page, aWorkingDevice);
+  try {
+    await setup.open();
+    await setup.garden().fill('Greenhouse');
+    await setup.name().fill('Robyn');
+    await setup.name().press('Tab');
+    await expect(setup.handle()).toHaveValue('robyn');
+    await setup.handle().fill(people.robin.handle);
+    await setup.timezone().selectOption('Europe/London');
+    await setup.create().click();
+
+    await expect(page).toHaveURL('/setup');
+    await expect(page.getByText(`${people.robin.handle} is already taken`)).toBeVisible();
+    await expect(setup.garden()).toHaveValue('Greenhouse');
+  } finally {
+    await detach();
+  }
+});
+
+test('Suggest a handle replaces a handle typed over with a free one @js', async ({ page, setup }) => {
+  await setup.open();
+  await setup.name().fill(people.robin.name);
+  await expect(setup.handle()).toHaveValue(people.robin.handle);
+
+  await setup.name().press('Tab');
+
+  await expect(setup.handle()).toHaveValue(new RegExp(`^${people.robin.handle}_[a-z2-7]{4}$`));
+
+  await setup.handle().fill('someone_else');
+  await setup.suggestHandle().click();
+
+  await expect(setup.handle()).toHaveValue(new RegExp(`^${people.robin.handle}_[a-z2-7]{4}$`));
+  await expect(page.getByText('is already taken')).toHaveCount(0);
 });
 
 test('an account signed in from Set up your garden gets a garden of its own and keeps the one it was in @passkey', async ({

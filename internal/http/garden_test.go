@@ -174,8 +174,8 @@ func TestGarden_SavingWritesTheGardensName(t *testing.T) {
 
 	rec := f.do(t, f.handler.saveGardenName, gardenPath, url.Values{"name": {"  The Roof  "}})
 
-	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != gardenPath {
-		t.Fatalf("status = %d to %q, want %d to %s", rec.Code, rec.Header().Get("Location"), http.StatusSeeOther, gardenPath)
+	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != savedURL(gardenPath) {
+		t.Fatalf("status = %d to %q, want %d to %s", rec.Code, rec.Header().Get("Location"), http.StatusSeeOther, savedURL(gardenPath))
 	}
 	var name string
 	if err := f.tx.QueryRow(t.Context(), "SELECT name FROM garden WHERE id = $1", moreGardenID).Scan(&name); err != nil {
@@ -332,6 +332,17 @@ func TestGarden_ACareTypeInAnotherGardenHasNoRowToOpen(t *testing.T) {
 
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("status = %d, want %d", rec.Code, http.StatusNotFound)
+	}
+}
+
+func TestGarden_ThePageASaveRedirectsToSaysSavedAndAPlainVisitDoesNot(t *testing.T) {
+	f := moreGarden(t)
+
+	if page := f.page(t, f.handler.garden, savedURL(gardenPath)); !strings.Contains(text(page), "Saved") {
+		t.Errorf("the page after a save does not say Saved:\n%s", text(page))
+	}
+	if page := f.page(t, f.handler.garden, gardenPath); strings.Contains(text(page), "Saved") {
+		t.Errorf("a plain visit says Saved:\n%s", text(page))
 	}
 }
 
@@ -645,9 +656,10 @@ func TestStorageLine_AFigureUnderAGigabyteReadsAsWholeMegabytes(t *testing.T) {
 		used, quota int64
 		want        string
 	}{
-		{0, 1 << 30, "0 MB of 1 GB of photo storage used."},
-		{200 << 10, 1 << 30, "0 MB of 1 GB of photo storage used."},
-		{312 << 20, 1 << 30, "312 MB of 1 GB of photo storage used."},
+		{0, 1_000_000_000, "0 MB of 1 GB of photo storage used."},
+		{200_000, 1_000_000_000, "0 MB of 1 GB of photo storage used."},
+		{312_000_000, 1_000_000_000, "312 MB of 1 GB of photo storage used."},
+		{999_499_999, 2_000_000_000, "999 MB of 2 GB of photo storage used."},
 	} {
 		if got := storageLine(photo.Usage{Used: c.used, Quota: c.quota}); got != c.want {
 			t.Errorf("storageLine(%d of %d) = %q, want %q", c.used, c.quota, got, c.want)
@@ -660,9 +672,12 @@ func TestStorageLine_AFigureOfAGigabyteOrMoreReadsAsGigabytes(t *testing.T) {
 		used, quota int64
 		want        string
 	}{
-		{1 << 30, 5 << 30, "1 GB of 5 GB of photo storage used."},
-		{1025 << 20, 5 << 30, "1.0 GB of 5 GB of photo storage used."},
-		{1536 << 20, 5 << 30, "1.5 GB of 5 GB of photo storage used."},
+		{1_000_000_000, 5_000_000_000, "1 GB of 5 GB of photo storage used."},
+		{1_001_000_000, 5_000_000_000, "1.0 GB of 5 GB of photo storage used."},
+		{1_500_000_000, 5_000_000_000, "1.5 GB of 5 GB of photo storage used."},
+		// A quota written as 4GiB is 4,294,967,296 bytes and reads in decimal
+		// units, as a disk tool would show it.
+		{1_000_000_000, 4 << 30, "1 GB of 4.3 GB of photo storage used."},
 	} {
 		if got := storageLine(photo.Usage{Used: c.used, Quota: c.quota}); got != c.want {
 			t.Errorf("storageLine(%d of %d) = %q, want %q", c.used, c.quota, got, c.want)
@@ -675,9 +690,9 @@ func TestStorageLine_TheLineAddsWhatToDeleteFromNineTenthsOfTheQuota(t *testing.
 		used, quota int64
 		want        string
 	}{
-		{921 << 20, 1 << 30, "921 MB of 1 GB of photo storage used."},
-		{922 << 20, 1 << 30, "922 MB of 1 GB of photo storage used. When it’s full, delete photos to make room."},
-		{2 << 30, 1 << 30, "2 GB of 1 GB of photo storage used. When it’s full, delete photos to make room."},
+		{899_999_999, 1_000_000_000, "900 MB of 1 GB of photo storage used."},
+		{900_000_000, 1_000_000_000, "900 MB of 1 GB of photo storage used. When it’s full, delete photos to make room."},
+		{2_000_000_000, 1_000_000_000, "2 GB of 1 GB of photo storage used. When it’s full, delete photos to make room."},
 	} {
 		if got := storageLine(photo.Usage{Used: c.used, Quota: c.quota}); got != c.want {
 			t.Errorf("storageLine(%d of %d) = %q, want %q", c.used, c.quota, got, c.want)

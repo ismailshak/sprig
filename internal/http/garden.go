@@ -81,6 +81,9 @@ type gardenPage struct {
 	// Delete is the URL of the Delete garden page, linked at the bottom. Empty
 	// for a reader who may not delete the garden.
 	Delete string
+	// Saved is true on the page a save of the name redirects to. "Saved" is
+	// shown beside the button.
+	Saved bool
 }
 
 // careTypeRow is one care type in the list. A closed row is a link to the care
@@ -139,7 +142,7 @@ type careTypeEdit struct {
 }
 
 func (h *more) garden(w http.ResponseWriter, r *http.Request) {
-	h.renderGarden(w, r, gardenPage{Name: PrincipalFrom(r).Garden.Name}, careTypeEdit{}, 0)
+	h.renderGarden(w, r, gardenPage{Name: PrincipalFrom(r).Garden.Name, Saved: saved(r)}, careTypeEdit{}, 0)
 }
 
 // saveGardenName writes the garden's name. An empty name renders the page
@@ -159,7 +162,7 @@ func (h *more) saveGardenName(w http.ResponseWriter, r *http.Request) {
 		h.templates.serverError(h.logger, w, r, "rename the garden", err)
 		return
 	}
-	http.Redirect(w, r, gardenPath, http.StatusSeeOther)
+	http.Redirect(w, r, savedURL(gardenPath), http.StatusSeeOther)
 }
 
 // newCareType handles GET /more/garden/types. It renders the page with an
@@ -406,19 +409,20 @@ func storageLine(usage photo.Usage) string {
 }
 
 // storageFigure formats a byte count as whole megabytes, or as gigabytes from
-// 1024 MB up. A gigabyte figure keeps one decimal place unless the number of
-// gigabytes is whole. The units are binary and the labels the ordinary ones,
-// so the 1 GiB default reads as 1 GB.
+// 1000 MB up. A gigabyte figure keeps one decimal place unless the number of
+// gigabytes is whole. A megabyte is 1,000,000 bytes here whatever suffix
+// SPRIG_PHOTO_QUOTA was written with, so a quota of 4GiB reads as
+// 4.3 GB, the figure a disk tool shows for the same bytes.
 func storageFigure(bytes int64) string {
-	mb := math.Round(float64(bytes) / (1 << 20))
-	if mb < 1024 {
+	mb := math.Round(float64(bytes) / 1_000_000)
+	if mb < 1000 {
 		return strconv.FormatFloat(mb, 'f', 0, 64) + " MB"
 	}
 	decimals := 1
-	if math.Mod(mb, 1024) == 0 {
+	if math.Mod(mb, 1000) == 0 {
 		decimals = 0
 	}
-	return strconv.FormatFloat(mb/1024, 'f', decimals, 64) + " GB"
+	return strconv.FormatFloat(mb/1000, 'f', decimals, 64) + " GB"
 }
 
 // careTypeRows builds the list. The one row edit names is open, and a row
