@@ -84,6 +84,7 @@
 </div>
 {{end}}
 
-{{define "script"}}<script src="{{asset "notifications.js"}}" defer></script>{{end}}
+{{define "script"}}<script src="{{asset "push.js"}}" defer></script>
+<script src="{{asset "notifications.js"}}" defer></script>{{end}}
 
 {{define "nav"}}{{template "tabs" "More"}}{{end}}

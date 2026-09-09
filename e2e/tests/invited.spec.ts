@@ -19,10 +19,10 @@ async function asAnotherBrowser(
   return { page: await context.newPage(), context };
 }
 
-test('joining through an invite link signs the sitter in and lands on Install sprig with a way into the garden @passkey', async ({
+test('joining through an invite link signs the sitter in and offers reminders before Today @passkey', async ({
   page,
   invited,
-  install,
+  reminders,
 }) => {
   await withDevice(page, aWorkingDevice, async () => {
     await invited.open(invites.sitter.token);
@@ -33,11 +33,11 @@ test('joining through an invite link signs the sitter in and lands on Install sp
     await invited.timezone().selectOption('Europe/London');
     await invited.join().click();
 
-    await expect(page).toHaveURL('/install?after=invite');
-    await expect(page.getByRole('heading', { name: 'Install sprig' })).toBeVisible();
+    await expect(page).toHaveURL('/setup/reminders');
+    await expect(page.getByRole('heading', { name: 'Turn on notifications?' })).toBeVisible();
     await expect(page.getByRole('navigation')).toHaveCount(0);
 
-    await install.continueLink().click();
+    await reminders.notNow().click();
     await expect(page).toHaveURL('/');
     await expect(page.getByRole('heading', { name: gardens.home.name })).toBeVisible();
 
@@ -270,7 +270,7 @@ test('a link made on Invite someone joins a new person from another browser @pas
       await onPhone.timezone().selectOption('Europe/London');
       await onPhone.join().click();
 
-      await expect(phone).toHaveURL('/install?after=invite');
+      await expect(phone).toHaveURL('/setup/reminders');
     });
   } finally {
     await context.close();

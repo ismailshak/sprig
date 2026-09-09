@@ -29,10 +29,6 @@ func InvitedPath(token string) string { return "/invite/" + token }
 // to for a registration challenge.
 func invitedChallengePath(token string) string { return InvitedPath(token) + "/challenge" }
 
-// afterInvitePath is the URL a completed join redirects to: the Install sprig
-// page with no tab bar and a link to Today at the end.
-const afterInvitePath = installPath + "?after=" + afterInvite
-
 const (
 	// tooManyInviteAttempts is the message shown when either rate limiter refuses
 	// a request.
@@ -362,7 +358,7 @@ func (h *invited) redeem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	user, passkey, err := h.join(r, open, form)
-	h.finish(w, r, page, "join the garden", user, open.row.Invite.GardenID, passkey, afterInvitePath, err)
+	h.finish(w, r, page, "join the garden", user, open.row.Invite.GardenID, passkey, remindersPath, err)
 }
 
 // join redeems a join invite: the account, the membership and the passkey are

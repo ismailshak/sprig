@@ -219,7 +219,10 @@ var routeAccess = map[string]access{
 	// post writes is a new one of the caller's own.
 	// Both run for an account in no garden. That is the account this page is
 	// for.
-	"GET /setup/signed-in":  {withoutGarden: true},
+	"GET /setup/signed-in": {withoutGarden: true},
+	// The last step of setup. The account and its garden exist by the time the
+	// browser is sent here, so it is an ordinary protected route.
+	"GET /setup/reminders":  {},
 	"POST /setup/signed-in": {anyMember: true, withoutGarden: true},
 	// An invite link is opened before any session exists. The token here was
 	// never issued, so the handler renders the page for a link that cannot be

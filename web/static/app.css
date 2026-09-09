@@ -2254,6 +2254,63 @@ a.wide-action {
 
 .app__body--bare .wide-action { margin-top: 22px; }
 
+/* Not now under Turn on notifications. A link in the muted colour, so the page
+   keeps one obvious button. */
+.bare__skip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--tap);
+  margin-top: -14px;
+  font-size: 14px;
+  color: var(--ink-2);
+  text-decoration: none;
+}
+
+/* ------------------------------------------------------ the reminders banner */
+
+/* The offer to turn on reminders in this browser, between Today's top bar and
+   the day. It is outside the day's element because a swap replaces that
+   element and would render the banner hidden again. It takes app__body for
+   the column's width and padding, and drops the bottom padding because the
+   day's element follows it. */
+.banner { padding-bottom: 0; }
+.banner[hidden] { display: none; }
+
+.banner__card {
+  margin: 4px 0 18px;
+  padding: 14px 16px;
+  border-radius: var(--radius);
+  background: var(--accent-soft);
+  font-size: 15px;
+}
+
+.banner__line { margin: 0; line-height: 1.5; }
+
+.banner__actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.banner__on {
+  height: 36px;
+  padding: 0 14px;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.banner__skip {
+  min-height: 36px;
+  padding: 0 12px;
+  font-size: 14px;
+  color: var(--ink-2);
+}
+
 /* ------------------------------------------------------------------ offline */
 
 /* The line at the top of a page served from the service worker's cache. */

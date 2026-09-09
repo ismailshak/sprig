@@ -21,10 +21,11 @@ import (
 )
 
 var (
-	rosewoodID = uuid.MustParse("00000000-0000-7000-8000-000000000101")
-	readerID   = uuid.MustParse("00000000-0000-7000-8000-000000000102")
-	waterID    = uuid.MustParse("00000000-0000-7000-8000-000000000103")
-	feedID     = uuid.MustParse("00000000-0000-7000-8000-000000000104")
+	rosewoodID           = uuid.MustParse("00000000-0000-7000-8000-000000000101")
+	readerID             = uuid.MustParse("00000000-0000-7000-8000-000000000102")
+	rosewoodMembershipID = uuid.MustParse("00000000-0000-7000-8000-000000000105")
+	waterID              = uuid.MustParse("00000000-0000-7000-8000-000000000103")
+	feedID               = uuid.MustParse("00000000-0000-7000-8000-000000000104")
 
 	bigFellaID = uuid.MustParse("00000000-0000-7000-8000-000000000111")
 	dorisID    = uuid.MustParse("00000000-0000-7000-8000-000000000112")
@@ -62,7 +63,7 @@ func rosewood(t *testing.T) *todayFixture {
 
 	exec("INSERT INTO garden (id, name) VALUES ($1, 'Rosewood')", rosewoodID)
 	exec("INSERT INTO app_user (id, display_name, handle, timezone) VALUES ($1, 'Ellie', 'ellie', 'Europe/London')", readerID)
-	exec("INSERT INTO membership (garden_id, user_id, role, digest_hour) VALUES ($1, $2, 'owner', 8)", rosewoodID, readerID)
+	exec("INSERT INTO membership (id, garden_id, user_id, role, digest_hour) VALUES ($1, $2, $3, 'owner', 8)", rosewoodMembershipID, rosewoodID, readerID)
 	exec("INSERT INTO care_type (id, garden_id, name, slug) VALUES ($1, $2, 'Water', 'water'), ($3, $2, 'Feed', 'feed')", waterID, rosewoodID, feedID)
 
 	plants := []struct {
@@ -97,7 +98,7 @@ func rosewood(t *testing.T) *todayFixture {
 	principal := auth.Principal{
 		User:         store.AppUser{ID: readerID, DisplayName: "Ellie", Handle: "ellie", Timezone: "Europe/London"},
 		Garden:       store.Garden{ID: rosewoodID, Name: "Rosewood"},
-		Membership:   store.Membership{Role: "owner"},
+		Membership:   store.Membership{ID: rosewoodMembershipID, Role: "owner"},
 		Capabilities: auth.Capabilities{auth.CareLog: true, auth.PlantCreate: true, auth.PlantEdit: true, auth.PlantArchive: true, auth.ScheduleEdit: true, auth.PhotoAdd: true, auth.PhotoSetProfile: true},
 	}
 	handler := &today{logger: testLogger, queries: queries, templates: testTemplates(), now: func() time.Time { return thursday }}
@@ -148,6 +149,7 @@ var (
 	sectionElement = regexp.MustCompile(`(?s)<section[^>]*aria-labelledby="([a-z0-9-]+)"[^>]*>.*?</section>`)
 	rowElement     = regexp.MustCompile(`(?s)<li[^>]*id="(care-[^"]+)"[^>]*>.*?</li>`)
 	headElement    = regexp.MustCompile(`(?s)<div[^>]*id="day-head"[^>]*>.*?</div>`)
+	bannerElement  = regexp.MustCompile(`(?s)<div[^>]*id="reminders"[^>]*>.*?</div>\n</div>`)
 	// The feed's closing </div> is the one after a newline, since each line
 	// opens and closes on one line.
 	feedElement     = regexp.MustCompile(`(?s)<div[^>]*id="activity"[^>]*>(.*?)\n</div>`)
@@ -817,5 +819,48 @@ func TestToday_ARowShowsThePlantsPictureAsItsSquare(t *testing.T) {
 
 	if got, want := images(page), []string{photoSquarePath(bigFellaID, photoID)}; !slices.Equal(got, want) {
 		t.Errorf("the page's images are %v, want Big Fella's square at %v and none on the other rows", got, want)
+	}
+}
+
+func TestToday_TheRemindersBannerIsRenderedOnlyWithPushOnAndANotificationTypeOn(t *testing.T) {
+	cases := []struct {
+		name     string
+		pushKey  string
+		digest   bool
+		activity bool
+		rendered bool
+	}{
+		{"push on and the digest on", testPushKey, true, false, true},
+		{"push on and only activity on", testPushKey, false, true, true},
+		{"push on and both types off", testPushKey, false, false, false},
+		{"push off", "", true, false, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			f := rosewood(t)
+			f.handler.pushKey = c.pushKey
+			f.exec(t, "INSERT INTO notification_preference (membership_id, kind, enabled) VALUES ($1, 'digest', $2), ($1, 'activity', $3)", rosewoodMembershipID, c.digest, c.activity)
+
+			page := f.show(t)
+
+			banner := bannerElement.FindString(page)
+			if (banner != "") != c.rendered {
+				t.Fatalf("the banner is rendered = %v, want %v:\n%s", banner != "", c.rendered, page)
+			}
+			if !c.rendered {
+				return
+			}
+			// The banner is hidden until the script decides this browser
+			// should see it.
+			if !strings.Contains(banner, " hidden") {
+				t.Errorf("the banner is not hidden, and the script has not run:\n%s", banner)
+			}
+			if !strings.Contains(banner, `data-key="`+testPushKey+`"`) {
+				t.Errorf("the banner has no data-key for the browser to subscribe with:\n%s", banner)
+			}
+			if !strings.Contains(text(banner), "Turn on notifications") || !strings.Contains(text(banner), "Not now") {
+				t.Errorf("the banner does not offer Turn on notifications and Not now:\n%s", text(banner))
+			}
+		})
 	}
 }

@@ -24,6 +24,7 @@ import { PlantFormScreen } from '../screens/plant-form';
 import { PlantsScreen } from '../screens/plants';
 import { RecoverScreen } from '../screens/recover';
 import { RecoveryScreen } from '../screens/recovery';
+import { RemindersScreen } from '../screens/reminders';
 import { SetupScreen } from '../screens/setup';
 import { SheetScreen } from '../screens/sheet';
 import { SignInScreen } from '../screens/signin';
@@ -57,6 +58,7 @@ type Screens = {
   plants: PlantsScreen;
   recover: RecoverScreen;
   recovery: RecoveryScreen;
+  reminders: RemindersScreen;
   setup: SetupScreen;
   sheet: SheetScreen;
   signin: SignInScreen;
@@ -178,6 +180,9 @@ export const test = base.extend<{ seededGarden: void; cspViolations: void } & Sc
   },
   recovery: async ({ page }, use) => {
     await use(new RecoveryScreen(page));
+  },
+  reminders: async ({ page }, use) => {
+    await use(new RemindersScreen(page));
   },
   setup: async ({ page }, use) => {
     await use(new SetupScreen(page));

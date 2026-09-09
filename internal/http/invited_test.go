@@ -427,7 +427,7 @@ func TestInvited_JoiningWritesTheAccountTheMembershipAndThePasskeyMarksTheLinkUs
 	if cookie := cookieNamed(t, rec, "__Host-sprig_ceremony"); cookie == nil || cookie.MaxAge != -1 {
 		t.Errorf("the post left the ceremony cookie in place: %+v", cookie)
 	}
-	principal := f.sessionOf(t, rec, afterInvitePath)
+	principal := f.sessionOf(t, rec, remindersPath)
 	if principal.User.DisplayName != "Robin" || principal.User.Handle != "robin" || principal.User.Timezone != "Asia/Tokyo" {
 		t.Errorf("the account is %+v, want Robin, robin, Asia/Tokyo", principal.User)
 	}
@@ -483,7 +483,7 @@ func TestInvited_JoiningWritesTheAccountTheMembershipAndThePasskeyMarksTheLinkUs
 func TestInvited_TheSameLinkRedeemedTwiceCreatesOneAccount(t *testing.T) {
 	f := invitedGarden(t)
 	users := f.count(t, "app_user")
-	f.sessionOf(t, f.redeem(t, sitterLink, aJoinForm(), aDevice()), afterInvitePath)
+	f.sessionOf(t, f.redeem(t, sitterLink, aJoinForm(), aDevice()), remindersPath)
 
 	unusable(t, f.show(t, sitterLink))
 	second := url.Values{"name": {"Sam"}, "timezone": {"Europe/London"}}
@@ -508,7 +508,7 @@ func TestInvited_TheSecondOfTwoChallengesOnOneLinkIsRefusedOnceTheFirstIsAnswere
 
 	answered := aJoinForm()
 	answered.Set(credentialField, aDevice().Register(first))
-	f.sessionOf(t, f.request(t, f.handler.redeem, sitterLink, InvitedPath(sitterLink), answered, firstCookie), afterInvitePath)
+	f.sessionOf(t, f.request(t, f.handler.redeem, sitterLink, InvitedPath(sitterLink), answered, firstCookie), remindersPath)
 	second.Set(credentialField, aDevice().Register(secondCreation))
 	rec := f.request(t, f.handler.redeem, sitterLink, InvitedPath(sitterLink), second, secondCookie)
 
@@ -620,7 +620,7 @@ func TestInvited_ABrowserAlreadySignedInGetsANewSessionInPlaceOfItsOld(t *testin
 
 	rec := f.redeem(t, sitterLink, aJoinForm(), aDevice(), f.handler.sessions.Cookie(old))
 
-	principal := f.sessionOf(t, rec, afterInvitePath)
+	principal := f.sessionOf(t, rec, remindersPath)
 	if principal.User.DisplayName != "Robin" {
 		t.Errorf("the session is %s's, want Robin's", principal.User.DisplayName)
 	}

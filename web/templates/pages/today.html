@@ -17,10 +17,34 @@
 {{with .Owner}}<div class="topbar__owner">{{.}}</div>{{end}}
 </div>
 </header>
+{{template "reminders-banner" .Reminders}}
 {{template "day-body" .}}
 {{end}}
 
+{{/* The banner offering to turn on reminders in this browser. It is rendered
+     hidden. The page's script shows it when the app is opened installed,
+     this browser has no push subscription, permission has not been refused
+     and Not now has not been pressed before. Without JavaScript it stays
+     hidden, since only the push API can subscribe a browser. Both buttons do
+     nothing without JavaScript, so they are type="button".
+
+     data-key is the VAPID public key this browser subscribes with and
+     data-subscribe the URL the script posts the subscription to. */}}
+{{define "reminders-banner"}}{{with .}}<div class="app__body banner" id="reminders" hidden data-key="{{.Key}}" data-subscribe="{{.Subscribe}}">
+<div class="banner__card">
+<p class="banner__line">Get a daily notification of what’s due.</p>
+<p class="field__error" id="reminders-error" role="alert"></p>
+<div class="banner__actions">
+<button class="banner__on" type="button" id="reminders-on">Turn on notifications</button>
+<button class="banner__skip" type="button" id="reminders-skip">Not now</button>
+</div>
+</div>
+</div>{{end}}{{end}}
+
 {{define "nav"}}{{template "tabs" "Today"}}{{end}}
+
+{{define "script"}}{{if .Reminders}}<script src="{{asset "push.js"}}" defer></script>
+<script src="{{asset "reminders.js"}}" defer></script>{{end}}{{end}}
 
 {{define "overlay"}}{{if .GardenSheet}}{{template "garden-sheet" .}}{{else}}{{template "sheet" .}}{{end}}{{end}}
 

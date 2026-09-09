@@ -144,6 +144,10 @@ type setup struct {
 	// account and a garden of their own.
 	enabled bool
 	wake    wakeDigest
+	// pushKey is the VAPID public key the Reminders page gives the browser to
+	// subscribe with. It is empty when push is off, and the page then sends
+	// the browser on to Today.
+	pushKey string
 }
 
 // open reports whether the three public setup routes are served. They are when
@@ -221,7 +225,8 @@ func (h *setup) challenge(w http.ResponseWriter, r *http.Request) {
 
 // create handles POST /setup. The account, the garden, the membership, the
 // care types and the passkey are written in one transaction, so a refused
-// registration rolls all of them back.
+// registration rolls all of them back. A post that goes through signs in and
+// redirects to the Reminders page.
 func (h *setup) create(w http.ResponseWriter, r *http.Request) {
 	if open, err := h.open(r); err != nil {
 		h.templates.serverError(h.logger, w, r, "set up the garden", err)
@@ -313,7 +318,7 @@ func (h *setup) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.SetCookie(w, h.sessions.Cookie(token))
-	http.Redirect(w, r, "/", http.StatusSeeOther)
+	http.Redirect(w, r, remindersPath, http.StatusSeeOther)
 }
 
 // createGardenOwnedBy writes a garden named name, an owner membership of it

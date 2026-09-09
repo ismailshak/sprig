@@ -47,7 +47,7 @@ type middleware func(http.Handler) http.Handler
 // test sends that page's test message to one browser. It is nil when push is
 // off.
 func routes(logger *slog.Logger, sessions *auth.Sessions, passkeys *auth.Passkeys, queries *store.Queries, photos *photo.Store, templates *Templates, assets *Assets, trustedIPHeader string, signupEnabled bool, pushKey string, wake func(), notify notifyActivity, test sendTest) []route {
-	todayHandler := &today{logger: logger, queries: queries, templates: templates, now: time.Now, notify: notify}
+	todayHandler := &today{logger: logger, queries: queries, templates: templates, now: time.Now, notify: notify, pushKey: pushKey}
 	plantsHandler := &plants{logger: logger, queries: queries, photos: photos, templates: templates, now: time.Now}
 	activityHandler := &activity{logger: logger, queries: queries, templates: templates, now: time.Now}
 	choresHandler := &chores{logger: logger, queries: queries, templates: templates, now: time.Now}
@@ -56,7 +56,7 @@ func routes(logger *slog.Logger, sessions *auth.Sessions, passkeys *auth.Passkey
 	resolver := auth.NewResolver(sessions, queries)
 	passkeyHandler := &passkeyCeremony{logger: logger, passkeys: passkeys, sessions: sessions, queries: queries, templates: templates, now: time.Now}
 	moreHandler := &more{logger: logger, sessions: sessions, queries: queries, photos: photos, templates: templates, build: build.Read(), now: time.Now, pushKey: pushKey, wake: wake, test: test}
-	setupHandler := &setup{logger: logger, passkeys: passkeys, sessions: sessions, resolver: resolver, queries: queries, templates: templates, now: time.Now, enabled: signupEnabled, wake: wake}
+	setupHandler := &setup{logger: logger, passkeys: passkeys, sessions: sessions, resolver: resolver, queries: queries, templates: templates, now: time.Now, enabled: signupEnabled, wake: wake, pushKey: pushKey}
 	invitedHandler := &invited{logger: logger, passkeys: passkeys, sessions: sessions, resolver: resolver, queries: queries, templates: templates, now: time.Now, wake: wake}
 	recoverHandler := &recoverAccount{logger: logger, passkeys: passkeys, queries: queries, templates: templates, now: time.Now}
 	recoverLimit := newRecoverLimits(trustedIPHeader)
@@ -117,6 +117,7 @@ func routes(logger *slog.Logger, sessions *auth.Sessions, passkeys *auth.Passkey
 		{pattern: "POST " + setupPath, handler: http.HandlerFunc(setupHandler.create)},
 		{pattern: "GET " + setupSignedInPath, withoutGarden: true, handler: http.HandlerFunc(setupHandler.showSignedIn)},
 		{pattern: "POST " + setupSignedInPath, withoutGarden: true, handler: http.HandlerFunc(setupHandler.createSignedIn)},
+		{pattern: "GET " + remindersPath, handler: http.HandlerFunc(setupHandler.reminders)},
 		{pattern: "GET " + invitedPattern, handler: http.HandlerFunc(invitedHandler.show)},
 		{pattern: "POST " + invitedPattern + "/challenge", limits: inviteLimits(trustedIPHeader, http.HandlerFunc(tooManyChallenges)), handler: http.HandlerFunc(invitedHandler.challenge)},
 		{pattern: "POST " + invitedPattern, limits: inviteLimits(trustedIPHeader, http.HandlerFunc(invitedHandler.tooManyAnswers)), handler: http.HandlerFunc(invitedHandler.redeem)},

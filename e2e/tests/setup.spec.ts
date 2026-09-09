@@ -6,9 +6,10 @@ import { expect, test } from '../harness/test';
 // The e2e stack runs with sign-up on. The seed has already created an account,
 // and with sign-up off the page is closed once one exists.
 
-test('setting up a garden signs its owner in and Today says No plants yet @passkey', async ({
+test('setting up a garden signs its owner in, offers reminders, and Today says No plants yet @passkey', async ({
   page,
   setup,
+  reminders,
   garden,
 }) => {
   const detach = await attach(page, aWorkingDevice);
@@ -18,6 +19,12 @@ test('setting up a garden signs its owner in and Today says No plants yet @passk
     await setup.name().fill('Robin');
     await setup.timezone().selectOption('Europe/London');
     await setup.create().click();
+
+    // A new membership's digest is sent at 8am.
+    await expect(page).toHaveURL('/setup/reminders');
+    await expect(page.getByText('One notification a day at 8:00am')).toBeVisible();
+    await expect(page.getByRole('navigation')).toHaveCount(0);
+    await reminders.notNow().click();
 
     await expect(page).toHaveURL('/');
     await expect(page.getByRole('heading', { name: 'Greenhouse' })).toBeVisible();

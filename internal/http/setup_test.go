@@ -129,8 +129,8 @@ func (f *setupFixture) mustCreate(t *testing.T, form url.Values, device *passkey
 	t.Helper()
 
 	rec := f.create(t, form, device)
-	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/" {
-		t.Fatalf("creating the garden: status = %d, Location = %q, want %d to /:\n%s", rec.Code, rec.Header().Get("Location"), http.StatusSeeOther, text(rec.Body.String()))
+	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != remindersPath {
+		t.Fatalf("creating the garden: status = %d, Location = %q, want %d to %s:\n%s", rec.Code, rec.Header().Get("Location"), http.StatusSeeOther, remindersPath, text(rec.Body.String()))
 	}
 	session := cookieNamed(t, rec, "__Host-sprig_session")
 	if session == nil {
@@ -232,8 +232,8 @@ func TestSetup_CreatingTheGardenWritesEveryRowAndSignsInAsItsOwner(t *testing.T)
 
 	rec := f.create(t, aGardenForm(), device)
 
-	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/" {
-		t.Fatalf("status = %d, Location = %q, want %d to /:\n%s", rec.Code, rec.Header().Get("Location"), http.StatusSeeOther, text(rec.Body.String()))
+	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != remindersPath {
+		t.Fatalf("status = %d, Location = %q, want %d to %s:\n%s", rec.Code, rec.Header().Get("Location"), http.StatusSeeOther, remindersPath, text(rec.Body.String()))
 	}
 	if cookie := cookieNamed(t, rec, "__Host-sprig_ceremony"); cookie == nil || cookie.MaxAge != -1 {
 		t.Errorf("the post left the ceremony cookie in place: %+v", cookie)

@@ -1,0 +1,41 @@
+{{define "title"}}Turn on notifications · sprig{{end}}
+
+{{define "app-class"}}app app--bare{{end}}
+
+{{/* The last step of setting up a garden or joining one. There is no tab bar,
+     because the person is still in setup and has not reached Today.
+
+     The page holds two blocks and the script shows one. The offer is on the
+     page from the start, so without JavaScript it is what renders. The
+     install steps start hidden, and the script shows them in place of the
+     offer in a browser with no push API. On an iPhone that is a browser
+     where sprig is not on the Home Screen.
+
+     data-key is the VAPID public key this browser subscribes with,
+     data-subscribe the URL the script posts the subscription to, and
+     data-next the page opened once the browser is subscribed. */}}
+{{define "main"}}
+<div class="app__body app__body--bare">
+<div id="reminders" data-key="{{.Key}}" data-subscribe="{{.Subscribe}}" data-next="{{.Today}}">
+<h1 class="bare__title">Turn on notifications?</h1>
+<p class="lead">{{.Digest}}</p>
+<p class="lead">Change the hour or turn it off in Notifications, under More.</p>
+{{/* The script writes the browser's refusal into this line when the press
+     gets no permission. */}}
+<p class="field__error" id="reminders-error" role="alert"></p>
+{{/* A link rather than a button, because without JavaScript the press opens
+     the Notifications page, where Save changes subscribes the browser. */}}
+<a class="wide-action" href="{{.Notifications}}" id="reminders-on">Turn on notifications</a>
+<a class="bare__skip" href="{{.Today}}" id="reminders-skip">Not now</a>
+</div>
+<div id="reminders-install" hidden>
+<h1 class="bare__title">Notifications need the app</h1>
+<p class="lead">On iPhone, notifications only work once sprig is added to your Home Screen.</p>
+<ol class="steps">{{range .Steps}}<li>{{.}}</li>{{end}}</ol>
+<a class="wide-action" href="{{.Today}}">Continue</a>
+</div>
+</div>
+{{end}}
+
+{{define "script"}}<script src="{{asset "push.js"}}" defer></script>
+<script src="{{asset "reminders.js"}}" defer></script>{{end}}
