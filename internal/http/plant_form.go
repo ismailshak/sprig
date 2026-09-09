@@ -194,7 +194,7 @@ func (f plantFields) update(gardenID, plantID uuid.UUID) store.UpdatePlantParams
 // multipart/form-data or as a query string. The plant form and Add a photo
 // both post this way. It writes the response itself and returns false when the
 // body was over the size cap or did not parse.
-func readMultipartForm(w http.ResponseWriter, r *http.Request) bool {
+func readMultipartForm(templates *Templates, w http.ResponseWriter, r *http.Request) bool {
 	r.Body = http.MaxBytesReader(w, r.Body, formMaxBytes)
 	// ParseForm runs first because ParseMultipartForm discards its error and
 	// returns ErrNotMultipart when the post is a query string.
@@ -207,10 +207,10 @@ func readMultipartForm(w http.ResponseWriter, r *http.Request) bool {
 	var tooLarge *http.MaxBytesError
 	switch {
 	case errors.As(err, &tooLarge):
-		http.Error(w, "The photo is too large.", http.StatusRequestEntityTooLarge)
+		templates.tooLarge(w, r)
 		return false
 	case err != nil:
-		badRequest(w)
+		templates.badRequest(w, r)
 		return false
 	}
 	return true
@@ -239,9 +239,9 @@ type photoField struct {
 	NeedsChoosing bool
 	// Missing renders "Choose a photo."
 	Missing bool
-	// Full is the message shown when the garden has no room for the photo,
-	// empty otherwise.
-	Full string
+	// Refusal is the sentence under the field saying why the store refused
+	// the photo. It is empty otherwise.
+	Refusal string
 	// Submit is the label on the submit button rendered inside the field. It
 	// is empty on the plant form, which has its own submit button below. Add a
 	// photo puts its button here so that a browser which cannot resize a photo
@@ -268,7 +268,7 @@ func canSetPicture(principal auth.Principal) bool {
 // A part that will not open gets a 400 written here, and false returned. A
 // post with no square gets the same 400, because every list shows the picture
 // as its square and the form's script always posts both files.
-func postedPhoto(w http.ResponseWriter, r *http.Request, principal auth.Principal, plantID uuid.UUID) (upload photo.Upload, closeFiles func(), ok bool) {
+func postedPhoto(templates *Templates, w http.ResponseWriter, r *http.Request, principal auth.Principal, plantID uuid.UUID) (upload photo.Upload, closeFiles func(), ok bool) {
 	var opened []io.Closer
 	closeFiles = func() {
 		for _, f := range opened {
@@ -277,19 +277,19 @@ func postedPhoto(w http.ResponseWriter, r *http.Request, principal auth.Principa
 	}
 	upload = photo.Upload{GardenID: principal.Garden.ID, PlantID: plantID, UploadedBy: principal.User.ID}
 	if len(r.MultipartForm.File["photo-square"]) == 0 {
-		badRequest(w)
+		templates.badRequest(w, r)
 		return upload, closeFiles, false
 	}
 	file, header, err := r.FormFile("photo")
 	if err != nil {
-		badRequest(w)
+		templates.badRequest(w, r)
 		return upload, closeFiles, false
 	}
 	opened = append(opened, file)
 	upload.File, upload.Size = file, header.Size
 	square, header, err := r.FormFile("photo-square")
 	if err != nil {
-		badRequest(w)
+		templates.badRequest(w, r)
 		return upload, closeFiles, false
 	}
 	opened = append(opened, square)
@@ -369,29 +369,41 @@ func pictureRemoved(r *http.Request) bool {
 	return r.PostForm.Get("photo-removed") == "1"
 }
 
-// photoQuotaFull is the message shown under the photo field when the garden
-// has no room for the photo.
-const photoQuotaFull = "Photo storage is full. Delete some photos to make room."
+// The sentences under the photo field for a photo the garden has no room for
+// and for a file that is not a photo.
+const (
+	photoQuotaFull = "Photo storage is full. Delete some photos to make room."
+	photoNotImage  = "The photo must be a JPEG or WebP."
+)
 
-// photoRefused writes the response for a photo the store refused and reports
-// whether err was such a refusal. The caller reports any other error itself.
-// A photo the garden has no room for renders the form again with the message
-// under the photo field. A file over the size limit or one that is not a JPEG
-// or a WebP gets a plain error response, because the form's script sends
-// neither.
+// photoRefused reports whether err is a refusal from the store. When it is,
+// the form is rendered again with the reason under the photo field. The
+// caller reports any other error itself.
 func (h *plants) photoRefused(w http.ResponseWriter, r *http.Request, err error, page plantFormPage) bool {
-	switch {
-	case errors.Is(err, photo.ErrQuotaFull):
-		page.PhotoFull = photoQuotaFull
-		h.templates.render(w, r, view{page: plantFormPageName, status: http.StatusUnprocessableEntity}, page)
-	case errors.Is(err, photo.ErrTooLarge):
-		http.Error(w, "The photo is too large.", http.StatusRequestEntityTooLarge)
-	case errors.Is(err, photo.ErrNotImage):
-		http.Error(w, "The photo must be a JPEG or WebP.", http.StatusBadRequest)
-	default:
+	status, message := photoRefusal(err)
+	if message == "" {
 		return false
 	}
+	page.PhotoRefusal = message
+	h.templates.render(w, r, view{page: plantFormPageName, status: status}, page)
 	return true
+}
+
+// photoRefusal returns the status and the sentence under the photo field for
+// a photo the store refused, and an empty sentence for any other error. Only
+// a post the app's pages did not make reaches the size or file type case,
+// because the form's script re-encodes every photo it sends and the field
+// stays hidden when no script is running.
+func photoRefusal(err error) (int, string) {
+	switch {
+	case errors.Is(err, photo.ErrQuotaFull):
+		return http.StatusUnprocessableEntity, photoQuotaFull
+	case errors.Is(err, photo.ErrTooLarge):
+		return http.StatusRequestEntityTooLarge, plainText(tooLargeTitle, tooLargeLine)
+	case errors.Is(err, photo.ErrNotImage):
+		return http.StatusUnprocessableEntity, photoNotImage
+	}
+	return 0, ""
 }
 
 // set converts a text field to its column value. An empty field is null, since
@@ -471,9 +483,9 @@ type plantFormPage struct {
 	// rendered again with an empty file input, because a server cannot fill
 	// one.
 	PhotoNeedsChoosing bool
-	// PhotoFull is the message shown under the photo field when the garden has
-	// no room for the photo. It is empty otherwise.
-	PhotoFull string
+	// PhotoRefusal is the sentence under the photo field saying why the store
+	// refused the photo. It is empty otherwise.
+	PhotoRefusal string
 	// showPhoto is whether the form renders the photo field. It is true only
 	// for a member who may set the plant's profile picture.
 	showPhoto bool
@@ -505,7 +517,7 @@ func (p plantFormPage) PhotoField() *photoField {
 		Removed:       p.PictureRemoved,
 		Focus:         p.PictureFocus,
 		NeedsChoosing: p.PhotoNeedsChoosing,
-		Full:          p.PhotoFull,
+		Refusal:       p.PhotoRefusal,
 	}
 }
 
@@ -612,7 +624,7 @@ func swappedRow(rows []scheduleField, values url.Values) (scheduleField, bool) {
 func (h *plants) gardenRooms(w http.ResponseWriter, r *http.Request, gardenID uuid.UUID) ([]string, bool) {
 	rooms, err := h.queries.ListRooms(r.Context(), gardenID)
 	if err != nil {
-		serverError(h.logger, w, r, "list the rooms", err)
+		h.templates.serverError(h.logger, w, r, "list the rooms", err)
 		return nil, false
 	}
 	return rooms, true
@@ -624,7 +636,7 @@ func (h *plants) newPlant(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	cares, err := h.queries.ListCareTypes(r.Context(), principal.Garden.ID)
 	if err != nil {
-		serverError(h.logger, w, r, "list the care types", err)
+		h.templates.serverError(h.logger, w, r, "list the care types", err)
 		return
 	}
 	now := h.now().In(locationFor(principal.User))
@@ -638,7 +650,7 @@ func (h *plants) newPlant(w http.ResponseWriter, r *http.Request) {
 		fields, fieldsOK = readPlantFields(query, now)
 		rows, rowsOK = readScheduleRows(query, cares, now)
 		if !fieldsOK || !rowsOK {
-			badRequest(w)
+			h.templates.badRequest(w, r)
 			return
 		}
 	}
@@ -649,7 +661,7 @@ func (h *plants) newPlant(w http.ResponseWriter, r *http.Request) {
 	if isHTMX(r) {
 		row, ok := swappedRow(page.Schedules, query)
 		if !ok {
-			badRequest(w)
+			h.templates.badRequest(w, r)
 			return
 		}
 		page.Schedules = []scheduleField{row}
@@ -670,7 +682,7 @@ func (h *plants) newPlant(w http.ResponseWriter, r *http.Request) {
 // transaction.
 func (h *plants) create(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
-	if !readMultipartForm(w, r) {
+	if !readMultipartForm(h.templates, w, r) {
 		return
 	}
 	focus, focusPosted, focusOK := postedFocus(r)
@@ -679,12 +691,12 @@ func (h *plants) create(w http.ResponseWriter, r *http.Request) {
 	// is refused unless the member may also add a photo and set the profile
 	// picture.
 	if (photoPosted(r) || focusPosted) && !canSetPicture(principal) {
-		notFound(w)
+		h.templates.notFound(w, r)
 		return
 	}
 	cares, err := h.queries.ListCareTypes(r.Context(), principal.Garden.ID)
 	if err != nil {
-		serverError(h.logger, w, r, "list the care types", err)
+		h.templates.serverError(h.logger, w, r, "list the care types", err)
 		return
 	}
 	now := h.now().In(locationFor(principal.User))
@@ -692,7 +704,7 @@ func (h *plants) create(w http.ResponseWriter, r *http.Request) {
 	fields, fieldsOK := readPlantFields(r.PostForm, now)
 	rows, rowsOK := readScheduleRows(r.PostForm, cares, now)
 	if !fieldsOK || !rowsOK || !focusOK {
-		badRequest(w)
+		h.templates.badRequest(w, r)
 		return
 	}
 	rooms, ok := h.gardenRooms(w, r, principal.Garden.ID)
@@ -732,7 +744,7 @@ func (h *plants) create(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if photoPosted(r) {
-			upload, closeFiles, ok := postedPhoto(w, r, principal, plant.ID)
+			upload, closeFiles, ok := postedPhoto(h.templates, w, r, principal, plant.ID)
 			defer closeFiles()
 			if !ok {
 				return errResponded
@@ -748,7 +760,7 @@ func (h *plants) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		serverError(h.logger, w, r, "add the plant", err)
+		h.templates.serverError(h.logger, w, r, "add the plant", err)
 		return
 	}
 	http.Redirect(w, r, plantPath(plant.ID), http.StatusSeeOther)
@@ -793,7 +805,7 @@ func (h *plants) edit(w http.ResponseWriter, r *http.Request) {
 	page.Rooms = rooms
 	focus, err := h.pictureFocus(r.Context(), principal, plant)
 	if err != nil {
-		serverError(h.logger, w, r, "load the plant's picture", err)
+		h.templates.serverError(h.logger, w, r, "load the plant's picture", err)
 		return
 	}
 	page.PictureFocus = focus.String()
@@ -809,18 +821,18 @@ func (h *plants) update(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if !readMultipartForm(w, r) {
+	if !readMultipartForm(h.templates, w, r) {
 		return
 	}
 	focus, focusPosted, focusOK := postedFocus(r)
 	if (photoPosted(r) || pictureRemoved(r) || focusPosted) && !canSetPicture(principal) {
-		notFound(w)
+		h.templates.notFound(w, r)
 		return
 	}
 	now := h.now().In(locationFor(principal.User))
 	fields, fieldsOK := readPlantFields(r.PostForm, now)
 	if !fieldsOK || !focusOK {
-		badRequest(w)
+		h.templates.badRequest(w, r)
 		return
 	}
 	rooms, ok := h.gardenRooms(w, r, principal.Garden.ID)
@@ -852,7 +864,7 @@ func (h *plants) update(w http.ResponseWriter, r *http.Request) {
 		}
 		switch {
 		case photoPosted(r):
-			upload, closeFiles, ok := postedPhoto(w, r, principal, plant.ID)
+			upload, closeFiles, ok := postedPhoto(h.templates, w, r, principal, plant.ID)
 			defer closeFiles()
 			if !ok {
 				return errResponded
@@ -874,10 +886,10 @@ func (h *plants) update(w http.ResponseWriter, r *http.Request) {
 	}
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		notFound(w)
+		h.templates.notFound(w, r)
 		return
 	case err != nil:
-		serverError(h.logger, w, r, "save the plant", err)
+		h.templates.serverError(h.logger, w, r, "save the plant", err)
 		return
 	}
 	http.Redirect(w, r, plantPath(plant.ID), http.StatusSeeOther)
@@ -890,21 +902,21 @@ func (h *plants) confirmArchive(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	plantID, err := uuid.Parse(r.PathValue("plant"))
 	if err != nil {
-		notFound(w)
+		h.templates.notFound(w, r)
 		return
 	}
 	detail, err := loadPlant(r.Context(), h.queries, principal, plantID, h.now())
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		notFound(w)
+		h.templates.notFound(w, r)
 		return
 	case err != nil:
-		serverError(h.logger, w, r, "load the plant", err)
+		h.templates.serverError(h.logger, w, r, "load the plant", err)
 		return
 	}
 	// An archived plant has no Archive button. There is nothing to confirm.
 	if detail.plant.ArchivedAt != nil {
-		notFound(w)
+		h.templates.notFound(w, r)
 		return
 	}
 
@@ -912,7 +924,7 @@ func (h *plants) confirmArchive(w http.ResponseWriter, r *http.Request) {
 	page.Foot = page.Foot.asking()
 	fragment, ok := plantSwap(r, &page)
 	if !ok {
-		notFound(w)
+		h.templates.notFound(w, r)
 		return
 	}
 	h.templates.render(w, r, view{page: "plant", fragment: fragment}, page)
@@ -924,15 +936,15 @@ func (h *plants) archive(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	plantID, err := uuid.Parse(r.PathValue("plant"))
 	if err != nil {
-		notFound(w)
+		h.templates.notFound(w, r)
 		return
 	}
 	if _, err := h.queries.ArchivePlant(r.Context(), principal.Garden.ID, plantID); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			notFound(w)
+			h.templates.notFound(w, r)
 			return
 		}
-		serverError(h.logger, w, r, "archive the plant", err)
+		h.templates.serverError(h.logger, w, r, "archive the plant", err)
 		return
 	}
 	http.Redirect(w, r, plantsPath, http.StatusSeeOther)
@@ -949,7 +961,7 @@ func (h *plants) editable(w http.ResponseWriter, r *http.Request, principal auth
 		return store.Plant{}, false
 	}
 	if plant.ArchivedAt != nil {
-		notFound(w)
+		h.templates.notFound(w, r)
 		return store.Plant{}, false
 	}
 	return plant, true

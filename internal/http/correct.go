@@ -101,7 +101,7 @@ func (h *activity) readEvent(w http.ResponseWriter, r *http.Request) (event, boo
 	principal := PrincipalFrom(r)
 	plantID, eventID, q, ok := readEventPath(r)
 	if !ok {
-		notFound(w)
+		h.templates.notFound(w, r)
 		return event{}, false
 	}
 
@@ -112,10 +112,10 @@ func (h *activity) readEvent(w http.ResponseWriter, r *http.Request) (event, boo
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		notFound(w)
+		h.templates.notFound(w, r)
 		return event{}, false
 	case err != nil:
-		serverError(h.logger, w, r, "read the care", err)
+		h.templates.serverError(h.logger, w, r, "read the care", err)
 		return event{}, false
 	}
 	return event{row: row, q: q, now: h.now().In(locationFor(principal.User))}, true
@@ -132,7 +132,7 @@ func (h *activity) correct(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !mayCorrect(principal, e.care()) {
-		notFound(w)
+		h.templates.notFound(w, r)
 		return
 	}
 
@@ -143,7 +143,7 @@ func (h *activity) correct(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Query().Get("when") != "" {
 		d, ok = readDraft(r.URL.Query())
 		if !ok {
-			badRequest(w)
+			h.templates.badRequest(w, r)
 			return
 		}
 	}
@@ -151,15 +151,15 @@ func (h *activity) correct(w http.ResponseWriter, r *http.Request) {
 	s, err := h.sheetOver(r, principal, e, d)
 	switch {
 	case errors.Is(err, errNotOffered):
-		badRequest(w)
+		h.templates.badRequest(w, r)
 		return
 	case err != nil:
-		serverError(h.logger, w, r, "load the plant", err)
+		h.templates.serverError(h.logger, w, r, "load the plant", err)
 		return
 	}
 	page, err := h.page(r.Context(), principal, e.q)
 	if err != nil {
-		serverError(h.logger, w, r, "load the log", err)
+		h.templates.serverError(h.logger, w, r, "load the log", err)
 		return
 	}
 	page.Sheet = s
@@ -177,26 +177,26 @@ func (h *activity) save(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !mayCorrect(principal, e.care()) {
-		notFound(w)
+		h.templates.notFound(w, r)
 		return
 	}
 	if err := r.ParseForm(); err != nil {
-		badRequest(w)
+		h.templates.badRequest(w, r)
 		return
 	}
 	d, ok := readDraft(r.PostForm)
 	if !ok {
-		badRequest(w)
+		h.templates.badRequest(w, r)
 		return
 	}
 
 	s, err := h.sheetOver(r, principal, e, d)
 	switch {
 	case errors.Is(err, errNotOffered):
-		badRequest(w)
+		h.templates.badRequest(w, r)
 		return
 	case err != nil:
-		serverError(h.logger, w, r, "load the plant", err)
+		h.templates.serverError(h.logger, w, r, "load the plant", err)
 		return
 	}
 
@@ -206,7 +206,7 @@ func (h *activity) save(w http.ResponseWriter, r *http.Request) {
 	case errors.As(err, &refused):
 		page, err := h.page(r.Context(), principal, e.q)
 		if err != nil {
-			serverError(h.logger, w, r, "load the log", err)
+			h.templates.serverError(h.logger, w, r, "load the log", err)
 			return
 		}
 		s.WhenError = string(refused)
@@ -218,7 +218,7 @@ func (h *activity) save(w http.ResponseWriter, r *http.Request) {
 		h.templates.render(w, r, view{page: "activity", fragment: "sheet", status: http.StatusUnprocessableEntity}, page)
 		return
 	case err != nil:
-		badRequest(w)
+		h.templates.badRequest(w, r)
 		return
 	}
 
@@ -241,10 +241,10 @@ func (h *activity) save(w http.ResponseWriter, r *http.Request) {
 	switch _, err := h.queries.UpdateCareEvent(r.Context(), params); {
 	case errors.Is(err, pgx.ErrNoRows):
 		// The event was deleted between reading it and writing the correction.
-		notFound(w)
+		h.templates.notFound(w, r)
 		return
 	case err != nil:
-		serverError(h.logger, w, r, "save the correction", err)
+		h.templates.serverError(h.logger, w, r, "save the correction", err)
 		return
 	}
 
@@ -255,7 +255,7 @@ func (h *activity) save(w http.ResponseWriter, r *http.Request) {
 	// The log is read again so the row is placed by the time it now holds.
 	saved, err := h.page(r.Context(), principal, e.q)
 	if err != nil {
-		serverError(h.logger, w, r, "load the log", err)
+		h.templates.serverError(h.logger, w, r, "load the log", err)
 		return
 	}
 	h.templates.render(w, r, view{page: "activity", fragment: "log-saved"}, saved)
@@ -286,10 +286,10 @@ func (h *activity) remove(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		// Somebody else's event is a 404, the same as one that does not exist.
-		notFound(w)
+		h.templates.notFound(w, r)
 		return
 	case err != nil:
-		serverError(h.logger, w, r, "delete the care", err)
+		h.templates.serverError(h.logger, w, r, "delete the care", err)
 		return
 	}
 
@@ -309,7 +309,7 @@ func (h *activity) restore(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	plantID, eventID, q, ok := readEventPath(r)
 	if !ok {
-		notFound(w)
+		h.templates.notFound(w, r)
 		return
 	}
 	// The plant is read first because the restore inserts a row against it, and
@@ -317,19 +317,19 @@ func (h *activity) restore(w http.ResponseWriter, r *http.Request) {
 	// fails a foreign key.
 	if _, err := h.queries.GetPlant(r.Context(), principal.Garden.ID, plantID); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			notFound(w)
+			h.templates.notFound(w, r)
 			return
 		}
-		serverError(h.logger, w, r, "read the plant", err)
+		h.templates.serverError(h.logger, w, r, "read the plant", err)
 		return
 	}
 	if err := r.ParseForm(); err != nil {
-		badRequest(w)
+		h.templates.badRequest(w, r)
 		return
 	}
 	params, ok := restoreParams(r.PostForm, h.now())
 	if !ok {
-		badRequest(w)
+		h.templates.badRequest(w, r)
 		return
 	}
 	params.ID = eventID
@@ -344,10 +344,10 @@ func (h *activity) restore(w http.ResponseWriter, r *http.Request) {
 	// the event being restored can be one of the last logged under it.
 	if _, err := h.queries.GetCareType(r.Context(), principal.Garden.ID, params.CareTypeID); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			notFound(w)
+			h.templates.notFound(w, r)
 			return
 		}
-		serverError(h.logger, w, r, "read the care type", err)
+		h.templates.serverError(h.logger, w, r, "read the care type", err)
 		return
 	}
 
@@ -356,10 +356,10 @@ func (h *activity) restore(w http.ResponseWriter, r *http.Request) {
 		// one performed by somebody else. Both are a 404, the same as an event
 		// that does not exist.
 		if errors.Is(err, pgx.ErrNoRows) {
-			notFound(w)
+			h.templates.notFound(w, r)
 			return
 		}
-		serverError(h.logger, w, r, "restore the care", err)
+		h.templates.serverError(h.logger, w, r, "restore the care", err)
 		return
 	}
 

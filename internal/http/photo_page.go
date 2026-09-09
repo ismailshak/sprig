@@ -95,7 +95,7 @@ func (h *plants) renderPhoto(w http.ResponseWriter, r *http.Request, asking bool
 	}
 	// A reader who may not delete the photo has no confirmation to render.
 	if asking && page.Foot == nil {
-		notFound(w)
+		h.templates.notFound(w, r)
 		return
 	}
 	v := view{page: "photo"}
@@ -132,10 +132,10 @@ func (h *plants) deletePhoto(w http.ResponseWriter, r *http.Request) {
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		notFound(w)
+		h.templates.notFound(w, r)
 		return
 	case err != nil:
-		serverError(h.logger, w, r, "delete the photo", err)
+		h.templates.serverError(h.logger, w, r, "delete the photo", err)
 		return
 	}
 	http.Redirect(w, r, photosPath(plant.ID), http.StatusSeeOther)
@@ -150,16 +150,16 @@ func (h *plants) resolvePhoto(w http.ResponseWriter, r *http.Request, principal 
 	}
 	photoID, err := uuid.Parse(r.PathValue("photo"))
 	if err != nil {
-		notFound(w)
+		h.templates.notFound(w, r)
 		return store.Plant{}, store.GetPlantPhotoRow{}, false
 	}
 	row, err := h.queries.GetPlantPhoto(r.Context(), store.GetPlantPhotoParams{GardenID: principal.Garden.ID, PlantID: plant.ID, PhotoID: photoID})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		notFound(w)
+		h.templates.notFound(w, r)
 		return store.Plant{}, store.GetPlantPhotoRow{}, false
 	case err != nil:
-		serverError(h.logger, w, r, "load the photo", err)
+		h.templates.serverError(h.logger, w, r, "load the photo", err)
 		return store.Plant{}, store.GetPlantPhotoRow{}, false
 	}
 	return plant, row, true

@@ -83,19 +83,19 @@ func (h *more) tokens(w http.ResponseWriter, r *http.Request) {
 func (h *more) createToken(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	if err := r.ParseForm(); err != nil {
-		badRequest(w)
+		h.templates.badRequest(w, r)
 		return
 	}
 	days, err := strconv.Atoi(r.PostForm.Get("expiry"))
 	if err != nil || !slices.Contains(tokenLives, days) {
-		badRequest(w)
+		h.templates.badRequest(w, r)
 		return
 	}
 	// TokenExpiry applies the ninety-day cap that holds for every token in the
 	// app, whatever lifetime the form offered.
 	expires, err := auth.TokenExpiry(h.now(), time.Duration(days)*24*time.Hour)
 	if err != nil {
-		badRequest(w)
+		h.templates.badRequest(w, r)
 		return
 	}
 
@@ -116,7 +116,7 @@ func (h *more) createToken(w http.ResponseWriter, r *http.Request) {
 		ExpiresAt: expires,
 	}
 	if _, err := h.queries.CreateAPIToken(r.Context(), params); err != nil {
-		serverError(h.logger, w, r, "create the token", err)
+		h.templates.serverError(h.logger, w, r, "create the token", err)
 		return
 	}
 
@@ -138,19 +138,19 @@ func (h *more) revokeToken(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	tokenID, err := uuid.Parse(r.PathValue("token"))
 	if err != nil {
-		notFound(w)
+		h.templates.notFound(w, r)
 		return
 	}
 	params := store.RevokeAPITokenParams{Now: h.now(), GardenID: principal.Garden.ID, TokenID: tokenID}
 	revoked, err := h.queries.RevokeAPIToken(r.Context(), params)
 	if err != nil {
-		serverError(h.logger, w, r, "revoke the token", err)
+		h.templates.serverError(h.logger, w, r, "revoke the token", err)
 		return
 	}
 	// Another garden's token and one already revoked are both 404, since
 	// neither was a button this page offered.
 	if revoked == 0 {
-		notFound(w)
+		h.templates.notFound(w, r)
 		return
 	}
 	http.Redirect(w, r, tokensPath, http.StatusSeeOther)
@@ -162,7 +162,7 @@ func (h *more) renderTokens(w http.ResponseWriter, r *http.Request, page tokensP
 	principal := PrincipalFrom(r)
 	tokens, err := h.queries.ListAPITokens(r.Context(), principal.Garden.ID)
 	if err != nil {
-		serverError(h.logger, w, r, "list the tokens", err)
+		h.templates.serverError(h.logger, w, r, "list the tokens", err)
 		return
 	}
 	page.Bar = moreBar("Tokens")

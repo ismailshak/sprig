@@ -1,10 +1,8 @@
 package http
 
 import (
-	"errors"
 	"net/http"
 
-	"github.com/ismailshak/sprig/internal/photo"
 	"github.com/ismailshak/sprig/internal/store"
 )
 
@@ -22,9 +20,9 @@ type photoFormPage struct {
 	// page.
 	Back   string
 	Action string
-	// PhotoFull is the message shown under the photo field when the garden has
-	// no room for the photo. It is empty otherwise.
-	PhotoFull string
+	// PhotoRefusal is the sentence under the photo field saying why the store
+	// refused the photo. It is empty otherwise.
+	PhotoRefusal string
 	// PhotoMissing is true when the post had no photo.
 	PhotoMissing bool
 }
@@ -34,7 +32,7 @@ func (p photoFormPage) PhotoField() photoField {
 	return photoField{
 		Choose:  "Choose photo",
 		Missing: p.PhotoMissing,
-		Full:    p.PhotoFull,
+		Refusal: p.PhotoRefusal,
 		Submit:  "Add photo",
 	}
 }
@@ -66,15 +64,15 @@ func (h *plants) addPhoto(w http.ResponseWriter, r *http.Request) {
 	// is checked as it is written instead.
 	usage, err := h.photos.Usage(r.Context(), h.queries, principal.Garden.ID)
 	if err != nil {
-		serverError(h.logger, w, r, "sum the garden's photos", err)
+		h.templates.serverError(h.logger, w, r, "sum the garden's photos", err)
 		return
 	}
 	if r.ContentLength > usage.Remaining()+photoFormOverhead {
-		page.PhotoFull = photoQuotaFull
+		page.PhotoRefusal = photoQuotaFull
 		h.templates.render(w, r, view{page: "photo-new", status: http.StatusRequestEntityTooLarge}, page)
 		return
 	}
-	if !readMultipartForm(w, r) {
+	if !readMultipartForm(h.templates, w, r) {
 		return
 	}
 	if !photoPosted(r) {
@@ -82,7 +80,7 @@ func (h *plants) addPhoto(w http.ResponseWriter, r *http.Request) {
 		h.templates.render(w, r, view{page: "photo-new", status: http.StatusUnprocessableEntity}, page)
 		return
 	}
-	upload, closeFiles, ok := postedPhoto(w, r, principal, plant.ID)
+	upload, closeFiles, ok := postedPhoto(h.templates, w, r, principal, plant.ID)
 	defer closeFiles()
 	if !ok {
 		return
@@ -91,19 +89,13 @@ func (h *plants) addPhoto(w http.ResponseWriter, r *http.Request) {
 		_, err := h.photos.Save(r.Context(), q, upload)
 		return err
 	})
-	switch {
-	case errors.Is(err, photo.ErrQuotaFull):
-		page.PhotoFull = photoQuotaFull
-		h.templates.render(w, r, view{page: "photo-new", status: http.StatusUnprocessableEntity}, page)
+	if status, message := photoRefusal(err); message != "" {
+		page.PhotoRefusal = message
+		h.templates.render(w, r, view{page: "photo-new", status: status}, page)
 		return
-	case errors.Is(err, photo.ErrTooLarge):
-		http.Error(w, "The photo is too large.", http.StatusRequestEntityTooLarge)
-		return
-	case errors.Is(err, photo.ErrNotImage):
-		http.Error(w, "The photo must be a JPEG or WebP.", http.StatusBadRequest)
-		return
-	case err != nil:
-		serverError(h.logger, w, r, "add the photo", err)
+	}
+	if err != nil {
+		h.templates.serverError(h.logger, w, r, "add the photo", err)
 		return
 	}
 	http.Redirect(w, r, photosPath(plant.ID), http.StatusSeeOther)

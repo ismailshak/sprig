@@ -50,7 +50,7 @@ func (h *more) confirmDeleteGarden(w http.ResponseWriter, r *http.Request) {
 func (h *more) deleteGarden(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	if err := r.ParseForm(); err != nil {
-		badRequest(w)
+		h.templates.badRequest(w, r)
 		return
 	}
 	typed := strings.TrimSpace(r.PostForm.Get("name"))
@@ -71,7 +71,7 @@ func (h *more) deleteGarden(w http.ResponseWriter, r *http.Request) {
 		return err
 	})
 	if err != nil {
-		serverError(h.logger, w, r, "delete the garden", err)
+		h.templates.serverError(h.logger, w, r, "delete the garden", err)
 		return
 	}
 	// A failure here is logged and not shown, because the rows are already

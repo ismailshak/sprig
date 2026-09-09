@@ -67,20 +67,24 @@ func (r *statusRecorder) Unwrap() http.ResponseWriter {
 }
 
 // Recover turns a panic in a handler into a logged stack and a 500, rather
-// than a crashed process.
-func Recover(logger *slog.Logger) func(http.Handler) http.Handler {
+// than a crashed process. The 500 is the Something went wrong page. A handler
+// that had already started its response keeps what it wrote.
+func Recover(logger *slog.Logger, templates *Templates) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
 			defer func() {
 				if err := recover(); err != nil {
 					logger.LogAttrs(r.Context(), slog.LevelError, "panic recovered",
 						slog.Any("error", err),
 						slog.String("stack", string(debug.Stack())),
 					)
-					w.WriteHeader(http.StatusInternalServerError)
+					if !rec.wroteHeader {
+						templates.refuse(rec, r, http.StatusInternalServerError, serverErrorTitle, serverErrorLine)
+					}
 				}
 			}()
-			next.ServeHTTP(w, r)
+			next.ServeHTTP(rec, r)
 		})
 	}
 }

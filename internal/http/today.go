@@ -29,7 +29,7 @@ func (h *today) show(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	g, err := h.load(r.Context(), principal)
 	if err != nil {
-		serverError(h.logger, w, r, "load the day", err)
+		h.templates.serverError(h.logger, w, r, "load the day", err)
 		return
 	}
 	if strings.HasPrefix(r.Header.Get("HX-Target"), careRowPrefix) {

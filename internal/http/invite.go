@@ -79,12 +79,12 @@ func (h *more) earliestAccessEnd(r *http.Request) string {
 // nowhere else.
 func (h *more) createInviteLink(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		badRequest(w)
+		h.templates.badRequest(w, r)
 		return
 	}
 	role := r.PostForm.Get("role")
 	if !slices.Contains(offeredRoles, role) {
-		badRequest(w)
+		h.templates.badRequest(w, r)
 		return
 	}
 
@@ -111,7 +111,7 @@ func (h *more) createInviteLink(w http.ResponseWriter, r *http.Request) {
 
 	token, err := h.createInvite(r, role, nil, ends)
 	if err != nil {
-		serverError(h.logger, w, r, "make the invite link", err)
+		h.templates.serverError(h.logger, w, r, "make the invite link", err)
 		return
 	}
 	h.templates.render(w, r, view{page: "invite"}, madeInvitePage(inviteLink(r, token), ends, locationFor(PrincipalFrom(r).User)))

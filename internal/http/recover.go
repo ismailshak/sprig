@@ -125,12 +125,12 @@ func (h *recoverAccount) show(w http.ResponseWriter, r *http.Request) {
 // nothing. Every other code gets the same 422 page.
 func (h *recoverAccount) check(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		badRequest(w)
+		h.templates.badRequest(w, r)
 		return
 	}
 	code, _, ok, err := h.lookUp(r)
 	if err != nil {
-		serverError(h.logger, w, r, "check the recovery code", err)
+		h.templates.serverError(h.logger, w, r, "check the recovery code", err)
 		return
 	}
 	if !ok {
@@ -169,12 +169,12 @@ func (h *recoverAccount) lookUp(r *http.Request) (code string, user store.AppUse
 // /recover/passkey renders the response the person reads.
 func (h *recoverAccount) challenge(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		badRequest(w)
+		h.templates.badRequest(w, r)
 		return
 	}
 	_, user, ok, err := h.lookUp(r)
 	if err != nil {
-		serverError(h.logger, w, r, "start the registration", err)
+		h.templates.serverError(h.logger, w, r, "start the registration", err)
 		return
 	}
 	if !ok {
@@ -183,16 +183,16 @@ func (h *recoverAccount) challenge(w http.ResponseWriter, r *http.Request) {
 	}
 	held, err := h.queries.ListPasskeys(r.Context(), user.ID)
 	if err != nil {
-		serverError(h.logger, w, r, "list the passkeys", err)
+		h.templates.serverError(h.logger, w, r, "list the passkeys", err)
 		return
 	}
 	creation, cookie, err := h.passkeys.BeginRegistration(r.Context(), h.now(), user, held)
 	if err != nil {
-		serverError(h.logger, w, r, "start the registration", err)
+		h.templates.serverError(h.logger, w, r, "start the registration", err)
 		return
 	}
 	http.SetCookie(w, cookie)
-	writeJSON(h.logger, w, r, creation)
+	writeJSON(h.templates, h.logger, w, r, creation)
 }
 
 // register handles POST /recover/passkey, the post holding the credential the
@@ -202,7 +202,7 @@ func (h *recoverAccount) challenge(w http.ResponseWriter, r *http.Request) {
 // and starts no session.
 func (h *recoverAccount) register(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		badRequest(w)
+		h.templates.badRequest(w, r)
 		return
 	}
 	// The ceremony cookie is cleared whatever the outcome, so one challenge
@@ -237,7 +237,7 @@ func (h *recoverAccount) register(w http.ResponseWriter, r *http.Request) {
 	}
 	if err != nil {
 		page := addDevicePage(code)
-		page.Refusal = registrationRefusal(h.logger, w, r, err, "register the passkey")
+		page.Refusal = registrationRefusal(h.templates, h.logger, w, r, err, "register the passkey")
 		if page.Refusal == "" {
 			return
 		}
@@ -263,7 +263,7 @@ func (h *recoverAccount) tooManyCodes(w http.ResponseWriter, r *http.Request) {
 // the rate limit. The line is plain text, because the page's script fetches
 // this URL and puts the body above the button.
 func tooManyRecoveryChallenges(w http.ResponseWriter, _ *http.Request) {
-	http.Error(w, tooManyAttemptsTitle+". "+tooManyAttemptsLine, http.StatusTooManyRequests)
+	http.Error(w, plainText(tooManyAttemptsTitle, tooManyAttemptsLine), http.StatusTooManyRequests)
 }
 
 // recoverLimits are the two rate limiters shared by the three routes that

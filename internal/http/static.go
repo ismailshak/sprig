@@ -128,7 +128,9 @@ func (a *Assets) handler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		f, ok := a.files[r.URL.Path]
 		if !ok {
-			notFound(w)
+			// Plain text rather than the page, because a browser asks for an
+			// asset from a link or a script tag and never shows the response.
+			http.Error(w, notFoundText, http.StatusNotFound)
 			return
 		}
 		cacheControl := plainCacheControl

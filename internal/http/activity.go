@@ -150,16 +150,16 @@ func (h *activity) show(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	q, ok := parseLogQuery(r)
 	if !ok {
-		notFound(w)
+		h.templates.notFound(w, r)
 		return
 	}
 	page, err := h.page(r.Context(), principal, q)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		notFound(w)
+		h.templates.notFound(w, r)
 		return
 	case err != nil:
-		serverError(h.logger, w, r, "load the log", err)
+		h.templates.serverError(h.logger, w, r, "load the log", err)
 		return
 	}
 	// The events a cursor points past can be deleted while somebody is looking

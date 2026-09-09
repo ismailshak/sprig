@@ -11,6 +11,7 @@ import (
 	"uuid"
 
 	"github.com/ismailshak/sprig/internal/auth"
+	"github.com/ismailshak/sprig/internal/photo"
 )
 
 func (f *formFixture) addPhotoPage(t *testing.T, plantID uuid.UUID) *httptest.ResponseRecorder {
@@ -193,5 +194,38 @@ func TestPhotoForm_AddAPhotoHasNoFocusField(t *testing.T) {
 
 	if strings.Contains(page, `name="focus"`) {
 		t.Error("Add a photo has a focus field, want none, because a progress photo is not cropped")
+	}
+}
+
+func TestPhotoForm_AFileThatIsNotAPhotoIsRefusedWithTheReasonUnderTheFieldAndNothingIsWritten(t *testing.T) {
+	f := plantFormOn(t)
+
+	rec := f.addPhoto(t, bigFellaID, []byte("not a photo"), testJPEG(t, 8, 8))
+
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusUnprocessableEntity, rec.Body.String())
+	}
+	if got := errorsOn(rec.Body.String()); len(got) != 1 || got[0] != photoNotImage {
+		t.Errorf("the form's errors are %v, want %q", got, photoNotImage)
+	}
+	if got := f.storedFiles(t); len(got) != 0 {
+		t.Errorf("the directory holds %v, want nothing", got)
+	}
+}
+
+func TestPhotoForm_APhotoOverTheFileLimitIsRefusedWithTheLimitUnderTheField(t *testing.T) {
+	f := plantFormOn(t)
+	image := append(testJPEG(t, 30, 20), make([]byte, photo.MaxBytes)...)
+
+	rec := f.addPhoto(t, bigFellaID, image, testJPEG(t, 8, 8))
+
+	if rec.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusRequestEntityTooLarge, rec.Body.String())
+	}
+	if got := errorsOn(rec.Body.String()); len(got) != 1 || got[0] != plainText(tooLargeTitle, tooLargeLine) {
+		t.Errorf("the form's errors are %v, want the size limit", got)
+	}
+	if got := f.storedFiles(t); len(got) != 0 {
+		t.Errorf("the directory holds %v, want nothing", got)
 	}
 }

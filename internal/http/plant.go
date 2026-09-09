@@ -476,22 +476,22 @@ func (h *plants) plant(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	plantID, err := uuid.Parse(r.PathValue("plant"))
 	if err != nil {
-		notFound(w)
+		h.templates.notFound(w, r)
 		return
 	}
 	detail, err := loadPlant(r.Context(), h.queries, principal, plantID, h.now())
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		notFound(w)
+		h.templates.notFound(w, r)
 		return
 	case err != nil:
-		serverError(h.logger, w, r, "load the plant", err)
+		h.templates.serverError(h.logger, w, r, "load the plant", err)
 		return
 	}
 	page := newPlantPage(principal, detail)
 	fragment, ok := plantSwap(r, &page)
 	if !ok {
-		notFound(w)
+		h.templates.notFound(w, r)
 		return
 	}
 	h.templates.render(w, r, view{page: "plant", fragment: fragment}, page)

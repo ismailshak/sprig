@@ -95,7 +95,7 @@ func (h *today) gardenSheet(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	g, err := h.load(r.Context(), principal)
 	if err != nil {
-		serverError(h.logger, w, r, "load the day", err)
+		h.templates.serverError(h.logger, w, r, "load the day", err)
 		return
 	}
 	page := newTodayPage(principal, g)
@@ -115,25 +115,25 @@ func (h *today) gardenSheet(w http.ResponseWriter, r *http.Request) {
 func (h *today) switchGarden(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	if err := r.ParseForm(); err != nil {
-		badRequest(w)
+		h.templates.badRequest(w, r)
 		return
 	}
 	gardenID, err := uuid.Parse(r.PostForm.Get(gardenField))
 	if err != nil {
-		notFound(w)
+		h.templates.notFound(w, r)
 		return
 	}
 
 	membership, err := h.queries.GetMembershipWithUserAndGarden(r.Context(), gardenID, principal.User.ID)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		notFound(w)
+		h.templates.notFound(w, r)
 		return
 	case err != nil:
-		serverError(h.logger, w, r, "read the membership", err)
+		h.templates.serverError(h.logger, w, r, "read the membership", err)
 		return
 	case auth.MembershipEnded(membership.Membership, h.now()):
-		notFound(w)
+		h.templates.notFound(w, r)
 		return
 	}
 
@@ -146,7 +146,7 @@ func (h *today) switchGarden(w http.ResponseWriter, r *http.Request) {
 		return q.SetLastGarden(r.Context(), &gardenID, principal.User.ID)
 	})
 	if err != nil {
-		serverError(h.logger, w, r, "set the session's garden", err)
+		h.templates.serverError(h.logger, w, r, "set the session's garden", err)
 		return
 	}
 	http.Redirect(w, r, "/", http.StatusSeeOther)

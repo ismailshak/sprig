@@ -55,7 +55,7 @@ func (h *more) account(w http.ResponseWriter, r *http.Request) {
 	held := accountForm{name: user.DisplayName, handle: user.Handle, zone: user.Timezone}
 	page, err := h.newAccountPage(r.Context(), principal, held)
 	if err != nil {
-		serverError(h.logger, w, r, "open the account", err)
+		h.templates.serverError(h.logger, w, r, "open the account", err)
 		return
 	}
 	h.templates.render(w, r, view{page: "account"}, page)
@@ -64,7 +64,7 @@ func (h *more) account(w http.ResponseWriter, r *http.Request) {
 func (h *more) saveAccount(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	if err := r.ParseForm(); err != nil {
-		badRequest(w)
+		h.templates.badRequest(w, r)
 		return
 	}
 	// A handle is normalised rather than rejected for its shape, so "Emma
@@ -76,7 +76,7 @@ func (h *more) saveAccount(w http.ResponseWriter, r *http.Request) {
 		zone:   r.PostForm.Get("timezone"),
 	}
 	if !slices.Contains(zonesFor(principal.User.Timezone), form.zone) {
-		badRequest(w)
+		h.templates.badRequest(w, r)
 		return
 	}
 
@@ -85,7 +85,7 @@ func (h *more) saveAccount(w http.ResponseWriter, r *http.Request) {
 	// A save that goes through redirects and throws it away.
 	page, err := h.newAccountPage(r.Context(), principal, form)
 	if err != nil {
-		serverError(h.logger, w, r, "save the account", err)
+		h.templates.serverError(h.logger, w, r, "save the account", err)
 		return
 	}
 	page.NameError = nameErrorFor(form.name)
@@ -107,7 +107,7 @@ func (h *more) saveAccount(w http.ResponseWriter, r *http.Request) {
 		h.templates.render(w, r, view{page: "account", status: http.StatusUnprocessableEntity}, page)
 		return
 	case err != nil:
-		serverError(h.logger, w, r, "save the account", err)
+		h.templates.serverError(h.logger, w, r, "save the account", err)
 		return
 	}
 	// The digest hour is read in the timezone just saved.

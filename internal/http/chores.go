@@ -21,8 +21,9 @@ const choresPath = "/api/chores"
 // chores handles GET /api/chores. It returns the garden's overdue, due-today
 // and upcoming cares as JSON to a caller holding an API token.
 type chores struct {
-	logger  *slog.Logger
-	queries *store.Queries
+	logger    *slog.Logger
+	queries   *store.Queries
+	templates *Templates
 	// now supplies the current time, so a test can fix the day.
 	now func() time.Time
 }
@@ -77,26 +78,26 @@ func (h *chores) show(w http.ResponseWriter, r *http.Request) {
 	// out in the timezone of the account that created the token.
 	creator, err := h.queries.GetUser(r.Context(), principal.APIToken.CreatedBy)
 	if err != nil {
-		serverError(h.logger, w, r, "read the token's creator", err)
+		h.templates.serverError(h.logger, w, r, "read the token's creator", err)
 		return
 	}
 	now := h.now().In(locationFor(creator))
 
 	schedules, err := h.queries.ListCareSchedules(r.Context(), principal.Garden.ID)
 	if err != nil {
-		serverError(h.logger, w, r, "list the schedules", err)
+		h.templates.serverError(h.logger, w, r, "list the schedules", err)
 		return
 	}
 	latest, err := h.queries.ListLatestCareEvents(r.Context(), principal.Garden.ID)
 	if err != nil {
-		serverError(h.logger, w, r, "list the latest care", err)
+		h.templates.serverError(h.logger, w, r, "list the latest care", err)
 		return
 	}
 	lines := schedule.Resolve(schedules, latest, now)
 
 	body, err := json.Marshal(newChoresResponse(principal, lines, now))
 	if err != nil {
-		serverError(h.logger, w, r, "encode the chores", err)
+		h.templates.serverError(h.logger, w, r, "encode the chores", err)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")

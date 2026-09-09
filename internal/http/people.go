@@ -195,17 +195,17 @@ func (h *more) people(w http.ResponseWriter, r *http.Request) {
 func (h *more) saveMembers(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	if err := r.ParseForm(); err != nil {
-		badRequest(w)
+		h.templates.badRequest(w, r)
 		return
 	}
 	members, err := h.queries.ListMembers(r.Context(), principal.Garden.ID)
 	if err != nil {
-		serverError(h.logger, w, r, "list the members", err)
+		h.templates.serverError(h.logger, w, r, "list the members", err)
 		return
 	}
 	changes, ok := postedChanges(members, principal, r.PostForm)
 	if !ok {
-		badRequest(w)
+		h.templates.badRequest(w, r)
 		return
 	}
 
@@ -228,7 +228,7 @@ func (h *more) saveMembers(w http.ResponseWriter, r *http.Request) {
 		return nil
 	})
 	if err != nil {
-		serverError(h.logger, w, r, "save the members", err)
+		h.templates.serverError(h.logger, w, r, "save the members", err)
 		return
 	}
 	http.Redirect(w, r, peoplePath, http.StatusSeeOther)
@@ -298,11 +298,11 @@ func (h *more) removeMember(w http.ResponseWriter, r *http.Request) {
 	}
 	removed, err := h.queries.DeleteMembership(r.Context(), member.Membership.GardenID, member.AppUser.ID)
 	if err != nil {
-		serverError(h.logger, w, r, "remove the member", err)
+		h.templates.serverError(h.logger, w, r, "remove the member", err)
 		return
 	}
 	if removed == 0 {
-		notFound(w)
+		h.templates.notFound(w, r)
 		return
 	}
 	http.Redirect(w, r, peoplePath, http.StatusSeeOther)
@@ -321,7 +321,7 @@ func (h *more) reenrolMember(w http.ResponseWriter, r *http.Request) {
 	}
 	token, err := h.createInvite(r, member.Membership.Role, &member.AppUser.ID, nil)
 	if err != nil {
-		serverError(h.logger, w, r, "make the re-enrolment link", err)
+		h.templates.serverError(h.logger, w, r, "make the re-enrolment link", err)
 		return
 	}
 	h.renderPeople(w, r, peopleState{reenrolled: member.AppUser, link: inviteLink(r, token)})
@@ -333,16 +333,16 @@ func (h *more) revokeInvite(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	inviteID, err := uuid.Parse(r.PathValue("invite"))
 	if err != nil {
-		notFound(w)
+		h.templates.notFound(w, r)
 		return
 	}
 	revoked, err := h.queries.DeletePendingInvite(r.Context(), principal.Garden.ID, inviteID)
 	if err != nil {
-		serverError(h.logger, w, r, "revoke the invite", err)
+		h.templates.serverError(h.logger, w, r, "revoke the invite", err)
 		return
 	}
 	if revoked == 0 {
-		notFound(w)
+		h.templates.notFound(w, r)
 		return
 	}
 	http.Redirect(w, r, peoplePath, http.StatusSeeOther)
@@ -356,14 +356,14 @@ func (h *more) memberFromPath(w http.ResponseWriter, r *http.Request) (store.Get
 	member, err := h.queries.GetMemberByHandle(r.Context(), principal.Garden.ID, r.PathValue("member"))
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		notFound(w)
+		h.templates.notFound(w, r)
 		return store.GetMemberByHandleRow{}, false
 	case err != nil:
-		serverError(h.logger, w, r, "read the member", err)
+		h.templates.serverError(h.logger, w, r, "read the member", err)
 		return store.GetMemberByHandleRow{}, false
 	}
 	if member.AppUser.ID == principal.User.ID {
-		notFound(w)
+		h.templates.notFound(w, r)
 		return store.GetMemberByHandleRow{}, false
 	}
 	return member, true
@@ -415,12 +415,12 @@ func (h *more) renderPeople(w http.ResponseWriter, r *http.Request, state people
 	principal := PrincipalFrom(r)
 	members, err := h.queries.ListMembers(r.Context(), principal.Garden.ID)
 	if err != nil {
-		serverError(h.logger, w, r, "list the members", err)
+		h.templates.serverError(h.logger, w, r, "list the members", err)
 		return
 	}
 	invites, err := h.queries.ListPendingInvites(r.Context(), principal.Garden.ID)
 	if err != nil {
-		serverError(h.logger, w, r, "list the invites", err)
+		h.templates.serverError(h.logger, w, r, "list the invites", err)
 		return
 	}
 

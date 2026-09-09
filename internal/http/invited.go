@@ -234,7 +234,7 @@ func openInviteToken(ctx context.Context, queries *store.Queries, now time.Time,
 func (h *invited) show(w http.ResponseWriter, r *http.Request) {
 	open, usable, err := h.open(r)
 	if err != nil {
-		serverError(h.logger, w, r, "open the invite", err)
+		h.templates.serverError(h.logger, w, r, "open the invite", err)
 		return
 	}
 	if !usable {
@@ -272,7 +272,7 @@ func (h *invited) renderUnusable(w http.ResponseWriter, r *http.Request) {
 func (h *invited) challenge(w http.ResponseWriter, r *http.Request) {
 	open, usable, err := h.open(r)
 	if err != nil {
-		serverError(h.logger, w, r, "start the registration", err)
+		h.templates.serverError(h.logger, w, r, "start the registration", err)
 		return
 	}
 	if !usable {
@@ -280,23 +280,23 @@ func (h *invited) challenge(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := r.ParseForm(); err != nil {
-		badRequest(w)
+		h.templates.badRequest(w, r)
 		return
 	}
 
 	if open.reenrol() {
 		held, err := h.queries.ListPasskeys(r.Context(), open.member.ID)
 		if err != nil {
-			serverError(h.logger, w, r, "list the passkeys", err)
+			h.templates.serverError(h.logger, w, r, "list the passkeys", err)
 			return
 		}
 		creation, cookie, err := h.passkeys.BeginRegistration(r.Context(), h.now(), open.member, held)
 		if err != nil {
-			serverError(h.logger, w, r, "start the registration", err)
+			h.templates.serverError(h.logger, w, r, "start the registration", err)
 			return
 		}
 		http.SetCookie(w, cookie)
-		writeJSON(h.logger, w, r, creation)
+		writeJSON(h.templates, h.logger, w, r, creation)
 		return
 	}
 
@@ -306,7 +306,7 @@ func (h *invited) challenge(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !slices.Contains(zones, form.zone) {
-		badRequest(w)
+		h.templates.badRequest(w, r)
 		return
 	}
 	// The account has no row yet. Its id is chosen here and stored with the
@@ -315,11 +315,11 @@ func (h *invited) challenge(w http.ResponseWriter, r *http.Request) {
 	account := store.AppUser{ID: uuid.NewV7(), DisplayName: form.name, Handle: store.HandleFor(form.name), Timezone: form.zone}
 	creation, cookie, err := h.passkeys.BeginSetup(r.Context(), h.now(), account)
 	if err != nil {
-		serverError(h.logger, w, r, "start the registration", err)
+		h.templates.serverError(h.logger, w, r, "start the registration", err)
 		return
 	}
 	http.SetCookie(w, cookie)
-	writeJSON(h.logger, w, r, creation)
+	writeJSON(h.templates, h.logger, w, r, creation)
 }
 
 // redeem handles POST /invite/{token}. Everything the post writes is in one
@@ -328,7 +328,7 @@ func (h *invited) challenge(w http.ResponseWriter, r *http.Request) {
 func (h *invited) redeem(w http.ResponseWriter, r *http.Request) {
 	open, usable, err := h.open(r)
 	if err != nil {
-		serverError(h.logger, w, r, "redeem the invite", err)
+		h.templates.serverError(h.logger, w, r, "redeem the invite", err)
 		return
 	}
 	if !usable {
@@ -336,7 +336,7 @@ func (h *invited) redeem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := r.ParseForm(); err != nil {
-		badRequest(w)
+		h.templates.badRequest(w, r)
 		return
 	}
 	token := r.PathValue("token")
@@ -353,7 +353,7 @@ func (h *invited) redeem(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if form.zone != "" && !slices.Contains(zones, form.zone) {
-		badRequest(w)
+		h.templates.badRequest(w, r)
 		return
 	}
 	page.NameError, page.Zone.Error = form.errors()
@@ -449,7 +449,7 @@ func (h *invited) finish(w http.ResponseWriter, r *http.Request, page invitedPag
 		return
 	}
 	if err != nil {
-		page.Refusal = registrationRefusal(h.logger, w, r, err, what)
+		page.Refusal = registrationRefusal(h.templates, h.logger, w, r, err, what)
 		if page.Refusal == "" {
 			return
 		}
@@ -458,12 +458,12 @@ func (h *invited) finish(w http.ResponseWriter, r *http.Request, page invitedPag
 	}
 
 	if err := h.sessions.DeleteFromRequest(r.Context(), r); err != nil {
-		serverError(h.logger, w, r, "end the previous session", err)
+		h.templates.serverError(h.logger, w, r, "end the previous session", err)
 		return
 	}
 	token, _, err := h.sessions.Create(r.Context(), h.now(), user.ID, &gardenID, &passkey.ID, r.UserAgent())
 	if err != nil {
-		serverError(h.logger, w, r, "start the session", err)
+		h.templates.serverError(h.logger, w, r, "start the session", err)
 		return
 	}
 	http.SetCookie(w, h.sessions.Cookie(token))
@@ -476,7 +476,7 @@ func (h *invited) finish(w http.ResponseWriter, r *http.Request, page invitedPag
 func (h *invited) tooManyAnswers(w http.ResponseWriter, r *http.Request) {
 	open, usable, err := h.open(r)
 	if err != nil {
-		serverError(h.logger, w, r, "open the invite", err)
+		h.templates.serverError(h.logger, w, r, "open the invite", err)
 		return
 	}
 	if !usable {
@@ -484,7 +484,7 @@ func (h *invited) tooManyAnswers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := r.ParseForm(); err != nil {
-		badRequest(w)
+		h.templates.badRequest(w, r)
 		return
 	}
 	page := newInvitedPage(r.PathValue("token"), open, readJoinForm(r), false)

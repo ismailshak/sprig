@@ -44,7 +44,7 @@ func (h *more) recovery(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	batch, live, err := h.recoveryBatch(r.Context(), principal.User.ID)
 	if err != nil {
-		serverError(h.logger, w, r, "open the recovery codes", err)
+		h.templates.serverError(h.logger, w, r, "open the recovery codes", err)
 		return
 	}
 	page := recoveryPage{
@@ -98,7 +98,7 @@ func (h *more) createCodes(w http.ResponseWriter, r *http.Request) {
 		})
 	})
 	if err != nil {
-		serverError(h.logger, w, r, "create the recovery codes", err)
+		h.templates.serverError(h.logger, w, r, "create the recovery codes", err)
 		return
 	}
 	h.templates.render(w, r, view{page: "recovery"}, recoveryPage{Bar: recoveryBar(), Codes: codes})
