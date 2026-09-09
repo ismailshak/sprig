@@ -25,7 +25,7 @@ type SweepReport struct {
 }
 
 // Sweep deletes the rows nothing else deletes and no page shows: sessions
-// last used a sessionTTL or more ago, redeemed invites and expired re-enrolment
+// last used a sessionTTL or more ago, redeemed invites and expired sign-in
 // links older than inviteGrace, and recovery codes from a batch a newer batch
 // replaced. Each holds the hash of a credential that no longer works.
 //
@@ -41,7 +41,7 @@ func Sweep(ctx context.Context, q *store.Queries, now time.Time, sessionTTL time
 	if err != nil {
 		return report, fmt.Errorf("delete the expired sessions: %w", err)
 	}
-	report.Invites, err = q.DeleteSpentInvites(ctx, now.Add(-inviteGrace))
+	report.Invites, err = q.DeleteRedeemedAndExpiredInvites(ctx, now.Add(-inviteGrace))
 	if err != nil {
 		return report, fmt.Errorf("delete the spent invites: %w", err)
 	}

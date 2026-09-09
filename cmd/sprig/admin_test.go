@@ -86,7 +86,7 @@ func (d *adminDatabase) counts(t *testing.T) (users, memberships, invites int) {
 	return users, memberships, invites
 }
 
-func TestAdminInvite_PrintsALinkThatOpensAReenrolmentInviteForTheAccount(t *testing.T) {
+func TestAdminInvite_PrintsASignInLinkForTheAccount(t *testing.T) {
 	d := adminFixture(t)
 	var stdout bytes.Buffer
 
@@ -132,7 +132,7 @@ func TestAdminInvite_AnUnknownHandleIsRefusedByNameAndWritesNothing(t *testing.T
 	}
 }
 
-func TestAdmin_AnArgumentListOtherThanInviteUserHandleIsRefusedBeforeTheConfigIsRead(t *testing.T) {
+func TestAdmin_AnythingOtherThanInviteWithAHandleIsRefusedBeforeTheConfigIsRead(t *testing.T) {
 	for _, args := range [][]string{
 		{"admin"},
 		{"admin", "invite"},

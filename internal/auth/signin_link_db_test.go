@@ -8,12 +8,12 @@ import (
 
 var issuedAt = signedInAt
 
-func TestIssueReenrolment_TheLinkIsForTheAccountOnTheGardenAndRoleItIsAMemberOf(t *testing.T) {
+func TestIssueSignInLink_TheLinkIsForTheAccountOnTheGardenAndRoleItIsAMemberOf(t *testing.T) {
 	q, _ := twoAccountsOnTx(t)
 
-	made, err := IssueReenrolment(t.Context(), q, issuedAt, "emma")
+	made, err := IssueSignInLink(t.Context(), q, issuedAt, "emma")
 	if err != nil {
-		t.Fatalf("IssueReenrolment: %v", err)
+		t.Fatalf("IssueSignInLink: %v", err)
 	}
 
 	invite := made.Invite
@@ -31,7 +31,7 @@ func TestIssueReenrolment_TheLinkIsForTheAccountOnTheGardenAndRoleItIsAMemberOf(
 	}
 }
 
-func TestIssueReenrolment_IssuingWritesNoAccountAndNoMembership(t *testing.T) {
+func TestIssueSignInLink_IssuingWritesNoAccountAndNoMembership(t *testing.T) {
 	q, tx := twoAccountsOnTx(t)
 	ctx := t.Context()
 	var users, memberships int
@@ -44,8 +44,8 @@ func TestIssueReenrolment_IssuingWritesNoAccountAndNoMembership(t *testing.T) {
 	count()
 	usersBefore, membershipsBefore := users, memberships
 
-	if _, err := IssueReenrolment(ctx, q, issuedAt, "emma"); err != nil {
-		t.Fatalf("IssueReenrolment: %v", err)
+	if _, err := IssueSignInLink(ctx, q, issuedAt, "emma"); err != nil {
+		t.Fatalf("IssueSignInLink: %v", err)
 	}
 
 	count()
@@ -54,7 +54,7 @@ func TestIssueReenrolment_IssuingWritesNoAccountAndNoMembership(t *testing.T) {
 	}
 }
 
-func TestIssueReenrolment_TheLinkIsOnTheGardenTheAccountLastUsed(t *testing.T) {
+func TestIssueSignInLink_TheLinkIsOnTheGardenTheAccountLastUsed(t *testing.T) {
 	q, tx := twoAccountsOnTx(t)
 	ctx := t.Context()
 	exec := func(sql string, args ...any) {
@@ -69,9 +69,9 @@ func TestIssueReenrolment_TheLinkIsOnTheGardenTheAccountLastUsed(t *testing.T) {
 	exec("INSERT INTO membership (garden_id, user_id, role, digest_hour) VALUES ($1, $2, 'member', 8)", otherGardenID, testUserID)
 	exec("UPDATE app_user SET last_garden_id = $1 WHERE id = $2", otherGardenID, testUserID)
 
-	made, err := IssueReenrolment(ctx, q, issuedAt, "emma")
+	made, err := IssueSignInLink(ctx, q, issuedAt, "emma")
 	if err != nil {
-		t.Fatalf("IssueReenrolment: %v", err)
+		t.Fatalf("IssueSignInLink: %v", err)
 	}
 
 	if made.Invite.GardenID != otherGardenID || made.Invite.Role != "member" {
@@ -79,10 +79,10 @@ func TestIssueReenrolment_TheLinkIsOnTheGardenTheAccountLastUsed(t *testing.T) {
 	}
 }
 
-func TestIssueReenrolment_AnUnknownHandleIsRefusedAndNothingIsWritten(t *testing.T) {
+func TestIssueSignInLink_AnUnknownHandleIsRefusedAndNothingIsWritten(t *testing.T) {
 	q, tx := twoAccountsOnTx(t)
 
-	_, err := IssueReenrolment(t.Context(), q, issuedAt, "nobody")
+	_, err := IssueSignInLink(t.Context(), q, issuedAt, "nobody")
 
 	if !errors.Is(err, ErrUnknownHandle) {
 		t.Errorf("err = %v, want ErrUnknownHandle", err)
@@ -92,24 +92,24 @@ func TestIssueReenrolment_AnUnknownHandleIsRefusedAndNothingIsWritten(t *testing
 	}
 }
 
-func TestIssueReenrolment_AnAccountWhoseEveryMembershipEndedIsRefused(t *testing.T) {
+func TestIssueSignInLink_AnAccountWhoseEveryMembershipEndedIsRefused(t *testing.T) {
 	q, _ := twoAccountsOnTx(t)
 
-	_, err := IssueReenrolment(t.Context(), q, issuedAt, "sam")
+	_, err := IssueSignInLink(t.Context(), q, issuedAt, "sam")
 
 	if !errors.Is(err, ErrNoLiveMembership) {
 		t.Errorf("err = %v, want ErrNoLiveMembership: the link would be refused when opened", err)
 	}
 }
 
-func TestIssueReenrolment_ASecondLinkReplacesTheFirst(t *testing.T) {
+func TestIssueSignInLink_ASecondLinkReplacesTheFirst(t *testing.T) {
 	q, tx := twoAccountsOnTx(t)
 	ctx := t.Context()
-	if _, err := IssueReenrolment(ctx, q, issuedAt, "emma"); err != nil {
+	if _, err := IssueSignInLink(ctx, q, issuedAt, "emma"); err != nil {
 		t.Fatalf("the first link: %v", err)
 	}
 
-	second, err := IssueReenrolment(ctx, q, issuedAt.Add(time.Minute), "emma")
+	second, err := IssueSignInLink(ctx, q, issuedAt.Add(time.Minute), "emma")
 	if err != nil {
 		t.Fatalf("the second link: %v", err)
 	}

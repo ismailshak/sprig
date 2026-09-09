@@ -467,7 +467,7 @@ func TestQueries_EveryQueryOnAGardenScopedTableBindsTheGarden(t *testing.T) {
 		}
 		// Closing an account and the daily sweep both delete invites across
 		// every garden. Neither runs from a request.
-		if (query.name == "DeleteUserReenrolmentInvites" || query.name == "DeleteSpentInvites") && slices.Equal(touched, []string{"invite"}) {
+		if (query.name == "DeleteUserReenrolmentInvites" || query.name == "DeleteRedeemedAndExpiredInvites") && slices.Equal(touched, []string{"invite"}) {
 			continue
 		}
 		// A bearer token is found by its hash before any garden is known, so

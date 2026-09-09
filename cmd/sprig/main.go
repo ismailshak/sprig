@@ -54,7 +54,7 @@ func subcommand(ctx context.Context, args []string, getenv func(string) string, 
 		return sweep(ctx, getenv, stdout)
 	case len(args) == 1 && args[0] == "health":
 		return health(ctx, getenv)
-	case args[0] == "admin":
+	case len(args) > 0 && args[0] == "admin":
 		return admin(ctx, args[1:], getenv, stdout)
 	default:
 		return fmt.Errorf("unknown command %q: the commands are vapid, sweep, health and admin, and the server runs with none", strings.Join(args, " "))
@@ -100,7 +100,7 @@ func sweep(ctx context.Context, getenv func(string) string, stdout io.Writer) er
 	if err != nil {
 		return err
 	}
-	if _, err := fmt.Fprintf(stdout, "removed %d expired sessions, %d redeemed invites and expired re-enrolment links, %d replaced recovery codes\n", rows.Sessions, rows.Invites, rows.RecoveryCodes); err != nil {
+	if _, err := fmt.Fprintf(stdout, "deleted %d expired sessions, %d redeemed invites and expired sign-in links, %d replaced recovery codes\n", rows.Sessions, rows.Invites, rows.RecoveryCodes); err != nil {
 		return err
 	}
 

@@ -552,7 +552,7 @@ func TestInvited_ALinkFromSprigAdminInviteAddsAPasskeyToTheSameAccountAndChanges
 	f := invitedGarden(t)
 	device := aDevice()
 	users, memberships := f.count(t, "app_user"), f.count(t, "membership")
-	made, err := auth.IssueReenrolment(t.Context(), f.queries, thursday, "sam")
+	made, err := auth.IssueSignInLink(t.Context(), f.queries, thursday, "sam")
 	if err != nil {
 		t.Fatalf("issuing the link: %v", err)
 	}

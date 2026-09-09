@@ -86,6 +86,24 @@ func (q *Queries) DeletePendingInvite(ctx context.Context, gardenID uuid.UUID, i
 	return result.RowsAffected(), nil
 }
 
+const deleteRedeemedAndExpiredInvites = `-- name: DeleteRedeemedAndExpiredInvites :execrows
+DELETE FROM invite
+WHERE (redeemed_at IS NOT NULL AND redeemed_at <= $1::timestamptz)
+   OR (user_id IS NOT NULL AND redeemed_at IS NULL AND expires_at <= $1::timestamptz)
+`
+
+// DeleteRedeemedAndExpiredInvites deletes the invites no page lists once they
+// are @before or older: a redeemed invite of either kind, and an expired
+// sign-in link. An expired join invite is kept, because People lists it under
+// Pending invites with a Revoke button.
+func (q *Queries) DeleteRedeemedAndExpiredInvites(ctx context.Context, before time.Time) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteRedeemedAndExpiredInvites, before)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteReenrolmentInvites = `-- name: DeleteReenrolmentInvites :execrows
 DELETE FROM invite
 WHERE garden_id = $1 AND user_id = $2 AND redeemed_at IS NULL
@@ -96,24 +114,6 @@ WHERE garden_id = $1 AND user_id = $2 AND redeemed_at IS NULL
 // link nobody can see is a link nobody can revoke.
 func (q *Queries) DeleteReenrolmentInvites(ctx context.Context, gardenID uuid.UUID, userID *uuid.UUID) (int64, error) {
 	result, err := q.db.Exec(ctx, deleteReenrolmentInvites, gardenID, userID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const deleteSpentInvites = `-- name: DeleteSpentInvites :execrows
-DELETE FROM invite
-WHERE (redeemed_at IS NOT NULL AND redeemed_at <= $1::timestamptz)
-   OR (user_id IS NOT NULL AND redeemed_at IS NULL AND expires_at <= $1::timestamptz)
-`
-
-// DeleteSpentInvites deletes the invites no page lists once they are @before
-// or older: a redeemed invite of either kind, and an expired re-enrolment
-// link. An expired join invite is kept, because People lists it under Pending
-// invites with a Revoke button.
-func (q *Queries) DeleteSpentInvites(ctx context.Context, before time.Time) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteSpentInvites, before)
 	if err != nil {
 		return 0, err
 	}
