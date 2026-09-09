@@ -45,7 +45,7 @@ func (h *more) passkeys(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	keys, err := h.queries.ListPasskeys(r.Context(), principal.User.ID)
 	if err != nil {
-		serverError(h.logger, w, r, "list the passkeys", err)
+		h.templates.serverError(h.logger, w, r, "list the passkeys", err)
 		return
 	}
 	page := newPasskeysPage(keys, h.now().In(locationFor(principal.User)))
@@ -62,7 +62,7 @@ func (h *more) removePasskey(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	passkeyID, err := uuid.Parse(r.PathValue("key"))
 	if err != nil {
-		notFound(w)
+		h.templates.notFound(w, r)
 		return
 	}
 	var removed int64
@@ -75,13 +75,13 @@ func (h *more) removePasskey(w http.ResponseWriter, r *http.Request) {
 		return err
 	})
 	if err != nil {
-		serverError(h.logger, w, r, "remove the passkey", err)
+		h.templates.serverError(h.logger, w, r, "remove the passkey", err)
 		return
 	}
 	// Another account's credential, one already removed and the last one left
 	// are all 404, since none of the three was a button this page offered.
 	if removed == 0 {
-		notFound(w)
+		h.templates.notFound(w, r)
 		return
 	}
 	http.Redirect(w, r, passkeysPath, http.StatusSeeOther)

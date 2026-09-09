@@ -147,7 +147,7 @@ func (h *more) garden(w http.ResponseWriter, r *http.Request) {
 func (h *more) saveGardenName(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	if err := r.ParseForm(); err != nil {
-		badRequest(w)
+		h.templates.badRequest(w, r)
 		return
 	}
 	name := strings.TrimSpace(r.PostForm.Get("name"))
@@ -156,7 +156,7 @@ func (h *more) saveGardenName(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.queries.RenameGarden(r.Context(), name, principal.Garden.ID); err != nil {
-		serverError(h.logger, w, r, "rename the garden", err)
+		h.templates.serverError(h.logger, w, r, "rename the garden", err)
 		return
 	}
 	http.Redirect(w, r, gardenPath, http.StatusSeeOther)
@@ -186,7 +186,7 @@ func (h *more) createCareType(w http.ResponseWriter, r *http.Request) {
 	}
 	taken, err := h.careTypeWithSlug(r.Context(), principal.Garden.ID, slug)
 	if err != nil {
-		serverError(h.logger, w, r, "check the care type's name", err)
+		h.templates.serverError(h.logger, w, r, "check the care type's name", err)
 		return
 	}
 	if taken != "" {
@@ -197,7 +197,7 @@ func (h *more) createCareType(w http.ResponseWriter, r *http.Request) {
 
 	params := store.CreateCareTypeParams{GardenID: principal.Garden.ID, Name: name, Slug: slug}
 	if _, err := h.queries.CreateCareType(r.Context(), params); err != nil {
-		serverError(h.logger, w, r, "create the care type", err)
+		h.templates.serverError(h.logger, w, r, "create the care type", err)
 		return
 	}
 	http.Redirect(w, r, gardenPath, http.StatusSeeOther)
@@ -238,7 +238,7 @@ func (h *more) renameCareType(w http.ResponseWriter, r *http.Request) {
 	if slug != care.Slug {
 		taken, err := h.careTypeWithSlug(r.Context(), principal.Garden.ID, slug)
 		if err != nil {
-			serverError(h.logger, w, r, "check the care type's name", err)
+			h.templates.serverError(h.logger, w, r, "check the care type's name", err)
 			return
 		}
 		if taken != "" {
@@ -250,7 +250,7 @@ func (h *more) renameCareType(w http.ResponseWriter, r *http.Request) {
 
 	params := store.RenameCareTypeParams{Name: name, GardenID: principal.Garden.ID, CareTypeID: care.ID}
 	if _, err := h.queries.RenameCareType(r.Context(), params); err != nil {
-		serverError(h.logger, w, r, "rename the care type", err)
+		h.templates.serverError(h.logger, w, r, "rename the care type", err)
 		return
 	}
 	http.Redirect(w, r, gardenPath, http.StatusSeeOther)
@@ -290,11 +290,11 @@ func (h *more) deleteCareType(w http.ResponseWriter, r *http.Request) {
 	}
 	deleted, err := h.queries.DeleteUnusedCareType(r.Context(), principal.Garden.ID, care.ID)
 	if err != nil {
-		serverError(h.logger, w, r, "delete the care type", err)
+		h.templates.serverError(h.logger, w, r, "delete the care type", err)
 		return
 	}
 	if deleted == 0 {
-		notFound(w)
+		h.templates.notFound(w, r)
 		return
 	}
 	http.Redirect(w, r, gardenPath, http.StatusSeeOther)
@@ -306,9 +306,9 @@ func (h *more) deleteCareType(w http.ResponseWriter, r *http.Request) {
 func (h *more) afterCareTypeChange(w http.ResponseWriter, r *http.Request, what string, err error) {
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		notFound(w)
+		h.templates.notFound(w, r)
 	case err != nil:
-		serverError(h.logger, w, r, what, err)
+		h.templates.serverError(h.logger, w, r, what, err)
 	default:
 		http.Redirect(w, r, gardenPath, http.StatusSeeOther)
 	}
@@ -321,10 +321,10 @@ func (h *more) careTypeFromPath(w http.ResponseWriter, r *http.Request, principa
 	care, err := h.queries.GetCareTypeBySlug(r.Context(), principal.Garden.ID, r.PathValue("care"))
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		notFound(w)
+		h.templates.notFound(w, r)
 		return store.CareType{}, false
 	case err != nil:
-		serverError(h.logger, w, r, "read the care type", err)
+		h.templates.serverError(h.logger, w, r, "read the care type", err)
 		return store.CareType{}, false
 	}
 	return care, true
@@ -333,7 +333,7 @@ func (h *more) careTypeFromPath(w http.ResponseWriter, r *http.Request, principa
 // postedName reads the name field of one of this page's forms.
 func (h *more) postedName(w http.ResponseWriter, r *http.Request) (string, bool) {
 	if err := r.ParseForm(); err != nil {
-		badRequest(w)
+		h.templates.badRequest(w, r)
 		return "", false
 	}
 	return strings.TrimSpace(r.PostForm.Get("name")), true
@@ -376,14 +376,14 @@ func (h *more) renderGarden(w http.ResponseWriter, r *http.Request, page gardenP
 	if page.ManageTypes {
 		types, err := h.queries.ListCareTypesWithEvents(r.Context(), principal.Garden.ID)
 		if err != nil {
-			serverError(h.logger, w, r, "list the care types", err)
+			h.templates.serverError(h.logger, w, r, "list the care types", err)
 			return
 		}
 		page.Types = careTypeRows(types, edit)
 	}
 	usage, err := h.photos.Usage(r.Context(), h.queries, principal.Garden.ID)
 	if err != nil {
-		serverError(h.logger, w, r, "sum the garden's photos", err)
+		h.templates.serverError(h.logger, w, r, "sum the garden's photos", err)
 		return
 	}
 	page.Storage = storageLine(usage)

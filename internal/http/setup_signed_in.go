@@ -52,7 +52,7 @@ func (h *setup) signedInOpen() bool {
 // showSignedIn handles GET /setup/signed-in.
 func (h *setup) showSignedIn(w http.ResponseWriter, r *http.Request) {
 	if !h.signedInOpen() {
-		notFound(w)
+		h.templates.notFound(w, r)
 		return
 	}
 	h.templates.render(w, r, view{page: "setup-signed-in"}, newSetupSignedInPage(PrincipalFrom(r), ""))
@@ -64,12 +64,12 @@ func (h *setup) showSignedIn(w http.ResponseWriter, r *http.Request) {
 // holds is left as it is.
 func (h *setup) createSignedIn(w http.ResponseWriter, r *http.Request) {
 	if !h.signedInOpen() {
-		notFound(w)
+		h.templates.notFound(w, r)
 		return
 	}
 	principal := PrincipalFrom(r)
 	if err := r.ParseForm(); err != nil {
-		badRequest(w)
+		h.templates.badRequest(w, r)
 		return
 	}
 	name := strings.TrimSpace(r.PostForm.Get("garden"))
@@ -94,7 +94,7 @@ func (h *setup) createSignedIn(w http.ResponseWriter, r *http.Request) {
 		return q.SetLastGarden(ctx, &garden.ID, principal.User.ID)
 	})
 	if err != nil {
-		serverError(h.logger, w, r, "set up the garden", err)
+		h.templates.serverError(h.logger, w, r, "set up the garden", err)
 		return
 	}
 	// The new membership starts with the digest on. The account may already

@@ -28,7 +28,7 @@ func (h *plants) archived(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	list, err := h.queries.ListArchivedPlants(r.Context(), principal.Garden.ID)
 	if err != nil {
-		serverError(h.logger, w, r, "list the archived plants", err)
+		h.templates.serverError(h.logger, w, r, "list the archived plants", err)
 		return
 	}
 	now := h.now().In(locationFor(principal.User))
@@ -67,15 +67,15 @@ func (h *plants) restore(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	plantID, err := uuid.Parse(r.PathValue("plant"))
 	if err != nil {
-		notFound(w)
+		h.templates.notFound(w, r)
 		return
 	}
 	if _, err := h.queries.RestorePlant(r.Context(), principal.Garden.ID, plantID); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			notFound(w)
+			h.templates.notFound(w, r)
 			return
 		}
-		serverError(h.logger, w, r, "restore the plant", err)
+		h.templates.serverError(h.logger, w, r, "restore the plant", err)
 		return
 	}
 	http.Redirect(w, r, plantPath(plantID), http.StatusSeeOther)

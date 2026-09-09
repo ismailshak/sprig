@@ -41,7 +41,7 @@ func (h *plants) show(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	page, err := h.load(r.Context(), principal)
 	if err != nil {
-		serverError(h.logger, w, r, "load the plant list", err)
+		h.templates.serverError(h.logger, w, r, "load the plant list", err)
 		return
 	}
 	h.templates.render(w, r, view{page: "plants"}, page)

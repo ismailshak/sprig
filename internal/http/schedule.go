@@ -66,14 +66,14 @@ func (h *plants) editor(w http.ResponseWriter, r *http.Request, asking bool) {
 	}
 	draft, ok := scheduleDraftFor(r.URL.Query(), detail, care)
 	if !ok {
-		badRequest(w)
+		h.templates.badRequest(w, r)
 		return
 	}
 
 	page := newPlantPage(principal, detail)
 	row := page.rowFor(care.Slug)
 	if row == nil {
-		notFound(w)
+		h.templates.notFound(w, r)
 		return
 	}
 	row.Edit = newScheduleEditor(draft, detail, asking)
@@ -89,12 +89,12 @@ func (h *plants) saveSchedule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := r.ParseForm(); err != nil {
-		badRequest(w)
+		h.templates.badRequest(w, r)
 		return
 	}
 	draft, ok := scheduleDraftFor(r.PostForm, detail, care)
 	if !ok {
-		badRequest(w)
+		h.templates.badRequest(w, r)
 		return
 	}
 
@@ -103,7 +103,7 @@ func (h *plants) saveSchedule(w http.ResponseWriter, r *http.Request) {
 		page := newPlantPage(principal, detail)
 		row := page.rowFor(care.Slug)
 		if row == nil {
-			notFound(w)
+			h.templates.notFound(w, r)
 			return
 		}
 		row.Edit = newScheduleEditor(draft, detail, false)
@@ -112,7 +112,7 @@ func (h *plants) saveSchedule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, err := h.queries.UpsertCareSchedule(r.Context(), params); err != nil {
-		serverError(h.logger, w, r, "save the schedule", err)
+		h.templates.serverError(h.logger, w, r, "save the schedule", err)
 		return
 	}
 	h.settledRow(w, r, principal, detail.plant.ID, care.Slug)
@@ -134,10 +134,10 @@ func (h *plants) removeSchedule(w http.ResponseWriter, r *http.Request) {
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		notFound(w)
+		h.templates.notFound(w, r)
 		return
 	case err != nil:
-		serverError(h.logger, w, r, "remove the schedule", err)
+		h.templates.serverError(h.logger, w, r, "remove the schedule", err)
 		return
 	}
 	h.settledRow(w, r, principal, detail.plant.ID, care.Slug)
@@ -151,25 +151,25 @@ func (h *plants) plantAndCare(w http.ResponseWriter, r *http.Request, principal 
 	var none store.CareType
 	plantID, err := uuid.Parse(r.PathValue("plant"))
 	if err != nil {
-		notFound(w)
+		h.templates.notFound(w, r)
 		return plantDetail{}, none, false
 	}
 	detail, err := loadPlant(r.Context(), h.queries, principal, plantID, h.now())
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		notFound(w)
+		h.templates.notFound(w, r)
 		return plantDetail{}, none, false
 	case err != nil:
-		serverError(h.logger, w, r, "load the plant", err)
+		h.templates.serverError(h.logger, w, r, "load the plant", err)
 		return plantDetail{}, none, false
 	}
 	if detail.plant.ArchivedAt != nil {
-		notFound(w)
+		h.templates.notFound(w, r)
 		return plantDetail{}, none, false
 	}
 	care, ok := careFor(detail.cares, r.PathValue("care"))
 	if !ok {
-		notFound(w)
+		h.templates.notFound(w, r)
 		return plantDetail{}, none, false
 	}
 	return detail, care, true
@@ -196,13 +196,13 @@ func (h *plants) settledRow(w http.ResponseWriter, r *http.Request, principal au
 	}
 	detail, err := loadPlant(r.Context(), h.queries, principal, plantID, h.now())
 	if err != nil {
-		serverError(h.logger, w, r, "load the plant", err)
+		h.templates.serverError(h.logger, w, r, "load the plant", err)
 		return
 	}
 	page := newPlantPage(principal, detail)
 	row := page.rowFor(slug)
 	if row == nil {
-		notFound(w)
+		h.templates.notFound(w, r)
 		return
 	}
 	h.renderRow(w, r, page, *row, 0)

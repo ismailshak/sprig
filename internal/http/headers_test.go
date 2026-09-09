@@ -54,7 +54,7 @@ func TestSecurityHeaders_EveryRouteSetsAllFourHeaders(t *testing.T) {
 func TestSecurityHeaders_TheFiveHundredAfterAPanicHasTheHeaders(t *testing.T) {
 	panicking := http.HandlerFunc(func(http.ResponseWriter, *http.Request) { panic("a handler that fell over") })
 	rec := httptest.NewRecorder()
-	SecurityHeaders(Recover(testLogger)(panicking)).ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil))
+	SecurityHeaders(Recover(testLogger, testTemplates())(panicking)).ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil))
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusInternalServerError)
 	}

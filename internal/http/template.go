@@ -126,34 +126,9 @@ type view struct {
 // that fails halfway has already written the top of the page, and that much
 // would otherwise reach the browser under a 200.
 func (t *Templates) render(w http.ResponseWriter, r *http.Request, v view, data any) {
-	pages := t.pages
-	if t.dir != "" {
-		reloaded, err := parsePages(t.fs(), t.funcs)
-		if err != nil {
-			t.fail(w, r, err)
-			return
-		}
-		pages = reloaded
-	}
-
-	// A view is a literal in a handler, so a page that is not in the set is a
-	// typo, and it surfaces on the first request for that route rather than
-	// at startup. If routes ever declare their view the way they declare
-	// their capability, New can check every page name against the set instead.
-	set, ok := pages[v.page]
-	if !ok {
-		t.fail(w, r, fmt.Errorf("no page named %q", v.page))
-		return
-	}
-
-	name := layoutTemplate
-	if v.fragment != "" && isHTMX(r) {
-		name = v.fragment
-	}
-
 	var buf bytes.Buffer
-	if err := set.ExecuteTemplate(&buf, name, data); err != nil {
-		t.fail(w, r, fmt.Errorf("executing %s in %s: %w", name, v.page, err))
+	if err := t.execute(&buf, r, v, data); err != nil {
+		t.fail(w, r, err)
 		return
 	}
 
@@ -165,8 +140,40 @@ func (t *Templates) render(w http.ResponseWriter, r *http.Request, v view, data 
 	_, _ = w.Write(buf.Bytes())
 }
 
+// execute renders into buf the page v names, or its fragment for an htmx
+// request.
+func (t *Templates) execute(buf *bytes.Buffer, r *http.Request, v view, data any) error {
+	pages := t.pages
+	if t.dir != "" {
+		reloaded, err := parsePages(t.fs(), t.funcs)
+		if err != nil {
+			return err
+		}
+		pages = reloaded
+	}
+
+	// A view is a literal in a handler, so a page that is not in the set is a
+	// typo, and it surfaces on the first request for that route rather than
+	// at startup. If routes ever declare their view the way they declare
+	// their capability, New can check every page name against the set instead.
+	set, ok := pages[v.page]
+	if !ok {
+		return fmt.Errorf("no page named %q", v.page)
+	}
+
+	name := layoutTemplate
+	if v.fragment != "" && isHTMX(r) {
+		name = v.fragment
+	}
+
+	if err := set.ExecuteTemplate(buf, name, data); err != nil {
+		return fmt.Errorf("executing %s in %s: %w", name, v.page, err)
+	}
+	return nil
+}
+
 func (t *Templates) fail(w http.ResponseWriter, r *http.Request, err error) {
-	serverError(t.logger, w, r, "render", err)
+	t.serverError(t.logger, w, r, "render", err)
 }
 
 // isHTMX reports whether htmx sent the request. htmx sets HX-Request on every

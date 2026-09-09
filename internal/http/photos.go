@@ -82,7 +82,7 @@ func (h *plants) photoGrid(w http.ResponseWriter, r *http.Request) {
 	if s := r.URL.Query().Get(beforeParam); s != "" {
 		c, ok := parseCursor(s)
 		if !ok {
-			notFound(w)
+			h.templates.notFound(w, r)
 			return
 		}
 		before = &c
@@ -100,7 +100,7 @@ func (h *plants) photoGrid(w http.ResponseWriter, r *http.Request) {
 	}
 	rows, err := h.queries.ListPlantPhotos(r.Context(), params)
 	if err != nil {
-		serverError(h.logger, w, r, "list the plant's photos", err)
+		h.templates.serverError(h.logger, w, r, "list the plant's photos", err)
 		return
 	}
 	now := h.now().In(locationFor(principal.User))
@@ -148,16 +148,16 @@ func photoDateWord(p store.Photo, now time.Time) string {
 func (h *plants) resolvePlant(w http.ResponseWriter, r *http.Request, principal auth.Principal) (store.Plant, bool) {
 	plantID, err := uuid.Parse(r.PathValue("plant"))
 	if err != nil {
-		notFound(w)
+		h.templates.notFound(w, r)
 		return store.Plant{}, false
 	}
 	plant, err := h.queries.GetPlant(r.Context(), principal.Garden.ID, plantID)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		notFound(w)
+		h.templates.notFound(w, r)
 		return store.Plant{}, false
 	case err != nil:
-		serverError(h.logger, w, r, "load the plant", err)
+		h.templates.serverError(h.logger, w, r, "load the plant", err)
 		return store.Plant{}, false
 	}
 	return plant, true

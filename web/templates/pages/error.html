@@ -1,0 +1,14 @@
+{{define "title"}}{{.Title}} · sprig{{end}}
+
+{{define "app-class"}}app app--bare{{end}}
+
+{{/* The error page: Page not found, Something went wrong, or This request
+     couldn't be processed. It has no tab bar, because it is rendered for an
+     account in no garden as well as for a member. */}}
+{{define "main"}}
+<div class="app__body app__body--bare">
+<h1 class="bare__title">{{.Title}}</h1>
+<p class="bare__line">{{.Line}}</p>
+<a class="wide-action" href="{{.Back}}">Back to Today</a>
+</div>
+{{end}}

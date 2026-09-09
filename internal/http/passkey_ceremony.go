@@ -46,16 +46,16 @@ func (h *passkeyCeremony) registerChallenge(w http.ResponseWriter, r *http.Reque
 	principal := PrincipalFrom(r)
 	held, err := h.queries.ListPasskeys(r.Context(), principal.User.ID)
 	if err != nil {
-		serverError(h.logger, w, r, "list the passkeys", err)
+		h.templates.serverError(h.logger, w, r, "list the passkeys", err)
 		return
 	}
 	creation, cookie, err := h.passkeys.BeginRegistration(r.Context(), h.now(), principal.User, held)
 	if err != nil {
-		serverError(h.logger, w, r, "start the registration", err)
+		h.templates.serverError(h.logger, w, r, "start the registration", err)
 		return
 	}
 	http.SetCookie(w, cookie)
-	writeJSON(h.logger, w, r, creation)
+	writeJSON(h.templates, h.logger, w, r, creation)
 }
 
 // register handles POST /more/passkeys and saves the device the browser just
@@ -64,7 +64,7 @@ func (h *passkeyCeremony) registerChallenge(w http.ResponseWriter, r *http.Reque
 func (h *passkeyCeremony) register(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	if err := r.ParseForm(); err != nil {
-		badRequest(w)
+		h.templates.badRequest(w, r)
 		return
 	}
 	// The page that reports a refusal lists the devices already enrolled. The
@@ -72,7 +72,7 @@ func (h *passkeyCeremony) register(w http.ResponseWriter, r *http.Request) {
 	// from it and runs no query after a failed write.
 	keys, err := h.queries.ListPasskeys(r.Context(), principal.User.ID)
 	if err != nil {
-		serverError(h.logger, w, r, "list the passkeys", err)
+		h.templates.serverError(h.logger, w, r, "list the passkeys", err)
 		return
 	}
 	// WebAuthn returns no name for a device, so the row is labelled with the
@@ -94,7 +94,7 @@ func (h *passkeyCeremony) register(w http.ResponseWriter, r *http.Request) {
 // was not enrolled. keys is the list the page shows, read before the credential
 // was checked.
 func (h *passkeyCeremony) refuseRegistration(w http.ResponseWriter, r *http.Request, principal auth.Principal, keys []store.PasskeyCredential, err error) {
-	message := registrationRefusal(h.logger, w, r, err, "add the passkey")
+	message := registrationRefusal(h.templates, h.logger, w, r, err, "add the passkey")
 	if message == "" {
 		return
 	}
@@ -108,7 +108,7 @@ func (h *passkeyCeremony) refuseRegistration(w http.ResponseWriter, r *http.Requ
 // Anything else gets no sentence, because the response has been written here
 // instead: a 400 for a post with no credential in it, and a 500 for the rest.
 // what is the action the 500's log line names as failed.
-func registrationRefusal(logger *slog.Logger, w http.ResponseWriter, r *http.Request, err error, what string) string {
+func registrationRefusal(templates *Templates, logger *slog.Logger, w http.ResponseWriter, r *http.Request, err error, what string) string {
 	switch {
 	case errors.Is(err, auth.ErrNotVerified):
 		return "This device didn’t verify you. Turn on its screen lock or set a PIN, then try again."
@@ -124,10 +124,10 @@ func registrationRefusal(logger *slog.Logger, w http.ResponseWriter, r *http.Req
 		logger.WarnContext(r.Context(), "refuse the passkey", slog.Any("error", err))
 		return "The passkey couldn’t be verified and wasn’t added. Try again."
 	case errors.Is(err, auth.ErrBadCredential):
-		badRequest(w)
+		templates.badRequest(w, r)
 		return ""
 	default:
-		serverError(logger, w, r, what, err)
+		templates.serverError(logger, w, r, what, err)
 		return ""
 	}
 }
@@ -139,11 +139,11 @@ func registrationRefusal(logger *slog.Logger, w http.ResponseWriter, r *http.Req
 func (h *passkeyCeremony) signInChallenge(w http.ResponseWriter, r *http.Request) {
 	assertion, cookie, err := h.passkeys.BeginAssertion(r.Context(), h.now())
 	if err != nil {
-		serverError(h.logger, w, r, "start the sign-in", err)
+		h.templates.serverError(h.logger, w, r, "start the sign-in", err)
 		return
 	}
 	http.SetCookie(w, cookie)
-	writeJSON(h.logger, w, r, assertion)
+	writeJSON(h.templates, h.logger, w, r, assertion)
 }
 
 // signIn handles POST /signin and starts a session for the account the passkey
@@ -157,7 +157,7 @@ func (h *passkeyCeremony) signInChallenge(w http.ResponseWriter, r *http.Request
 // to set up a garden of their own or accept an invite.
 func (h *passkeyCeremony) signIn(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		badRequest(w)
+		h.templates.badRequest(w, r)
 		return
 	}
 
@@ -172,12 +172,12 @@ func (h *passkeyCeremony) signIn(w http.ResponseWriter, r *http.Request) {
 	// A browser that was already signed in gets a new session in place of the
 	// one it arrived with.
 	if err := h.sessions.DeleteFromRequest(r.Context(), r); err != nil {
-		serverError(h.logger, w, r, "end the previous session", err)
+		h.templates.serverError(h.logger, w, r, "end the previous session", err)
 		return
 	}
 	token, _, err := h.sessions.Create(r.Context(), h.now(), user.ID, nil, &passkey.ID, r.UserAgent())
 	if err != nil {
-		serverError(h.logger, w, r, "start the session", err)
+		h.templates.serverError(h.logger, w, r, "start the session", err)
 		return
 	}
 	http.SetCookie(w, h.sessions.Cookie(token))
@@ -209,10 +209,10 @@ func (h *passkeyCeremony) refuseSignIn(w http.ResponseWriter, r *http.Request, e
 	case errors.Is(err, auth.ErrCeremonyGone):
 		message = "Sign-in timed out. Try again."
 	case errors.Is(err, auth.ErrBadCredential):
-		badRequest(w)
+		h.templates.badRequest(w, r)
 		return
 	default:
-		serverError(h.logger, w, r, "sign in", err)
+		h.templates.serverError(h.logger, w, r, "sign in", err)
 		return
 	}
 	h.renderSignIn(w, r, http.StatusUnauthorized, message)
@@ -220,10 +220,10 @@ func (h *passkeyCeremony) refuseSignIn(w http.ResponseWriter, r *http.Request, e
 
 // writeJSON writes v as a JSON response with Cache-Control: no-store, because a
 // challenge can only be answered once.
-func writeJSON(logger *slog.Logger, w http.ResponseWriter, r *http.Request, v any) {
+func writeJSON(templates *Templates, logger *slog.Logger, w http.ResponseWriter, r *http.Request, v any) {
 	body, err := json.Marshal(v)
 	if err != nil {
-		serverError(logger, w, r, "encode the challenge", err)
+		templates.serverError(logger, w, r, "encode the challenge", err)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")

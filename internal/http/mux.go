@@ -50,7 +50,7 @@ func routes(logger *slog.Logger, sessions *auth.Sessions, passkeys *auth.Passkey
 	todayHandler := &today{logger: logger, queries: queries, templates: templates, now: time.Now, notify: notify}
 	plantsHandler := &plants{logger: logger, queries: queries, photos: photos, templates: templates, now: time.Now}
 	activityHandler := &activity{logger: logger, queries: queries, templates: templates, now: time.Now}
-	choresHandler := &chores{logger: logger, queries: queries, now: time.Now}
+	choresHandler := &chores{logger: logger, queries: queries, templates: templates, now: time.Now}
 	// The setup and invite pages use the resolver to tell whether the browser
 	// is already signed in.
 	resolver := auth.NewResolver(sessions, queries)
@@ -158,7 +158,7 @@ func routes(logger *slog.Logger, sessions *auth.Sessions, passkeys *auth.Passkey
 		{pattern: "POST " + tokensPath + "/{token}/revoke", capability: auth.TokenManage, handler: http.HandlerFunc(moreHandler.revokeToken)},
 		{pattern: "GET " + choresPath, bearer: true, limits: choresLimits(), handler: http.HandlerFunc(choresHandler.show)},
 		// Every path no other route matches.
-		{pattern: "/", withoutGarden: true, handler: notFoundHandler},
+		{pattern: "/", withoutGarden: true, handler: http.HandlerFunc(templates.notFound)},
 	}
 	return append(base, devRoutes(sessions, queries, templates)...)
 }
@@ -251,7 +251,7 @@ func New(logger *slog.Logger, sessions *auth.Sessions, passkeys *auth.Passkeys, 
 	for _, r := range table {
 		h := r.handler
 		if r.capability != "" {
-			h = require(r.capability, h)
+			h = require(r.capability, templates, h)
 		}
 		// The garden check goes outside the capability check. An account
 		// in no garden has no capabilities, so the capability check would
@@ -263,7 +263,7 @@ func New(logger *slog.Logger, sessions *auth.Sessions, passkeys *auth.Passkeys, 
 		// where the garden comes from. It goes inside the limiters so a request
 		// past the budget costs no lookup.
 		if r.bearer {
-			h = requireToken(logger, tokens, h)
+			h = requireToken(logger, templates, tokens, h)
 		}
 		// Wrapping backwards leaves limits[0] outermost, so a request already
 		// refused by the per-address budget spends nothing from the shared one.
@@ -280,9 +280,9 @@ func New(logger *slog.Logger, sessions *auth.Sessions, passkeys *auth.Passkeys, 
 	}
 
 	var handler http.Handler = mux
-	handler = Authenticate(logger, sessions, resolver, credentialFor)(handler)
+	handler = Authenticate(logger, templates, sessions, resolver, credentialFor)(handler)
 	handler = crossOrigin().Handler(handler)
-	handler = Recover(logger)(handler)
+	handler = Recover(logger, templates)(handler)
 	handler = Logging(logger, mux)(handler)
 	handler = SecurityHeaders(handler)
 	handler = RequestID(handler)

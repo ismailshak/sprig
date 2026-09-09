@@ -100,7 +100,7 @@ func (h *more) show(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	state, err := h.state(r.Context(), principal)
 	if err != nil {
-		serverError(h.logger, w, r, "load the More index", err)
+		h.templates.serverError(h.logger, w, r, "load the More index", err)
 		return
 	}
 	h.templates.render(w, r, view{page: "more"}, newMorePage(principal, state, h.build))
@@ -157,7 +157,7 @@ func newMorePage(principal auth.Principal, state moreState, info build.Info) mor
 // after signing out resolves to nothing.
 func (h *more) signOut(w http.ResponseWriter, r *http.Request) {
 	if err := h.sessions.Delete(r.Context(), h.sessions.TokenFromRequest(r)); err != nil {
-		serverError(h.logger, w, r, "end the session", err)
+		h.templates.serverError(h.logger, w, r, "end the session", err)
 		return
 	}
 	http.SetCookie(w, h.sessions.ClearedCookie())

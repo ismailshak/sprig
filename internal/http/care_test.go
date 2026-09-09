@@ -364,6 +364,33 @@ func TestLog_JustNowIsShownWhateverThePrecisionOfTheStoredTime(t *testing.T) {
 	}
 }
 
+// The app does not deduplicate. A repeat logged by mistake is deleted from
+// Activity instead.
+func TestLog_TheSameCareLoggedTwiceSecondsApartIsTwoEvents(t *testing.T) {
+	f := rosewood(t)
+	form := url.Values{"row": {"water"}, "care": {"water"}, "when": {"now"}}
+
+	first := f.post(t, dorisID.String(), form, true)
+	f.handler.now = func() time.Time { return thursday.Add(5 * time.Second) }
+	second := f.post(t, dorisID.String(), form, true)
+
+	if first.Code != http.StatusOK || second.Code != http.StatusOK {
+		t.Fatalf("the two posts got %d and %d, want %d for both:\n%s", first.Code, second.Code, http.StatusOK, second.Body.String())
+	}
+	events := f.events(t, dorisID)
+	if len(events) != 3 {
+		t.Fatalf("Doris has %d events, want the seeded one and both logs", len(events))
+	}
+	logged := events[1:]
+	if !logged[0].PerformedAt.Equal(thursday) || !logged[1].PerformedAt.Equal(thursday.Add(5*time.Second)) {
+		t.Errorf("the logs were performed at %v and %v, want %v and %v",
+			logged[0].PerformedAt, logged[1].PerformedAt, thursday, thursday.Add(5*time.Second))
+	}
+	if logged[0].ID == logged[1].ID {
+		t.Error("the two logs are one event, want two")
+	}
+}
+
 func TestLog_AFormPostRedirectsToToday(t *testing.T) {
 	f := rosewood(t)
 	rec := f.post(t, dorisID.String(), url.Values{"care": {"water"}}, false)

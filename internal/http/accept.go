@@ -75,7 +75,7 @@ func (h *invited) showAccept(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	open, usable, err := h.openToAccept(r)
 	if err != nil {
-		serverError(h.logger, w, r, "open the invite", err)
+		h.templates.serverError(h.logger, w, r, "open the invite", err)
 		return
 	}
 	if !usable {
@@ -84,7 +84,7 @@ func (h *invited) showAccept(w http.ResponseWriter, r *http.Request) {
 	}
 	_, live, err := existingMembership(r.Context(), h.queries, h.now(), open.row.Invite.GardenID, principal.User.ID)
 	if err != nil {
-		serverError(h.logger, w, r, "read the membership", err)
+		h.templates.serverError(h.logger, w, r, "read the membership", err)
 		return
 	}
 	page := newAcceptPage(r.PathValue("token"), principal, open)
@@ -100,7 +100,7 @@ func (h *invited) accept(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	open, usable, err := h.openToAccept(r)
 	if err != nil {
-		serverError(h.logger, w, r, "accept the invite", err)
+		h.templates.serverError(h.logger, w, r, "accept the invite", err)
 		return
 	}
 	if !usable {
@@ -109,7 +109,7 @@ func (h *invited) accept(w http.ResponseWriter, r *http.Request) {
 	}
 	existing, live, err := existingMembership(r.Context(), h.queries, h.now(), open.row.Invite.GardenID, principal.User.ID)
 	if err != nil {
-		serverError(h.logger, w, r, "read the membership", err)
+		h.templates.serverError(h.logger, w, r, "read the membership", err)
 		return
 	}
 	if live {
@@ -138,7 +138,7 @@ func (h *invited) accept(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		serverError(h.logger, w, r, "accept the invite", err)
+		h.templates.serverError(h.logger, w, r, "accept the invite", err)
 		return
 	}
 	// The account may already have a subscribed browser, so the new membership

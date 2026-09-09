@@ -77,7 +77,7 @@ func andList(names []string) string {
 func (h *more) confirmCloseAccount(w http.ResponseWriter, r *http.Request) {
 	page, err := h.newCloseAccountPage(r.Context(), PrincipalFrom(r))
 	if err != nil {
-		serverError(h.logger, w, r, "open the close account page", err)
+		h.templates.serverError(h.logger, w, r, "open the close account page", err)
 		return
 	}
 	h.templates.render(w, r, view{page: "close-account"}, page)
@@ -93,14 +93,14 @@ func (h *more) closeAccount(w http.ResponseWriter, r *http.Request) {
 	if errors.Is(err, errSoleOwner) {
 		page, err := h.newCloseAccountPage(r.Context(), principal)
 		if err != nil {
-			serverError(h.logger, w, r, "open the close account page", err)
+			h.templates.serverError(h.logger, w, r, "open the close account page", err)
 			return
 		}
 		h.templates.render(w, r, view{page: "close-account", status: http.StatusUnprocessableEntity}, page)
 		return
 	}
 	if err != nil {
-		serverError(h.logger, w, r, "close the account", err)
+		h.templates.serverError(h.logger, w, r, "close the account", err)
 		return
 	}
 	// The digest job works out its next send again, because the memberships it

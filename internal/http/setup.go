@@ -164,10 +164,10 @@ func (h *setup) open(r *http.Request) (bool, error) {
 // account for a person who has one.
 func (h *setup) show(w http.ResponseWriter, r *http.Request) {
 	if open, err := h.open(r); err != nil {
-		serverError(h.logger, w, r, "open the setup page", err)
+		h.templates.serverError(h.logger, w, r, "open the setup page", err)
 		return
 	} else if !open {
-		notFound(w)
+		h.templates.notFound(w, r)
 		return
 	}
 	if hasSession(r, h.sessions, h.resolver, h.now()) {
@@ -186,14 +186,14 @@ func (h *setup) show(w http.ResponseWriter, r *http.Request) {
 // form the post would refuse.
 func (h *setup) challenge(w http.ResponseWriter, r *http.Request) {
 	if open, err := h.open(r); err != nil {
-		serverError(h.logger, w, r, "start the setup", err)
+		h.templates.serverError(h.logger, w, r, "start the setup", err)
 		return
 	} else if !open {
-		notFound(w)
+		h.templates.notFound(w, r)
 		return
 	}
 	if err := r.ParseForm(); err != nil {
-		badRequest(w)
+		h.templates.badRequest(w, r)
 		return
 	}
 	form := readSetupForm(r)
@@ -202,7 +202,7 @@ func (h *setup) challenge(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !slices.Contains(zones, form.zone) {
-		badRequest(w)
+		h.templates.badRequest(w, r)
 		return
 	}
 
@@ -212,11 +212,11 @@ func (h *setup) challenge(w http.ResponseWriter, r *http.Request) {
 	account := store.AppUser{ID: uuid.NewV7(), DisplayName: form.name, Handle: store.HandleFor(form.name), Timezone: form.zone}
 	creation, cookie, err := h.passkeys.BeginSetup(r.Context(), h.now(), account)
 	if err != nil {
-		serverError(h.logger, w, r, "start the setup", err)
+		h.templates.serverError(h.logger, w, r, "start the setup", err)
 		return
 	}
 	http.SetCookie(w, cookie)
-	writeJSON(h.logger, w, r, creation)
+	writeJSON(h.templates, h.logger, w, r, creation)
 }
 
 // create handles POST /setup. The account, the garden, the membership, the
@@ -224,19 +224,19 @@ func (h *setup) challenge(w http.ResponseWriter, r *http.Request) {
 // registration rolls all of them back.
 func (h *setup) create(w http.ResponseWriter, r *http.Request) {
 	if open, err := h.open(r); err != nil {
-		serverError(h.logger, w, r, "set up the garden", err)
+		h.templates.serverError(h.logger, w, r, "set up the garden", err)
 		return
 	} else if !open {
-		notFound(w)
+		h.templates.notFound(w, r)
 		return
 	}
 	if err := r.ParseForm(); err != nil {
-		badRequest(w)
+		h.templates.badRequest(w, r)
 		return
 	}
 	form := readSetupForm(r)
 	if form.zone != "" && !slices.Contains(zones, form.zone) {
-		badRequest(w)
+		h.templates.badRequest(w, r)
 		return
 	}
 	page := newSetupPage(form, false, h.enabled)
@@ -292,7 +292,7 @@ func (h *setup) create(w http.ResponseWriter, r *http.Request) {
 		return err
 	})
 	if errors.Is(err, errSetupClosed) {
-		notFound(w)
+		h.templates.notFound(w, r)
 		return
 	}
 	if err != nil {
@@ -304,12 +304,12 @@ func (h *setup) create(w http.ResponseWriter, r *http.Request) {
 	// A browser that was already signed in gets a new session in place of the
 	// one it arrived with.
 	if err := h.sessions.DeleteFromRequest(r.Context(), r); err != nil {
-		serverError(h.logger, w, r, "end the previous session", err)
+		h.templates.serverError(h.logger, w, r, "end the previous session", err)
 		return
 	}
 	token, _, err := h.sessions.Create(r.Context(), now, user.ID, &membership.GardenID, &passkey.ID, r.UserAgent())
 	if err != nil {
-		serverError(h.logger, w, r, "start the session", err)
+		h.templates.serverError(h.logger, w, r, "start the session", err)
 		return
 	}
 	http.SetCookie(w, h.sessions.Cookie(token))
@@ -339,7 +339,7 @@ func createGardenOwnedBy(ctx context.Context, q *store.Queries, name string, use
 // and the reason the device was not enrolled above the form. A post with no
 // credential in it gets a 400 instead, and anything else a 500.
 func (h *setup) refuse(w http.ResponseWriter, r *http.Request, page setupPage, err error) {
-	page.Refusal = registrationRefusal(h.logger, w, r, err, "set up the garden")
+	page.Refusal = registrationRefusal(h.templates, h.logger, w, r, err, "set up the garden")
 	if page.Refusal == "" {
 		return
 	}

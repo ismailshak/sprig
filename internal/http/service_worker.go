@@ -39,18 +39,19 @@ type serviceWorker struct {
 	// script is nil when the static tree has no service-worker.js or no
 	// notification icon. The tree is compiled into the binary, so that only
 	// happens in a broken build.
-	script []byte
-	etag   string
+	script    []byte
+	etag      string
+	templates *Templates
 }
 
 func newServiceWorker(assets *Assets, templates *Templates) *serviceWorker {
 	body, ok := assets.content(serviceWorkerFile)
 	if !ok {
-		return &serviceWorker{}
+		return &serviceWorker{templates: templates}
 	}
 	icon, err := assets.Path(notificationIcon)
 	if err != nil {
-		return &serviceWorker{}
+		return &serviceWorker{templates: templates}
 	}
 
 	shell := shellURLs(assets)
@@ -77,7 +78,7 @@ func newServiceWorker(assets *Assets, templates *Templates) *serviceWorker {
 	fmt.Fprintf(&script, "const ICON = %q;\n\n", icon)
 	script.Write(body)
 
-	return &serviceWorker{script: script.Bytes(), etag: `"` + version + `"`}
+	return &serviceWorker{script: script.Bytes(), etag: `"` + version + `"`, templates: templates}
 }
 
 // shellURLs returns the URLs the worker caches at install, sorted so the list
@@ -106,7 +107,7 @@ func shellURLs(assets *Assets) []string {
 // check for a new worker rather than reuse a cached copy.
 func (s *serviceWorker) serve(w http.ResponseWriter, r *http.Request) {
 	if s.script == nil {
-		notFound(w)
+		s.templates.notFound(w, r)
 		return
 	}
 	w.Header().Set("Cache-Control", "no-cache")

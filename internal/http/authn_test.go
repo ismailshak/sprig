@@ -127,7 +127,7 @@ func protected(t *testing.T, resolver Resolver) (http.Handler, *auth.Principal) 
 		return sessionCookie
 	}
 	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
-	return Authenticate(logger, testSessions(), resolver, credentialFor)(mux), &seen
+	return Authenticate(logger, testTemplates(), testSessions(), resolver, credentialFor)(mux), &seen
 }
 
 func sessionOnly(*http.Request) credential { return sessionCookie }
@@ -247,7 +247,7 @@ func TestAuthenticate_AnAPITokenOnASessionRouteIsSentToSignIn(t *testing.T) {
 // saw. That is how New wraps a route flagged bearer.
 func tokenRoute(logger *slog.Logger, tokens Resolver) (http.Handler, *auth.Principal) {
 	var seen auth.Principal
-	return requireToken(logger, tokens, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return requireToken(logger, testTemplates(), tokens, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		seen = PrincipalFrom(r)
 		w.WriteHeader(http.StatusOK)
 	})), &seen
@@ -309,7 +309,7 @@ func TestRequireToken_AFailedTokenLookupIsA500ThatDoesNotLogTheToken(t *testing.
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&buf, nil))
 	tokens := failEveryToken(errors.New("read the token: connection refused"))
-	handler := requireToken(logger, tokens, http.HandlerFunc(func(http.ResponseWriter, *http.Request) { t.Error("the handler ran") }))
+	handler := requireToken(logger, testTemplates(), tokens, http.HandlerFunc(func(http.ResponseWriter, *http.Request) { t.Error("the handler ran") }))
 
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, withToken(httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/plants", nil)))
@@ -424,12 +424,15 @@ func TestAuthenticate_AFailedLookupIsA500LoggedOnce(t *testing.T) {
 	logger := slog.New(slog.NewJSONHandler(&buf, nil))
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /plants", func(http.ResponseWriter, *http.Request) { t.Error("the handler ran") })
-	handler := Authenticate(logger, testSessions(), failEveryToken(errors.New("read the session: connection refused")), sessionOnly)(mux)
+	handler := Authenticate(logger, testTemplates(), testSessions(), failEveryToken(errors.New("read the session: connection refused")), sessionOnly)(mux)
 
 	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, signedIn(httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/plants", nil)))
+	handler.ServeHTTP(rec, browsing(signedIn(httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/plants", nil))))
 	if rec.Code != http.StatusInternalServerError {
 		t.Errorf("status = %d, want %d", rec.Code, http.StatusInternalServerError)
+	}
+	if !strings.Contains(rec.Body.String(), serverErrorTitle) {
+		t.Errorf("the browser read %q, want the %q page", rec.Body.String(), serverErrorTitle)
 	}
 
 	lines := strings.Split(strings.TrimSpace(buf.String()), "\n")
@@ -450,33 +453,36 @@ func TestAuthenticate_AFailedLookupIsA500LoggedOnce(t *testing.T) {
 
 func TestRequire_AMissingCapabilityIsTheSame404AsAnUnknownPath(t *testing.T) {
 	mux := http.NewServeMux()
-	mux.Handle("POST /plants", require(auth.PlantCreate, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	mux.Handle("POST /plants", require(auth.PlantCreate, testTemplates(), http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusCreated)
 	})))
-	handler := Authenticate(slog.New(slog.DiscardHandler), testSessions(), acceptEveryToken(sitterPrincipal()), sessionOnly)(mux)
+	handler := Authenticate(slog.New(slog.DiscardHandler), testTemplates(), testSessions(), acceptEveryToken(sitterPrincipal()), sessionOnly)(mux)
 
 	// The unknown path goes through the whole app. The comparison is then
-	// against the 404 the route table serves and not one this test wrote.
+	// against the 404 the route table serves and not one this test wrote. The
+	// body differs between a browser and a script, so the loop checks both.
 	app := New(testLogger, testSessions(), testPasskeys(), acceptEveryToken(sitterPrincipal()), noLiveToken, nil,
 		testPhotos(t), testTemplates(), testAssets(), "", false, testPushKey, nil, nil, nil)
-	unknown := httptest.NewRecorder()
-	app.ServeHTTP(unknown, signedIn(httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/nope", nil)))
-	if unknown.Code != http.StatusNotFound {
-		t.Fatalf("an unknown path got %d, want %d", unknown.Code, http.StatusNotFound)
-	}
+	for name, prepare := range map[string]func(*http.Request) *http.Request{"a browser": browsing, "a script": func(r *http.Request) *http.Request { return r }} {
+		unknown := httptest.NewRecorder()
+		app.ServeHTTP(unknown, prepare(signedIn(httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/nope", nil))))
+		if unknown.Code != http.StatusNotFound {
+			t.Fatalf("%s: an unknown path got %d, want %d", name, unknown.Code, http.StatusNotFound)
+		}
 
-	refused := httptest.NewRecorder()
-	handler.ServeHTTP(refused, signedIn(httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/plants", nil)))
-	if refused.Code != http.StatusNotFound {
-		t.Errorf("status = %d, want %d", refused.Code, http.StatusNotFound)
-	}
-	if refused.Body.String() != unknown.Body.String() {
-		t.Errorf("body = %q, want the unknown path's %q", refused.Body.String(), unknown.Body.String())
+		refused := httptest.NewRecorder()
+		handler.ServeHTTP(refused, prepare(signedIn(httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/plants", nil))))
+		if refused.Code != http.StatusNotFound {
+			t.Errorf("%s: status = %d, want %d", name, refused.Code, http.StatusNotFound)
+		}
+		if refused.Body.String() != unknown.Body.String() {
+			t.Errorf("%s: body = %q, want the unknown path's %q", name, refused.Body.String(), unknown.Body.String())
+		}
 	}
 
 	owner := sitterPrincipal()
 	owner.Capabilities = auth.Capabilities{auth.PlantCreate: true}
-	handler = Authenticate(slog.New(slog.DiscardHandler), testSessions(), acceptEveryToken(owner), sessionOnly)(mux)
+	handler = Authenticate(slog.New(slog.DiscardHandler), testTemplates(), testSessions(), acceptEveryToken(owner), sessionOnly)(mux)
 	allowed := httptest.NewRecorder()
 	handler.ServeHTTP(allowed, signedIn(httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/plants", nil)))
 	if allowed.Code != http.StatusCreated {

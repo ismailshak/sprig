@@ -538,6 +538,9 @@ func TestPlantForm_APostOverTheBodyCapIsRefusedInEitherEncoding(t *testing.T) {
 		if rec.Code != http.StatusRequestEntityTooLarge {
 			t.Errorf("%s: status = %d, want %d", name, rec.Code, http.StatusRequestEntityTooLarge)
 		}
+		if got := strings.TrimSpace(rec.Body.String()); got != plainText(tooLargeTitle, tooLargeLine) {
+			t.Errorf("%s: body = %q, want the size limit", name, got)
+		}
 	}
 	if after := f.countPlants(t); after != before {
 		t.Errorf("the garden has %d plants, want the %d it started with", after, before)
@@ -1270,6 +1273,9 @@ func TestPlantForm_APhotoOverTheFileLimitIsRefusedAndNothingIsWritten(t *testing
 	if rec.Code != http.StatusRequestEntityTooLarge {
 		t.Errorf("status = %d, want %d", rec.Code, http.StatusRequestEntityTooLarge)
 	}
+	if got := errorsOn(rec.Body.String()); len(got) != 1 || got[0] != plainText(tooLargeTitle, tooLargeLine) {
+		t.Errorf("the form's errors are %v, want the size limit under the photo field", got)
+	}
 	if after := f.countPlants(t); after != before {
 		t.Errorf("the garden has %d plants, want the %d it started with", after, before)
 	}
@@ -1454,8 +1460,11 @@ func TestPlantForm_APhotoWithASquareOfADifferentKindIsRefusedAndNothingIsWritten
 
 	rec := f.postPhoto(t, nil, values, testJPEG(t, 30, 20), testWebP(8, 8))
 
-	if rec.Code != http.StatusBadRequest {
-		t.Errorf("status = %d, want %d", rec.Code, http.StatusBadRequest)
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusUnprocessableEntity)
+	}
+	if got := errorsOn(rec.Body.String()); len(got) != 1 || got[0] != photoNotImage {
+		t.Errorf("the form's errors are %v, want %q under the photo field", got, photoNotImage)
 	}
 	if after := f.countPlants(t); after != before {
 		t.Errorf("the garden has %d plants, want the %d it started with", after, before)

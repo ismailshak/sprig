@@ -135,12 +135,12 @@ func (h *more) notifications(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	preferences, err := h.queries.ListNotificationPreferences(r.Context(), principal.Membership.ID)
 	if err != nil {
-		serverError(h.logger, w, r, "read the notification preferences", err)
+		h.templates.serverError(h.logger, w, r, "read the notification preferences", err)
 		return
 	}
 	subscriptions, err := h.queries.ListPushSubscriptions(r.Context(), principal.User.ID)
 	if err != nil {
-		serverError(h.logger, w, r, "list the push subscriptions", err)
+		h.templates.serverError(h.logger, w, r, "list the push subscriptions", err)
 		return
 	}
 
@@ -159,12 +159,12 @@ func (h *more) notifications(w http.ResponseWriter, r *http.Request) {
 func (h *more) sendTestNotification(w http.ResponseWriter, r *http.Request) {
 	// With push off no browser can be subscribed, so the route is a 404.
 	if h.pushKey == "" || h.test == nil {
-		notFound(w)
+		h.templates.notFound(w, r)
 		return
 	}
 	principal := PrincipalFrom(r)
 	if err := r.ParseForm(); err != nil {
-		badRequest(w)
+		h.templates.badRequest(w, r)
 		return
 	}
 	result := testSent
@@ -173,7 +173,7 @@ func (h *more) sendTestNotification(w http.ResponseWriter, r *http.Request) {
 	case errors.Is(err, pgx.ErrNoRows):
 		result = testNone
 	case err != nil:
-		serverError(h.logger, w, r, "find the browser to test", err)
+		h.templates.serverError(h.logger, w, r, "find the browser to test", err)
 		return
 	default:
 		switch err := h.test(r.Context(), subscription, testMessage); {
@@ -194,18 +194,18 @@ func (h *more) subscribeBrowser(w http.ResponseWriter, r *http.Request) {
 	// With push off no browser can have a subscription to post, so the route
 	// is a 404.
 	if h.pushKey == "" {
-		notFound(w)
+		h.templates.notFound(w, r)
 		return
 	}
 	principal := PrincipalFrom(r)
 	if err := r.ParseForm(); err != nil {
-		badRequest(w)
+		h.templates.badRequest(w, r)
 		return
 	}
 	endpoint := r.PostForm.Get("endpoint")
 	p256dh, auth := r.PostForm.Get("p256dh"), r.PostForm.Get("auth")
 	if !isPushEndpoint(endpoint) || !isPushPoint(p256dh) || !isPushKey(auth, authLength) {
-		badRequest(w)
+		h.templates.badRequest(w, r)
 		return
 	}
 	var userAgent *string
@@ -220,7 +220,7 @@ func (h *more) subscribeBrowser(w http.ResponseWriter, r *http.Request) {
 		UserAgent: userAgent,
 	})
 	if err != nil {
-		serverError(h.logger, w, r, "save the push subscription", err)
+		h.templates.serverError(h.logger, w, r, "save the push subscription", err)
 		return
 	}
 	h.wake.call()
@@ -266,14 +266,14 @@ func decodePushKey(v string) ([]byte, error) {
 func (h *more) saveNotifications(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	if err := r.ParseForm(); err != nil {
-		badRequest(w)
+		h.templates.badRequest(w, r)
 		return
 	}
 	hour := principal.Membership.DigestHour
 	if r.PostForm.Has("hour") {
 		posted, ok := offeredHour(r.PostForm.Get("hour"))
 		if !ok {
-			badRequest(w)
+			h.templates.badRequest(w, r)
 			return
 		}
 		hour = posted
@@ -300,7 +300,7 @@ func (h *more) saveNotifications(w http.ResponseWriter, r *http.Request) {
 		})
 	})
 	if err != nil {
-		serverError(h.logger, w, r, "save the notification settings", err)
+		h.templates.serverError(h.logger, w, r, "save the notification settings", err)
 		return
 	}
 	h.wake.call()
@@ -313,18 +313,18 @@ func (h *more) removeBrowser(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	subscriptionID, err := uuid.Parse(r.PathValue("browser"))
 	if err != nil {
-		notFound(w)
+		h.templates.notFound(w, r)
 		return
 	}
 	removed, err := h.queries.DeletePushSubscription(r.Context(), principal.User.ID, subscriptionID)
 	if err != nil {
-		serverError(h.logger, w, r, "remove the browser", err)
+		h.templates.serverError(h.logger, w, r, "remove the browser", err)
 		return
 	}
 	// Another account's subscription and one already removed are both 404,
 	// since neither was a button this page offered.
 	if removed == 0 {
-		notFound(w)
+		h.templates.notFound(w, r)
 		return
 	}
 	http.Redirect(w, r, notificationsPath, http.StatusSeeOther)

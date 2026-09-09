@@ -51,7 +51,7 @@ const (
 //
 // A public route and a route taking an API token both pass through here.
 // requireToken resolves the bearer token further in, inside the mux.
-func Authenticate(logger *slog.Logger, sessions *auth.Sessions, resolver Resolver, credentialFor func(*http.Request) credential) func(http.Handler) http.Handler {
+func Authenticate(logger *slog.Logger, templates *Templates, sessions *auth.Sessions, resolver Resolver, credentialFor func(*http.Request) credential) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			switch credentialFor(r) {
@@ -73,8 +73,7 @@ func Authenticate(logger *slog.Logger, sessions *auth.Sessions, resolver Resolve
 				http.Redirect(w, r, signInPath, http.StatusSeeOther)
 				return
 			case err != nil:
-				logger.ErrorContext(r.Context(), "resolve the session", slog.Any("error", err))
-				http.Error(w, serverErrorText, http.StatusInternalServerError)
+				templates.serverError(logger, w, r, "resolve the session", err)
 				return
 			}
 
@@ -88,7 +87,7 @@ func Authenticate(logger *slog.Logger, sessions *auth.Sessions, resolver Resolve
 // requireToken resolves the bearer token in the Authorization header and puts
 // the principal on the context for PrincipalFrom. A request with no token, or
 // one that matches no live row, gets a 401.
-func requireToken(logger *slog.Logger, tokens Resolver, h http.Handler) http.Handler {
+func requireToken(logger *slog.Logger, templates *Templates, tokens Resolver, h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		token := bearerToken(r)
 		if token == "" {
@@ -101,7 +100,7 @@ func requireToken(logger *slog.Logger, tokens Resolver, h http.Handler) http.Han
 			unauthorized(w)
 			return
 		case err != nil:
-			serverError(logger, w, r, "resolve the token", err)
+			templates.serverError(logger, w, r, "resolve the token", err)
 			return
 		}
 		h.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), principalKey, principal)))
@@ -113,7 +112,7 @@ func requireToken(logger *slog.Logger, tokens Resolver, h http.Handler) http.Han
 // not a redirect.
 func unauthorized(w http.ResponseWriter) {
 	w.Header().Set("WWW-Authenticate", "Bearer")
-	http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+	http.Error(w, "Send an API token from the Tokens page as a Bearer token in the Authorization header.", http.StatusUnauthorized)
 }
 
 // hasSession reports whether the request's session cookie resolves to a
@@ -195,10 +194,10 @@ func PrincipalFrom(r *http.Request) auth.Principal {
 
 // require wraps h so a principal whose role lacks capability gets the 404 an
 // unknown path gets. A 403 would confirm the page exists.
-func require(capability auth.Capability, h http.Handler) http.Handler {
+func require(capability auth.Capability, templates *Templates, h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !PrincipalFrom(r).Can(capability) {
-			notFound(w)
+			templates.notFound(w, r)
 			return
 		}
 		h.ServeHTTP(w, r)

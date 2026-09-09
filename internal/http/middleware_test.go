@@ -91,10 +91,13 @@ func TestRecover_ConvertsPanicToInternalServerError(t *testing.T) {
 	})
 
 	rec := httptest.NewRecorder()
-	Recover(logger)(next).ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil))
+	Recover(logger, testTemplates())(next).ServeHTTP(rec, browsing(httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)))
 
 	if rec.Code != http.StatusInternalServerError {
 		t.Errorf("status = %d, want %d", rec.Code, http.StatusInternalServerError)
+	}
+	if !strings.Contains(rec.Body.String(), serverErrorTitle) {
+		t.Errorf("the browser read %q, want the %q page", rec.Body.String(), serverErrorTitle)
 	}
 
 	var entry map[string]any
@@ -122,5 +125,23 @@ func TestNewContextHandler_AttachesRequestID(t *testing.T) {
 	}
 	if entry["request_id"] != "abc123" {
 		t.Errorf("request_id = %v, want %q", entry["request_id"], "abc123")
+	}
+}
+
+func TestRecover_APanicAfterTheResponseStartedKeepsWhatTheHandlerWrote(t *testing.T) {
+	next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("<p>half a page"))
+		panic("boom")
+	})
+
+	rec := httptest.NewRecorder()
+	Recover(slog.New(slog.DiscardHandler), testTemplates())(next).ServeHTTP(rec, browsing(httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)))
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("status = %d, want the %d the handler wrote", rec.Code, http.StatusOK)
+	}
+	if got := rec.Body.String(); got != "<p>half a page" {
+		t.Errorf("body = %q, want only what the handler wrote", got)
 	}
 }

@@ -482,12 +482,12 @@ func (h *today) sheet(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	plantID, err := uuid.Parse(r.PathValue("plant"))
 	if err != nil {
-		notFound(w)
+		h.templates.notFound(w, r)
 		return
 	}
 	d, ok := readDraft(r.URL.Query())
 	if !ok {
-		badRequest(w)
+		h.templates.badRequest(w, r)
 		return
 	}
 	if d.Over == overPlant {
@@ -497,12 +497,12 @@ func (h *today) sheet(w http.ResponseWriter, r *http.Request) {
 
 	g, err := h.load(r.Context(), principal)
 	if err != nil {
-		serverError(h.logger, w, r, "load the day", err)
+		h.templates.serverError(h.logger, w, r, "load the day", err)
 		return
 	}
 	lines := plantLines(g.lines, plantID)
 	if len(lines) == 0 {
-		notFound(w)
+		h.templates.notFound(w, r)
 		return
 	}
 	if d.Care == "" {
@@ -511,7 +511,7 @@ func (h *today) sheet(w http.ResponseWriter, r *http.Request) {
 	}
 	care, ok := lineFor(lines, d.Care)
 	if !ok {
-		badRequest(w)
+		h.templates.badRequest(w, r)
 		return
 	}
 
@@ -527,21 +527,21 @@ func (h *today) plantSheet(w http.ResponseWriter, r *http.Request, principal aut
 	detail, err := loadPlant(r.Context(), h.queries, principal, plantID, h.now())
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		notFound(w)
+		h.templates.notFound(w, r)
 		return
 	case err != nil:
-		serverError(h.logger, w, r, "load the plant", err)
+		h.templates.serverError(h.logger, w, r, "load the plant", err)
 		return
 	}
 	// Nothing can be logged against an archived plant.
 	if detail.plant.ArchivedAt != nil {
-		notFound(w)
+		h.templates.notFound(w, r)
 		return
 	}
 
 	care, ok := chosenCare(detail, d)
 	if !ok {
-		badRequest(w)
+		h.templates.badRequest(w, r)
 		return
 	}
 	page := newPlantPage(principal, detail)
@@ -585,11 +585,11 @@ func (h *today) log(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	plantID, err := uuid.Parse(r.PathValue("plant"))
 	if err != nil {
-		notFound(w)
+		h.templates.notFound(w, r)
 		return
 	}
 	if err := r.ParseForm(); err != nil {
-		badRequest(w)
+		h.templates.badRequest(w, r)
 		return
 	}
 	// "over" is read before the rest of the form because it decides which page
@@ -603,22 +603,22 @@ func (h *today) log(w http.ResponseWriter, r *http.Request) {
 	// garden does not have is a 404 whatever the form says.
 	g, err := h.load(r.Context(), principal)
 	if err != nil {
-		serverError(h.logger, w, r, "load the day", err)
+		h.templates.serverError(h.logger, w, r, "load the day", err)
 		return
 	}
 	lines := plantLines(g.lines, plantID)
 	if len(lines) == 0 {
-		notFound(w)
+		h.templates.notFound(w, r)
 		return
 	}
 	d, ok := readDraft(r.PostForm)
 	if !ok || d.Care == "" {
-		badRequest(w)
+		h.templates.badRequest(w, r)
 		return
 	}
 	care, ok := lineFor(lines, d.Care)
 	if !ok {
-		badRequest(w)
+		h.templates.badRequest(w, r)
 		return
 	}
 	plant := lines[0].Plant
@@ -638,13 +638,13 @@ func (h *today) log(w http.ResponseWriter, r *http.Request) {
 		h.templates.render(w, r, view{page: "today", fragment: "sheet", status: http.StatusUnprocessableEntity}, page)
 		return
 	case err != nil:
-		badRequest(w)
+		h.templates.badRequest(w, r)
 		return
 	}
 
 	logged, err := h.queries.CreateCareEvent(r.Context(), careEventParams(principal, plant.ID, care.CareType.ID, d, performedAt, g.now))
 	if err != nil {
-		serverError(h.logger, w, r, "record the care", err)
+		h.templates.serverError(h.logger, w, r, "record the care", err)
 		return
 	}
 	h.notify.call(r.Context(), principal, activityNotification(principal, plant, care.CareType, logged.Done))
@@ -658,7 +658,7 @@ func (h *today) log(w http.ResponseWriter, r *http.Request) {
 	// filled in against.
 	after, err := h.load(r.Context(), principal)
 	if err != nil {
-		serverError(h.logger, w, r, "load the day", err)
+		h.templates.serverError(h.logger, w, r, "load the day", err)
 		return
 	}
 	swap := careSwap{
@@ -676,25 +676,25 @@ func (h *today) logOnPlant(w http.ResponseWriter, r *http.Request, principal aut
 	detail, err := loadPlant(r.Context(), h.queries, principal, plantID, h.now())
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		notFound(w)
+		h.templates.notFound(w, r)
 		return
 	case err != nil:
-		serverError(h.logger, w, r, "load the plant", err)
+		h.templates.serverError(h.logger, w, r, "load the plant", err)
 		return
 	}
 	if detail.plant.ArchivedAt != nil {
-		notFound(w)
+		h.templates.notFound(w, r)
 		return
 	}
 
 	d, ok := readDraft(r.PostForm)
 	if !ok || d.Care == "" {
-		badRequest(w)
+		h.templates.badRequest(w, r)
 		return
 	}
 	care, ok := offerFor(detail.offers(), d.Care)
 	if !ok {
-		badRequest(w)
+		h.templates.badRequest(w, r)
 		return
 	}
 	s := newSheet(detail.plant, detail.offers(), care, d, detail.now)
@@ -710,14 +710,14 @@ func (h *today) logOnPlant(w http.ResponseWriter, r *http.Request, principal aut
 		h.templates.render(w, r, view{page: "plant", status: http.StatusUnprocessableEntity}, page)
 		return
 	case err != nil:
-		badRequest(w)
+		h.templates.badRequest(w, r)
 		return
 	}
 
 	params := careEventParams(principal, detail.plant.ID, care.CareType.ID, d, performedAt, detail.now)
 	logged, err := h.queries.CreateCareEvent(r.Context(), params)
 	if err != nil {
-		serverError(h.logger, w, r, "record the care", err)
+		h.templates.serverError(h.logger, w, r, "record the care", err)
 		return
 	}
 	h.notify.call(r.Context(), principal, activityNotification(principal, detail.plant, care.CareType, logged.Done))
@@ -783,12 +783,12 @@ func (h *today) undo(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	plantID, err := uuid.Parse(r.PathValue("plant"))
 	if err != nil {
-		notFound(w)
+		h.templates.notFound(w, r)
 		return
 	}
 	eventID, err := uuid.Parse(r.PathValue("event"))
 	if err != nil {
-		notFound(w)
+		h.templates.notFound(w, r)
 		return
 	}
 
@@ -803,10 +803,10 @@ func (h *today) undo(w http.ResponseWriter, r *http.Request) {
 	case errors.Is(err, pgx.ErrNoRows):
 		// Someone else's event is a 404, the same as an event that does not
 		// exist.
-		notFound(w)
+		h.templates.notFound(w, r)
 		return
 	case err != nil:
-		serverError(h.logger, w, r, "delete the care", err)
+		h.templates.serverError(h.logger, w, r, "delete the care", err)
 		return
 	}
 
@@ -818,12 +818,12 @@ func (h *today) undo(w http.ResponseWriter, r *http.Request) {
 	// that no longer counts the deleted event.
 	g, err := h.load(r.Context(), principal)
 	if err != nil {
-		serverError(h.logger, w, r, "load the day", err)
+		h.templates.serverError(h.logger, w, r, "load the day", err)
 		return
 	}
 	lines := plantLines(g.lines, plantID)
 	if len(lines) == 0 {
-		notFound(w)
+		h.templates.notFound(w, r)
 		return
 	}
 	line := lines[0]

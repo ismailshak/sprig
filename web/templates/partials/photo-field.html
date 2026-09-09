@@ -19,10 +19,9 @@
      input, because a server cannot fill one. */}}
 {{if .NeedsChoosing}}<p class="field__error" id="photo-again">Choose the photo again.</p>{{end}}
 {{if .Missing}}<p class="field__error">Choose a photo.</p>{{end}}
-{{/* Shown when the garden has no room for the photo. It has no id, so the
-     script that clears the line above by id leaves this one alone. Choosing
-     another photo does not make room. */}}
-{{with .Full}}<p class="field__error">{{.}}</p>{{end}}
+{{/* Why the store refused the photo. It has no id, so the script that clears
+     the line above by id leaves this one alone. */}}
+{{with .Refusal}}<p class="field__error">{{.}}</p>{{end}}
 <div id="photo-chosen"{{if not .Picture}} hidden{{end}}>
 {{/* On the plant form the page's script adds a frame inside this div, over
      the preview. The frame is the 5 by 3 box the plant's page shows the
