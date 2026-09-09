@@ -30,6 +30,8 @@ test('joining through an invite link signs the sitter in and offers reminders be
       page.getByRole('heading', { name: `${people.ellie.name} invited you to ${gardens.home.name}` }),
     ).toBeVisible();
     await invited.name().fill('Kim');
+    await invited.name().press('Tab');
+    await expect(invited.handle()).toHaveValue('kim');
     await invited.timezone().selectOption('Europe/London');
     await invited.join().click();
 
@@ -45,6 +47,22 @@ test('joining through an invite link signs the sitter in and offers reminders be
     // cannot be used.
     await invited.open(invites.sitter.token);
     await expect(page.getByRole('heading', { name: 'This invite link can’t be used' })).toBeVisible();
+  });
+});
+
+test("a handle another account holds is refused on an invite's join form @passkey", async ({ page, invited }) => {
+  await withDevice(page, aWorkingDevice, async () => {
+    await invited.open(invites.sitter.token);
+    await invited.name().fill('Kim');
+    await invited.name().press('Tab');
+    await expect(invited.handle()).toHaveValue('kim');
+    await invited.handle().fill(people.robin.handle);
+    await invited.timezone().selectOption('Europe/London');
+    await invited.join().click();
+
+    await expect(page).toHaveURL(`/invite/${invites.sitter.token}`);
+    await expect(page.getByText(`${people.robin.handle} is already taken`)).toBeVisible();
+    await expect(invited.name()).toHaveValue('Kim');
   });
 });
 

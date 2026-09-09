@@ -30,4 +30,10 @@ export class TokensScreen {
   token(): Locator {
     return this.page.getByText(/^sprg_[0-9a-f]{4}_[0-9a-f]+$/);
   }
+
+  // The button beside the token. The server renders it hidden and the page's
+  // script shows it in a browser with a clipboard.
+  copy(): Locator {
+    return this.page.getByRole('button', { name: 'Copy' });
+  }
 }

@@ -10,9 +10,9 @@ export async function signIn(page: Page, handle: string): Promise<void> {
   // the redirect to finish. A navigation started before that would interrupt
   // it.
   await page.waitForURL('/');
-  // networkidle waits for the heading font. WebKit requests it after first
-  // paint because of font-display: swap, and with JavaScript off the page
-  // reaches load before that request finishes. A navigation started while the
-  // font is still loading fails with an internal WebKit error.
+  // networkidle waits for the heading font. The page preloads it, and with
+  // JavaScript off the page can reach load before that request finishes. A
+  // navigation started while the font is still loading fails with an internal
+  // WebKit error.
   await page.waitForLoadState('networkidle');
 }

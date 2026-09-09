@@ -2,6 +2,7 @@ import { expect, test as base } from '@playwright/test';
 import { AcceptScreen } from '../screens/accept';
 import { AccountScreen } from '../screens/account';
 import { ActivityScreen } from '../screens/activity';
+import { AppearanceScreen } from '../screens/appearance';
 import { ArchivedPlantsScreen } from '../screens/archived-plants';
 import { CloseAccountScreen } from '../screens/close-account';
 import { DeleteGardenScreen } from '../screens/delete-garden';
@@ -36,6 +37,7 @@ type Screens = {
   accept: AcceptScreen;
   account: AccountScreen;
   activity: ActivityScreen;
+  appearance: AppearanceScreen;
   archivedPlants: ArchivedPlantsScreen;
   closeAccount: CloseAccountScreen;
   deleteGarden: DeleteGardenScreen;
@@ -111,6 +113,9 @@ export const test = base.extend<{ seededGarden: void; cspViolations: void } & Sc
   },
   activity: async ({ page }, use) => {
     await use(new ActivityScreen(page));
+  },
+  appearance: async ({ page }, use) => {
+    await use(new AppearanceScreen(page));
   },
   archivedPlants: async ({ page }, use) => {
     await use(new ArchivedPlantsScreen(page));

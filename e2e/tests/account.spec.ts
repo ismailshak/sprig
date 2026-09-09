@@ -81,6 +81,7 @@ test('a closed account cannot sign in and its name stays on Activity', async ({
   await account.open();
   await account.closeAccount().click();
 
+  await closeAccount.handle().fill(people.sam.handle);
   await closeAccount.confirm().click();
 
   await expect(page).toHaveURL('/signin');
@@ -90,4 +91,17 @@ test('a closed account cannot sign in and its name stays on Activity', async ({
   await signIn(page, people.ellie.handle);
   await activity.open();
   await expect(activity.rows().filter({ hasText: people.sam.name }).first()).toBeVisible();
+});
+
+test('closing an account with the wrong handle typed is refused', async ({ account, closeAccount, page }) => {
+  await signIn(page, people.sam.handle);
+  await closeAccount.open();
+
+  await closeAccount.handle().fill(people.ellie.handle);
+  await closeAccount.confirm().click();
+
+  await expect(page.getByText('That isn’t your handle.')).toBeVisible();
+  await expect(closeAccount.handle()).toHaveValue(people.ellie.handle);
+  await account.open();
+  await expect(account.handle()).toHaveValue(people.sam.handle);
 });

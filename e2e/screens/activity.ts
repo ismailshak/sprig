@@ -14,6 +14,32 @@ export class ActivityScreen {
     return this.page.getByRole('link', { name: plant.name });
   }
 
+  // The filters sit in a details element under the title that renders closed.
+  // Its summary reads Filter, followed by what is set.
+  async showFilters(): Promise<void> {
+    await this.page.getByText(/^Filter/).click();
+  }
+
+  care(): Locator {
+    return this.page.getByLabel('Care', { exact: true });
+  }
+
+  from(): Locator {
+    return this.page.getByLabel('From', { exact: true });
+  }
+
+  to(): Locator {
+    return this.page.getByLabel('To', { exact: true });
+  }
+
+  async apply(): Promise<void> {
+    await this.page.getByRole('button', { name: 'Apply' }).click();
+  }
+
+  clear(): Locator {
+    return this.page.getByRole('link', { name: 'Clear' });
+  }
+
   older(): Locator {
     return this.page.getByRole('link', { name: 'Older activity' });
   }

@@ -12,6 +12,16 @@ test('the More tab opens the index', async ({ page, more }) => {
   await expect(more.row('Account')).toBeVisible();
 });
 
+test('the More tab on a page under More goes back to the index', async ({ page, account }) => {
+  await signIn(page, people.ellie.handle);
+  await account.open();
+
+  await page.getByRole('navigation').getByRole('link', { name: 'More' }).click();
+
+  await expect(page).toHaveURL('/more');
+  await expect(page.getByRole('heading', { name: 'More' })).toBeVisible();
+});
+
 test('a member has no Garden row and no People row', async ({ page, more }) => {
   await signIn(page, people.sam.handle);
 
