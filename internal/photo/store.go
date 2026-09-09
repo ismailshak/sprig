@@ -37,7 +37,7 @@ const cacheControl = "private, max-age=31536000, immutable"
 // Store writes and reads photo files under one directory, SPRIG_PHOTO_DIR.
 type Store struct {
 	dir string
-	// quota is SPRIG_PHOTO_QUOTA_BYTES, the most one garden's photos may add
+	// quota is SPRIG_PHOTO_QUOTA, the most one garden's photos may add
 	// up to, square variants included.
 	quota int64
 }

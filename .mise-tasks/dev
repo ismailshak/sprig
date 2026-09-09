@@ -3,6 +3,9 @@
 #USAGE flag "--once" help="Run the server once instead of rebuilding on a change"
 set -euo pipefail
 
+# /setup returns 404 once an install has an account, unless sign-up is on. The
+# seeded database has accounts.
+export SPRIG_SIGNUP_ENABLED="true"
 export SPRIG_LOG_FORMAT=text
 # The session cookie drops Secure because WebKit refuses one over plain http,
 # localhost included. The name loses its __Host- prefix, which is valid only on
@@ -33,6 +36,6 @@ if [ "${usage_once:-false}" = "true" ]; then
   go run -tags dev ./cmd/sprig
 else
   # wgo rebuilds and restarts on a change, watching .go on its own. The -file
-  # flag adds .css because web/static is compiled into the binary.
-  wgo run -file='\.css$' -xdir='^(prototype|node_modules|e2e)$' -tags=dev ./cmd/sprig
+  # flag adds .css and .js because web/static is compiled into the binary.
+  wgo run -file='\.(css|js)$' -xdir='^(node_modules|e2e)$' -tags=dev ./cmd/sprig
 fi
