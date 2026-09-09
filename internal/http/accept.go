@@ -25,7 +25,7 @@ const acceptSuffix = "/accept"
 
 // acceptPath is the URL of the page that accepts the invite for token as the
 // account signed in. The form on it posts to the same URL.
-func acceptPath(token string) string { return invitedPath(token) + acceptSuffix }
+func acceptPath(token string) string { return InvitedPath(token) + acceptSuffix }
 
 // signInToAcceptPath is the URL of the sign-in page with its next parameter
 // set to the accept page for token, so signing in there redirects to it.

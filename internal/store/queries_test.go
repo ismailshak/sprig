@@ -448,8 +448,9 @@ func TestQueries_EveryQueryOnAGardenScopedTableBindsTheGarden(t *testing.T) {
 		if len(touched) == 0 {
 			continue
 		}
-		// Closing an account deletes its sessions in every garden at once.
-		if query.name == "DeleteUserSessions" && slices.Equal(touched, []string{"session"}) {
+		// Closing an account and the daily sweep both delete sessions across
+		// every garden. Neither runs from a request.
+		if (query.name == "DeleteUserSessions" || query.name == "DeleteExpiredSessions") && slices.Equal(touched, []string{"session"}) {
 			continue
 		}
 		if slices.Equal(touched, []string{"session"}) {
@@ -464,9 +465,9 @@ func TestQueries_EveryQueryOnAGardenScopedTableBindsTheGarden(t *testing.T) {
 		if slices.Equal(touched, []string{"invite"}) && strings.Contains(query.sql, "@token_hash") {
 			continue
 		}
-		// Closing an account deletes the re-enrolment links made for it in
-		// every garden at once.
-		if query.name == "DeleteUserReenrolmentInvites" && slices.Equal(touched, []string{"invite"}) {
+		// Closing an account and the daily sweep both delete invites across
+		// every garden. Neither runs from a request.
+		if (query.name == "DeleteUserReenrolmentInvites" || query.name == "DeleteRedeemedAndExpiredInvites") && slices.Equal(touched, []string{"invite"}) {
 			continue
 		}
 		// A bearer token is found by its hash before any garden is known, so

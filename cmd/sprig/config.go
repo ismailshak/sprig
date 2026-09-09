@@ -50,6 +50,10 @@ type config struct {
 	push push.Keys
 }
 
+// defaultAddr is the address the server listens on when SPRIG_ADDR is unset.
+// sprig health reads the same variable to find the server.
+const defaultAddr = ":8080"
+
 // defaultBaseURL is the address the development server runs on, so a local run
 // needs no configuration. A deployment sets SPRIG_BASE_URL, because a browser
 // refuses a passkey ceremony whose origin is not the one it is on.
@@ -76,7 +80,7 @@ func loadConfig(getenv func(string) string) (config, error) {
 	}
 
 	cfg := config{
-		addr:            withDefault(getenv("SPRIG_ADDR"), ":8080"),
+		addr:            withDefault(getenv("SPRIG_ADDR"), defaultAddr),
 		databaseURL:     require("SPRIG_DATABASE_URL"),
 		trustedIPHeader: strings.TrimSpace(getenv("SPRIG_TRUSTED_IP_HEADER")),
 		templateDir:     strings.TrimSpace(getenv("SPRIG_TEMPLATE_DIR")),

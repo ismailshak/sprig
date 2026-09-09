@@ -136,7 +136,7 @@ func (f *invitedFixture) request(t *testing.T, handler http.HandlerFunc, token, 
 
 func (f *invitedFixture) show(t *testing.T, token string) *httptest.ResponseRecorder {
 	t.Helper()
-	return f.request(t, f.handler.show, token, invitedPath(token), nil)
+	return f.request(t, f.handler.show, token, InvitedPath(token), nil)
 }
 
 // challenge posts form for a registration challenge on token and returns the
@@ -171,7 +171,7 @@ func (f *invitedFixture) redeem(t *testing.T, token string, form url.Values, dev
 		answered[k] = v
 	}
 	answered.Set(credentialField, device.Register(creation))
-	return f.request(t, f.handler.redeem, token, invitedPath(token), answered, append(cookies, cookie)...)
+	return f.request(t, f.handler.redeem, token, InvitedPath(token), answered, append(cookies, cookie)...)
 }
 
 // sessionOf fails the test unless rec redirected to next with a session
@@ -238,7 +238,7 @@ func TestInvited_AJoinLinkRendersTheFormWithTheGardenTheInviterAndTheRoleAndNoTa
 	page := rec.Body.String()
 	for _, want := range []string{
 		"Ellie invited you to Rosewood",
-		`action="` + invitedPath(sitterLink) + `"`,
+		`action="` + InvitedPath(sitterLink) + `"`,
 		`data-passkey="create"`,
 		`data-challenge="` + invitedChallengePath(sitterLink) + `"`,
 		`id="name" name="name"`,
@@ -334,7 +334,7 @@ func TestInvited_AJoinLinkWhoseAccessWouldAlreadyHaveEndedCannotBeUsed(t *testin
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Errorf("the challenge: status = %d, want %d, so no passkey is made for a link the post refuses", rec.Code, http.StatusUnprocessableEntity)
 	}
-	unusable(t, f.request(t, f.handler.redeem, endedBeforeJoiningLink, invitedPath(endedBeforeJoiningLink), aJoinForm()))
+	unusable(t, f.request(t, f.handler.redeem, endedBeforeJoiningLink, InvitedPath(endedBeforeJoiningLink), aJoinForm()))
 }
 
 func TestInvited_ALinkExpiringAtThisInstantCannotBeUsed(t *testing.T) {
@@ -346,7 +346,7 @@ func TestInvited_ALinkExpiringAtThisInstantCannotBeUsed(t *testing.T) {
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Errorf("the challenge: status = %d, want %d, so no passkey is made for a link the post refuses", rec.Code, http.StatusUnprocessableEntity)
 	}
-	unusable(t, f.request(t, f.handler.redeem, expiringNowLink, invitedPath(expiringNowLink), aJoinForm()))
+	unusable(t, f.request(t, f.handler.redeem, expiringNowLink, InvitedPath(expiringNowLink), aJoinForm()))
 }
 
 func TestInvited_AReenrolmentLinkForSomebodyWhoseAccessEndedOrWasRemovedCannotBeUsed(t *testing.T) {
@@ -380,7 +380,7 @@ func TestInvited_AnEmptyFieldIsRefusedOnTheChallengeAndTheMessageIsUnderItOnTheP
 				t.Errorf("the challenge wrote %d ceremony rows, want none", n)
 			}
 
-			rec := f.request(t, f.handler.redeem, sitterLink, invitedPath(sitterLink), form)
+			rec := f.request(t, f.handler.redeem, sitterLink, InvitedPath(sitterLink), form)
 
 			if rec.Code != http.StatusUnprocessableEntity {
 				t.Fatalf("the post: status = %d, want %d:\n%s", rec.Code, http.StatusUnprocessableEntity, text(rec.Body.String()))
@@ -412,7 +412,7 @@ func TestInvited_AZoneTheSelectDoesNotOfferIs400(t *testing.T) {
 	if rec := f.request(t, f.handler.challenge, sitterLink, invitedChallengePath(sitterLink), form); rec.Code != http.StatusBadRequest {
 		t.Errorf("the challenge: status = %d, want %d", rec.Code, http.StatusBadRequest)
 	}
-	if rec := f.request(t, f.handler.redeem, sitterLink, invitedPath(sitterLink), form); rec.Code != http.StatusBadRequest {
+	if rec := f.request(t, f.handler.redeem, sitterLink, InvitedPath(sitterLink), form); rec.Code != http.StatusBadRequest {
 		t.Errorf("the post: status = %d, want %d", rec.Code, http.StatusBadRequest)
 	}
 }
@@ -490,7 +490,7 @@ func TestInvited_TheSameLinkRedeemedTwiceCreatesOneAccount(t *testing.T) {
 	if rec := f.request(t, f.handler.challenge, sitterLink, invitedChallengePath(sitterLink), second); rec.Code != http.StatusUnprocessableEntity {
 		t.Errorf("the second challenge: status = %d, want %d", rec.Code, http.StatusUnprocessableEntity)
 	}
-	unusable(t, f.request(t, f.handler.redeem, sitterLink, invitedPath(sitterLink), second))
+	unusable(t, f.request(t, f.handler.redeem, sitterLink, InvitedPath(sitterLink), second))
 
 	if n := f.count(t, "app_user"); n != users+1 {
 		t.Errorf("%d accounts, want one more than before", n)
@@ -508,9 +508,9 @@ func TestInvited_TheSecondOfTwoChallengesOnOneLinkIsRefusedOnceTheFirstIsAnswere
 
 	answered := aJoinForm()
 	answered.Set(credentialField, aDevice().Register(first))
-	f.sessionOf(t, f.request(t, f.handler.redeem, sitterLink, invitedPath(sitterLink), answered, firstCookie), afterInvitePath)
+	f.sessionOf(t, f.request(t, f.handler.redeem, sitterLink, InvitedPath(sitterLink), answered, firstCookie), afterInvitePath)
 	second.Set(credentialField, aDevice().Register(secondCreation))
-	rec := f.request(t, f.handler.redeem, sitterLink, invitedPath(sitterLink), second, secondCookie)
+	rec := f.request(t, f.handler.redeem, sitterLink, InvitedPath(sitterLink), second, secondCookie)
 
 	unusable(t, rec)
 	if n := f.count(t, "app_user"); n != users+1 {
@@ -546,6 +546,37 @@ func TestInvited_ReenrollingAddsAPasskeyToTheAccountWritesNothingElseAndSignsInO
 		t.Error("the link was not marked used")
 	}
 	unusable(t, f.show(t, samsLink))
+}
+
+func TestInvited_ALinkFromSprigAdminInviteAddsAPasskeyToTheSameAccountAndChangesNoMembership(t *testing.T) {
+	f := invitedGarden(t)
+	device := aDevice()
+	users, memberships := f.count(t, "app_user"), f.count(t, "membership")
+	made, err := auth.IssueSignInLink(t.Context(), f.queries, thursday, "sam")
+	if err != nil {
+		t.Fatalf("issuing the link: %v", err)
+	}
+
+	page := f.show(t, made.Token).Body.String()
+	if !strings.Contains(page, "This link signs you in to") || strings.Contains(page, "Sam sent this link") {
+		t.Errorf("the page names a sender, and the operator made the link:\n%s", text(page))
+	}
+	rec := f.redeem(t, made.Token, nil, device)
+
+	principal := f.sessionOf(t, rec, "/")
+	if principal.User.ID != otherUserID || principal.Garden.ID != moreGardenID {
+		t.Errorf("the session is %s on %s, want Sam on Rosewood", principal.User.DisplayName, principal.Garden.Name)
+	}
+	keys, err := f.queries.ListPasskeys(t.Context(), otherUserID)
+	if err != nil {
+		t.Fatalf("listing the passkeys: %v", err)
+	}
+	if len(keys) != 2 || keys[1].CredentialID != device.CredentialID() {
+		t.Errorf("Sam's passkeys are %+v, want the one seeded and the device", keys)
+	}
+	if f.count(t, "app_user") != users || f.count(t, "membership") != memberships {
+		t.Error("redeeming wrote an account or a membership, and Sam already has both")
+	}
 }
 
 func TestInvited_ADeviceThatDidNotCheckWhoWasUsingItIsRefusedAndNothingIsWritten(t *testing.T) {
@@ -630,11 +661,11 @@ func TestInvited_TheSeventhPostInAMinuteFromOneAddressIsRefusedWithTheSentenceAb
 	// A post with no ceremony cookie is refused as expired. Each one still
 	// spends from the address's budget.
 	for i := range 6 {
-		if rec := postFrom(t, handler, invitedPath(sitterLink), "203.0.113.1", aJoinForm()); rec.Code != http.StatusUnprocessableEntity {
+		if rec := postFrom(t, handler, InvitedPath(sitterLink), "203.0.113.1", aJoinForm()); rec.Code != http.StatusUnprocessableEntity {
 			t.Fatalf("post %d: status = %d, want %d:\n%s", i+1, rec.Code, http.StatusUnprocessableEntity, text(rec.Body.String()))
 		}
 	}
-	rec := postFrom(t, handler, invitedPath(sitterLink), "203.0.113.1", aJoinForm())
+	rec := postFrom(t, handler, InvitedPath(sitterLink), "203.0.113.1", aJoinForm())
 
 	if rec.Code != http.StatusTooManyRequests {
 		t.Fatalf("the seventh post: status = %d, want %d", rec.Code, http.StatusTooManyRequests)
@@ -652,7 +683,7 @@ func TestInvited_TheSeventhPostInAMinuteFromOneAddressIsRefusedWithTheSentenceAb
 	if strings.Contains(page, "data-propose") {
 		t.Error("the select is marked for the script to change, and the zone posted is the person's own choice")
 	}
-	if rec := postFrom(t, handler, invitedPath(sitterLink), "203.0.113.2", aJoinForm()); rec.Code != http.StatusUnprocessableEntity {
+	if rec := postFrom(t, handler, InvitedPath(sitterLink), "203.0.113.2", aJoinForm()); rec.Code != http.StatusUnprocessableEntity {
 		t.Errorf("another address: status = %d, want %d, so the budget spent was one address's", rec.Code, http.StatusUnprocessableEntity)
 	}
 }

@@ -56,3 +56,12 @@ WHERE garden_id = @garden_id AND id = @invite_id AND redeemed_at IS NULL AND exp
 -- name: DeleteUserReenrolmentInvites :exec
 DELETE FROM invite
 WHERE user_id = @user_id::uuid AND redeemed_at IS NULL;
+
+-- DeleteRedeemedAndExpiredInvites deletes the invites no page lists once they
+-- are @before or older: a redeemed invite of either kind, and an expired
+-- sign-in link. An expired join invite is kept, because People lists it under
+-- Pending invites with a Revoke button.
+-- name: DeleteRedeemedAndExpiredInvites :execrows
+DELETE FROM invite
+WHERE (redeemed_at IS NOT NULL AND redeemed_at <= @before::timestamptz)
+   OR (user_id IS NOT NULL AND redeemed_at IS NULL AND expires_at <= @before::timestamptz);

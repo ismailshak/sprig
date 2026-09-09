@@ -35,3 +35,11 @@ WHERE token_hash = @token_hash;
 
 -- name: DeleteUserSessions :exec
 DELETE FROM session WHERE user_id = @user_id;
+
+-- DeleteExpiredSessions deletes the sessions last seen at @before or earlier,
+-- where @before is now minus the session TTL. Looking a session up deletes an
+-- expired row when its token is next presented, so what is left for this are
+-- the sessions no browser will present again.
+-- name: DeleteExpiredSessions :execrows
+DELETE FROM session
+WHERE last_seen_at <= @before::timestamptz;

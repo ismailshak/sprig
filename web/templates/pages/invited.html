@@ -17,7 +17,7 @@
 <p class="bare__line">Invite links work once and expire after 7 days. Ask the person who sent it for a new one, or <a href="{{.SignIn}}">sign in</a> if you’ve already joined.</p>
 {{else if .Reenrol}}
 <h1 class="bare__title">Add this device to your account</h1>
-<p class="lead">{{.By}} sent this link so you can sign in to {{.Garden}} from this device. It adds a passkey to your existing account.</p>
+<p class="lead">{{if .By}}{{.By}} sent this link so you can sign in to {{.Garden}} from this device.{{else}}This link signs you in to {{.Garden}} from this device.{{end}} It adds a passkey to your existing account.</p>
 {{/* The paragraph below is rendered even when Refusal is empty, because the
      page's script writes the browser's refusal into it. The button starts
      disabled and the note stays under it until that script runs, because the

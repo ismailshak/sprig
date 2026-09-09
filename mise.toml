@@ -57,15 +57,15 @@ description = "Regenerate the sqlc queries in internal/store from db/queries"
 run = "sqlc generate"
 
 [tasks.format]
-description = "Format the e2e subproject and the app's JavaScript with prettier"
+description = "Format the e2e subproject, the app's JavaScript and the markdown at the root with prettier"
 dir = "e2e"
 run = [
   "pnpm install --frozen-lockfile",
   "pnpm run format",
-  # The app's scripts are outside this directory, so they are named here and
-  # given the same config. The glob does not reach the vendored htmx. That is
-  # a directory below, under web/static/vendor.
-  "pnpm exec prettier --write --config .prettierrc.json ../web/static/*.js",
+  # The app's scripts and the root markdown are outside this directory, so
+  # they are named here and given the same config. The script glob does not
+  # reach the vendored htmx. That is a directory below, under web/static/vendor.
+  "pnpm exec prettier --write --config .prettierrc.json ../web/static/*.js ../*.md",
 ]
 
 [tasks.hooks]
@@ -73,9 +73,15 @@ description = "Point git at the hooks in .githooks, which is a per-clone setting
 run = "git config core.hooksPath .githooks"
 
 [tasks.sweep]
-description = "Remove photo files under SPRIG_PHOTO_DIR that no row points at, against the dev database"
+description = "Delete the rows no page shows and the photo files no row points at, against the dev database"
 # The sweep loads the whole server config. It uses no cookie, but the config
 # rejects the default __Host- cookie name unless the cookie is Secure, and
 # rejects a Secure cookie with an http base URL.
 env = { SPRIG_COOKIE_SECURE = "false", SPRIG_COOKIE_NAME = "sprig_session" }
 run = "go run ./cmd/sprig sweep"
+
+[tasks.admin]
+description = "Run sprig admin against the dev database: mise run admin invite --user <handle>"
+usage = 'arg "<args>..." var=#true help="Passed to sprig admin, such as invite --user emma"'
+env = { SPRIG_COOKIE_SECURE = "false", SPRIG_COOKIE_NAME = "sprig_session" }
+run = 'eval "set -- $usage_args"; go run ./cmd/sprig admin "$@"'

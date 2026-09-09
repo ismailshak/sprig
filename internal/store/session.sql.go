@@ -53,6 +53,23 @@ func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) (S
 	return i, err
 }
 
+const deleteExpiredSessions = `-- name: DeleteExpiredSessions :execrows
+DELETE FROM session
+WHERE last_seen_at <= $1::timestamptz
+`
+
+// DeleteExpiredSessions deletes the sessions last seen at @before or earlier,
+// where @before is now minus the session TTL. Looking a session up deletes an
+// expired row when its token is next presented, so what is left for this are
+// the sessions no browser will present again.
+func (q *Queries) DeleteExpiredSessions(ctx context.Context, before time.Time) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteExpiredSessions, before)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteSession = `-- name: DeleteSession :exec
 DELETE FROM session
 WHERE token_hash = $1
