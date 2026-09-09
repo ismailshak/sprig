@@ -73,7 +73,8 @@ const deleteUserMemberships = `-- name: DeleteUserMemberships :exec
 DELETE FROM membership WHERE user_id = $1
 `
 
-// Deletes the account's memberships in every garden, so it takes no garden id.
+// Deletes the account's memberships in every garden. There is no garden id
+// because the query spans them all.
 func (q *Queries) DeleteUserMemberships(ctx context.Context, userID uuid.UUID) error {
 	_, err := q.db.Exec(ctx, deleteUserMemberships, userID)
 	return err

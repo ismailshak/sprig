@@ -20,7 +20,7 @@
 {{if .Add}}<a class="empty__action" href="/plants/new">Add plant</a>{{end}}
 </div>
 {{end}}
-{{/* The archive is linked from here rather than from More, because an archived
+{{/* Archived plants is linked from here rather than from More, because an archived
      plant is still a plant. */}}
 {{with .Archived}}<a class="foot-link" href="{{.Href}}">{{.Label}}{{template "icon-chevron"}}</a>{{end}}
 </div>

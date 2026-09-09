@@ -391,8 +391,7 @@ func livingPlants() []plant {
 }
 
 // archivedPlants returns the three archived plants in the Home garden. They
-// have no schedules and no history. Plants, Today and the digest leave them
-// out, and the Archived plants page lists them.
+// have no schedules and no activity.
 func archivedPlants() []plant {
 	return []plant{
 		{

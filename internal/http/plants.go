@@ -101,9 +101,9 @@ type plantRow struct {
 	// today is not mentioned because Today already says so. Only the Plants
 	// page sets it.
 	Standing string
-	// When is the day the plant was archived, such as "Archived 12 Aug". Only
+	// ArchivedOn is the day the plant was archived, such as "Archived 12 Aug". Only
 	// the Archived plants page sets it.
-	When string
+	ArchivedOn string
 	// Picture is the URL of the plant's profile picture as a square, empty for
 	// a plant with no picture.
 	Picture string

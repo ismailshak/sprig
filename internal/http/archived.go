@@ -19,9 +19,7 @@ func restorePlantPath(plantID uuid.UUID) string {
 }
 
 type archivedPage struct {
-	Bar topbar
-	// Plants are the same rows the Plants page renders. Their second line
-	// gives the date the plant was archived instead of an overdue care.
+	Bar    topbar
 	Plants []plantRow
 }
 
@@ -41,11 +39,11 @@ func newArchivedPage(list []store.Plant, now time.Time) archivedPage {
 	page := archivedPage{Bar: topbar{Href: plantsPath, Back: "Plants", Title: "Archived plants"}}
 	for _, plant := range list {
 		row := plantRow{
-			Href:      plantPath(plant.ID),
-			Name:      plant.DisplayName(),
-			Botanical: plant.BotanicalOnly(),
-			Picture:   squarePicturePath(plant),
-			When:      archivedWord(*plant.ArchivedAt, now),
+			Href:       plantPath(plant.ID),
+			Name:       plant.DisplayName(),
+			Botanical:  plant.BotanicalOnly(),
+			Picture:    squarePicturePath(plant),
+			ArchivedOn: archivedWord(*plant.ArchivedAt, now),
 		}
 		row.Sub, row.SubBotanical = plant.OtherName()
 		page.Plants = append(page.Plants, row)

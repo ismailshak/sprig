@@ -6,7 +6,7 @@
 {{define "main"}}
 {{template "more-topbar" .Bar}}
 <div class="app__body app__body--sub">
-<p class="lead">Deleting {{.Name}} removes its plants, schedules, activity and photos, and everyone in it loses access. This can’t be undone.</p>
+<p class="lead">Deleting {{.Name}} deletes its plants, schedules, activity and photos. Everyone in it loses access. This can’t be undone.</p>
 <form method="post" action="{{.Action}}" novalidate>
 <div class="field">
 <label class="field__label" for="name">Type {{.Name}} to confirm</label>

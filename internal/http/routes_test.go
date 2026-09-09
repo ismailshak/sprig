@@ -285,8 +285,8 @@ var routeAccess = map[string]access{
 	// Fairview has.
 	"GET /more/garden":  {capability: auth.GardenEdit},
 	"POST /more/garden": {capability: auth.GardenEdit},
-	// The post with no name typed is refused, so the seeded garden stays for
-	// the routes after it.
+	// The post with no name typed is refused. The seeded garden stays for the
+	// routes after it.
 	"GET /more/garden/delete":  {capability: auth.GardenDelete},
 	"POST /more/garden/delete": {capability: auth.GardenDelete},
 	"GET /more/garden/types":   {capability: auth.CareTypeManage},

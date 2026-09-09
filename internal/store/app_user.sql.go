@@ -30,8 +30,8 @@ UPDATE app_user SET closed_at = $1::timestamptz, last_garden_id = NULL
 WHERE id = $2 AND closed_at IS NULL
 `
 
-// Marks the account closed and keeps the row, so care events and photos still
-// show the person's name. The caller deletes the passkeys, sessions and
+// Marks the account closed. The row is kept because care events and photos
+// still show the person's name. The caller deletes the passkeys, sessions and
 // memberships in the same transaction.
 func (q *Queries) CloseAccount(ctx context.Context, now time.Time, userID uuid.UUID) (int64, error) {
 	result, err := q.db.Exec(ctx, closeAccount, now, userID)
@@ -139,7 +139,7 @@ ORDER BY garden.name, garden.id
 // Lists the gardens where this account is the only owner, ordered by name. An
 // expired membership counts on neither side, because an owner whose access has
 // ended can no longer delete the garden or hand it on. It takes a user id and
-// no garden id, because it is what finds the account's gardens.
+// no garden id, because it searches every garden.
 func (q *Queries) ListGardensOnlyThisUserOwns(ctx context.Context, userID uuid.UUID, now time.Time) ([]Garden, error) {
 	rows, err := q.db.Query(ctx, listGardensOnlyThisUserOwns, userID, now)
 	if err != nil {
@@ -166,9 +166,9 @@ WHERE closed_at IS NULL
 ORDER BY created_at, id
 `
 
-// Both queries exist for the development sign-in, which lists accounts and
-// signs one in by handle alone. Closed accounts are left out because nothing
-// may sign in as them. Nothing in a production build calls either query.
+// Both queries serve the development sign-in. It lists accounts and signs one
+// in by handle alone. Closed accounts are left out because nothing may sign in
+// as them. Nothing in a production build calls either query.
 func (q *Queries) ListUsers(ctx context.Context) ([]AppUser, error) {
 	rows, err := q.db.Query(ctx, listUsers)
 	if err != nil {

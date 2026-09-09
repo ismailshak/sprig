@@ -119,7 +119,7 @@ test('a garden name typed in lower case is refused and the garden stays', async 
   await deleteGarden.name().fill('home');
   await deleteGarden.confirm().click();
 
-  await expect(page.getByText('That isn’t this garden’s name.')).toBeVisible();
+  await expect(page.getByText('That isn’t the garden’s name. Type it exactly as shown.')).toBeVisible();
   await today.open();
   await expect(page.getByRole('heading', { name: gardens.home.name, level: 1 })).toBeVisible();
 });

@@ -152,8 +152,8 @@ export class PlantScreen {
     return this.page.locator('#plant-foot');
   }
 
-  // Restore posts and redirects, with no confirmation step, so the click is a
-  // full navigation.
+  // Restore posts and redirects with no confirmation step. The click is a full
+  // navigation.
   async restore(): Promise<void> {
     await this.page.getByRole('button', { name: 'Restore' }).click();
     await this.page.waitForLoadState();

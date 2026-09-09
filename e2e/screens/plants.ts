@@ -41,7 +41,7 @@ export class PlantsScreen {
 
   // The link at the bottom of the list to the Archived plants page. Its text
   // is the count, such as "3 archived".
-  archiveLink(): Locator {
+  archivedLink(): Locator {
     return this.page.getByRole('link', { name: /\d+ archived$/ });
   }
 }

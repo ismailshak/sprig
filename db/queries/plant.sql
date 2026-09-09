@@ -75,7 +75,7 @@ SELECT * FROM plant
 WHERE garden_id = @garden_id AND archived_at IS NOT NULL
 ORDER BY archived_at DESC, id;
 
--- The Plants page links to the archive only when this is not zero.
+-- The Plants page links to Archived plants only when this is not zero.
 -- name: CountArchivedPlants :one
 SELECT count(*) FROM plant
 WHERE garden_id = @garden_id AND archived_at IS NOT NULL;

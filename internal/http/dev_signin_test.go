@@ -47,7 +47,7 @@ func devStack(t *testing.T) (http.Handler, *auth.Resolver) {
 		{"INSERT INTO app_user (id, display_name, handle, timezone, created_at) VALUES ($1, 'Ellie', 'ellie', 'Europe/London', now() - interval '3 days')", []any{ellieID}},
 		{"INSERT INTO app_user (id, display_name, handle, timezone, created_at) VALUES ($1, 'Sam', 'sam', 'Europe/London', now() - interval '2 days')", []any{samID}},
 		{"INSERT INTO app_user (id, display_name, handle, timezone, created_at) VALUES ($1, 'Robin', 'robin', 'Europe/Lisbon', now() - interval '1 day')", []any{robinID}},
-		// Clare closed her account, so the page does not list her.
+		// Clare's account is closed. The page does not list her.
 		{"INSERT INTO app_user (display_name, handle, timezone, closed_at) VALUES ('Clare', 'clare', 'Europe/London', now())", nil},
 		{"INSERT INTO membership (garden_id, user_id, role, created_at, digest_hour) VALUES ($1, $2, 'owner', now() - interval '3 days', 8)", []any{homeID, ellieID}},
 		{"INSERT INTO membership (garden_id, user_id, role, created_at, digest_hour) VALUES ($1, $2, 'member', now() - interval '2 days', 8)", []any{homeID, samID}},

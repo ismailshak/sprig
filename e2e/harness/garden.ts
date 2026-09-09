@@ -79,8 +79,8 @@ export const plants = {
 } as const;
 
 // The three archived plants in the Home garden, most recently archived first.
-// Upstairs has none. Sweet basil has no nickname, so its page and its row
-// show the common name.
+// Upstairs has none. Sweet basil has no nickname. Its page and its row show
+// the common name.
 export const archivedPlants = {
   barry: { id: '00000000-0000-7000-8000-050000000013', name: 'Barry', room: 'Living room' },
   kev: { id: '00000000-0000-7000-8000-050000000014', name: 'Kev', room: 'Bathroom' },

@@ -13,11 +13,11 @@ const deleteGardenPath = gardenPath + "/delete"
 
 // deleteGardenMismatch is shown under the field when what was typed is not
 // the garden's name.
-const deleteGardenMismatch = "That isn’t this garden’s name."
+const deleteGardenMismatch = "That isn’t the garden’s name. Type it exactly as shown."
 
 // deleteGardenPage is the Delete garden page. The garden's name has to be
 // typed into a field rather than a button pressed, because this is the one
-// action that removes plants, activity and photos with no way to undo it.
+// action that deletes plants, activity and photos with no way to undo it.
 type deleteGardenPage struct {
 	Bar    topbar
 	Action string
@@ -42,12 +42,11 @@ func (h *more) confirmDeleteGarden(w http.ResponseWriter, r *http.Request) {
 	h.templates.render(w, r, view{page: "delete-garden"}, h.newDeleteGardenPage(PrincipalFrom(r).Garden.Name))
 }
 
-// deleteGarden handles POST /more/garden/delete. The garden's rows go in one
-// transaction and its photo files afterwards, so a crash between the two
-// leaves files with no row rather than rows with no files. Deleting the
-// memberships sets garden_id to null on the sessions in the garden, so the
-// redirect to Today lands the owner on their next garden or on the page for an
-// account in none.
+// deleteGarden handles POST /more/garden/delete. The rows are deleted in one
+// transaction and the photo files afterwards, so a crash between the two
+// leaves files with no row rather than rows with no file. Deleting the
+// memberships sets garden_id to null on the garden's sessions. The redirect to
+// Today then opens the owner's next garden or the no-garden page.
 func (h *more) deleteGarden(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	if err := r.ParseForm(); err != nil {
@@ -76,8 +75,8 @@ func (h *more) deleteGarden(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// A failure here is logged and not shown, because the rows are already
-	// deleted. The sweep removes the leftover files later.
-	if err := h.photos.RemoveGarden(gardenID); err != nil {
+	// deleted. The photo sweep deletes any file left behind.
+	if err := h.photos.DeleteGardenPhotos(gardenID); err != nil {
 		h.logger.WarnContext(r.Context(), "remove the deleted garden's photos", "error", err)
 	}
 	// The digest job works out its next send again, because the memberships it

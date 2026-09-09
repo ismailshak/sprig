@@ -13,8 +13,7 @@ import (
 )
 
 // closeAccountPath is the URL of the Close account page. A GET renders the
-// confirmation and a POST closes the account. The route is registered without
-// the garden requirement, so an account in no garden can still close.
+// confirmation and a POST closes the account.
 const closeAccountPath = accountPath + "/close"
 
 // errSoleOwner is returned by closeUserAccount when the account is the only
@@ -28,9 +27,9 @@ type closeAccountPage struct {
 	// InGarden is false when the account is in no garden. The page then leaves
 	// out the tab bar, because every tab needs a garden.
 	InGarden bool
-	// Owned is the sentence naming the gardens this account is the only owner
-	// of. The page renders no Close account button while it is set.
-	Owned string
+	// SoleOwnerNotice is the sentence naming the gardens this account is the
+	// only owner of. The page renders no Close account button while it is set.
+	SoleOwnerNotice string
 }
 
 func (h *more) newCloseAccountPage(ctx context.Context, principal auth.Principal) (closeAccountPage, error) {
@@ -46,13 +45,11 @@ func (h *more) newCloseAccountPage(ctx context.Context, principal auth.Principal
 	if err != nil {
 		return closeAccountPage{}, err
 	}
-	page.Owned = ownedSentence(owned)
+	page.SoleOwnerNotice = soleOwnerNotice(owned)
 	return page, nil
 }
 
-// ownedSentence tells the reader to delete the gardens they alone own before
-// closing. It is empty when there are none.
-func ownedSentence(gardens []store.Garden) string {
+func soleOwnerNotice(gardens []store.Garden) string {
 	if len(gardens) == 0 {
 		return ""
 	}
@@ -87,7 +84,7 @@ func (h *more) confirmCloseAccount(w http.ResponseWriter, r *http.Request) {
 }
 
 // closeAccount handles POST /more/account/close. The sole-owner check runs in
-// the same transaction as the deletes, so a refused close writes nothing.
+// the same transaction as the deletes. A refused close writes nothing.
 func (h *more) closeAccount(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	err := h.queries.InTx(r.Context(), func(q *store.Queries) error {
@@ -113,11 +110,9 @@ func (h *more) closeAccount(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, signInPath, http.StatusSeeOther)
 }
 
-// closeUserAccount deletes the account's passkeys, recovery codes, push
-// subscriptions, sessions, ceremonies, re-enrolment invites and memberships,
+// closeUserAccount deletes the account's credentials, sessions and memberships,
 // then marks the row closed. The row is kept so care events and photos still
-// show the person's name. It writes nothing and returns errSoleOwner when the
-// account is the only owner of a garden.
+// show the person's name.
 func closeUserAccount(ctx context.Context, q *store.Queries, userID uuid.UUID, now func() time.Time) error {
 	owned, err := q.ListGardensOnlyThisUserOwns(ctx, userID, now())
 	if err != nil {

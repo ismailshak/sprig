@@ -264,7 +264,7 @@ func newPlantPage(principal auth.Principal, d plantDetail) plantPage {
 // archived plant.
 type plantFoot struct {
 	// Restore is the URL the Restore button posts to. It is set only for an
-	// archived plant, and the other fields are empty then.
+	// archived plant. The other fields are empty then.
 	Restore string
 	Edit    string
 	// Archive is the URL for archiving. A GET renders the confirmation and a
@@ -278,7 +278,7 @@ type plantFoot struct {
 	Keep   string
 }
 
-// newPlantFoot builds the buttons with the confirmation not yet asked for. For
+// newPlantFoot builds the buttons with Asking false. For
 // an archived plant it sets Restore alone. It returns nil for a reader who may
 // neither edit nor archive.
 func newPlantFoot(principal auth.Principal, plant store.Plant) *plantFoot {

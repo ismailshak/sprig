@@ -4,17 +4,15 @@
      tab needs a garden. */}}
 {{define "app-class"}}{{if .InGarden}}app{{else}}app app--bare{{end}}{{end}}
 
-{{/* The paragraph says what stays as well as what goes, because closing keeps
-     the person's name on everything they logged. An account that is the only
-     owner of a garden is told why it cannot close instead of being given the
-     button and refused after the press. */}}
+{{/* An account that is the only owner of a garden gets the reason it cannot
+     close instead of the button. */}}
 {{define "main"}}
 {{template "more-topbar" .Bar}}
 <div class="app__body app__body--sub">
-{{with .Owned}}
+{{with .SoleOwnerNotice}}
 <p class="lead">{{.}}</p>
 {{else}}
-<p class="lead">Closing your account deletes your passkeys, recovery codes and signed-in devices, and removes you from every garden. Your name stays on everything you’ve logged. This can’t be undone.</p>
+<p class="lead">Closing your account deletes your passkeys and recovery codes, signs you out on every device and removes you from every garden. Your name stays on everything you’ve logged. This can’t be undone.</p>
 <form method="post" action="{{.Action}}"><button class="wide-action" type="submit">Close account</button></form>
 {{end}}
 </div>

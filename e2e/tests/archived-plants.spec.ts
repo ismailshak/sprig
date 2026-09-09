@@ -51,10 +51,10 @@ test('an archived plant is restored from its page and listed on Plants again', a
   await expect(page.getByRole('link', { name: 'Log care' })).toBeVisible();
   await plants.open();
   await expect(plants.room(archived.barry.room).getByRole('link', { name: archived.barry.name })).toBeVisible();
-  await expect(plants.archiveLink()).toHaveText('2 archived');
+  await expect(plants.archivedLink()).toHaveText('2 archived');
 });
 
-test('a plant archived from its page appears in the archive @swap', async ({ plant, archivedPlants }) => {
+test('a plant archived from its page is listed on Archived plants @swap', async ({ plant, archivedPlants }) => {
   await plant.open(seeded.doris);
   await plant.archive();
 

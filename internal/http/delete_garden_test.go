@@ -22,9 +22,9 @@ var (
 )
 
 // deletableGarden gives Rosewood and Fairview each a plant with a care type, a
-// schedule, a care event, a token and a photo whose file is on disk, so the
-// delete has one of everything to remove and one of everything to leave. It
-// returns the directory the photo files are under.
+// schedule, a care event, a token and a photo whose file is on disk. The delete
+// has one of everything to delete in Rosewood and one of everything to keep in
+// Fairview. It returns the directory the photo files are under.
 func deletableGarden(t *testing.T) (*moreFixture, string) {
 	t.Helper()
 
@@ -62,7 +62,7 @@ func deletableGarden(t *testing.T) (*moreFixture, string) {
 			t.Fatal(err)
 		}
 	}
-	// A session on the garden, so the delete has one to set the garden to null on.
+	// A session on the garden. The delete sets its garden to null.
 	f.exec(t, "INSERT INTO session (token_hash, user_id, garden_id, created_at, last_seen_at) VALUES ('owner-session', $1, $2, now(), now())", moreUserID, moreGardenID)
 	return f, dir
 }
@@ -80,7 +80,7 @@ func TestDeleteGarden_ThePageNamesTheGardenAndAsksForItsName(t *testing.T) {
 	if !strings.Contains(page, "Type Rosewood to confirm") {
 		t.Errorf("the page does not ask for the garden's name:\n%s", text(page))
 	}
-	if !strings.Contains(page, "Deleting Rosewood removes its plants") {
+	if !strings.Contains(page, "Deleting Rosewood deletes its plants") {
 		t.Errorf("the page does not say what goes:\n%s", text(page))
 	}
 }
@@ -119,7 +119,7 @@ func TestDeleteGarden_TheNameIsComparedAsTyped(t *testing.T) {
 	}
 }
 
-func TestDeleteGarden_TheGardensRowsAndPhotoFilesGoAndAnotherGardensStay(t *testing.T) {
+func TestDeleteGarden_TheGardensRowsAndPhotoFilesAreDeletedAndAnotherGardensAreKept(t *testing.T) {
 	f, dir := deletableGarden(t)
 	woken := 0
 	f.handler.wake = countingWake(&woken)

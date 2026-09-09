@@ -50,7 +50,7 @@ SELECT count(*) FROM plant
 WHERE garden_id = $1 AND archived_at IS NOT NULL
 `
 
-// The Plants page links to the archive only when this is not zero.
+// The Plants page links to Archived plants only when this is not zero.
 func (q *Queries) CountArchivedPlants(ctx context.Context, gardenID uuid.UUID) (int64, error) {
 	row := q.db.QueryRow(ctx, countArchivedPlants, gardenID)
 	var count int64

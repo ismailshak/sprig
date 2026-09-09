@@ -1,6 +1,6 @@
--- Both queries exist for the development sign-in, which lists accounts and
--- signs one in by handle alone. Closed accounts are left out because nothing
--- may sign in as them. Nothing in a production build calls either query.
+-- Both queries serve the development sign-in. It lists accounts and signs one
+-- in by handle alone. Closed accounts are left out because nothing may sign in
+-- as them. Nothing in a production build calls either query.
 -- name: ListUsers :many
 SELECT * FROM app_user
 WHERE closed_at IS NULL
@@ -58,7 +58,7 @@ WHERE id = @user_id;
 -- Lists the gardens where this account is the only owner, ordered by name. An
 -- expired membership counts on neither side, because an owner whose access has
 -- ended can no longer delete the garden or hand it on. It takes a user id and
--- no garden id, because it is what finds the account's gardens.
+-- no garden id, because it searches every garden.
 -- name: ListGardensOnlyThisUserOwns :many
 SELECT garden.* FROM garden
 JOIN membership AS mine ON mine.garden_id = garden.id
@@ -70,8 +70,8 @@ WHERE mine.user_id = @user_id AND mine.role = 'owner'
       AND (other.expires_at IS NULL OR other.expires_at > @now::timestamptz))
 ORDER BY garden.name, garden.id;
 
--- Marks the account closed and keeps the row, so care events and photos still
--- show the person's name. The caller deletes the passkeys, sessions and
+-- Marks the account closed. The row is kept because care events and photos
+-- still show the person's name. The caller deletes the passkeys, sessions and
 -- memberships in the same transaction.
 -- name: CloseAccount :execrows
 UPDATE app_user SET closed_at = @now::timestamptz, last_garden_id = NULL

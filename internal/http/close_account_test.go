@@ -14,9 +14,10 @@ import (
 
 var closeEventID = uuid.MustParse("00000000-0000-7000-8000-000000000340")
 
-// closableAccount gives Ellie a care event, a recovery code, a session and a
-// re-enrolment invite, so closing has one of each to remove, and makes Sam a
-// second owner of Rosewood so the close is allowed.
+// closableAccount gives Ellie one of everything closing deletes: a care event,
+// a recovery code, a session and a re-enrolment invite. It makes Sam a second
+// owner of Rosewood, because the close is refused while Ellie is the only
+// owner.
 func closableAccount(t *testing.T) *moreFixture {
 	t.Helper()
 
@@ -39,7 +40,7 @@ func (f *moreFixture) closeAccount(t *testing.T) *httptest.ResponseRecorder {
 	return f.do(t, f.handler.closeAccount, closeAccountPath, map[string][]string{})
 }
 
-func TestCloseAccount_ThePageSaysWhatGoesAndWhatStays(t *testing.T) {
+func TestCloseAccount_ThePageSaysWhatIsDeletedAndWhatIsKept(t *testing.T) {
 	f := closableAccount(t)
 
 	page := f.page(t, f.handler.confirmCloseAccount, closeAccountPath)
@@ -94,8 +95,8 @@ func TestCloseAccount_PostingAsTheOnlyOwnerIsRefusedAndNothingIsDeleted(t *testi
 	}
 }
 
-// Sam's ownership of Rosewood ended yesterday, so Ellie is still the one
-// person who can manage it.
+// Sam's ownership of Rosewood ended yesterday. Ellie is still the only owner
+// who can manage it.
 func TestCloseAccount_AnOwnerWhoseMembershipEndedDoesNotCountAsAnotherOwner(t *testing.T) {
 	f := closableAccount(t)
 	f.exec(t, "UPDATE membership SET expires_at = $3 WHERE garden_id = $1 AND user_id = $2", moreGardenID, otherUserID, thursday.AddDate(0, 0, -1))
@@ -106,8 +107,8 @@ func TestCloseAccount_AnOwnerWhoseMembershipEndedDoesNotCountAsAnotherOwner(t *t
 }
 
 // Ellie's own ownership of Rosewood ended yesterday. She can no longer reach
-// the garden to delete it, so refusing the close would leave her with no way
-// out.
+// the garden to delete it. A refusal would leave her unable to close the
+// account at all.
 func TestCloseAccount_AnOwnerWhoseOwnMembershipEndedCanClose(t *testing.T) {
 	f := moreGarden(t)
 	f.handler.sessions = testSessions()
@@ -168,7 +169,7 @@ func TestCloseAccount_AClosedAccountsNameStaysOnItsCareEvents(t *testing.T) {
 	}
 	events, err := queries.ListPlantCareEvents(t.Context(), store.ListPlantCareEventsParams{GardenID: moreGardenID, PlantID: morePlantID, Count: 5})
 	if err != nil || len(events) != 1 || events[0].PerformedByName != "Ellie" {
-		t.Errorf("the plant's history reads %v, want the one event still performed by Ellie: %v", events, err)
+		t.Errorf("the plant's care events are %v, want the one event still performed by Ellie: %v", events, err)
 	}
 }
 

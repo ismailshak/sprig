@@ -213,7 +213,7 @@ func TestAcquiredWord(t *testing.T) {
 	}
 }
 
-func TestArchivedWord(t *testing.T) {
+func TestArchivedWord_TheYearIsAddedWhenTheDateIsNotInTheCurrentYear(t *testing.T) {
 	auckland, err := time.LoadLocation("Pacific/Auckland")
 	if err != nil {
 		t.Fatal(err)

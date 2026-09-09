@@ -16,11 +16,11 @@ import (
 )
 
 var (
-	archiveLink   = regexp.MustCompile(`<a class="foot-link" href="([^"]+)">(.*?)<svg`)
-	archivedRowEl = regexp.MustCompile(`(?s)<a class="row row--link" href="([^"]+)">(.*?)</a>`)
-	rowMeta       = regexp.MustCompile(`(?s)<span class="row__meta">(.*?)</span>\s*</span>`)
-	backLink      = regexp.MustCompile(`<a class="backlink" href="([^"]+)">(?:<svg.*?</svg>)?([^<]+)</a>`)
-	restoreForm   = regexp.MustCompile(`<form method="post" action="([^"]+)"><button class="care care--outline">Restore</button></form>`)
+	archivedLinkEl = regexp.MustCompile(`<a class="foot-link" href="([^"]+)">(.*?)<svg`)
+	archivedRowEl  = regexp.MustCompile(`(?s)<a class="row row--link" href="([^"]+)">(.*?)</a>`)
+	rowMeta        = regexp.MustCompile(`(?s)<span class="row__meta">(.*?)</span>\s*</span>`)
+	backLink       = regexp.MustCompile(`<a class="backlink" href="([^"]+)">(?:<svg.*?</svg>)?([^<]+)</a>`)
+	restoreForm    = regexp.MustCompile(`<form method="post" action="([^"]+)"><button class="care care--outline">Restore</button></form>`)
 )
 
 // archiveTwo archives Doris and Nigel on the Plants fixture's garden, Nigel
@@ -57,22 +57,22 @@ func (f *plantsFixture) restore(t *testing.T, plantID uuid.UUID) *httptest.Respo
 	return rec
 }
 
-func TestPlants_TheArchiveLinkIsAbsentWithNothingArchived(t *testing.T) {
+func TestPlants_TheArchivedPlantsLinkIsAbsentWithNothingArchived(t *testing.T) {
 	f := rosewoodPlants(t)
 
-	if m := archiveLink.FindStringSubmatch(f.show(t)); m != nil {
-		t.Errorf("Plants links to the archive as %q with nothing archived", m[2])
+	if m := archivedLinkEl.FindStringSubmatch(f.show(t)); m != nil {
+		t.Errorf("Plants links to Archived plants as %q with nothing archived", m[2])
 	}
 }
 
-func TestPlants_TheArchiveLinkReadsTheNumberArchived(t *testing.T) {
+func TestPlants_TheArchivedPlantsLinkReadsTheNumberArchived(t *testing.T) {
 	f := rosewoodPlants(t)
 	archiveTwo(t, f)
 
-	m := archiveLink.FindStringSubmatch(f.show(t))
+	m := archivedLinkEl.FindStringSubmatch(f.show(t))
 
 	if m == nil {
-		t.Fatal("Plants has no link to the archive with two plants archived")
+		t.Fatal("Plants has no link to Archived plants with two plants archived")
 	}
 	if m[1] != archivedPlantsPath || m[2] != "2 archived" {
 		t.Errorf("the link reads %q to %s, want \"2 archived\" to %s", m[2], m[1], archivedPlantsPath)
@@ -92,7 +92,7 @@ func TestArchived_ListsTheGardensArchivedPlantsMostRecentFirstWithTheDay(t *test
 		metas = append(metas, text(rowMeta.FindStringSubmatch(m[2])[1]))
 	}
 	if want := []string{"Nigel", "Doris"}; !slices.Equal(names, want) {
-		t.Errorf("the archive lists %v, want %v: this garden's, the most recently archived first", names, want)
+		t.Errorf("Archived plants lists %v, want %v: this garden's, the most recently archived first", names, want)
 	}
 	if want := []string{plantPath(nigelID), plantPath(dorisID)}; !slices.Equal(hrefs, want) {
 		t.Errorf("the rows link to %v, want %v", hrefs, want)
@@ -118,7 +118,7 @@ func TestArchived_AnEmptyArchiveReadsNothingArchived(t *testing.T) {
 
 	page := f.archived(t)
 
-	if archivedRowEl.MatchString(page) || !strings.Contains(page, "Nothing archived") {
+	if archivedRowEl.MatchString(page) || !strings.Contains(page, "No archived plants") {
 		t.Errorf("the empty archive reads:\n%s", text(page))
 	}
 }
@@ -179,8 +179,8 @@ func TestPlant_RestoringPutsAnArchivedPlantBackOnThePlantsList(t *testing.T) {
 	if !slices.ContainsFunc(list, func(p store.Plant) bool { return p.ID == dorisID }) {
 		t.Error("the restored plant is not on the plant list")
 	}
-	if m := archiveLink.FindStringSubmatch(f.show(t)); m == nil || m[2] != "1 archived" {
-		t.Errorf("after restoring one of two, the archive link reads %v, want 1 archived", m)
+	if m := archivedLinkEl.FindStringSubmatch(f.show(t)); m == nil || m[2] != "1 archived" {
+		t.Errorf("after restoring one of two, the Archived plants link reads %v, want 1 archived", m)
 	}
 }
 
