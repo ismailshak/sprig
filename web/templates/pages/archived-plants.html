@@ -1,0 +1,23 @@
+{{define "title"}}Archived plants · sprig{{end}}
+
+{{/* Every archived plant in the garden, most recently archived first. A row
+     opens the plant's page, which holds its activity, its photos and the
+     Restore button. */}}
+{{define "main"}}
+{{template "more-topbar" .Bar}}
+<div class="app__body app__body--sub">
+{{if .Plants}}
+<ul class="list">
+{{range .Plants}}{{template "plant-row" .}}
+{{end}}</ul>
+{{else}}
+<div class="empty">
+<span class="empty__mark">{{template "icon-plants"}}</span>
+<h2 class="empty__title">Nothing archived</h2>
+<p class="empty__line">A plant you archive keeps its activity and photos here.</p>
+</div>
+{{end}}
+</div>
+{{end}}
+
+{{define "nav"}}{{template "tabs" "Plants"}}{{end}}

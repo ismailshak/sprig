@@ -25,6 +25,15 @@ func (q *Queries) DeletePushSubscription(ctx context.Context, userID uuid.UUID, 
 	return result.RowsAffected(), nil
 }
 
+const deleteUserPushSubscriptions = `-- name: DeleteUserPushSubscriptions :exec
+DELETE FROM push_subscription WHERE user_id = $1
+`
+
+func (q *Queries) DeleteUserPushSubscriptions(ctx context.Context, userID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteUserPushSubscriptions, userID)
+	return err
+}
+
 const getPushSubscriptionByEndpoint = `-- name: GetPushSubscriptionByEndpoint :one
 SELECT id, user_id, endpoint, p256dh_key, auth_key, user_agent, created_at, last_sent_at FROM push_subscription
 WHERE user_id = $1 AND endpoint = $2

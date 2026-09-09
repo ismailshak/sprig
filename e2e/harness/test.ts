@@ -2,6 +2,9 @@ import { expect, test as base } from '@playwright/test';
 import { AcceptScreen } from '../screens/accept';
 import { AccountScreen } from '../screens/account';
 import { ActivityScreen } from '../screens/activity';
+import { ArchivedPlantsScreen } from '../screens/archived-plants';
+import { CloseAccountScreen } from '../screens/close-account';
+import { DeleteGardenScreen } from '../screens/delete-garden';
 import { GardenScreen } from '../screens/garden';
 import { InstallScreen } from '../screens/install';
 import { InviteScreen } from '../screens/invite';
@@ -31,6 +34,9 @@ type Screens = {
   accept: AcceptScreen;
   account: AccountScreen;
   activity: ActivityScreen;
+  archivedPlants: ArchivedPlantsScreen;
+  closeAccount: CloseAccountScreen;
+  deleteGarden: DeleteGardenScreen;
   garden: GardenScreen;
   install: InstallScreen;
   invite: InviteScreen;
@@ -101,6 +107,15 @@ export const test = base.extend<{ seededGarden: void; cspViolations: void } & Sc
   },
   activity: async ({ page }, use) => {
     await use(new ActivityScreen(page));
+  },
+  archivedPlants: async ({ page }, use) => {
+    await use(new ArchivedPlantsScreen(page));
+  },
+  closeAccount: async ({ page }, use) => {
+    await use(new CloseAccountScreen(page));
+  },
+  deleteGarden: async ({ page }, use) => {
+    await use(new DeleteGardenScreen(page));
   },
   garden: async ({ page }, use) => {
     await use(new GardenScreen(page));

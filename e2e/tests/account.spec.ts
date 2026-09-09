@@ -1,4 +1,4 @@
-import { people } from '../harness/garden';
+import { gardens, people } from '../harness/garden';
 import { signIn } from '../harness/signin';
 import { expect, test } from '../harness/test';
 
@@ -57,4 +57,37 @@ test('a handle typed with a capital and a space is saved in lower case with an u
   await account.save().click();
 
   await expect(account.handle()).toHaveValue('emma_fletcher');
+});
+
+test('the only owner of a garden is told to delete it before closing the account', async ({
+  account,
+  closeAccount,
+  page,
+}) => {
+  await account.open();
+  await account.closeAccount().click();
+
+  await expect(page.getByText(`You’re the only owner of ${gardens.home.name}.`)).toBeVisible();
+  await expect(closeAccount.confirm()).toHaveCount(0);
+});
+
+test('a closed account cannot sign in and its name stays on Activity', async ({
+  account,
+  closeAccount,
+  activity,
+  page,
+}) => {
+  await signIn(page, people.sam.handle);
+  await account.open();
+  await account.closeAccount().click();
+
+  await closeAccount.confirm().click();
+
+  await expect(page).toHaveURL('/signin');
+  await page.goto('/dev/signin');
+  await expect(page.getByRole('button', { name: `(${people.sam.handle})` })).toHaveCount(0);
+
+  await signIn(page, people.ellie.handle);
+  await activity.open();
+  await expect(activity.rows().filter({ hasText: people.sam.name }).first()).toBeVisible();
 });

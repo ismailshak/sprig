@@ -53,4 +53,8 @@ export class GardenScreen {
   storage(): Locator {
     return this.page.getByText(/of photo storage used\./);
   }
+
+  deleteGarden(): Locator {
+    return this.page.getByRole('link', { name: 'Delete garden' });
+  }
 }

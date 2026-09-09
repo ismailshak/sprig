@@ -102,8 +102,20 @@ func (q *Queries) DeleteReenrolmentInvites(ctx context.Context, gardenID uuid.UU
 	return result.RowsAffected(), nil
 }
 
+const deleteUserReenrolmentInvites = `-- name: DeleteUserReenrolmentInvites :exec
+DELETE FROM invite
+WHERE user_id = $1::uuid AND redeemed_at IS NULL
+`
+
+// Deletes the unredeemed re-enrolment invites made for this account, in every
+// garden. A redeemed invite is kept as a record of the enrolment.
+func (q *Queries) DeleteUserReenrolmentInvites(ctx context.Context, userID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteUserReenrolmentInvites, userID)
+	return err
+}
+
 const getInviteByTokenHash = `-- name: GetInviteByTokenHash :one
-SELECT invite.id, invite.garden_id, invite.token_hash, invite.role, invite.user_id, invite.created_by, invite.created_at, invite.expires_at, invite.redeemed_at, invite.membership_expires_at, garden.id, garden.name, garden.created_at, app_user.id, app_user.display_name, app_user.handle, app_user.timezone, app_user.created_at, app_user.last_garden_id
+SELECT invite.id, invite.garden_id, invite.token_hash, invite.role, invite.user_id, invite.created_by, invite.created_at, invite.expires_at, invite.redeemed_at, invite.membership_expires_at, garden.id, garden.name, garden.created_at, app_user.id, app_user.display_name, app_user.handle, app_user.timezone, app_user.created_at, app_user.last_garden_id, app_user.closed_at
 FROM invite
 JOIN garden ON garden.id = invite.garden_id
 JOIN app_user ON app_user.id = invite.created_by
@@ -143,6 +155,7 @@ func (q *Queries) GetInviteByTokenHash(ctx context.Context, tokenHash string) (G
 		&i.AppUser.Timezone,
 		&i.AppUser.CreatedAt,
 		&i.AppUser.LastGardenID,
+		&i.AppUser.ClosedAt,
 	)
 	return i, err
 }

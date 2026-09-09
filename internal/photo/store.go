@@ -256,6 +256,17 @@ func (s *Store) full(p string) string {
 	return filepath.Join(s.dir, filepath.FromSlash(p))
 }
 
+// RemoveGarden deletes the garden's photo directory and every file in it. The
+// caller deletes the garden's rows first, so a crash between the two leaves
+// files no row points at rather than rows with no file. os.RemoveAll returns
+// no error for a garden that never had a photo directory.
+func (s *Store) RemoveGarden(gardenID uuid.UUID) error {
+	if err := os.RemoveAll(s.full(gardenID.String())); err != nil {
+		return fmt.Errorf("remove the garden's photo directory: %w", err)
+	}
+	return nil
+}
+
 // Delete removes the photo's row through q and then its files. The row goes
 // first, so a crash between the two leaves a file no row points at rather than
 // a row without its file. The sweep removes that file once it is an hour old.

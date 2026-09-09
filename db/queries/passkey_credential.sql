@@ -43,3 +43,9 @@ WHERE id = @passkey_id
 SELECT id FROM app_user
 WHERE id = @user_id
 FOR UPDATE;
+
+-- Deletes every passkey, including the last one. Removing passkeys one at a
+-- time stops at the last, because it is the only way to sign in. An account
+-- being closed is not going to sign in again.
+-- name: DeleteUserPasskeys :exec
+DELETE FROM passkey_credential WHERE user_id = @user_id;

@@ -78,6 +78,15 @@ export const plants = {
   sprout: { id: '00000000-0000-7000-8000-050000000012', name: 'Sprout' },
 } as const;
 
+// The three archived plants in the Home garden, most recently archived first.
+// Upstairs has none. Sweet basil has no nickname, so its page and its row
+// show the common name.
+export const archivedPlants = {
+  barry: { id: '00000000-0000-7000-8000-050000000013', name: 'Barry', room: 'Living room' },
+  kev: { id: '00000000-0000-7000-8000-050000000014', name: 'Kev', room: 'Bathroom' },
+  sweetBasil: { id: '00000000-0000-7000-8000-050000000015', name: 'Sweet basil', room: 'Kitchen' },
+} as const;
+
 // No room is the heading Plants uses for plants with no room set. It is not a
 // room the seed writes.
 export const rooms = {

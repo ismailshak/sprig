@@ -1,13 +1,14 @@
--- Both queries exist for the development sign-in, which lists every user and
--- signs one in by handle alone. Nothing in a production build calls them, and
--- they will be removed with the development sign-in.
+-- Both queries exist for the development sign-in, which lists accounts and
+-- signs one in by handle alone. Closed accounts are left out because nothing
+-- may sign in as them. Nothing in a production build calls either query.
 -- name: ListUsers :many
 SELECT * FROM app_user
+WHERE closed_at IS NULL
 ORDER BY created_at, id;
 
 -- name: GetUserByHandle :one
 SELECT * FROM app_user
-WHERE handle = @handle;
+WHERE handle = @handle AND closed_at IS NULL;
 
 -- name: UpdateAccount :exec
 -- Nothing checks that the handle is free before this runs. The unique index on
@@ -53,3 +54,25 @@ WHERE id = @id;
 -- name: SetLastGarden :exec
 UPDATE app_user SET last_garden_id = @garden_id
 WHERE id = @user_id;
+
+-- Lists the gardens where this account is the only owner, ordered by name. An
+-- expired membership counts on neither side, because an owner whose access has
+-- ended can no longer delete the garden or hand it on. It takes a user id and
+-- no garden id, because it is what finds the account's gardens.
+-- name: ListGardensOnlyThisUserOwns :many
+SELECT garden.* FROM garden
+JOIN membership AS mine ON mine.garden_id = garden.id
+WHERE mine.user_id = @user_id AND mine.role = 'owner'
+  AND (mine.expires_at IS NULL OR mine.expires_at > @now::timestamptz)
+  AND NOT EXISTS (
+    SELECT 1 FROM membership AS other
+    WHERE other.garden_id = garden.id AND other.role = 'owner' AND other.user_id <> mine.user_id
+      AND (other.expires_at IS NULL OR other.expires_at > @now::timestamptz))
+ORDER BY garden.name, garden.id;
+
+-- Marks the account closed and keeps the row, so care events and photos still
+-- show the person's name. The caller deletes the passkeys, sessions and
+-- memberships in the same transaction.
+-- name: CloseAccount :execrows
+UPDATE app_user SET closed_at = @now::timestamptz, last_garden_id = NULL
+WHERE id = @user_id AND closed_at IS NULL;

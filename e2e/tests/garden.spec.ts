@@ -1,4 +1,4 @@
-import { careTypes, people, plants as seeded } from '../harness/garden';
+import { careTypes, gardens, people, plants as seeded } from '../harness/garden';
 import { signIn } from '../harness/signin';
 import { expect, test } from '../harness/test';
 
@@ -105,4 +105,31 @@ test('the Garden page says how much photo storage is used', async ({ garden }) =
   await garden.open();
 
   await expect(garden.storage()).toHaveText('0 MB of 1 GB of photo storage used.');
+});
+
+test('a garden name typed in lower case is refused and the garden stays', async ({
+  garden,
+  deleteGarden,
+  today,
+  page,
+}) => {
+  await garden.open();
+  await garden.deleteGarden().click();
+
+  await deleteGarden.name().fill('home');
+  await deleteGarden.confirm().click();
+
+  await expect(page.getByText('That isn’t this garden’s name.')).toBeVisible();
+  await today.open();
+  await expect(page.getByRole('heading', { name: gardens.home.name, level: 1 })).toBeVisible();
+});
+
+test('deleting the garden leaves the owner on the no-garden page', async ({ deleteGarden, noGarden, page }) => {
+  await deleteGarden.open();
+
+  await deleteGarden.name().fill(gardens.home.name);
+  await deleteGarden.confirm().click();
+
+  await expect(page).toHaveURL('/');
+  await expect(noGarden.heading()).toBeVisible();
 });

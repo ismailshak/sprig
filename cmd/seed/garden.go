@@ -391,9 +391,8 @@ func livingPlants() []plant {
 }
 
 // archivedPlants returns the three archived plants in the Home garden. They
-// have no schedules and no history. Their job is to be rows every list must
-// leave out, and care invented for plants the prototype never described would
-// be fixture nobody can check.
+// have no schedules and no history. Plants, Today and the digest leave them
+// out, and the Archived plants page lists them.
 func archivedPlants() []plant {
 	return []plant{
 		{

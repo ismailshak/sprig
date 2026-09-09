@@ -27,9 +27,9 @@ const (
 
 // wakeDigest has the digest job work out its next send again. A handler calls
 // it after committing a change to who gets a digest and when: a type switched
-// on or off, the hour, an account's timezone, a browser subscribed. Without it
-// the job finds the change only when its timer next fires. It is nil when push
-// is off.
+// on or off, the hour, an account's timezone, a browser subscribed, a garden
+// deleted, an account closed. Without it the job finds the change only when
+// its timer next fires. It is nil when push is off.
 type wakeDigest func()
 
 func (w wakeDigest) call() {

@@ -138,6 +138,9 @@ type noGardenPage struct {
 	SetUp string
 	// SignOut is the URL the Sign out button posts to.
 	SignOut string
+	// Close is the URL of the Close account page. It is linked here because
+	// an account in no garden reaches nothing under More.
+	Close string
 }
 
 // requireGarden wraps a route that needs a garden. For an account in no
@@ -159,7 +162,7 @@ func requireGarden(templates *Templates, signupEnabled bool, h http.Handler) htt
 			w.Header().Set("HX-Redirect", todayPath)
 			return
 		}
-		page := noGardenPage{Name: principal.User.DisplayName, SignOut: signOutPath}
+		page := noGardenPage{Name: principal.User.DisplayName, SignOut: signOutPath, Close: closeAccountPath}
 		if signupEnabled {
 			page.SetUp = setupSignedInPath
 		}

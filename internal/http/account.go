@@ -45,6 +45,8 @@ type accountPage struct {
 	// That page is reached from Account rather than from More, because every
 	// other page under More is about the garden.
 	Codes linkRow
+	// Close is the URL of the Close account page, linked at the bottom.
+	Close string
 }
 
 func (h *more) account(w http.ResponseWriter, r *http.Request) {
@@ -138,6 +140,7 @@ func (h *more) newAccountPage(ctx context.Context, principal auth.Principal, for
 		Name:   form.name,
 		Handle: form.handle,
 		Codes:  linkRow{Label: "Recovery codes", Href: recoveryPath},
+		Close:  closeAccountPath,
 	}
 	page.Zone.Zones = zoneOptions(form.zone)
 

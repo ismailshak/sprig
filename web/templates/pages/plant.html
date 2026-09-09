@@ -4,7 +4,7 @@
      the plant. */}}
 {{define "main"}}
 <header class="topbar topbar--back">
-<a class="backlink" href="/plants">{{template "icon-back"}}Plants</a>
+<a class="backlink" href="{{.Back.Href}}">{{template "icon-back"}}{{.Back.Label}}</a>
 </header>
 {{/* Sections are in phone order. Above 900px the stylesheet's grid areas move
      the picture and the details into their own column, so the wide layout
@@ -19,6 +19,7 @@
 {{/* The room is on its own line rather than as a third item in the names line
      above, because it is not a name. */}}
 {{with .Room}}<p class="hero__where">{{.}}</p>{{end}}
+{{with .Archived}}<p class="hero__where">{{.}}</p>{{end}}
 </div>
 
 {{with .Schedule}}

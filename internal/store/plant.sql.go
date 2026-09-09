@@ -45,6 +45,19 @@ func (q *Queries) ArchivePlant(ctx context.Context, gardenID uuid.UUID, plantID 
 	return i, err
 }
 
+const countArchivedPlants = `-- name: CountArchivedPlants :one
+SELECT count(*) FROM plant
+WHERE garden_id = $1 AND archived_at IS NOT NULL
+`
+
+// The Plants page links to the archive only when this is not zero.
+func (q *Queries) CountArchivedPlants(ctx context.Context, gardenID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countArchivedPlants, gardenID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countPlants = `-- name: CountPlants :one
 SELECT count(*) FROM plant
 WHERE garden_id = $1 AND archived_at IS NULL
@@ -160,6 +173,51 @@ func (q *Queries) GetPlant(ctx context.Context, gardenID uuid.UUID, plantID uuid
 	return i, err
 }
 
+const listArchivedPlants = `-- name: ListArchivedPlants :many
+SELECT id, garden_id, nickname, common_name, botanical_name, location, sun, water_needs, feed_needs, soil, climate, pot, notes, acquired_year, acquired_month, created_at, archived_at, profile_photo_id FROM plant
+WHERE garden_id = $1 AND archived_at IS NOT NULL
+ORDER BY archived_at DESC, id
+`
+
+func (q *Queries) ListArchivedPlants(ctx context.Context, gardenID uuid.UUID) ([]Plant, error) {
+	rows, err := q.db.Query(ctx, listArchivedPlants, gardenID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Plant
+	for rows.Next() {
+		var i Plant
+		if err := rows.Scan(
+			&i.ID,
+			&i.GardenID,
+			&i.Nickname,
+			&i.CommonName,
+			&i.BotanicalName,
+			&i.Location,
+			&i.Sun,
+			&i.WaterNeeds,
+			&i.FeedNeeds,
+			&i.Soil,
+			&i.Climate,
+			&i.Pot,
+			&i.Notes,
+			&i.AcquiredYear,
+			&i.AcquiredMonth,
+			&i.CreatedAt,
+			&i.ArchivedAt,
+			&i.ProfilePhotoID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPlants = `-- name: ListPlants :many
 SELECT id, garden_id, nickname, common_name, botanical_name, location, sun, water_needs, feed_needs, soil, climate, pot, notes, acquired_year, acquired_month, created_at, archived_at, profile_photo_id FROM plant
 WHERE garden_id = $1 AND archived_at IS NULL
@@ -239,6 +297,40 @@ func (q *Queries) ListRooms(ctx context.Context, gardenID uuid.UUID) ([]string, 
 		return nil, err
 	}
 	return items, nil
+}
+
+const restorePlant = `-- name: RestorePlant :one
+UPDATE plant SET archived_at = NULL
+WHERE garden_id = $1 AND id = $2 AND archived_at IS NOT NULL
+RETURNING id, garden_id, nickname, common_name, botanical_name, location, sun, water_needs, feed_needs, soil, climate, pot, notes, acquired_year, acquired_month, created_at, archived_at, profile_photo_id
+`
+
+// Returns no rows for a plant that is not archived, the same as for a plant in
+// another garden. The handler returns 404 for both.
+func (q *Queries) RestorePlant(ctx context.Context, gardenID uuid.UUID, plantID uuid.UUID) (Plant, error) {
+	row := q.db.QueryRow(ctx, restorePlant, gardenID, plantID)
+	var i Plant
+	err := row.Scan(
+		&i.ID,
+		&i.GardenID,
+		&i.Nickname,
+		&i.CommonName,
+		&i.BotanicalName,
+		&i.Location,
+		&i.Sun,
+		&i.WaterNeeds,
+		&i.FeedNeeds,
+		&i.Soil,
+		&i.Climate,
+		&i.Pot,
+		&i.Notes,
+		&i.AcquiredYear,
+		&i.AcquiredMonth,
+		&i.CreatedAt,
+		&i.ArchivedAt,
+		&i.ProfilePhotoID,
+	)
+	return i, err
 }
 
 const setProfilePhoto = `-- name: SetProfilePhoto :one

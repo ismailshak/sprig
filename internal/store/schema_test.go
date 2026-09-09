@@ -18,7 +18,7 @@ import (
 var wantCapabilities = map[string][]string{
 	"owner": {
 		"care.delete_any", "care.delete_own", "care.edit_any", "care.edit_own",
-		"care.log", "care_type.manage", "garden.edit", "member.invite",
+		"care.log", "care_type.manage", "garden.delete", "garden.edit", "member.invite",
 		"member.manage", "photo.add", "photo.delete_any", "photo.delete_own",
 		"photo.set_profile", "plant.archive", "plant.create", "plant.edit",
 		"schedule.edit", "token.manage",

@@ -30,6 +30,7 @@ type AppUser struct {
 	Timezone     string
 	CreatedAt    time.Time
 	LastGardenID *uuid.UUID
+	ClosedAt     *time.Time
 }
 
 type Capability struct {

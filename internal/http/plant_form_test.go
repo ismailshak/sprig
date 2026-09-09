@@ -1178,17 +1178,6 @@ func TestPlant_TheBottomButtonsLinkToEditAndArchive(t *testing.T) {
 	}
 }
 
-func TestPlant_AnArchivedPlantHasNoEditOrArchiveButtons(t *testing.T) {
-	f := rosewoodPlant(t)
-	f.exec(t, "UPDATE plant SET archived_at = now() WHERE id = $1", bigFellaID)
-
-	page := f.page(t, bigFellaID)
-
-	if strings.Contains(page, "Edit plant") || strings.Contains(page, "Archive") {
-		t.Errorf("an archived plant offers the foot:\n%s", text(page))
-	}
-}
-
 func TestPlantForm_APlantAddedWithAPhotoHasTheFileAndTheRow(t *testing.T) {
 	f := plantFormOn(t)
 	values := addValues()

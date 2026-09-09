@@ -62,3 +62,21 @@ test('a plant with one name has no second line', async ({ plants }) => {
 
   await expect(plants.rowsIn(rooms.noRoom)).toHaveText([/^\s*Sprout\s*$/]);
 });
+
+test('the Plants page links to the archive and says how many are archived', async ({ plants, page }) => {
+  await plants.open();
+
+  await expect(plants.archiveLink()).toHaveText('3 archived');
+  await plants.archiveLink().click();
+
+  await expect(page).toHaveURL('/plants/archived');
+  await expect(page.getByRole('heading', { name: 'Archived plants' })).toBeVisible();
+});
+
+test('a garden with nothing archived has no archive link', async ({ page, plants }) => {
+  await signIn(page, people.robin.handle);
+
+  await plants.open();
+
+  await expect(plants.archiveLink()).toHaveCount(0);
+});

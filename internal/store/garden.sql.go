@@ -24,6 +24,31 @@ func (q *Queries) CreateGarden(ctx context.Context, name string) (Garden, error)
 	return i, err
 }
 
+const deleteGarden = `-- name: DeleteGarden :execrows
+DELETE FROM garden WHERE id = $1
+`
+
+func (q *Queries) DeleteGarden(ctx context.Context, gardenID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteGarden, gardenID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteGardenCareEvents = `-- name: DeleteGardenCareEvents :exec
+DELETE FROM care_event WHERE garden_id = $1
+`
+
+// Deletes the garden's care events before the garden itself, because
+// care_event references care_type with ON DELETE RESTRICT and Postgres refuses
+// the cascade while any event is left. Deleting the garden then cascades to
+// its memberships, plants, care types, schedules, photos, invites and tokens.
+func (q *Queries) DeleteGardenCareEvents(ctx context.Context, gardenID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteGardenCareEvents, gardenID)
+	return err
+}
+
 const getGarden = `-- name: GetGarden :one
 SELECT id, name, created_at FROM garden WHERE id = $1
 `

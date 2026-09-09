@@ -55,6 +55,7 @@ var routeAccess = map[string]access{
 	"GET /offline":           {public: true},
 	"GET /{$}":               {},
 	"GET /plants":            {},
+	"GET /plants/archived":   {},
 	"GET /activity":          {},
 	"GET /plants/new":        {capability: auth.PlantCreate},
 	"POST /plants/new":       {capability: auth.PlantCreate},
@@ -80,6 +81,13 @@ var routeAccess = map[string]access{
 		capability: auth.PlantArchive,
 		path:       archivePlantPath(rosewoodArchivedID),
 		foreign:    archivePlantPath(fairviewArchivedID),
+	},
+	// Restore needs a plant that is already archived. The plant the archive
+	// routes above act on is archived only after its POST has run.
+	"POST /plants/{plant}/restore": {
+		capability: auth.PlantArchive,
+		path:       restorePlantPath(rosewoodRestoreID),
+		foreign:    restorePlantPath(fairviewRestoreID),
 	},
 	// The editor's two routes use the watering schedule, since opening the
 	// editor and saving leave the schedule in place.
@@ -180,6 +188,11 @@ var routeAccess = map[string]access{
 	"POST /signout":      {anyMember: true, withoutGarden: true},
 	"GET /more/account":  {},
 	"POST /more/account": {anyMember: true},
+	// The Close account page is served without a garden, because an account
+	// whose access has ended reaches nothing else. The post is refused and
+	// writes nothing, since the seeded owner is the only owner of Rosewood.
+	"GET /more/account/close":  {withoutGarden: true},
+	"POST /more/account/close": {anyMember: true, withoutGarden: true},
 	// Recovery codes belong to an account rather than to a garden, so every
 	// member reaches the page.
 	"GET /more/account/recovery":  {},
@@ -270,10 +283,14 @@ var routeAccess = map[string]access{
 	// Garden and the care types under it are the owner's pages. A care type is
 	// named by slug rather than by id, so the foreign path is a slug only
 	// Fairview has.
-	"GET /more/garden":        {capability: auth.GardenEdit},
-	"POST /more/garden":       {capability: auth.GardenEdit},
-	"GET /more/garden/types":  {capability: auth.CareTypeManage},
-	"POST /more/garden/types": {capability: auth.CareTypeManage},
+	"GET /more/garden":  {capability: auth.GardenEdit},
+	"POST /more/garden": {capability: auth.GardenEdit},
+	// The post with no name typed is refused, so the seeded garden stays for
+	// the routes after it.
+	"GET /more/garden/delete":  {capability: auth.GardenDelete},
+	"POST /more/garden/delete": {capability: auth.GardenDelete},
+	"GET /more/garden/types":   {capability: auth.CareTypeManage},
+	"POST /more/garden/types":  {capability: auth.CareTypeManage},
 	"GET /more/garden/types/{care}": {
 		capability: auth.CareTypeManage,
 		path:       careTypePath("water"),
@@ -383,6 +400,8 @@ var (
 	// the edit routes would then find nothing to edit.
 	rosewoodArchivedID = uuid.MustParse("00000000-0000-7000-8000-000000000231")
 	fairviewArchivedID = uuid.MustParse("00000000-0000-7000-8000-000000000232")
+	rosewoodRestoreID  = uuid.MustParse("00000000-0000-7000-8000-000000000233")
+	fairviewRestoreID  = uuid.MustParse("00000000-0000-7000-8000-000000000234")
 	// The stranger is a second account, holding the passkey and the push
 	// subscription the More routes have to refuse. The reader holds two
 	// passkeys, because the query refuses to remove the last one an account
@@ -430,6 +449,7 @@ func routeQueries(t *testing.T) *store.Queries {
 			VALUES ($1, 'Prune', 'prune', NULL), ($1, 'Mist', 'mist', now()), ($2, 'Trim', 'trim', NULL)`, []any{rosewoodID, fairviewID}},
 		{"INSERT INTO plant (id, garden_id, nickname) VALUES ($1, $2, 'Big Fella'), ($3, $4, 'Gerald')", []any{rosewoodPlantID, rosewoodID, fairviewPlantID, fairviewID}},
 		{"INSERT INTO plant (id, garden_id, nickname) VALUES ($1, $2, 'Doris'), ($3, $4, 'Nigel')", []any{rosewoodArchivedID, rosewoodID, fairviewArchivedID, fairviewID}},
+		{"INSERT INTO plant (id, garden_id, nickname, archived_at) VALUES ($1, $2, 'Barry', now()), ($3, $4, 'Kev', now())", []any{rosewoodRestoreID, rosewoodID, fairviewRestoreID, fairviewID}},
 		{`INSERT INTO care_schedule (garden_id, plant_id, care_type_id, interval_count, interval_unit)
 			SELECT garden_id, $1, id, 7, 'day' FROM care_type WHERE garden_id = $2`, []any{rosewoodPlantID, rosewoodID}},
 		{`INSERT INTO care_schedule (garden_id, plant_id, care_type_id, interval_count, interval_unit)

@@ -26,4 +26,8 @@ export class AccountScreen {
   save(): Locator {
     return this.page.getByRole('button', { name: 'Save changes' });
   }
+
+  closeAccount(): Locator {
+    return this.page.getByRole('link', { name: 'Close account' });
+  }
 }

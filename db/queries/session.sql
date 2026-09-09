@@ -32,3 +32,6 @@ WHERE token_hash = @token_hash;
 UPDATE session
 SET garden_id = sqlc.narg('garden_id')
 WHERE token_hash = @token_hash;
+
+-- name: DeleteUserSessions :exec
+DELETE FROM session WHERE user_id = @user_id;

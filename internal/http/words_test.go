@@ -213,6 +213,45 @@ func TestAcquiredWord(t *testing.T) {
 	}
 }
 
+func TestArchivedWord(t *testing.T) {
+	auckland, err := time.LoadLocation("Pacific/Auckland")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cases := []struct {
+		name string
+		at   time.Time
+		now  time.Time
+		want string
+	}{
+		{
+			"a day this year is named without it",
+			time.Date(2026, time.August, 12, 9, 0, 0, 0, london()),
+			time.Date(2026, time.September, 3, 9, 0, 0, 0, london()),
+			"Archived 12 Aug",
+		},
+		{
+			"a day in an earlier year is named with it",
+			time.Date(2025, time.December, 31, 23, 30, 0, 0, london()),
+			time.Date(2026, time.September, 3, 9, 0, 0, 0, london()),
+			"Archived 31 Dec 2025",
+		},
+		{
+			"a London evening is the next day for a reader in Auckland",
+			time.Date(2026, time.September, 3, 23, 30, 0, 0, london()),
+			time.Date(2026, time.September, 5, 9, 0, 0, 0, auckland),
+			"Archived 4 Sep",
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := archivedWord(c.at, c.now); got != c.want {
+				t.Errorf("archivedWord = %q, want %q", got, c.want)
+			}
+		})
+	}
+}
+
 func TestAgoWord(t *testing.T) {
 	now := time.Date(2026, time.September, 3, 9, 0, 0, 0, london())
 	cases := []struct {

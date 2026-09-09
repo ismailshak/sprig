@@ -1,6 +1,8 @@
 {{/* The buttons at the bottom of a plant's page, and the confirmation that
      replaces them when Archive is pressed. Both states share the id plant-foot,
      and settle:0ms stops htmx painting a frame with the old element's classes.
+     An archived plant gets Restore alone. It posts without a confirmation,
+     because archiving the plant again undoes it.
 
      Archive is not styled as a warning, because rose means overdue in this app
      and using it here would make an ordinary tidy-up look like a mistake.
@@ -8,7 +10,9 @@
      Plants list and leaves no row to undo from. The confirmation replaces the
      buttons instead of opening a dialog, so the plant stays visible above it. */}}
 {{define "plant-foot"}}{{with .Foot}}<div class="plant__foot{{if .Asking}} plant__foot--asking{{end}}" id="plant-foot">
-{{if .Asking}}
+{{if .Restore}}
+<form method="post" action="{{.Restore}}"><button class="care care--outline">Restore</button></form>
+{{else if .Asking}}
 <span class="plant__ask">Archive {{.Name}}?</span>
 <span class="plant__note">It’s removed from Plants but keeps its activity and photos. You can restore it later.</span>
 {{/* Cancel swaps the buttons back. Archive is a full navigation, because the

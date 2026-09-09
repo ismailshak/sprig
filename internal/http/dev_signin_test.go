@@ -47,6 +47,8 @@ func devStack(t *testing.T) (http.Handler, *auth.Resolver) {
 		{"INSERT INTO app_user (id, display_name, handle, timezone, created_at) VALUES ($1, 'Ellie', 'ellie', 'Europe/London', now() - interval '3 days')", []any{ellieID}},
 		{"INSERT INTO app_user (id, display_name, handle, timezone, created_at) VALUES ($1, 'Sam', 'sam', 'Europe/London', now() - interval '2 days')", []any{samID}},
 		{"INSERT INTO app_user (id, display_name, handle, timezone, created_at) VALUES ($1, 'Robin', 'robin', 'Europe/Lisbon', now() - interval '1 day')", []any{robinID}},
+		// Clare closed her account, so the page does not list her.
+		{"INSERT INTO app_user (display_name, handle, timezone, closed_at) VALUES ('Clare', 'clare', 'Europe/London', now())", nil},
 		{"INSERT INTO membership (garden_id, user_id, role, created_at, digest_hour) VALUES ($1, $2, 'owner', now() - interval '3 days', 8)", []any{homeID, ellieID}},
 		{"INSERT INTO membership (garden_id, user_id, role, created_at, digest_hour) VALUES ($1, $2, 'member', now() - interval '2 days', 8)", []any{homeID, samID}},
 		{"INSERT INTO membership (garden_id, user_id, role, created_at, expires_at, digest_hour) VALUES ($1, $2, 'sitter', now() - interval '1 day', now() - interval '1 hour', 8)", []any{upstairsID, samID}},
@@ -94,6 +96,9 @@ func TestDevSignIn_ThePageListsEveryUser(t *testing.T) {
 		if !strings.Contains(rec.Body.String(), `value="`+handle+`"`) {
 			t.Errorf("the page has no button for %s", handle)
 		}
+	}
+	if strings.Contains(rec.Body.String(), `value="clare"`) {
+		t.Error("the page has a button for a closed account")
 	}
 }
 
@@ -182,6 +187,14 @@ func TestDevSignIn_AUserWithNoGardenGetsASessionOnNoGarden(t *testing.T) {
 	}
 	if principal.InGarden() || principal.User.Handle != "robin" {
 		t.Errorf("resolved to %s on %q, want robin in no garden", principal.User.Handle, principal.Garden.Name)
+	}
+}
+
+func TestDevSignIn_AClosedAccountIs404(t *testing.T) {
+	handler, _ := devStack(t)
+
+	if rec := postHandle(t, handler, "clare", nil); rec.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusNotFound)
 	}
 }
 

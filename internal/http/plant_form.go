@@ -902,8 +902,7 @@ func (h *plants) confirmArchive(w http.ResponseWriter, r *http.Request) {
 		serverError(h.logger, w, r, "load the plant", err)
 		return
 	}
-	// An archived plant has no buttons at the bottom of its page, so there is
-	// nothing to confirm.
+	// An archived plant has no Archive button, so there is nothing to confirm.
 	if detail.plant.ArchivedAt != nil {
 		notFound(w)
 		return

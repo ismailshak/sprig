@@ -233,6 +233,16 @@ func agoWord(at, now time.Time) string {
 	return at.Format("2 Jan")
 }
 
+// archivedWord is the line saying when a plant was archived, such as "Archived
+// 12 Aug". The year is added when the date is not in the current year.
+func archivedWord(at, now time.Time) string {
+	at = at.In(now.Location())
+	if at.Year() != now.Year() {
+		return "Archived " + at.Format("2 Jan 2006")
+	}
+	return "Archived " + at.Format("2 Jan")
+}
+
 // offNote is the Notifications row's note on More: "Off" when neither
 // notification type is on, and nothing when one is.
 func offNote(on bool) string {
