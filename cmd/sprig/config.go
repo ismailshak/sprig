@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log/slog"
+	"math"
 	"net/url"
 	"strconv"
 	"strings"
@@ -136,9 +137,9 @@ func loadConfig(getenv func(string) string) (config, error) {
 	}
 	cfg.sessionTTL = ttl
 
-	quota, err := strconv.ParseInt(withDefault(strings.TrimSpace(getenv("SPRIG_PHOTO_QUOTA_BYTES")), strconv.Itoa(defaultPhotoQuota)), 10, 64)
-	if err != nil || quota < 1 {
-		problems = append(problems, fmt.Sprintf("SPRIG_PHOTO_QUOTA_BYTES must be a whole number of bytes above zero, got %q", getenv("SPRIG_PHOTO_QUOTA_BYTES")))
+	quota, err := parseBytes(withDefault(strings.TrimSpace(getenv("SPRIG_PHOTO_QUOTA_BYTES")), strconv.Itoa(defaultPhotoQuota)))
+	if err != nil {
+		problems = append(problems, fmt.Sprintf("SPRIG_PHOTO_QUOTA_BYTES must be a whole number of bytes above zero, or a number with a unit such as 1GiB, 500MiB or 2GB, got %q", getenv("SPRIG_PHOTO_QUOTA_BYTES")))
 	}
 	cfg.photoQuota = quota
 
@@ -213,6 +214,44 @@ func isRegistrableFor(rpID, host string) bool {
 		return true
 	}
 	return strings.Contains(rpID, ".") && strings.HasSuffix(host, "."+rpID)
+}
+
+// byteUnits is the multiplier for each unit suffix a byte count accepts. The
+// lookup is case-insensitive.
+var byteUnits = map[string]int64{
+	"":    1,
+	"b":   1,
+	"kib": 1 << 10,
+	"mib": 1 << 20,
+	"gib": 1 << 30,
+	"tib": 1 << 40,
+	"kb":  1e3,
+	"mb":  1e6,
+	"gb":  1e9,
+	"tb":  1e12,
+}
+
+// parseBytes reads a count of bytes written as a whole number with an optional
+// unit, such as "1073741824", "1GiB" or "2 GB". Zero, a negative number, a
+// fraction, an unknown unit and a count past int64 are errors.
+func parseBytes(s string) (int64, error) {
+	s = strings.TrimSpace(s)
+	suffix := strings.TrimLeftFunc(s, func(r rune) bool { return r >= '0' && r <= '9' })
+	unit, ok := byteUnits[strings.ToLower(strings.TrimSpace(suffix))]
+	if !ok {
+		return 0, fmt.Errorf("unknown unit %q", suffix)
+	}
+	n, err := strconv.ParseInt(s[:len(s)-len(suffix)], 10, 64)
+	if err != nil {
+		return 0, err
+	}
+	if n < 1 {
+		return 0, fmt.Errorf("%d is not above zero", n)
+	}
+	if n > math.MaxInt64/unit {
+		return 0, fmt.Errorf("%s is more bytes than can be counted", s)
+	}
+	return n * unit, nil
 }
 
 func withDefault(v, def string) string {
