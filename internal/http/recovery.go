@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"uuid"
 
 	"github.com/jackc/pgx/v5"
@@ -22,6 +23,9 @@ type recoveryPage struct {
 	// the single response that created the batch and is empty on every other
 	// request.
 	Codes []string
+	// CodesText is the same batch one code per line, the value Copy all puts
+	// on the clipboard.
+	CodesText string
 	// Live is true when the account has recovery codes.
 	Live bool
 	// Left reads "8 of 10 left".
@@ -101,5 +105,5 @@ func (h *more) createCodes(w http.ResponseWriter, r *http.Request) {
 		h.templates.serverError(h.logger, w, r, "create the recovery codes", err)
 		return
 	}
-	h.templates.render(w, r, view{page: "recovery"}, recoveryPage{Bar: recoveryBar(), Codes: codes})
+	h.templates.render(w, r, view{page: "recovery"}, recoveryPage{Bar: recoveryBar(), Codes: codes, CodesText: strings.Join(codes, "\n")})
 }

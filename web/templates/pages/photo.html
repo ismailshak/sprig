@@ -7,7 +7,9 @@
 <a class="backlink" href="{{.Back}}">{{template "icon-back"}}Photos</a>
 </header>
 <div class="app__body app__body--photo">
-<img class="photo__pic" src="{{.Src}}" alt="Photo of {{.Name}}">
+{{/* The box has the photo's own proportions, so the browser lays it out
+     before the photo arrives and the caption under it does not move. */}}
+<div class="photo__pic" style="aspect-ratio: {{.Width}} / {{.Height}}"><img class="photo__img" src="{{.Src}}" alt="Photo of {{.Name}}" width="{{.Width}}" height="{{.Height}}" data-photo></div>
 <p class="photo__meta">{{.When}} by {{.Who}}</p>
 {{template "photo-foot" .}}
 </div>
@@ -15,11 +17,16 @@
 
 {{/* The Delete button at the bottom of the page, and the confirmation that
      replaces it. Both share the id photo-foot, so the swap sets settle:0ms to
-     stop htmx painting a frame with the old element's classes.
+     stop htmx painting a frame with the old element's classes. show scrolls
+     the confirmation into view. It is taller than the Delete button it
+     replaces, which is at the bottom of the page, so its own buttons would
+     otherwise be below the fold.
 
-     Deleting asks first rather than offering Undo afterwards, because the
-     files go with the row. The confirmation replaces the button instead of
-     opening a dialog, so the photo stays visible above it. */}}
+     Delete is outlined like Archive on a plant's page and not styled as a
+     warning, because rose means overdue in this app. Deleting asks first
+     rather than offering Undo afterwards, because the files go with the row.
+     The confirmation replaces the button instead of opening a dialog, so the
+     photo stays visible above it. */}}
 {{define "photo-foot"}}{{with .Foot}}<div class="plant__foot{{if .Asking}} plant__foot--asking{{end}}" id="photo-foot">
 {{if .Asking}}
 <span class="plant__ask">Delete this photo?</span>
@@ -29,8 +36,10 @@
 <form method="get" action="{{.Keep}}"><button class="plant__keep" hx-get="{{.Keep}}" hx-target="#photo-foot" hx-swap="outerHTML settle:0ms">Cancel</button></form>
 <form method="post" action="{{.Delete}}"><button class="care care--small">Delete</button></form>
 {{else}}
-<form method="get" action="{{.Delete}}"><button class="plant__archive" hx-get="{{.Delete}}" hx-target="#photo-foot" hx-swap="outerHTML settle:0ms">Delete</button></form>
+<form method="get" action="{{.Delete}}"><button class="care care--outline" hx-get="{{.Delete}}" hx-target="#photo-foot" hx-swap="outerHTML settle:0ms show:#photo-foot:bottom">Delete</button></form>
 {{end}}
 </div>{{end}}{{end}}
 
-{{define "nav"}}{{template "tabs" "Plants"}}{{end}}
+{{define "nav"}}{{template "tabs" "Under Plants"}}{{end}}
+
+{{define "script"}}<script src="{{asset "photo-loading.js"}}" defer></script>{{end}}

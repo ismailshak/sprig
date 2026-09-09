@@ -35,6 +35,15 @@
   // in, "x,y" in percentages. Add a photo has no such input, so no frame is
   // added there.
   const focus = document.getElementById('photo-focus');
+  // preparing is the line shown while a chosen photo is being resized. The
+  // form's submit buttons are disabled for as long as it shows, so the post
+  // cannot go out before the file inputs hold the resized photo.
+  const preparing = document.getElementById('photo-preparing');
+  const submits = field.closest('form').querySelectorAll('button[type="submit"]');
+  const busy = (on) => {
+    preparing.hidden = !on;
+    for (const button of submits) button.disabled = on;
+  };
 
   const canResize =
     typeof HTMLCanvasElement.prototype.toBlob === 'function' &&
@@ -250,6 +259,7 @@
       return;
     }
     const url = URL.createObjectURL(file);
+    busy(true);
     try {
       const img = await decode(url);
       const stem = file.name.replace(/\.[^.]*$/, '') || 'photo';
@@ -262,6 +272,7 @@
       error.hidden = false;
     } finally {
       URL.revokeObjectURL(url);
+      busy(false);
     }
   });
 

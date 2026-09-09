@@ -214,6 +214,7 @@ var routeAccess = map[string]access{
 	"GET /setup":            {public: true},
 	"POST /setup/challenge": {public: true},
 	"POST /setup":           {public: true},
+	"GET /handle":           {public: true},
 	// The two routes an account that is already signed in uses to set up a
 	// garden of its own. Neither names a capability, because the garden the
 	// post writes is a new one of the caller's own.
@@ -276,7 +277,8 @@ var routeAccess = map[string]access{
 		path:      removeBrowserPath(readerBrowserID),
 		foreign:   removeBrowserPath(strangerBrowserID),
 	},
-	"GET /install": {},
+	"GET /install":         {},
+	"GET /more/appearance": {},
 	// The sheet lists the reader's own memberships and the post moves their
 	// own session, so every role reaches both routes. Neither has a foreign
 	// path, because the garden is posted in the body rather than named in the

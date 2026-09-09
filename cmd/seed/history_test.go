@@ -8,8 +8,8 @@ import (
 	engine "github.com/ismailshak/sprig/internal/schedule"
 )
 
-// A Wednesday in September: the day the prototype shows, and a month in which
-// every seasonal schedule is in season.
+// A Wednesday in September, a month in which every seasonal schedule is in
+// season.
 func testReference(t *testing.T) time.Time {
 	t.Helper()
 

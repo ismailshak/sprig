@@ -1,6 +1,7 @@
 package http
 
 import (
+	"html"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -100,6 +101,26 @@ func TestTokens_ANewTokenIsShownOnceAndOnlyItsHashIsStored(t *testing.T) {
 	}
 	if strings.Contains(f.page(t, f.handler.tokens, tokensPath), token) {
 		t.Error("the token is on the page again on the next request, and it is shown exactly once")
+	}
+}
+
+// copyButton matches a Copy button and captures the value it puts on the
+// clipboard. The button is rendered hidden, so a browser running no script
+// shows no Copy.
+var copyButton = regexp.MustCompile(`<button[^>]*data-copy="([^"]*)"[^>]*hidden>`)
+
+func TestTokens_ANewTokensCopyButtonHoldsTheTokenShown(t *testing.T) {
+	f := tokenGarden(t)
+
+	rec := f.do(t, f.handler.createToken, tokensPath, url.Values{"name": {"The greenhouse pi"}, "expiry": {"30"}})
+
+	page := rec.Body.String()
+	m := copyButton.FindStringSubmatch(page)
+	if m == nil {
+		t.Fatalf("the page has no hidden Copy button:\n%s", page)
+	}
+	if got, want := html.UnescapeString(m[1]), secretValue(t, page); got != want {
+		t.Errorf("Copy puts %q on the clipboard, want the token shown, %q", got, want)
 	}
 }
 

@@ -138,8 +138,8 @@ func (f *logFixture) exec(t *testing.T, sql string, args ...any) {
 var backlink = regexp.MustCompile(`(?s)<a class="backlink" href="([^"]*)">(.*?)</a>`)
 
 // footLink matches a link under the list. On the activity log those are the
-// pager's two links.
-var footLink = regexp.MustCompile(`(?s)<a class="foot-link" href="([^"]*)">(.*?)</a>`)
+// pager's two links. The swap attributes after the href are skipped.
+var footLink = regexp.MustCompile(`(?s)<a class="foot-link" href="([^"]*)"[^>]*>(.*?)</a>`)
 
 // pagerLink is the href of the link under the list with this text, or "" when
 // the page has no such link.
@@ -757,6 +757,34 @@ func TestActivity_ASwapAimedAtTheLogBodyGetsTheListAndNotTheWholePage(t *testing
 	}
 }
 
+func TestActivity_ASwapAimedAtTheFiltersAndTheLogGetsBothAndNotTheWholePage(t *testing.T) {
+	f := rosewoodLog(t)
+	ctx := context.WithValue(t.Context(), principalKey, f.principal)
+	req := httptest.NewRequestWithContext(ctx, http.MethodGet, activityPath+"?care=water", nil)
+	req.Header.Set("HX-Request", "true")
+	req.Header.Set("HX-Target", logID)
+	rec := httptest.NewRecorder()
+
+	f.handler.show(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d:\n%s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if strings.HasPrefix(body, "<!doctype html>") {
+		t.Errorf("the response is the whole page, want the filters and the log alone:\n%.120s", body)
+	}
+	if !strings.Contains(body, `id="`+logID+`"`) || !strings.Contains(body, `id="`+logBodyID+`"`) || !strings.Contains(body, `id="filter-care"`) {
+		t.Errorf("the response does not hold the filters and the log body:\n%.200s", body)
+	}
+	if !strings.Contains(body, "<details") || strings.Contains(body, "<details open") || strings.Contains(body, " open>") {
+		t.Error("the filters are not a closed details element")
+	}
+	if !strings.Contains(text(body), "Filter · Water") {
+		t.Errorf("the summary line does not say the log is filtered to Water:\n%s", text(body))
+	}
+}
+
 func TestActivity_ARowShowsThePlantsPictureAsItsSquare(t *testing.T) {
 	f := rosewoodLog(t)
 	photoID := givePicture(t, f.tx, bigFellaID)
@@ -765,5 +793,194 @@ func TestActivity_ARowShowsThePlantsPictureAsItsSquare(t *testing.T) {
 
 	if got, want := images(page), []string{photoSquarePath(bigFellaID, photoID)}; !slices.Equal(got, want) {
 		t.Errorf("the log's images are %v, want Big Fella's square at %v and none on Doris's row", got, want)
+	}
+}
+
+func TestActivity_TheCareFilterListsThatCareAlone(t *testing.T) {
+	f := rosewoodLog(t)
+
+	page := f.get(t, activityPath+"?care=feed")
+
+	rows := textOf(logEntries(page), eventKind)
+	if len(rows) != 1 || !strings.HasPrefix(rows[0], "Nigel") {
+		t.Errorf("the rows are %v, want Nigel's feed alone", rows)
+	}
+}
+
+// The range is read in the reader's timezone, London, so an event at 23:30 on
+// the last day is in and one at 00:15 the next morning is out.
+func TestActivity_TheDateRangeIncludesBothEndsInTheReadersDay(t *testing.T) {
+	f := rosewoodLog(t)
+	f.care(t, dorisID, waterID, at(time.August, 21, 23, 30))
+	f.care(t, bigFellaID, waterID, at(time.August, 22, 0, 15))
+
+	page := f.get(t, activityPath+"?from=2026-08-19&to=2026-08-21")
+
+	rows := textOf(logEntries(page), eventKind)
+	if len(rows) != 3 {
+		t.Fatalf("the rows are %v, want Doris, Trail Mix and Sprout", rows)
+	}
+	for i, want := range []string{"Doris", "Trail Mix", "Sprout"} {
+		if !strings.HasPrefix(rows[i], want) {
+			t.Errorf("row %d is %q, want %s", i, rows[i], want)
+		}
+	}
+}
+
+// The clocks go forward on 29 March in London, so the day the range ends on is
+// 23 hours long and the range still stops at midnight.
+func TestActivity_ADateRangeOverTheClockChangeEndsAtTheReadersMidnight(t *testing.T) {
+	f := rosewoodLog(t)
+	f.care(t, dorisID, waterID, at(time.March, 29, 23, 30))
+	f.care(t, bigFellaID, waterID, at(time.March, 30, 0, 15))
+
+	page := f.get(t, activityPath+"?from=2026-03-28&to=2026-03-29")
+
+	rows := textOf(logEntries(page), eventKind)
+	if len(rows) != 1 || !strings.HasPrefix(rows[0], "Doris") {
+		t.Errorf("the rows are %v, want Doris's watering at 23:30 on the 29th alone", rows)
+	}
+}
+
+func TestActivity_AnOpenEndedRangeFiltersOnTheOneDateGiven(t *testing.T) {
+	f := rosewoodLog(t)
+
+	since := textOf(logEntries(f.get(t, activityPath+"?from=2026-09-02")), eventKind)
+	until := textOf(logEntries(f.get(t, activityPath+"?to=2026-08-16")), eventKind)
+
+	if len(since) != 3 {
+		t.Errorf("from 2 September lists %v, want the three events on the 2nd and 3rd", since)
+	}
+	if len(until) != 2 {
+		t.Errorf("to 16 August lists %v, want Spike and Opuntia", until)
+	}
+}
+
+func TestActivity_TheOlderLinkKeepsTheFilters(t *testing.T) {
+	f := rosewoodLog(t)
+	f.waterings(t, nigelID, daysBack(30, 50)...)
+
+	first := f.get(t, activityPath+"?care=water&to=2026-09-03")
+
+	href := pagerLink(first, olderLink)
+	if !strings.Contains(href, "care=water") || !strings.Contains(href, "to=2026-09-03") {
+		t.Fatalf("the Older link is %q, want the care and the date on it", href)
+	}
+	second := f.get(t, href)
+	if !strings.Contains(pagerLink(second, latestLink), "care=water") {
+		t.Errorf("the Latest link is %q, want the care on it", pagerLink(second, latestLink))
+	}
+	for _, row := range textOf(logEntries(second), eventKind) {
+		if strings.Contains(row, "fed") {
+			t.Errorf("the older page lists a feed under the water filter: %q", row)
+		}
+	}
+}
+
+func TestActivity_FiltersThatMatchNothingSayNothingMatches(t *testing.T) {
+	f := rosewoodLog(t)
+
+	page := f.get(t, activityPath+"?care=feed&from=2026-09-03")
+
+	if !strings.Contains(text(page), "Nothing matches these filters") {
+		t.Errorf("the page does not say the filters matched nothing:\n%s", text(page))
+	}
+	if strings.Contains(text(page), "No activity yet") {
+		t.Error("the page says nothing has been logged, and the filters are what hid it")
+	}
+}
+
+func TestActivity_ACareTypeTheGardenDoesNotHaveIsNotFound(t *testing.T) {
+	f := rosewoodLog(t)
+
+	if rec := f.request(t, activityPath+"?care=prune"); rec.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusNotFound)
+	}
+}
+
+func TestActivity_AMalformedDateIsNotFound(t *testing.T) {
+	f := rosewoodLog(t)
+
+	for _, target := range []string{activityPath + "?from=yesterday", activityPath + "?to=2026-13-01"} {
+		if rec := f.request(t, target); rec.Code != http.StatusNotFound {
+			t.Errorf("%s: status = %d, want %d", target, rec.Code, http.StatusNotFound)
+		}
+	}
+}
+
+// filterForm matches the filter form above the list. It is the only form on
+// the page that submits to the log's own URL.
+var filterForm = regexp.MustCompile(`(?s)<form[^>]*action="/activity"[^>]*>(.*?)</form>`)
+
+func TestActivity_TheFilterFormComesBackWithThePlantAndTheValuesChosen(t *testing.T) {
+	f := rosewoodLog(t)
+
+	page := f.get(t, activityPath+"?plant="+bigFellaID.String()+"&care=water&from=2026-08-01")
+
+	form := filterForm.FindStringSubmatch(page)
+	if form == nil {
+		t.Fatalf("the page has no filter form:\n%s", page)
+	}
+	for _, want := range []string{
+		`<input type="hidden" name="plant" value="` + bigFellaID.String() + `">`,
+		`<option value="water" selected>Water</option>`,
+		`<option value="feed">Feed</option>`,
+		`name="from" value="2026-08-01"`,
+		`name="to" value=""`,
+	} {
+		if !strings.Contains(form[1], want) {
+			t.Errorf("the form lacks %s:\n%s", want, form[1])
+		}
+	}
+}
+
+// clearLink matches the Clear link beside the filters and captures its href.
+var clearLink = regexp.MustCompile(`<a class="filters__clear" href="([^"]*)"`)
+
+func TestActivity_ClearIsOfferedOnlyWhileAFilterIsOn(t *testing.T) {
+	f := rosewoodLog(t)
+
+	plain := f.show(t)
+	filtered := f.get(t, activityPath+"?plant="+bigFellaID.String()+"&care=water")
+
+	if clearLink.MatchString(plain) {
+		t.Error("the unfiltered log offers Clear")
+	}
+	clear := clearLink.FindStringSubmatch(filtered)
+	if clear == nil || html.UnescapeString(clear[1]) != plantActivityPath(bigFellaID) {
+		t.Errorf("the filtered log's Clear is %v, want a link to %s", clear, plantActivityPath(bigFellaID))
+	}
+}
+
+func TestActivity_TheSummarySaysTheDatesTheLogIsFilteredBetween(t *testing.T) {
+	f := rosewoodLog(t)
+
+	page := f.get(t, activityPath+"?from=2026-09-01&to=2026-09-03")
+
+	if !strings.Contains(text(page), "Filter · from 1 Sep · to 3 Sep") {
+		t.Errorf("the summary does not say the range:\n%s", text(page))
+	}
+}
+
+// Now is 3 September 2026 in London, so a date in 2025 is labelled with its
+// year and one in 2026 is not.
+func TestActivity_ADateInAnotherYearIsSummarisedWithItsYear(t *testing.T) {
+	f := rosewoodLog(t)
+
+	page := f.get(t, activityPath+"?from=2025-12-31")
+
+	if !strings.Contains(text(page), "Filter · from 31 Dec 2025") {
+		t.Errorf("the summary does not say the year:\n%s", text(page))
+	}
+}
+
+func TestActivity_ACareTypeTurnedOffStillFiltersItsEvents(t *testing.T) {
+	f := rosewoodLog(t)
+	f.exec(t, "UPDATE care_type SET archived_at = now() WHERE id = $1", feedID)
+
+	page := f.get(t, activityPath+"?care=feed")
+
+	if rows := textOf(logEntries(page), eventKind); len(rows) != 1 {
+		t.Errorf("the rows are %v, want Nigel's feed, because its events are still in the log", rows)
 	}
 }

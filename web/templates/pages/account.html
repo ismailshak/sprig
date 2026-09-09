@@ -22,6 +22,7 @@
 <p class="note">Your handle identifies your account. It’s shown on People when two members have the same display name.</p>
 {{template "timezone-field" .Zone}}
 <button class="wide-action" type="submit">Save changes</button>
+{{if .Saved}}{{template "saved"}}{{end}}
 </form>
 <ul class="list">{{template "link-row" .Codes}}</ul>
 {{/* The link is not styled as a warning, because rose means overdue in this
@@ -30,4 +31,4 @@
 </div>
 {{end}}
 
-{{define "nav"}}{{template "tabs" "More"}}{{end}}
+{{define "nav"}}{{template "tabs" "Under More"}}{{end}}

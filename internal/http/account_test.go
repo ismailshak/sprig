@@ -161,8 +161,8 @@ func TestAccount_SavingWritesTheNameTheHandleAndTheZone(t *testing.T) {
 
 	rec := f.saveAccount(t, "  Eleanor  ", "  eleanor  ", "Asia/Tokyo")
 
-	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != accountPath {
-		t.Fatalf("status = %d to %q, want %d to %s", rec.Code, rec.Header().Get("Location"), http.StatusSeeOther, accountPath)
+	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != savedURL(accountPath) {
+		t.Fatalf("status = %d to %q, want %d to %s", rec.Code, rec.Header().Get("Location"), http.StatusSeeOther, savedURL(accountPath))
 	}
 	var name, handle, zone string
 	if err := f.tx.QueryRow(t.Context(), "SELECT display_name, handle, timezone FROM app_user WHERE id = $1", moreUserID).Scan(&name, &handle, &zone); err != nil {
@@ -257,8 +257,19 @@ func TestAccount_SavingWithTheHandleUnchangedRedirectsBackToAccount(t *testing.T
 
 	rec := f.saveAccount(t, "Eleanor", "ellie", "Europe/London")
 
-	if rec.Code != http.StatusSeeOther {
-		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusSeeOther, rec.Body.String())
+	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != savedURL(accountPath) {
+		t.Fatalf("status = %d to %q, want %d to %s:\n%s", rec.Code, rec.Header().Get("Location"), http.StatusSeeOther, savedURL(accountPath), rec.Body.String())
+	}
+}
+
+func TestAccount_ThePageASaveRedirectsToSaysSavedAndAPlainVisitDoesNot(t *testing.T) {
+	f := moreGarden(t)
+
+	if page := f.page(t, f.handler.account, savedURL(accountPath)); !strings.Contains(text(page), "Saved") {
+		t.Errorf("the page after a save does not say Saved:\n%s", text(page))
+	}
+	if page := f.page(t, f.handler.account, accountPath); strings.Contains(text(page), "Saved") {
+		t.Errorf("a plain visit says Saved:\n%s", text(page))
 	}
 }
 

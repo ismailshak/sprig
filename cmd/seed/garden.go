@@ -179,8 +179,8 @@ type garden struct {
 	tokens    []apiToken
 }
 
-// home is the garden the prototype shows, with its plants, rooms, names,
-// people and schedules.
+// home is the first of the two seed gardens: its plants, rooms, names, people
+// and schedules.
 //
 // Only the schedules are written here. The event history is derived from them
 // by history, because the app computes the next occurrence as the last event

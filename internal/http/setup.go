@@ -47,6 +47,10 @@ var errSetupClosed = errors.New("an account exists and sign-up is off")
 type setupForm struct {
 	garden string
 	name   string
+	// handle is the Handle field in its stored form. It is empty when the field
+	// was left blank, and the account then gets the handle made from its
+	// display name.
+	handle string
 	zone   string
 }
 
@@ -54,8 +58,18 @@ func readSetupForm(r *http.Request) setupForm {
 	return setupForm{
 		garden: strings.TrimSpace(r.PostForm.Get("garden")),
 		name:   strings.TrimSpace(r.PostForm.Get("name")),
+		handle: store.NormaliseHandle(r.PostForm.Get("handle")),
 		zone:   r.PostForm.Get("timezone"),
 	}
+}
+
+// handleOrDefault is the handle the account is created with: the one typed,
+// or the display name's when the field was left blank.
+func (f setupForm) handleOrDefault() string {
+	if f.handle != "" {
+		return f.handle
+	}
+	return store.HandleFor(f.name)
 }
 
 // errors returns the message to show under each empty field, and "" for a
@@ -84,7 +98,14 @@ type setupPage struct {
 	GardenError string
 	Name        string
 	NameError   string
-	Zone        timezoneField
+	Handle      string
+	// HandleError is shown under Handle when another account already holds
+	// the one typed. A blank handle is not an error here, because the display
+	// name's handle is used instead.
+	HandleError string
+	// Suggest is the URL the page's script GETs a free handle from.
+	Suggest string
+	Zone    timezoneField
 	// Refusal is the message above the form saying why the device was not
 	// enrolled. It is empty unless a registration has been refused.
 	Refusal string
@@ -113,6 +134,8 @@ func newSetupPage(form setupForm, propose, signupOn bool) setupPage {
 	page := setupPage{
 		Garden:    form.garden,
 		Name:      form.name,
+		Handle:    form.handle,
+		Suggest:   handlePath,
 		Zone:      timezoneField{Zones: zoneOptions(form.zone), Propose: propose},
 		Action:    setupPath,
 		Challenge: setupChallengePath,
@@ -209,11 +232,20 @@ func (h *setup) challenge(w http.ResponseWriter, r *http.Request) {
 		h.templates.badRequest(w, r)
 		return
 	}
+	// The handle is checked here as well as on the post, so the browser is not
+	// asked to make a passkey the post will then refuse.
+	if taken, err := handleTaken(r.Context(), h.queries, form.handle); err != nil {
+		h.templates.serverError(h.logger, w, r, "start the setup", err)
+		return
+	} else if taken {
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		return
+	}
 
 	// The account has no row yet. Its id is chosen here and stored with the
 	// ceremony, so the row the post writes has the id the passkey was
 	// registered under.
-	account := store.AppUser{ID: uuid.NewV7(), DisplayName: form.name, Handle: store.HandleFor(form.name), Timezone: form.zone}
+	account := store.AppUser{ID: uuid.NewV7(), DisplayName: form.name, Handle: form.handleOrDefault(), Timezone: form.zone}
 	creation, cookie, err := h.passkeys.BeginSetup(r.Context(), h.now(), account)
 	if err != nil {
 		h.templates.serverError(h.logger, w, r, "start the setup", err)
@@ -247,6 +279,14 @@ func (h *setup) create(w http.ResponseWriter, r *http.Request) {
 	page := newSetupPage(form, false, h.enabled)
 	page.GardenError, page.NameError, page.Zone.Error = form.errors()
 	if !form.valid() {
+		h.templates.render(w, r, view{page: "setup", status: http.StatusUnprocessableEntity}, page)
+		return
+	}
+	if taken, err := handleTaken(r.Context(), h.queries, form.handle); err != nil {
+		h.templates.serverError(h.logger, w, r, "set up the garden", err)
+		return
+	} else if taken {
+		page.HandleError = handleTakenMessage(form.handle)
 		h.templates.render(w, r, view{page: "setup", status: http.StatusUnprocessableEntity}, page)
 		return
 	}
@@ -285,7 +325,11 @@ func (h *setup) create(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		var err error
-		user, err = q.CreateAccount(ctx, ceremony.AccountID, form.name, form.zone)
+		if form.handle != "" {
+			user, err = q.CreateAccountWithHandle(ctx, ceremony.AccountID, form.name, form.handle, form.zone)
+		} else {
+			user, err = q.CreateAccount(ctx, ceremony.AccountID, form.name, form.zone)
+		}
 		if err != nil {
 			return err
 		}
@@ -298,6 +342,14 @@ func (h *setup) create(w http.ResponseWriter, r *http.Request) {
 	})
 	if errors.Is(err, errSetupClosed) {
 		h.templates.notFound(w, r)
+		return
+	}
+	// The handle was free when the challenge and the post checked it, and
+	// another account took it between the check and the write. The passkey the
+	// browser made is not saved, since the transaction rolled back.
+	if errors.Is(err, store.ErrHandleTaken) {
+		page.HandleError = handleTakenMessage(form.handle)
+		h.templates.render(w, r, view{page: "setup", status: http.StatusUnprocessableEntity}, page)
 		return
 	}
 	if err != nil {
@@ -319,6 +371,17 @@ func (h *setup) create(w http.ResponseWriter, r *http.Request) {
 	}
 	http.SetCookie(w, h.sessions.Cookie(token))
 	http.Redirect(w, r, remindersPath, http.StatusSeeOther)
+}
+
+// handleTaken reports whether the handle typed on Set up your garden or an
+// invite's join form belongs to an account already, open or closed. A blank
+// field is never taken, because the account then gets a handle made from its
+// display name.
+func handleTaken(ctx context.Context, queries *store.Queries, handle string) (bool, error) {
+	if handle == "" {
+		return false, nil
+	}
+	return queries.HandleExists(ctx, handle)
 }
 
 // createGardenOwnedBy writes a garden named name, an owner membership of it

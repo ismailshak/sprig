@@ -709,3 +709,51 @@ func TestInvited_TheSeventhChallengeInAMinuteFromOneAddressIsRefusedAsPlainText(
 		t.Errorf("%d ceremony rows, want the 6 the challenges before the limit wrote", n)
 	}
 }
+
+func TestInvited_ATypedHandleIsStoredAsTyped(t *testing.T) {
+	f := invitedGarden(t)
+	form := aJoinForm()
+	form.Set("handle", "Robin H")
+
+	principal := f.sessionOf(t, f.redeem(t, sitterLink, form, aDevice()), remindersPath)
+
+	if principal.User.Handle != "robin_h" {
+		t.Errorf("the account's handle is %q, want robin_h", principal.User.Handle)
+	}
+}
+
+func TestInvited_AHandleAnotherAccountHoldsIsRefusedOnTheChallengeAndNamedOnThePost(t *testing.T) {
+	f := invitedGarden(t)
+	users := f.count(t, "app_user")
+	form := aJoinForm()
+	form.Set("handle", "ellie")
+
+	if rec := f.request(t, f.handler.challenge, sitterLink, invitedChallengePath(sitterLink), form); rec.Code != http.StatusUnprocessableEntity {
+		t.Errorf("the challenge: status = %d, want %d, so no passkey is made for a handle the post refuses", rec.Code, http.StatusUnprocessableEntity)
+	}
+	if n := f.count(t, "webauthn_ceremony"); n != 0 {
+		t.Errorf("the challenge wrote %d ceremony rows, want none", n)
+	}
+
+	rec := f.request(t, f.handler.redeem, sitterLink, InvitedPath(sitterLink), form)
+
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("the post: status = %d, want %d:\n%s", rec.Code, http.StatusUnprocessableEntity, text(rec.Body.String()))
+	}
+	page := rec.Body.String()
+	if got := errorUnder(page, "handle"); got != "ellie is already taken." {
+		t.Errorf("under Handle: %q, want the taken message", got)
+	}
+	if got := valueOf(t, page, "handle"); got != "ellie" {
+		t.Errorf("Handle came back as %q, want ellie", got)
+	}
+	if got := valueOf(t, page, "name"); got != "Robin" {
+		t.Errorf("Display name came back as %q, want Robin", got)
+	}
+	if n := f.count(t, "app_user"); n != users {
+		t.Errorf("%d accounts, want the same number as before", n)
+	}
+	if at := f.redeemedAt(t, sitterLink); at != nil {
+		t.Error("the refused post marked the invite used")
+	}
+}

@@ -9,7 +9,9 @@
 <p class="lead">Deleting {{.Name}} deletes its plants, schedules, activity and photos. Everyone in it loses access. This can’t be undone.</p>
 <form method="post" action="{{.Action}}" novalidate>
 <div class="field">
-<label class="field__label" for="name">Type {{.Name}} to confirm</label>
+{{/* The name is in its own element because the label style uppercases its
+     text, and the name has to read exactly as it must be typed. */}}
+<label class="field__label" for="name">Type <span class="field__name">{{.Name}}</span> to confirm</label>
 <input class="input" id="name" name="name" type="text" value="{{.Typed}}" autocomplete="off">
 {{with .Error}}<p class="field__error">{{.}}</p>{{end}}
 </div>
@@ -18,4 +20,4 @@
 </div>
 {{end}}
 
-{{define "nav"}}{{template "tabs" "More"}}{{end}}
+{{define "nav"}}{{template "tabs" "Under More"}}{{end}}

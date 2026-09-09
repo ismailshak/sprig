@@ -15,6 +15,7 @@
 {{with .NameError}}<p class="field__error">{{.}}</p>{{end}}
 </div>
 <button class="wide-action" type="submit">Save</button>
+{{if .Saved}}{{template "saved"}}{{end}}
 </form>
 {{end}}
 {{if .ManageTypes}}
@@ -65,4 +66,4 @@
 </div>
 </form>{{end}}
 
-{{define "nav"}}{{template "tabs" "More"}}{{end}}
+{{define "nav"}}{{template "tabs" "Under More"}}{{end}}

@@ -20,7 +20,7 @@
 {{- with .Empty}}<div class="empty" id="day-head"{{if $.OOB}} hx-swap-oob="true"{{end}}>
 <span class="empty__mark">{{if .Done}}{{template "icon-check"}}{{else}}{{template "icon-plants"}}{{end}}</span>
 <h2 class="empty__title">{{.Title}}</h2>
-<p class="empty__line">{{.Line}}</p>
+{{with .Line}}<p class="empty__line">{{.}}</p>{{end}}
 {{with .Action}}<a class="empty__action" href="{{.Href}}">{{.Label}}</a>{{end}}
 </div>{{end}}
 {{- end}}

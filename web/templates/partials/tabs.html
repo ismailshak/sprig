@@ -1,15 +1,14 @@
-{{/* The argument is the name of the current page. That page's tab is a button
-     that goes nowhere. The other three are plain links. */}}
+{{/* The argument is Today, Plants, Activity, More, "Under Plants" or "Under
+     More". Every tab is a link, including the one for the page being shown.
+     "Under X" marks that tab aria-current="true" rather than "page", because
+     the reader is on a page reached from that tab rather than on the tab's
+     own page. */}}
 {{define "tabs"}}
 <nav class="nav">
-{{if eq . "Today"}}<button class="nav__item" aria-current="page">{{template "icon-today"}}Today</button>
-{{else}}<a class="nav__item" href="/">{{template "icon-today"}}Today</a>{{end}}
-{{if eq . "Plants"}}<button class="nav__item" aria-current="page">{{template "icon-plants"}}Plants</button>
-{{else}}<a class="nav__item" href="/plants">{{template "icon-plants"}}Plants</a>{{end}}
-{{if eq . "Activity"}}<button class="nav__item" aria-current="page">{{template "icon-activity"}}Activity</button>
-{{else}}<a class="nav__item" href="/activity">{{template "icon-activity"}}Activity</a>{{end}}
-{{if eq . "More"}}<button class="nav__item" aria-current="page">{{template "icon-more"}}More</button>
-{{else}}<a class="nav__item" href="/more">{{template "icon-more"}}More</a>{{end}}
+<a class="nav__item" href="/"{{if eq . "Today"}} aria-current="page"{{end}}>{{template "icon-today"}}Today</a>
+<a class="nav__item" href="/plants"{{if eq . "Plants"}} aria-current="page"{{else if eq . "Under Plants"}} aria-current="true"{{end}}>{{template "icon-plants"}}Plants</a>
+<a class="nav__item" href="/activity"{{if eq . "Activity"}} aria-current="page"{{end}}>{{template "icon-activity"}}Activity</a>
+<a class="nav__item" href="/more"{{if eq . "More"}} aria-current="page"{{else if eq . "Under More"}} aria-current="true"{{end}}>{{template "icon-more"}}More</a>
 </nav>
 {{end}}
 

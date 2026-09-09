@@ -52,20 +52,34 @@ type activity struct {
 }
 
 // logQuery is the query string of a request for the log. plant is nil for the
-// whole garden, before is nil for the newest page.
+// whole garden, before is nil for the newest page. care is the slug of the
+// care type the log is filtered to. from and to are the ends of the date range
+// as the form posts them, "2026-09-03". care, from and to are empty when that
+// filter is off.
 type logQuery struct {
 	plant  *uuid.UUID
+	care   string
+	from   string
+	to     string
 	before *cursor
 }
 
 const (
 	plantParam  = "plant"
+	careParam   = "care"
+	fromParam   = "from"
+	toParam     = "to"
 	beforeParam = "before"
 )
 
-// parseLogQuery reads the query string. It returns false when either
-// parameter is present and unparseable. The handler then returns 404, because
-// such a URL names no page.
+// errUnknownCare is returned when the care parameter names no care type in
+// the garden. The URL names no page, so the handler returns 404.
+var errUnknownCare = errors.New("no care type has that slug")
+
+// parseLogQuery reads the query string. It returns false when a parameter is
+// present and unparseable. The handler then returns 404, because such a URL
+// names no page. An empty parameter is a filter left blank on the form and is
+// the same as an absent one.
 func parseLogQuery(r *http.Request) (logQuery, bool) {
 	var q logQuery
 	values := r.URL.Query()
@@ -75,6 +89,20 @@ func parseLogQuery(r *http.Request) (logQuery, bool) {
 			return q, false
 		}
 		q.plant = &id
+	}
+	q.care = values.Get(careParam)
+	for _, date := range []struct {
+		param string
+		into  *string
+	}{{fromParam, &q.from}, {toParam, &q.to}} {
+		s := values.Get(date.param)
+		if s == "" {
+			continue
+		}
+		if _, err := time.Parse(time.DateOnly, s); err != nil {
+			return q, false
+		}
+		*date.into = s
 	}
 	if s := values.Get(beforeParam); s != "" {
 		c, ok := parseCursor(s)
@@ -86,6 +114,36 @@ func parseLogQuery(r *http.Request) (logQuery, bool) {
 	return q, true
 }
 
+// filtered reports whether a care type or a date is set. The plant is not
+// counted, so Clear leaves the log on the same plant.
+func (q logQuery) filtered() bool {
+	return q.care != "" || q.from != "" || q.to != ""
+}
+
+// latest returns the same query with no cursor. That is the newest page of
+// the log.
+func (q logQuery) latest() logQuery {
+	q.before = nil
+	return q
+}
+
+// span returns the ends of the date range in loc: the start of the from day
+// and the start of the day after the to day. Either is nil when that end is
+// open. The parse errors are ignored because parseLogQuery rejected any date
+// that does not parse.
+func (q logQuery) span(loc *time.Location) (since, until *time.Time) {
+	if q.from != "" {
+		day, _ := time.ParseInLocation(time.DateOnly, q.from, loc)
+		since = &day
+	}
+	if q.to != "" {
+		day, _ := time.ParseInLocation(time.DateOnly, q.to, loc)
+		next := day.AddDate(0, 0, 1)
+		until = &next
+	}
+	return since, until
+}
+
 // values is the query string as parameters. The correcting sheet's URLs repeat
 // the same ones, so a save or a delete can render the page the sheet was opened
 // over.
@@ -93,6 +151,15 @@ func (q logQuery) values() url.Values {
 	values := url.Values{}
 	if q.plant != nil {
 		values.Set(plantParam, q.plant.String())
+	}
+	if q.care != "" {
+		values.Set(careParam, q.care)
+	}
+	if q.from != "" {
+		values.Set(fromParam, q.from)
+	}
+	if q.to != "" {
+		values.Set(toParam, q.to)
 	}
 	if q.before != nil {
 		values.Set(beforeParam, q.before.String())
@@ -155,7 +222,7 @@ func (h *activity) show(w http.ResponseWriter, r *http.Request) {
 	}
 	page, err := h.page(r.Context(), principal, q)
 	switch {
-	case errors.Is(err, pgx.ErrNoRows):
+	case errors.Is(err, pgx.ErrNoRows), errors.Is(err, errUnknownCare):
 		h.templates.notFound(w, r)
 		return
 	case err != nil:
@@ -167,7 +234,7 @@ func (h *activity) show(w http.ResponseWriter, r *http.Request) {
 	// under it, so send the reader to the top of the log rather than to a page
 	// holding one sentence and no way on.
 	if page.Empty != nil && q.before != nil {
-		http.Redirect(w, r, logQuery{plant: q.plant}.href(), http.StatusSeeOther)
+		http.Redirect(w, r, q.latest().href(), http.StatusSeeOther)
 		return
 	}
 	h.templates.render(w, r, view{page: "activity", fragment: logFragment(r)}, page)
@@ -179,12 +246,19 @@ func (h *activity) show(w http.ResponseWriter, r *http.Request) {
 // anything on the page at all.
 const logBodyID = "log-body"
 
+// logID is the id of the element holding the filters and the log body. Apply
+// and Clear swap it, because they change the filters as well as the rows.
+const logID = "log"
+
 // logFragment picks the part of the page a swap returns. A swap aimed at the
-// log body gets that alone, and everything else, a page navigation included,
-// gets the whole page.
+// log body gets that alone, one aimed at the filters and the body gets those,
+// and everything else, a page navigation included, gets the whole page.
 func logFragment(r *http.Request) string {
-	if r.Header.Get("HX-Target") == logBodyID {
+	switch r.Header.Get("HX-Target") {
+	case logBodyID:
 		return logBodyID
+	case logID:
+		return logID
 	}
 	return ""
 }
@@ -204,6 +278,13 @@ func (h *activity) page(ctx context.Context, principal auth.Principal, q logQuer
 		plant = &p
 	}
 
+	// The select lists every care type, the ones turned off included, because
+	// their events are still in the log. A slug matching none of them is a
+	// 404.
+	types, err := h.queries.ListCareTypesWithEvents(ctx, principal.Garden.ID)
+	if err != nil {
+		return activityPage{}, fmt.Errorf("list the care types: %w", err)
+	}
 	params := store.ListCareEventLogParams{
 		GardenID: principal.Garden.ID,
 		PlantID:  q.plant,
@@ -211,6 +292,14 @@ func (h *activity) page(ctx context.Context, principal auth.Principal, q logQuer
 		// page. That is cheaper than counting the whole log.
 		Count: logPageSize + 1,
 	}
+	if q.care != "" {
+		i := slices.IndexFunc(types, func(t store.ListCareTypesWithEventsRow) bool { return t.CareType.Slug == q.care })
+		if i < 0 {
+			return activityPage{}, errUnknownCare
+		}
+		params.CareTypeID = &types[i].CareType.ID
+	}
+	params.Since, params.Until = q.span(now.Location())
 	if q.before != nil {
 		params.BeforeAt = &q.before.at
 		params.BeforeID = &q.before.id
@@ -224,14 +313,86 @@ func (h *activity) page(ctx context.Context, principal auth.Principal, q logQuer
 		return activityPage{}, fmt.Errorf("count the plants: %w", err)
 	}
 
-	return newActivityPage(principal, q, plant, events, plants, now), nil
+	page := newActivityPage(principal, q, plant, events, plants, now)
+	page.Filters = newLogFilters(q, types, now)
+	return page, nil
+}
+
+// logFilters is the form above the log, with a care type select and a date
+// range. It submits with GET, so the filtered log has a URL and works without
+// JavaScript.
+type logFilters struct {
+	// Action is the log's own URL.
+	Action string
+	// Plant is the id of the plant the log is filtered to, posted as a hidden
+	// field so the filters apply within that plant's log. Empty on the whole
+	// garden's log.
+	Plant string
+	// Cares is the Care select's options. The first matches every care type.
+	// The rest are the garden's care types, the ones turned off included.
+	Cares []option
+	From  string
+	To    string
+	// Clear is the URL of the same log with the filters off. It is empty when
+	// no filter is set.
+	Clear string
+	// Summary is the text after "Filter" on the closed details: the care type's
+	// name, then "from 3 Sep" and "to 9 Sep" as set, joined with " · ".
+	// Empty when no filter is set.
+	Summary string
+}
+
+const everyCareType = "Every care type"
+
+func newLogFilters(q logQuery, types []store.ListCareTypesWithEventsRow, now time.Time) logFilters {
+	f := logFilters{Action: activityPath, From: q.from, To: q.to}
+	if q.plant != nil {
+		f.Plant = q.plant.String()
+	}
+	f.Cares = append(f.Cares, option{Value: "", Label: everyCareType, On: q.care == ""})
+	var parts []string
+	for _, t := range types {
+		f.Cares = append(f.Cares, option{Value: t.CareType.Slug, Label: t.CareType.Name, On: t.CareType.Slug == q.care})
+		if t.CareType.Slug == q.care {
+			parts = append(parts, t.CareType.Name)
+		}
+	}
+	if q.from != "" {
+		parts = append(parts, "from "+filterDate(q.from, now))
+	}
+	if q.to != "" {
+		parts = append(parts, "to "+filterDate(q.to, now))
+	}
+	if q.filtered() {
+		f.Clear = logQuery{plant: q.plant}.href()
+		f.Summary = strings.Join(parts, " · ")
+	}
+	return f
+}
+
+// filterDate formats a date from the From or To field, 2006-01-02, as
+// "2 Jan", with the year added when it is not now's year. now is the current
+// time in the reader's timezone, so the year compared is the reader's rather
+// than the server's. A date that does not parse is returned as typed, because
+// parseLogQuery has already refused such a URL with a 404.
+func filterDate(value string, now time.Time) string {
+	at, err := time.Parse(time.DateOnly, value)
+	if err != nil {
+		return value
+	}
+	if at.Year() != now.Year() {
+		return at.Format("2 Jan 2006")
+	}
+	return at.Format("2 Jan")
 }
 
 type activityPage struct {
 	// Back links to the plant the log is filtered to. It is nil for the whole
 	// garden's log, which is reached from the tab bar and needs no way back.
-	Back  *link
-	Items []logItem
+	Back *link
+	// Filters is the care type and date range form above the list.
+	Filters logFilters
+	Items   []logItem
 	// Pager is nil when the log fits on one page.
 	Pager *pager
 	// Empty is set only when Items is empty.
@@ -339,7 +500,7 @@ func newActivityPage(principal auth.Principal, q logQuery, plant *store.Plant, e
 		events = events[:logPageSize]
 	}
 	if len(events) == 0 {
-		page.Empty = newActivityEmpty(principal, plants)
+		page.Empty = newActivityEmpty(principal, plants, q.filtered())
 		return page
 	}
 
@@ -356,11 +517,12 @@ func newActivityPage(principal auth.Principal, q logQuery, plant *store.Plant, e
 func newPager(q logQuery, last store.CareEvent, more bool) *pager {
 	var p pager
 	if more {
-		next := logQuery{plant: q.plant, before: &cursor{at: last.PerformedAt, id: last.ID}}
+		next := q
+		next.before = &cursor{at: last.PerformedAt, id: last.ID}
 		p.Older = next.href()
 	}
 	if q.before != nil {
-		p.Latest = logQuery{plant: q.plant}.href()
+		p.Latest = q.latest().href()
 	}
 	if p.Older == "" && p.Latest == "" {
 		return nil
@@ -371,7 +533,10 @@ func newPager(q logQuery, last store.CareEvent, more bool) *pager {
 // newActivityEmpty builds the empty state. Only a garden with no plants gets a
 // link, since care is logged on Today or a plant's page rather than here. A
 // reader who may not create a plant gets no link.
-func newActivityEmpty(principal auth.Principal, plants int64) *activityEmpty {
+func newActivityEmpty(principal auth.Principal, plants int64, filtered bool) *activityEmpty {
+	if filtered {
+		return &activityEmpty{Title: "Nothing matches these filters"}
+	}
 	if plants == 0 {
 		empty := &activityEmpty{
 			NoPlants: true,

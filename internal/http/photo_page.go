@@ -23,6 +23,10 @@ type photoPage struct {
 	// Back is the URL of the plant's Photos page.
 	Back string
 	Src  string
+	// Width and Height are the photo's pixel size, written on the img so the
+	// page lays the box out at its final shape before the photo downloads.
+	Width  int32
+	Height int32
 	// When is the day the photo was taken, or uploaded when the uploader did
 	// not say, as "Taken 3 Sep" or "Uploaded today".
 	When string
@@ -76,11 +80,13 @@ func (h *plants) renderPhoto(w http.ResponseWriter, r *http.Request, asking bool
 	}
 	now := h.now().In(locationFor(principal.User))
 	page := photoPage{
-		Name: plant.DisplayName(),
-		Back: photosPath(plant.ID),
-		Src:  photoFullPath(plant.ID, row.Photo.ID),
-		When: photoWhen(row.Photo, now),
-		Who:  row.UploadedByName,
+		Name:   plant.DisplayName(),
+		Back:   photosPath(plant.ID),
+		Src:    photoFullPath(plant.ID, row.Photo.ID),
+		Width:  row.Photo.Width,
+		Height: row.Photo.Height,
+		When:   photoWhen(row.Photo, now),
+		Who:    row.UploadedByName,
 	}
 	if row.Photo.UploadedBy == principal.User.ID {
 		page.Who = "you"

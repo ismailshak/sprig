@@ -19,8 +19,44 @@
 <h1 class="topbar__title">Activity</h1>
 </header>
 {{end}}
-{{template "log-body" .}}
+{{template "log" .}}
 {{end}}
+
+{{/* The filters and the list under one id. Apply and Clear swap this. A saved
+     correction swaps the list alone. */}}
+{{define "log"}}<div id="log">
+{{template "log-filters" .Filters}}
+{{template "log-body" .}}
+</div>{{end}}
+
+{{/* The care type and date range the log is filtered to, in a details element
+     that renders closed. The form submits with GET, so a filtered log has a
+     URL to share and works without JavaScript. Apply and Clear swap the whole
+     of #log rather than the list alone, because they change the summary line,
+     the field values and whether Clear is there. The swap leaves the details
+     closed again. */}}
+{{define "log-filters"}}<div class="app__body app__body--log filters">
+<details class="filters__details">
+<summary class="filters__toggle">{{template "icon-chevron"}}Filter{{with .Summary}}<span class="filters__summary"> &middot; {{.}}</span>{{end}}</summary>
+<form class="filters__form" method="get" action="{{.Action}}" hx-get="{{.Action}}" hx-target="#log" hx-swap="outerHTML settle:0ms" hx-push-url="true">
+{{with .Plant}}<input type="hidden" name="plant" value="{{.}}">{{end}}
+<div class="filters__field">
+<label for="filter-care">Care</label>
+<select class="input input--unit" id="filter-care" name="care">{{template "options" .Cares}}</select>
+</div>
+<div class="filters__field">
+<label for="filter-from">From</label>
+<input class="input input--unit" id="filter-from" type="date" name="from" value="{{.From}}">
+</div>
+<div class="filters__field">
+<label for="filter-to">To</label>
+<input class="input input--unit" id="filter-to" type="date" name="to" value="{{.To}}">
+</div>
+<button class="care care--small" type="submit">Apply</button>
+</form>
+</details>
+{{with .Clear}}<a class="filters__clear" href="{{.}}" hx-get="{{.}}" hx-target="#log" hx-swap="outerHTML settle:0ms" hx-push-url="true">Clear</a>{{end}}
+</div>{{end}}
 
 {{/* The list, the pager and the empty state under one id. A saved correction
      and the end of a delete's undo window both swap this, because either can
@@ -34,15 +70,15 @@
 {{end}}
 {{with .Pager}}
 <div class="pager">
-{{with .Older}}<a class="foot-link" href="{{.}}">Older activity{{template "icon-chevron"}}</a>{{end}}
-{{with .Latest}}<a class="foot-link" href="{{.}}">Latest activity</a>{{end}}
+{{with .Older}}<a class="foot-link" href="{{.}}" hx-get="{{.}}" hx-target="#log-body" hx-swap="outerHTML settle:0ms show:#log:top" hx-push-url="true">Older activity{{template "icon-chevron"}}</a>{{end}}
+{{with .Latest}}<a class="foot-link" href="{{.}}" hx-get="{{.}}" hx-target="#log-body" hx-swap="outerHTML settle:0ms show:#log:top" hx-push-url="true">Latest activity</a>{{end}}
 </div>
 {{end}}
 {{with .Empty}}
 <div class="empty">
 <span class="empty__mark">{{if .NoPlants}}{{template "icon-plants"}}{{else}}{{template "icon-activity"}}{{end}}</span>
 <h2 class="empty__title">{{.Title}}</h2>
-<p class="empty__line">{{.Line}}</p>
+{{with .Line}}<p class="empty__line">{{.}}</p>{{end}}
 {{with .Action}}<a class="empty__action" href="{{.Href}}">{{.Label}}</a>{{end}}
 </div>
 {{end}}
@@ -111,3 +147,5 @@
 {{define "nav"}}{{template "tabs" "Activity"}}{{end}}
 
 {{define "overlay"}}{{template "sheet" .}}{{end}}
+
+{{define "script"}}<script src="{{asset "sheet.js"}}" defer></script>{{end}}

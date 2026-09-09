@@ -4,11 +4,12 @@
 {{template "more-topbar" .Bar}}
 <div class="app__body app__body--sub">
 {{if .Codes}}
-{{/* Copy all has no handler yet. Writing to the clipboard needs JavaScript. */}}
+{{/* Copy all is rendered hidden. The page's script shows it in a browser that
+     can write to the clipboard, and copies the codes one per line. */}}
 <div class="secret">
 <p class="secret__label">Your recovery codes</p>
 <ul class="secret__codes">{{range .Codes}}<li>{{.}}</li>{{end}}</ul>
-<button class="care care--outline" type="button">Copy all</button>
+<button class="care care--outline" type="button" data-copy="{{.CodesText}}" hidden>Copy all</button>
 <p class="note">These codes are shown only once. Save them somewhere safe, away from the device you sign in with.</p>
 </div>
 <p class="note">Each code works once and lets a new device add a passkey.</p>
@@ -36,4 +37,6 @@
 </div>
 {{end}}
 
-{{define "nav"}}{{template "tabs" "More"}}{{end}}
+{{define "script"}}<script src="{{asset "copy.js"}}" defer></script>{{end}}
+
+{{define "nav"}}{{template "tabs" "Under More"}}{{end}}

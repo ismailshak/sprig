@@ -77,7 +77,7 @@ func TestDeleteGarden_ThePageNamesTheGardenAndAsksForItsName(t *testing.T) {
 
 	page := f.page(t, f.handler.confirmDeleteGarden, deleteGardenPath)
 
-	if !strings.Contains(page, "Type Rosewood to confirm") {
+	if !strings.Contains(text(page), "Type Rosewood to confirm") {
 		t.Errorf("the page does not ask for the garden's name:\n%s", text(page))
 	}
 	if !strings.Contains(page, "Deleting Rosewood deletes its plants") {

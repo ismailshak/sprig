@@ -19,6 +19,7 @@ const (
 	recoveryPath      = accountPath + "/recovery"
 	passkeysPath      = morePath + "/passkeys"
 	notificationsPath = morePath + "/notifications"
+	appearancePath    = morePath + "/appearance"
 	gardenPath        = morePath + "/garden"
 	peoplePath        = morePath + "/people"
 	tokensPath        = morePath + "/tokens"
@@ -65,6 +66,19 @@ type topbar struct {
 	Href  string
 	Back  string
 	Title string
+}
+
+// savedParam is the query parameter a save's redirect adds, so the page it
+// lands on can show that the save happened. It has no value.
+const savedParam = "saved"
+
+// savedURL is path with savedParam added, the URL a save redirects to.
+func savedURL(path string) string {
+	return path + "?" + savedParam
+}
+
+func saved(r *http.Request) bool {
+	return r.URL.Query().Has(savedParam)
 }
 
 // moreBar is the top bar for a page reached from More's index, with its back
@@ -138,6 +152,7 @@ func (h *more) state(ctx context.Context, principal auth.Principal) (moreState, 
 func newMorePage(principal auth.Principal, state moreState, info build.Info) morePage {
 	rows := []linkRow{
 		{Label: "Account", Href: accountPath, Note: codesNote(state.noCodesLeft)},
+		{Label: "Appearance", Href: appearancePath},
 		{Label: "Passkeys", Href: passkeysPath},
 		{Label: "Notifications", Href: notificationsPath, Note: offNote(state.notificationsOn)},
 	}
@@ -151,6 +166,36 @@ func newMorePage(principal auth.Principal, state moreState, info build.Info) mor
 		rows = append(rows, linkRow{Label: "Tokens", Href: tokensPath})
 	}
 	return morePage{Rows: rows, Version: info.Version, Revision: shortRevision(info.Revision)}
+}
+
+// appearancePage is the Appearance page: three radio buttons for light, dark
+// and the system setting. The page's script stores the choice in the browser,
+// so no handler reads or writes it.
+type appearancePage struct {
+	Bar   topbar
+	Modes []appearanceMode
+}
+
+// appearanceMode is one of the three radio buttons. Value is the string the
+// page's script stores in the browser. On is set on System, because a page
+// with no script running follows the system setting.
+type appearanceMode struct {
+	Value string
+	Label string
+	Note  string
+	On    bool
+}
+
+func (h *more) appearance(w http.ResponseWriter, r *http.Request) {
+	page := appearancePage{
+		Bar: moreBar("Appearance"),
+		Modes: []appearanceMode{
+			{Value: "light", Label: "Light"},
+			{Value: "dark", Label: "Dark"},
+			{Value: "system", Label: "System", Note: "Follows your device’s setting.", On: true},
+		},
+	}
+	h.templates.render(w, r, view{page: "appearance"}, page)
 }
 
 // signOut deletes this session's row and clears the cookie. A cookie kept

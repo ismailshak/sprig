@@ -8,7 +8,7 @@
 //
 // Seasonal schedules follow the real calendar. Feeding is out of season from
 // October to February, so a garden seeded in winter has fewer plants due than
-// the prototype shows.
+// one seeded in summer.
 //
 // Running the seed again replaces what it wrote last time and leaves everything
 // else in the database alone.

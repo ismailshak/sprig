@@ -107,6 +107,11 @@ func TestRecovery_CreatingCodesShowsTenOnceAndStoresOnlyTheirHashes(t *testing.T
 	if !strings.Contains(box[1], "These codes are shown only once") {
 		t.Errorf("the box does not say the codes are shown once:\n%s", box[1])
 	}
+	// Copy all is rendered hidden with the codes one per line on it, for the
+	// page's script to put on the clipboard.
+	if !strings.Contains(box[1], `data-copy="`+strings.Join(codes, "\n")+`" hidden>Copy all</button>`) {
+		t.Errorf("Copy all does not hold the ten codes:\n%s", box[1])
+	}
 	if !strings.Contains(page, `<a class="wide-action" href="`+accountPath+`">Done</a>`) {
 		t.Errorf("the page has no Done link back to Account:\n%s", text(page))
 	}

@@ -1,0 +1,17 @@
+{{/* The Handle field on Set up your garden and an invite's join form. The
+     page's script fills it from the display name as it is typed, and when the
+     display name is left it asks the server at Suggest for a handle no
+     account holds. The button asks again after the handle has been typed over.
+     Without JavaScript the button stays hidden, the field stays empty and the
+     server makes the handle from the display name. */}}
+{{define "handle-field"}}<div class="field">
+<label class="field__label" for="handle">Handle <span class="field__hint">unique to you</span></label>
+<span class="handle">
+<input class="input" id="handle" name="handle" type="text" value="{{.Handle}}" autocomplete="off" autocapitalize="none" spellcheck="false" data-suggest="{{.Suggest}}">
+<button class="handle__again" type="button" id="handle-again" aria-label="Suggest a handle" hidden>{{template "icon-refresh"}}</button>
+</span>
+{{with .HandleError}}<p class="field__error">{{.}}</p>{{end}}
+</div>
+<p class="note">Your handle identifies your account. It’s shown on People when two members have the same display name.</p>{{end}}
+
+{{define "icon-refresh"}}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>{{end}}

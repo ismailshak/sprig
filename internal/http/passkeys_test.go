@@ -142,3 +142,20 @@ func TestPasskeys_RemovingAPasskeyEndsTheSessionsItSignedInAndNoOther(t *testing
 		t.Errorf("the session with no passkey behind it stopped resolving: %v", err)
 	}
 }
+
+func TestPasskeys_APasskeyFromAKnownProviderIsNamedAfterTheProvider(t *testing.T) {
+	f := moreGarden(t)
+	f.exec(t, "UPDATE passkey_credential SET aaguid = $1 WHERE id = $2", uuid.MustParse("bada5566-a7aa-401f-bd96-45619a55120d"), phoneKeyID)
+	// An AAGUID the table does not know keeps the browser's label.
+	f.exec(t, "UPDATE passkey_credential SET aaguid = $1 WHERE id = $2", uuid.MustParse("11111111-2222-4333-8444-555555555555"), laptopKeyID)
+
+	rows := stackedRowsOf(f.page(t, f.handler.passkeys, passkeysPath))
+
+	want := []stackedRow{
+		{name: "1Password", meta: "Last used today", drop: removePasskeyPath(phoneKeyID)},
+		{name: "MacBook Air", meta: "Never used", drop: removePasskeyPath(laptopKeyID)},
+	}
+	if !slices.Equal(rows, want) {
+		t.Errorf("the passkeys are %v, want %v", rows, want)
+	}
+}

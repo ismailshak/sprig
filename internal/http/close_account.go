@@ -21,6 +21,10 @@ const closeAccountPath = accountPath + "/close"
 // manage it.
 var errSoleOwner = errors.New("the account is the only owner of a garden")
 
+// closeAccountMismatch is shown under the field when what was typed is not the
+// account's handle.
+const closeAccountMismatch = "That isn’t your handle. Type it exactly as shown."
+
 type closeAccountPage struct {
 	Bar    topbar
 	Action string
@@ -28,8 +32,15 @@ type closeAccountPage struct {
 	// out the tab bar, because every tab needs a garden.
 	InGarden bool
 	// SoleOwnerNotice is the sentence naming the gardens this account is the
-	// only owner of. The page renders no Close account button while it is set.
+	// only owner of. The page renders no form while it is set.
 	SoleOwnerNotice string
+	// Handle is the account's handle, shown in the field's label to be typed
+	// back.
+	Handle string
+	// Typed is the value put back in the field after a post that did not match.
+	Typed string
+	// Error is shown under the field, empty until a post is refused.
+	Error string
 }
 
 func (h *more) newCloseAccountPage(ctx context.Context, principal auth.Principal) (closeAccountPage, error) {
@@ -37,6 +48,7 @@ func (h *more) newCloseAccountPage(ctx context.Context, principal auth.Principal
 		Bar:      topbar{Href: accountPath, Back: "Account", Title: "Close account"},
 		Action:   closeAccountPath,
 		InGarden: principal.InGarden(),
+		Handle:   principal.User.Handle,
 	}
 	if !page.InGarden {
 		page.Bar.Href, page.Bar.Back = todayPath, "Back"
@@ -83,10 +95,25 @@ func (h *more) confirmCloseAccount(w http.ResponseWriter, r *http.Request) {
 	h.templates.render(w, r, view{page: "close-account"}, page)
 }
 
-// closeAccount handles POST /more/account/close. The sole-owner check runs in
-// the same transaction as the deletes. A refused close writes nothing.
+// closeAccount handles POST /more/account/close. A post whose typed handle is
+// not the account's is refused before anything runs. The sole-owner check runs
+// in the same transaction as the deletes. A refused close writes nothing.
 func (h *more) closeAccount(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
+	if err := r.ParseForm(); err != nil {
+		h.templates.badRequest(w, r)
+		return
+	}
+	if typed := strings.TrimSpace(r.PostForm.Get("handle")); typed != principal.User.Handle {
+		page, err := h.newCloseAccountPage(r.Context(), principal)
+		if err != nil {
+			h.templates.serverError(h.logger, w, r, "open the close account page", err)
+			return
+		}
+		page.Typed, page.Error = typed, closeAccountMismatch
+		h.templates.render(w, r, view{page: "close-account", status: http.StatusUnprocessableEntity}, page)
+		return
+	}
 	err := h.queries.InTx(r.Context(), func(q *store.Queries) error {
 		return closeUserAccount(r.Context(), q, principal.User.ID, h.now)
 	})

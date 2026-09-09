@@ -380,7 +380,7 @@ func newTodayEmpty(principal auth.Principal, day schedule.Day, latest []store.Ca
 		return empty
 	}
 
-	empty := &todayEmpty{Title: "Nothing due today", Line: "Nothing is due or overdue."}
+	empty := &todayEmpty{Title: "Nothing due today"}
 	if caredForOn(latest, now) {
 		empty.Done = true
 		empty.Title = "All done for today"

@@ -98,7 +98,7 @@ func TestSeed_NoSecretIsStoredInTheClear(t *testing.T) {
 	}
 }
 
-func TestSeed_ThePasskeysAreThePrototypesTwoDevices(t *testing.T) {
+func TestSeed_EllieHasAnIPhonePasskeyAndAMacBookAirPasskey(t *testing.T) {
 	pool := seeded(t)
 	ref := testReference(t)
 
@@ -196,7 +196,7 @@ func TestSeed_TheKitchenDisplayTokenIsLiveAndTheSpareHasExpired(t *testing.T) {
 			t.Errorf("%s expires in %d days, want %d", w.name, got, w.expiresIn)
 		}
 		if !tok.Unrevoked {
-			t.Errorf("%s was revoked, and the prototype's expired row ran out on its own", w.name)
+			t.Errorf("%s was revoked, want a token that ran out on its own", w.name)
 		}
 	}
 }
@@ -229,7 +229,7 @@ func TestSeed_EightOfTenRecoveryCodesAreLeft(t *testing.T) {
 	}
 }
 
-func TestSeed_NotificationPreferencesAndSubscriptionsMatchThePrototype(t *testing.T) {
+func TestSeed_EllieGetsTheDigestAtEightInTwoBrowsers(t *testing.T) {
 	pool := seeded(t)
 	ref := testReference(t)
 	ctx := t.Context()

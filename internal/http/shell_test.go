@@ -94,7 +94,7 @@ func TestShell_LinksTheManifestAndTheAppleTouchIcon(t *testing.T) {
 	}
 }
 
-func TestShell_TheCurrentTabIsTheOnlyOneThatIsNotALink(t *testing.T) {
+func TestShell_TheCurrentTabIsMarkedCurrentAndLinksToItsOwnPage(t *testing.T) {
 	for tab, href := range map[string]string{
 		"Today":    "/",
 		"Plants":   "/plants",
@@ -104,16 +104,38 @@ func TestShell_TheCurrentTabIsTheOnlyOneThatIsNotALink(t *testing.T) {
 		t.Run(tab, func(t *testing.T) {
 			shell := renderShell(t, testAssets(), tab)
 
-			if links := strings.Count(shell, `class="nav__item" href=`); links != 3 {
-				t.Errorf("the bar has %d links, want the three tabs that are not this one", links)
+			if links := strings.Count(shell, `class="nav__item" href=`); links != 4 {
+				t.Errorf("the bar has %d links, want all four tabs", links)
 			}
 			if current := strings.Count(shell, `aria-current="page"`); current != 1 {
 				t.Errorf("%d tabs are marked current, want 1", current)
 			}
-			if strings.Contains(shell, `href="`+href+`"`) {
-				t.Errorf("the %s tab links to %s, which is the page it is already on", tab, href)
+			if !strings.Contains(shell, `href="`+href+`" aria-current="page"`) {
+				t.Errorf("the %s tab is not the one marked current, or does not link to %s", tab, href)
 			}
 		})
+	}
+}
+
+func TestShell_APageUnderPlantsMarksThePlantsTabAndLinksToTheList(t *testing.T) {
+	shell := renderShell(t, testAssets(), "Under Plants")
+
+	if !strings.Contains(shell, `href="/plants" aria-current="true"`) {
+		t.Errorf("the Plants tab is not marked, or does not link to the list:\n%s", shell)
+	}
+	if strings.Contains(shell, `aria-current="page"`) {
+		t.Error("a tab is marked as the current page, and the reader is on a page under Plants rather than on the list")
+	}
+}
+
+func TestShell_APageUnderMoreMarksTheMoreTabAndLinksToTheIndex(t *testing.T) {
+	shell := renderShell(t, testAssets(), "Under More")
+
+	if !strings.Contains(shell, `href="/more" aria-current="true"`) {
+		t.Errorf("the More tab is not marked, or does not link to the index:\n%s", shell)
+	}
+	if strings.Contains(shell, `aria-current="page"`) {
+		t.Error("a tab is marked as the current page, and the reader is on a page under More rather than on the index")
 	}
 }
 

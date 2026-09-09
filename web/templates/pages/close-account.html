@@ -1,11 +1,13 @@
 {{define "title"}}Close account · sprig{{end}}
 
-{{/* An account in no garden gets the page without the tab bar, because every
-     tab needs a garden. */}}
-{{define "app-class"}}{{if .InGarden}}app{{else}}app app--bare{{end}}{{end}}
-
 {{/* An account that is the only owner of a garden gets the reason it cannot
-     close instead of the button. */}}
+     close instead of the form. Everyone else types their handle back, because
+     closing an account cannot be undone. The handle is in its own element
+     because the label style uppercases its text, and it has to read exactly as
+     it must be typed.
+
+     An account in no garden gets the same page without the tab bar, because
+     every tab needs a garden. */}}
 {{define "main"}}
 {{template "more-topbar" .Bar}}
 <div class="app__body app__body--sub">
@@ -13,9 +15,16 @@
 <p class="lead">{{.}}</p>
 {{else}}
 <p class="lead">Closing your account deletes your passkeys and recovery codes, signs you out on every device and removes you from every garden. Your name stays on everything you’ve logged. This can’t be undone.</p>
-<form method="post" action="{{.Action}}"><button class="wide-action" type="submit">Close account</button></form>
+<form method="post" action="{{.Action}}" novalidate>
+<div class="field">
+<label class="field__label" for="handle">Type <span class="field__name">{{.Handle}}</span> to confirm</label>
+<input class="input" id="handle" name="handle" type="text" value="{{.Typed}}" autocomplete="off" autocapitalize="none" spellcheck="false">
+{{with .Error}}<p class="field__error">{{.}}</p>{{end}}
+</div>
+<button class="wide-action" type="submit">Close account</button>
+</form>
 {{end}}
 </div>
 {{end}}
 
-{{define "nav"}}{{if .InGarden}}{{template "tabs" "More"}}{{end}}{{end}}
+{{define "nav"}}{{if .InGarden}}{{template "tabs" "Under More"}}{{end}}{{end}}

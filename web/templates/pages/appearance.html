@@ -1,0 +1,35 @@
+{{define "title"}}Appearance · sprig{{end}}
+
+{{/* Light, dark or the system setting, as three radio buttons. The page's
+     script keeps the choice in the browser's localStorage and posts nothing,
+     so one person's phone can be dark and their laptop light.
+
+     The radios are rendered disabled with the line under them, and the script
+     enables them and removes the line. Without JavaScript the app follows the
+     system setting and the line says so. */}}
+{{define "main"}}
+{{template "more-topbar" .Bar}}
+<div class="app__body app__body--sub">
+<form id="appearance-form">
+<fieldset class="field">
+<legend class="field__label">Theme</legend>
+<ul class="list">
+{{range .Modes}}<li class="row row--check">
+<label class="check" for="mode-{{.Value}}">
+<input type="radio" id="mode-{{.Value}}" name="mode" value="{{.Value}}"{{if .On}} checked{{end}} disabled>
+<span class="row__text">
+<span class="row__name">{{.Label}}</span>
+{{with .Note}}<span class="row__meta"><span class="row__part">{{.}}</span></span>{{end}}
+</span>
+</label>
+</li>
+{{end}}</ul>
+</fieldset>
+<p class="note" id="appearance-noscript">Without JavaScript, sprig follows your device’s light or dark setting.</p>
+</form>
+</div>
+{{end}}
+
+{{define "script"}}<script src="{{asset "appearance-form.js"}}" defer></script>{{end}}
+
+{{define "nav"}}{{template "tabs" "Under More"}}{{end}}

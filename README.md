@@ -92,32 +92,32 @@ Sign-in and account recovery are rate limited per client address. Behind a proxy
 
 The app sends no `Strict-Transport-Security` header. Set HSTS where TLS terminates.
 
-The Content-Security-Policy allows scripts from the app's origin only. Turn off any proxy feature that injects scripts, such as Cloudflare's Rocket Loader.
+The Content-Security-Policy allows scripts from the app's origin only. Turn off any proxy feature that injects a script into pages.
 
 ## Configuration
 
 Every setting is an environment variable, read once at startup. A missing or invalid value stops the process. The error lists every problem.
 
-| Variable                  | Required        | Default                 | What it is                                                                                                              |
-| ------------------------- | --------------- | ----------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `SPRIG_DATABASE_URL`      | yes             |                         | The Postgres connection URL.                                                                                            |
-| `SPRIG_ADDR`              | no              | `:8080`                 | The address the server listens on.                                                                                      |
-| `SPRIG_BASE_URL`          | no              | `http://localhost:8080` | The origin browsers reach the app at, port included. Passkeys and the links in invites and notifications use it.        |
-| `SPRIG_RP_ID`             | no              | host of the base URL    | The WebAuthn relying party id. See below.                                                                               |
-| `SPRIG_COOKIE_NAME`       | no              | `__Host-sprig_session`  | The session cookie's name. A `__Host-` or `__Secure-` name needs a Secure cookie.                                       |
-| `SPRIG_COOKIE_SECURE`     | no              | `true`                  | Whether the session cookie is sent over https only. Off needs a plain cookie name and an http base URL.                 |
-| `SPRIG_SESSION_TTL`       | no              | `720h`                  | How long a session lasts without use. A Go duration in whole seconds.                                                   |
-| `SPRIG_PHOTO_DIR`         | no              | `./photos`              | The directory photos are written to.                                                                                    |
-| `SPRIG_PHOTO_QUOTA_BYTES` | no              | `1GiB`                  | The most one garden's photos may add up to. A number with a unit such as `1GiB`, `500MiB` or `2GB`, or a byte count.    |
-| `SPRIG_TRUSTED_IP_HEADER` | no              |                         | The header a proxy puts the client address in. Unset means the connection's address.                                    |
-| `SPRIG_SIGNUP_ENABLED`    | no              | `false`                 | Whether `/setup` creates an account and a garden for anyone.                                                            |
-| `SPRIG_PUSH_ENABLED`      | no              | `false`                 | Whether push notifications are offered. Off, the VAPID variables are not read.                                          |
-| `SPRIG_VAPID_PUBLIC_KEY`  | when push is on |                         | The VAPID public key, from `sprig vapid`.                                                                               |
-| `SPRIG_VAPID_PRIVATE_KEY` | when push is on |                         | The VAPID private key, from `sprig vapid`.                                                                              |
-| `SPRIG_VAPID_SUBJECT`     | when push is on |                         | A `mailto:` address or an https URL push services can contact you at.                                                   |
-| `SPRIG_TEMPLATE_DIR`      | no              |                         | A directory of templates to re-read on every request, for development. Unset means the templates built into the binary. |
-| `SPRIG_LOG_LEVEL`         | no              | `info`                  | One of `debug`, `info`, `warn`, `error`.                                                                                |
-| `SPRIG_LOG_FORMAT`        | no              | `json`                  | `json` or `text`.                                                                                                       |
+| Variable                  | Required        | Default                 | What it is                                                                                                                                                                                             |
+| ------------------------- | --------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `SPRIG_DATABASE_URL`      | yes             |                         | The Postgres connection URL.                                                                                                                                                                           |
+| `SPRIG_ADDR`              | no              | `:8080`                 | The address the server listens on.                                                                                                                                                                     |
+| `SPRIG_BASE_URL`          | no              | `http://localhost:8080` | The origin browsers reach the app at, port included. Passkeys and the links in invites and notifications use it.                                                                                       |
+| `SPRIG_RP_ID`             | no              | host of the base URL    | The WebAuthn relying party id. See below.                                                                                                                                                              |
+| `SPRIG_COOKIE_NAME`       | no              | `__Host-sprig_session`  | The session cookie's name. A `__Host-` or `__Secure-` name needs a Secure cookie.                                                                                                                      |
+| `SPRIG_COOKIE_SECURE`     | no              | `true`                  | Whether the session cookie is sent over https only. Off needs a plain cookie name and an http base URL.                                                                                                |
+| `SPRIG_SESSION_TTL`       | no              | `720h`                  | How long a session lasts without use. A Go duration in whole seconds.                                                                                                                                  |
+| `SPRIG_PHOTO_DIR`         | no              | `./photos`              | The directory photos are written to.                                                                                                                                                                   |
+| `SPRIG_PHOTO_QUOTA`       | no              | `1GB`                   | The most one garden's photos may add up to. A number with a unit such as `1GB`, `500MB` or `2GiB`, or a byte count. The Garden page reports the figure in decimal units, where `4GiB` reads as 4.3 GB. |
+| `SPRIG_TRUSTED_IP_HEADER` | no              |                         | The header a proxy puts the client address in. Unset means the connection's address.                                                                                                                   |
+| `SPRIG_SIGNUP_ENABLED`    | no              | `false`                 | Whether `/setup` creates an account and a garden for anyone.                                                                                                                                           |
+| `SPRIG_PUSH_ENABLED`      | no              | `false`                 | Whether push notifications are offered. Off, the VAPID variables are not read.                                                                                                                         |
+| `SPRIG_VAPID_PUBLIC_KEY`  | when push is on |                         | The VAPID public key, from `sprig vapid`.                                                                                                                                                              |
+| `SPRIG_VAPID_PRIVATE_KEY` | when push is on |                         | The VAPID private key, from `sprig vapid`.                                                                                                                                                             |
+| `SPRIG_VAPID_SUBJECT`     | when push is on |                         | A `mailto:` address or an https URL push services can contact you at.                                                                                                                                  |
+| `SPRIG_TEMPLATE_DIR`      | no              |                         | A directory of templates to re-read on every request, for development. Unset means the templates built into the binary.                                                                                |
+| `SPRIG_LOG_LEVEL`         | no              | `info`                  | One of `debug`, `info`, `warn`, `error`.                                                                                                                                                               |
+| `SPRIG_LOG_FORMAT`        | no              | `json`                  | `json` or `text`.                                                                                                                                                                                      |
 
 A passkey is bound to the relying party id. Changing the id loses every passkey, so set `SPRIG_RP_ID` before anyone registers one. Set it to the registrable domain, `example.com` rather than `sprig.example.com`, and the app can move to another name under that domain and keep every passkey. The value must be the base URL's host or a parent domain of it.
 
@@ -133,7 +133,7 @@ Once a day the server deletes rows no page shows: sessions past `SPRIG_SESSION_T
 docker compose exec sprig /sprig sweep
 ```
 
-`sprig admin invite --user <handle>` prints a sign-in link for an account. It is for a garden's owner who has lost every device, because nobody else can make one for them on People. The link adds a passkey to that account, works once and expires after 7 days. The handle is on the People page.
+`sprig admin invite --user <handle>` prints a sign-in link for an account. It is for a garden's owner who has lost every device, because nobody else can make one for them on People. The link adds a passkey to that account, works once and expires after 7 days. The handle is the one on that person's Account page.
 
 ```sh
 docker compose exec sprig /sprig admin invite --user emma
@@ -143,7 +143,7 @@ Back up the Postgres database and the photo directory together.
 
 ### The chores endpoint
 
-`GET /api/chores` returns one garden's overdue, due and upcoming cares as JSON, for a display such as a TRMNL to poll. It takes an API token from the garden's Tokens page as a bearer token. A missing, revoked or expired token gets a 401.
+`GET /api/chores` returns one garden's overdue, due and upcoming cares as JSON, for a device or a script that polls it. It takes an API token from the garden's Tokens page as a bearer token. A missing, revoked or expired token gets a 401.
 
 ```sh
 curl -H "Authorization: Bearer sprg_..." https://sprig.example.com/api/chores
@@ -179,4 +179,4 @@ mise run e2e    # the Playwright suite against a seeded throwaway Postgres
 mise run lint
 ```
 
-`mise run dev` serves `http://localhost:8080` with a development sign-in in place of passkeys. Push is on, with a throwaway VAPID pair the e2e stack shares, so a browser on localhost can subscribe. `mise run seed` loads example gardens. The development sign-in is behind a build tag and is not in the published image.
+`mise run dev` serves `http://localhost:8080` with a development sign-in in place of passkeys. Push is on, with a throwaway VAPID pair the e2e stack shares, so a browser on localhost can subscribe. `mise run seed` loads two example gardens. The development sign-in is behind a build tag and is not in the published image.

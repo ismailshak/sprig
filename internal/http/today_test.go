@@ -363,14 +363,17 @@ func TestToday_TheEmptyStateDependsOnWhyTheListIsEmpty(t *testing.T) {
 		}
 	})
 
-	t.Run("a garden with nothing scheduled at all says so", func(t *testing.T) {
+	t.Run("a garden with nothing scheduled at all has the heading and no line under it", func(t *testing.T) {
 		f := rosewood(t)
 		clearTheWeek(t, f)
 		f.exec(t, "DELETE FROM care_schedule WHERE plant_id = $1", spikeID)
 
 		page := f.show(t)
-		if !strings.Contains(page, "Nothing is due or overdue.") {
+		if !strings.Contains(page, "Nothing due today") {
 			t.Errorf("the page does not say nothing is due:\n%s", text(page))
+		}
+		if strings.Contains(page, "Nothing is due or overdue.") {
+			t.Errorf("the page repeats the heading in a line under it:\n%s", text(page))
 		}
 		if strings.Contains(page, "is next") {
 			t.Error("the page names a next plant when nothing is scheduled")

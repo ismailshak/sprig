@@ -179,8 +179,11 @@ func TestNotifications_SavingWritesBothTypesAndTheHour(t *testing.T) {
 		"hour":     {"19"},
 	})
 
-	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != notificationsPath {
-		t.Fatalf("status = %d to %q, want %d to %s", rec.Code, rec.Header().Get("Location"), http.StatusSeeOther, notificationsPath)
+	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != savedURL(notificationsPath) {
+		t.Fatalf("status = %d to %q, want %d to %s", rec.Code, rec.Header().Get("Location"), http.StatusSeeOther, savedURL(notificationsPath))
+	}
+	if page := f.page(t, f.handler.notifications, savedURL(notificationsPath)); !strings.Contains(text(page), "Saved") {
+		t.Errorf("the page after a save does not say Saved:\n%s", text(page))
 	}
 	if got, want := settingsOf(t, f, moreMembershipID), (notificationSettings{digest: false, activity: true, hour: 19}); got != want {
 		t.Errorf("the membership holds %+v, want %+v", got, want)
