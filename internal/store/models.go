@@ -145,6 +145,8 @@ type Photo struct {
 	Height      int32
 	Bytes       int64
 	SquareBytes *int64
+	FocusX      int16
+	FocusY      int16
 }
 
 type Plant struct {

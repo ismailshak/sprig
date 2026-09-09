@@ -9,6 +9,11 @@ RETURNING *;
 SELECT * FROM photo
 WHERE garden_id = @garden_id AND id = @photo_id;
 
+-- Sets which part of the photo the plant's page shows.
+-- name: SetPhotoFocus :exec
+UPDATE photo SET focus_x = @focus_x, focus_y = @focus_y
+WHERE garden_id = @garden_id AND plant_id = @plant_id AND id = @photo_id;
+
 -- The bytes of every photo in the garden, the square variants included.
 -- name: SumPhotoBytes :one
 SELECT coalesce(sum(bytes + coalesce(square_bytes, 0)), 0)::bigint

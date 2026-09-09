@@ -27,7 +27,7 @@ func (q *Queries) CountPlantPhotos(ctx context.Context, gardenID uuid.UUID, plan
 const createPhoto = `-- name: CreatePhoto :one
 INSERT INTO photo (id, garden_id, plant_id, uploaded_by, taken_at, kind, path, width, height, bytes, square_bytes)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-RETURNING id, garden_id, plant_id, uploaded_by, taken_at, uploaded_at, kind, path, width, height, bytes, square_bytes
+RETURNING id, garden_id, plant_id, uploaded_by, taken_at, uploaded_at, kind, path, width, height, bytes, square_bytes, focus_x, focus_y
 `
 
 type CreatePhotoParams struct {
@@ -74,6 +74,8 @@ func (q *Queries) CreatePhoto(ctx context.Context, arg CreatePhotoParams) (Photo
 		&i.Height,
 		&i.Bytes,
 		&i.SquareBytes,
+		&i.FocusX,
+		&i.FocusY,
 	)
 	return i, err
 }
@@ -82,7 +84,7 @@ const deletePhoto = `-- name: DeletePhoto :one
 DELETE FROM photo
 WHERE garden_id = $1 AND plant_id = $2 AND id = $3
   AND ($4::boolean OR uploaded_by = $5)
-RETURNING id, garden_id, plant_id, uploaded_by, taken_at, uploaded_at, kind, path, width, height, bytes, square_bytes
+RETURNING id, garden_id, plant_id, uploaded_by, taken_at, uploaded_at, kind, path, width, height, bytes, square_bytes, focus_x, focus_y
 `
 
 type DeletePhotoParams struct {
@@ -118,12 +120,14 @@ func (q *Queries) DeletePhoto(ctx context.Context, arg DeletePhotoParams) (Photo
 		&i.Height,
 		&i.Bytes,
 		&i.SquareBytes,
+		&i.FocusX,
+		&i.FocusY,
 	)
 	return i, err
 }
 
 const getPhoto = `-- name: GetPhoto :one
-SELECT id, garden_id, plant_id, uploaded_by, taken_at, uploaded_at, kind, path, width, height, bytes, square_bytes FROM photo
+SELECT id, garden_id, plant_id, uploaded_by, taken_at, uploaded_at, kind, path, width, height, bytes, square_bytes, focus_x, focus_y FROM photo
 WHERE garden_id = $1 AND id = $2
 `
 
@@ -143,12 +147,14 @@ func (q *Queries) GetPhoto(ctx context.Context, gardenID uuid.UUID, photoID uuid
 		&i.Height,
 		&i.Bytes,
 		&i.SquareBytes,
+		&i.FocusX,
+		&i.FocusY,
 	)
 	return i, err
 }
 
 const getPlantPhoto = `-- name: GetPlantPhoto :one
-SELECT photo.id, photo.garden_id, photo.plant_id, photo.uploaded_by, photo.taken_at, photo.uploaded_at, photo.kind, photo.path, photo.width, photo.height, photo.bytes, photo.square_bytes, app_user.display_name AS uploaded_by_name
+SELECT photo.id, photo.garden_id, photo.plant_id, photo.uploaded_by, photo.taken_at, photo.uploaded_at, photo.kind, photo.path, photo.width, photo.height, photo.bytes, photo.square_bytes, photo.focus_x, photo.focus_y, app_user.display_name AS uploaded_by_name
 FROM photo
 JOIN app_user ON app_user.id = photo.uploaded_by
 WHERE photo.garden_id = $1 AND photo.plant_id = $2 AND photo.id = $3
@@ -182,6 +188,8 @@ func (q *Queries) GetPlantPhoto(ctx context.Context, arg GetPlantPhotoParams) (G
 		&i.Photo.Height,
 		&i.Photo.Bytes,
 		&i.Photo.SquareBytes,
+		&i.Photo.FocusX,
+		&i.Photo.FocusY,
 		&i.UploadedByName,
 	)
 	return i, err
@@ -227,7 +235,7 @@ func (q *Queries) ListPhotoFiles(ctx context.Context) ([]ListPhotoFilesRow, erro
 }
 
 const listPlantPhotos = `-- name: ListPlantPhotos :many
-SELECT photo.id, photo.garden_id, photo.plant_id, photo.uploaded_by, photo.taken_at, photo.uploaded_at, photo.kind, photo.path, photo.width, photo.height, photo.bytes, photo.square_bytes, app_user.display_name AS uploaded_by_name
+SELECT photo.id, photo.garden_id, photo.plant_id, photo.uploaded_by, photo.taken_at, photo.uploaded_at, photo.kind, photo.path, photo.width, photo.height, photo.bytes, photo.square_bytes, photo.focus_x, photo.focus_y, app_user.display_name AS uploaded_by_name
 FROM photo
 JOIN app_user ON app_user.id = photo.uploaded_by
 WHERE photo.garden_id = $1 AND photo.plant_id = $2
@@ -283,6 +291,8 @@ func (q *Queries) ListPlantPhotos(ctx context.Context, arg ListPlantPhotosParams
 			&i.Photo.Height,
 			&i.Photo.Bytes,
 			&i.Photo.SquareBytes,
+			&i.Photo.FocusX,
+			&i.Photo.FocusY,
 			&i.UploadedByName,
 		); err != nil {
 			return nil, err
@@ -293,6 +303,31 @@ func (q *Queries) ListPlantPhotos(ctx context.Context, arg ListPlantPhotosParams
 		return nil, err
 	}
 	return items, nil
+}
+
+const setPhotoFocus = `-- name: SetPhotoFocus :exec
+UPDATE photo SET focus_x = $1, focus_y = $2
+WHERE garden_id = $3 AND plant_id = $4 AND id = $5
+`
+
+type SetPhotoFocusParams struct {
+	FocusX   int16
+	FocusY   int16
+	GardenID uuid.UUID
+	PlantID  uuid.UUID
+	PhotoID  uuid.UUID
+}
+
+// Sets which part of the photo the plant's page shows.
+func (q *Queries) SetPhotoFocus(ctx context.Context, arg SetPhotoFocusParams) error {
+	_, err := q.db.Exec(ctx, setPhotoFocus,
+		arg.FocusX,
+		arg.FocusY,
+		arg.GardenID,
+		arg.PlantID,
+		arg.PhotoID,
+	)
+	return err
 }
 
 const sumPhotoBytes = `-- name: SumPhotoBytes :one
