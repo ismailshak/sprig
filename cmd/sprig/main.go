@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 	"uuid"
@@ -51,8 +52,12 @@ func subcommand(ctx context.Context, args []string, getenv func(string) string, 
 		return vapid(stdout)
 	case len(args) == 1 && args[0] == "sweep":
 		return sweep(ctx, getenv, stdout)
+	case len(args) == 1 && args[0] == "health":
+		return health(ctx, getenv)
+	case args[0] == "admin":
+		return admin(ctx, args[1:], getenv, stdout)
 	default:
-		return fmt.Errorf("unknown command %q: the commands are vapid and sweep, and the server runs with none", strings.Join(args, " "))
+		return fmt.Errorf("unknown command %q: the commands are vapid, sweep, health and admin, and the server runs with none", strings.Join(args, " "))
 	}
 }
 
@@ -68,10 +73,11 @@ func vapid(stdout io.Writer) error {
 	return err
 }
 
-// sweep runs one pass over the photo directory and the photo rows and prints
-// what it finds. It does not run the migrations, because the server that
-// wrote the rows has already applied them. A row with no file makes it return
-// an error, so the exit status is non-zero.
+// sweep deletes the sessions, invites and recovery codes that no longer mean
+// anything, then passes over the photo directory and the photo rows, printing
+// what it removed. It does not run the migrations, because the server that
+// wrote the rows has already applied them. A photo row with no file makes it
+// return an error, so the exit status is non-zero.
 func sweep(ctx context.Context, getenv func(string) string, stdout io.Writer) error {
 	cfg, err := loadConfig(getenv)
 	if err != nil {
@@ -89,11 +95,20 @@ func sweep(ctx context.Context, getenv func(string) string, stdout io.Writer) er
 	}
 	defer pool.Close()
 
+	queries := store.New(pool)
+	rows, err := auth.Sweep(ctx, queries, time.Now(), cfg.sessionTTL)
+	if err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(stdout, "removed %d expired sessions, %d redeemed invites and expired re-enrolment links, %d replaced recovery codes\n", rows.Sessions, rows.Invites, rows.RecoveryCodes); err != nil {
+		return err
+	}
+
 	photos, err := photo.NewStore(cfg.photoDir, cfg.photoQuota)
 	if err != nil {
 		return err
 	}
-	report, err := photos.Sweep(ctx, store.New(pool), stdout)
+	report, err := photos.Sweep(ctx, queries, stdout)
 	if err != nil {
 		return err
 	}
@@ -180,24 +195,23 @@ func run(ctx context.Context, getenv func(string) string, stdout io.Writer) erro
 		test = push.NewTestMessage(queries, sender, cfg.baseURL.String()).Send
 	}
 	handler := sprighttp.New(logger, sessions, passkeys, resolver, tokens, queries, photos, templates, assets, cfg.trustedIPHeader, cfg.signupEnabled, pushKey, wake, notify, test)
-	if !cfg.pushEnabled {
-		return serve(ctx, logger, listener, handler)
-	}
 
-	// run does not return until the digest job has stopped and every activity
-	// notification has finished sending. The deferred pool.Close would
-	// otherwise close the pool under one of them.
-	jobCtx, stopJob := context.WithCancel(ctx)
-	defer stopJob()
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		digest.Run(jobCtx)
-	}()
+	// run does not return until the sweep and the digest job have stopped and
+	// every activity notification has finished sending. The deferred
+	// pool.Close would otherwise close the pool under one of them.
+	jobCtx, stopJobs := context.WithCancel(ctx)
+	defer stopJobs()
+	var jobs sync.WaitGroup
+	jobs.Go(func() { auth.NewSweeper(logger, queries, cfg.sessionTTL).Run(jobCtx) })
+	if cfg.pushEnabled {
+		jobs.Go(func() { digest.Run(jobCtx) })
+	}
 	err = serve(ctx, logger, listener, handler)
-	stopJob()
-	<-done
-	activity.Wait()
+	stopJobs()
+	jobs.Wait()
+	if activity != nil {
+		activity.Wait()
+	}
 	return err
 }
 

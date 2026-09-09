@@ -73,9 +73,15 @@ description = "Point git at the hooks in .githooks, which is a per-clone setting
 run = "git config core.hooksPath .githooks"
 
 [tasks.sweep]
-description = "Remove photo files under SPRIG_PHOTO_DIR that no row points at, against the dev database"
+description = "Delete the rows no page shows and the photo files no row points at, against the dev database"
 # The sweep loads the whole server config. It uses no cookie, but the config
 # rejects the default __Host- cookie name unless the cookie is Secure, and
 # rejects a Secure cookie with an http base URL.
 env = { SPRIG_COOKIE_SECURE = "false", SPRIG_COOKIE_NAME = "sprig_session" }
 run = "go run ./cmd/sprig sweep"
+
+[tasks.admin]
+description = "Run sprig admin against the dev database: mise run admin invite --user <handle>"
+usage = 'arg "<args>..." var=#true help="Passed to sprig admin, such as invite --user emma"'
+env = { SPRIG_COOKIE_SECURE = "false", SPRIG_COOKIE_NAME = "sprig_session" }
+run = 'eval "set -- $usage_args"; go run ./cmd/sprig admin "$@"'

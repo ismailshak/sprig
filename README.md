@@ -125,12 +125,20 @@ A passkey is bound to the relying party id, and changing the id loses every pass
 
 ## Operating it
 
-`GET /healthz` returns JSON with the version and revision the binary was built from. It needs no sign-in.
+`GET /healthz` returns JSON with the version and revision the binary was built from. It needs no sign-in. The image has a `HEALTHCHECK` that runs `sprig health`. That subcommand GETs the route on `SPRIG_ADDR` and exits non-zero unless it gets a 200, so `docker ps` and compose show whether the server is up. Compose can override the interval.
 
-`sprig sweep` removes photo files under `SPRIG_PHOTO_DIR` that no database row points at, once they are an hour old. It also prints any row whose file is missing and exits non-zero. That is how you find out a restore or a mount went wrong. Nothing schedules it. Run it by hand with the server's environment:
+Once a day the server deletes the rows that stopped meaning anything and that nothing on a page shows: sessions past `SPRIG_SESSION_TTL`, redeemed invites and expired re-enrolment links older than a month, and recovery codes a newer batch replaced. It logs what it removed. An expired API token stays on the Tokens page, an ended membership stays on People and an expired invite stays under Pending invites, each with the button that removes it.
+
+`sprig sweep` runs that same pass and then removes photo files under `SPRIG_PHOTO_DIR` that no database row points at, once they are an hour old. It also prints any row whose file is missing and exits non-zero. That is how you find out a restore or a mount went wrong. Nothing schedules it. Run it by hand with the server's environment:
 
 ```sh
 docker compose exec sprig /sprig sweep
+```
+
+`sprig admin invite --user <handle>` prints a sign-in link for an account, for the owner of a garden who has lost every device and has nobody above them to make one on the People page. The link adds a passkey to the account named and creates no account, works once and expires after seven days. It refuses a handle no account holds and an account with no live membership. The handle is on the People page. Run it with the server's environment:
+
+```sh
+docker compose exec sprig /sprig admin invite --user emma
 ```
 
 Back up the Postgres database and the photo directory together.
