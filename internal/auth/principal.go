@@ -131,12 +131,17 @@ func (r *Resolver) principal(ctx context.Context, session store.Session, row sto
 	}, nil
 }
 
-// startingMembership returns the membership Resolve moves a session to. It is
-// the account's membership of the garden it last switched to when that one is
-// live at now, and otherwise the account's oldest live membership. It returns
-// ErrNoLiveMembership when none is live.
+// startingMembership returns the membership Resolve moves a session to.
 func (r *Resolver) startingMembership(ctx context.Context, now time.Time, userID uuid.UUID) (store.Membership, error) {
-	memberships, err := r.queries.ListMembershipsForUser(ctx, userID)
+	return firstLiveMembership(ctx, r.queries, now, userID)
+}
+
+// firstLiveMembership returns the account's membership of the garden it last
+// switched to, or its oldest live membership when that one has ended.
+// ListMembershipsForUser returns the rows in that order. It returns
+// ErrNoLiveMembership when every membership has ended at now.
+func firstLiveMembership(ctx context.Context, queries *store.Queries, now time.Time, userID uuid.UUID) (store.Membership, error) {
+	memberships, err := queries.ListMembershipsForUser(ctx, userID)
 	if err != nil {
 		return store.Membership{}, fmt.Errorf("read the memberships: %w", err)
 	}

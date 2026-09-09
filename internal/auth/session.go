@@ -127,8 +127,8 @@ func (s *Sessions) Create(ctx context.Context, now time.Time, userID uuid.UUID, 
 }
 
 // Lookup returns the session for token and moves its deadline forward to now
-// plus the TTL. An expired row is deleted here rather than by a sweep, since
-// the request presenting it is the only thing that will ever touch it again.
+// plus the TTL. An expired row is deleted here rather than left for the daily
+// sweep.
 func (s *Sessions) Lookup(ctx context.Context, now time.Time, token string) (store.Session, error) {
 	hash := HashToken(token)
 
