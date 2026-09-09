@@ -55,6 +55,15 @@ func (q *Queries) DeleteExpiredCeremonies(ctx context.Context, now time.Time) er
 	return err
 }
 
+const deleteUserCeremonies = `-- name: DeleteUserCeremonies :exec
+DELETE FROM webauthn_ceremony WHERE user_id = $1::uuid
+`
+
+func (q *Queries) DeleteUserCeremonies(ctx context.Context, userID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteUserCeremonies, userID)
+	return err
+}
+
 const takeCeremony = `-- name: TakeCeremony :one
 DELETE FROM webauthn_ceremony
 WHERE token_hash = $1 AND expires_at > $2

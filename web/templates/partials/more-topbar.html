@@ -1,8 +1,8 @@
-{{/* The bar on the pages under More: a back link above the page's title. The
-     title is in the bar because a word like "Passkeys" appears nowhere else on
-     the page. Most of these pages go back to More. Recovery codes goes back to
-     Account and Invite someone to People, because each is reached from
-     there. */}}
+{{/* The bar on the pages under More, and on Archived plants: a back link above
+     the page's title. The title is in the bar because a word like "Passkeys"
+     appears nowhere else on the page. Most of these pages go back to More.
+     Recovery codes goes back to Account, Invite someone to People and Archived
+     plants to Plants, because each is reached from there. */}}
 {{define "more-topbar"}}<header class="topbar topbar--stack topbar--sub">
 <a class="backlink" href="{{.Href}}">{{template "icon-back"}}{{.Back}}</a>
 <h1 class="topbar__title">{{.Title}}</h1>

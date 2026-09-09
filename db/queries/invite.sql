@@ -50,3 +50,9 @@ WHERE invite.token_hash = @token_hash;
 -- name: RedeemInvite :execrows
 UPDATE invite SET redeemed_at = @now::timestamptz
 WHERE garden_id = @garden_id AND id = @invite_id AND redeemed_at IS NULL AND expires_at > @now;
+
+-- Deletes the unredeemed re-enrolment invites made for this account, in every
+-- garden. A redeemed invite is kept as a record of the enrolment.
+-- name: DeleteUserReenrolmentInvites :exec
+DELETE FROM invite
+WHERE user_id = @user_id::uuid AND redeemed_at IS NULL;

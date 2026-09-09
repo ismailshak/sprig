@@ -27,7 +27,10 @@ CREATE TABLE app_user (
     -- chose could be wrong by up to a day.
     timezone     text NOT NULL,
     created_at   timestamptz NOT NULL DEFAULT now(),
-    last_garden_id uuid REFERENCES garden (id) ON DELETE SET NULL
+    last_garden_id uuid REFERENCES garden (id) ON DELETE SET NULL,
+    -- When the account was closed, NULL while it is open. The row is kept
+    -- because care_event and photo point at it.
+    closed_at    timestamptz
 );
 
 CREATE TABLE role (
@@ -64,6 +67,8 @@ INSERT INTO capability (name) VALUES
     ('photo.delete_own'),
     ('photo.delete_any'),
     ('garden.edit'),
+    -- Granted to the owner alone by the SELECT below.
+    ('garden.delete'),
     ('care_type.manage'),
     ('member.invite'),
     ('member.manage'),

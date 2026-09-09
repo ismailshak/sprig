@@ -69,3 +69,20 @@ SELECT location::text AS room FROM plant
 WHERE garden_id = @garden_id AND archived_at IS NULL AND location IS NOT NULL
 GROUP BY location
 ORDER BY lower(location), location;
+
+-- name: ListArchivedPlants :many
+SELECT * FROM plant
+WHERE garden_id = @garden_id AND archived_at IS NOT NULL
+ORDER BY archived_at DESC, id;
+
+-- The Plants page links to Archived plants only when this is not zero.
+-- name: CountArchivedPlants :one
+SELECT count(*) FROM plant
+WHERE garden_id = @garden_id AND archived_at IS NOT NULL;
+
+-- Returns no rows for a plant that is not archived, the same as for a plant in
+-- another garden. The handler returns 404 for both.
+-- name: RestorePlant :one
+UPDATE plant SET archived_at = NULL
+WHERE garden_id = @garden_id AND id = @plant_id AND archived_at IS NOT NULL
+RETURNING *;

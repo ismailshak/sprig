@@ -39,6 +39,9 @@
 <div class="section__head"><h2 class="section__title">Photos</h2></div>
 <p class="note">{{.Storage}}</p>
 </div>
+{{/* The link is not styled as a warning, because rose means overdue in this
+     app. Deleting is confirmed on the page it opens. */}}
+{{with .Delete}}<a class="foot-link" href="{{.}}">Delete garden{{template "icon-chevron"}}</a>{{end}}
 </div>
 {{end}}
 

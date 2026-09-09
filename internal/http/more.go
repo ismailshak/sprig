@@ -32,7 +32,8 @@ type more struct {
 	logger   *slog.Logger
 	sessions *auth.Sessions
 	queries  *store.Queries
-	// photos supplies the Garden page's photo storage figure.
+	// photos supplies the Garden page's photo storage figure, and deletes a
+	// garden's photo files when the garden is deleted.
 	photos    *photo.Store
 	templates *Templates
 	build     build.Info

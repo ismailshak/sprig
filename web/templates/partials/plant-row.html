@@ -1,0 +1,14 @@
+{{/* One plant as a row in a list, used by Plants and by Archived plants. The
+     second line holds the plant's other name, the date it was archived, or
+     both with a dot between. Standing is the overdue text on the right. Only
+     Plants sets it. */}}
+{{define "plant-row"}}<li>
+<a class="row row--link" href="{{.Href}}">
+{{template "avatar" .Picture}}
+<span class="row__text">
+<span class="row__name{{if .Botanical}} row__name--sp{{end}}">{{.Name}}</span>
+{{if or .Sub .ArchivedOn}}<span class="row__meta">{{with .Sub}}<span class="row__part">{{if $.SubBotanical}}<i>{{.}}</i>{{else}}{{.}}{{end}}</span>{{end}}{{if and .Sub .ArchivedOn}}<span class="dot">&middot;</span>{{end}}{{with .ArchivedOn}}<span class="row__part">{{.}}</span>{{end}}</span>{{end}}
+</span>
+{{with .Standing}}<span class="standing">{{.}}</span>{{end}}
+</a>
+</li>{{end}}

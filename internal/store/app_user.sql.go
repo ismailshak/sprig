@@ -7,6 +7,7 @@ package store
 
 import (
 	"context"
+	"time"
 
 	"uuid"
 )
@@ -24,11 +25,27 @@ func (q *Queries) AnyUsers(ctx context.Context) (bool, error) {
 	return exists, err
 }
 
+const closeAccount = `-- name: CloseAccount :execrows
+UPDATE app_user SET closed_at = $1::timestamptz, last_garden_id = NULL
+WHERE id = $2 AND closed_at IS NULL
+`
+
+// Marks the account closed. The row is kept because care events and photos
+// still show the person's name. The caller deletes the passkeys, sessions and
+// memberships in the same transaction.
+func (q *Queries) CloseAccount(ctx context.Context, now time.Time, userID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, closeAccount, now, userID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const createUser = `-- name: CreateUser :one
 INSERT INTO app_user (id, display_name, handle, timezone)
 VALUES ($1, $2, $3, $4)
 ON CONFLICT (handle) DO NOTHING
-RETURNING id, display_name, handle, timezone, created_at, last_garden_id
+RETURNING id, display_name, handle, timezone, created_at, last_garden_id, closed_at
 `
 
 type CreateUserParams struct {
@@ -62,12 +79,13 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (AppUser
 		&i.Timezone,
 		&i.CreatedAt,
 		&i.LastGardenID,
+		&i.ClosedAt,
 	)
 	return i, err
 }
 
 const getUser = `-- name: GetUser :one
-SELECT id, display_name, handle, timezone, created_at, last_garden_id FROM app_user
+SELECT id, display_name, handle, timezone, created_at, last_garden_id, closed_at FROM app_user
 WHERE id = $1
 `
 
@@ -81,13 +99,14 @@ func (q *Queries) GetUser(ctx context.Context, id uuid.UUID) (AppUser, error) {
 		&i.Timezone,
 		&i.CreatedAt,
 		&i.LastGardenID,
+		&i.ClosedAt,
 	)
 	return i, err
 }
 
 const getUserByHandle = `-- name: GetUserByHandle :one
-SELECT id, display_name, handle, timezone, created_at, last_garden_id FROM app_user
-WHERE handle = $1
+SELECT id, display_name, handle, timezone, created_at, last_garden_id, closed_at FROM app_user
+WHERE handle = $1 AND closed_at IS NULL
 `
 
 func (q *Queries) GetUserByHandle(ctx context.Context, handle string) (AppUser, error) {
@@ -100,18 +119,56 @@ func (q *Queries) GetUserByHandle(ctx context.Context, handle string) (AppUser, 
 		&i.Timezone,
 		&i.CreatedAt,
 		&i.LastGardenID,
+		&i.ClosedAt,
 	)
 	return i, err
 }
 
+const listGardensOnlyThisUserOwns = `-- name: ListGardensOnlyThisUserOwns :many
+SELECT garden.id, garden.name, garden.created_at FROM garden
+JOIN membership AS mine ON mine.garden_id = garden.id
+WHERE mine.user_id = $1 AND mine.role = 'owner'
+  AND (mine.expires_at IS NULL OR mine.expires_at > $2::timestamptz)
+  AND NOT EXISTS (
+    SELECT 1 FROM membership AS other
+    WHERE other.garden_id = garden.id AND other.role = 'owner' AND other.user_id <> mine.user_id
+      AND (other.expires_at IS NULL OR other.expires_at > $2::timestamptz))
+ORDER BY garden.name, garden.id
+`
+
+// Lists the gardens where this account is the only owner, ordered by name. An
+// expired membership counts on neither side, because an owner whose access has
+// ended can no longer delete the garden or hand it on. It takes a user id and
+// no garden id, because it searches every garden.
+func (q *Queries) ListGardensOnlyThisUserOwns(ctx context.Context, userID uuid.UUID, now time.Time) ([]Garden, error) {
+	rows, err := q.db.Query(ctx, listGardensOnlyThisUserOwns, userID, now)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Garden
+	for rows.Next() {
+		var i Garden
+		if err := rows.Scan(&i.ID, &i.Name, &i.CreatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listUsers = `-- name: ListUsers :many
-SELECT id, display_name, handle, timezone, created_at, last_garden_id FROM app_user
+SELECT id, display_name, handle, timezone, created_at, last_garden_id, closed_at FROM app_user
+WHERE closed_at IS NULL
 ORDER BY created_at, id
 `
 
-// Both queries exist for the development sign-in, which lists every user and
-// signs one in by handle alone. Nothing in a production build calls them, and
-// they will be removed with the development sign-in.
+// Both queries serve the development sign-in. It lists accounts and signs one
+// in by handle alone. Closed accounts are left out because nothing may sign in
+// as them. Nothing in a production build calls either query.
 func (q *Queries) ListUsers(ctx context.Context) ([]AppUser, error) {
 	rows, err := q.db.Query(ctx, listUsers)
 	if err != nil {
@@ -128,6 +185,7 @@ func (q *Queries) ListUsers(ctx context.Context) ([]AppUser, error) {
 			&i.Timezone,
 			&i.CreatedAt,
 			&i.LastGardenID,
+			&i.ClosedAt,
 		); err != nil {
 			return nil, err
 		}

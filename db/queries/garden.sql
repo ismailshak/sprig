@@ -8,3 +8,13 @@ RETURNING *;
 
 -- name: GetGarden :one
 SELECT * FROM garden WHERE id = @garden_id;
+
+-- Deletes the garden's care events before the garden itself, because
+-- care_event references care_type with ON DELETE RESTRICT and Postgres refuses
+-- the cascade while any event is left. Deleting the garden then cascades to
+-- its memberships, plants, care types, schedules, photos, invites and tokens.
+-- name: DeleteGardenCareEvents :exec
+DELETE FROM care_event WHERE garden_id = @garden_id;
+
+-- name: DeleteGarden :execrows
+DELETE FROM garden WHERE id = @garden_id;

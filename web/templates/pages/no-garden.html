@@ -10,5 +10,6 @@
 <p class="lead">You’re signed in as {{.Name}}, but this account isn’t a member of any garden. Ask a garden’s owner for an invite link, or set up your own.</p>
 {{with .SetUp}}<a class="wide-action" href="{{.}}">Set up a garden</a>{{end}}
 <form method="post" action="{{.SignOut}}"><button class="more__signout" type="submit">Sign out</button></form>
+<a class="foot-link" href="{{.Close}}">Close account{{template "icon-chevron"}}</a>
 </div>
 {{end}}

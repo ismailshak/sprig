@@ -69,8 +69,19 @@ func (q *Queries) DeleteMembership(ctx context.Context, gardenID uuid.UUID, user
 	return result.RowsAffected(), nil
 }
 
+const deleteUserMemberships = `-- name: DeleteUserMemberships :exec
+DELETE FROM membership WHERE user_id = $1
+`
+
+// Deletes the account's memberships in every garden. There is no garden id
+// because the query spans them all.
+func (q *Queries) DeleteUserMemberships(ctx context.Context, userID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteUserMemberships, userID)
+	return err
+}
+
 const getMemberByHandle = `-- name: GetMemberByHandle :one
-SELECT membership.id, membership.garden_id, membership.user_id, membership.role, membership.invited_by, membership.created_at, membership.expires_at, membership.digest_hour, app_user.id, app_user.display_name, app_user.handle, app_user.timezone, app_user.created_at, app_user.last_garden_id
+SELECT membership.id, membership.garden_id, membership.user_id, membership.role, membership.invited_by, membership.created_at, membership.expires_at, membership.digest_hour, app_user.id, app_user.display_name, app_user.handle, app_user.timezone, app_user.created_at, app_user.last_garden_id, app_user.closed_at
 FROM membership
 JOIN app_user ON app_user.id = membership.user_id
 WHERE membership.garden_id = $1 AND app_user.handle = $2
@@ -101,12 +112,13 @@ func (q *Queries) GetMemberByHandle(ctx context.Context, gardenID uuid.UUID, han
 		&i.AppUser.Timezone,
 		&i.AppUser.CreatedAt,
 		&i.AppUser.LastGardenID,
+		&i.AppUser.ClosedAt,
 	)
 	return i, err
 }
 
 const getMembershipWithUserAndGarden = `-- name: GetMembershipWithUserAndGarden :one
-SELECT membership.id, membership.garden_id, membership.user_id, membership.role, membership.invited_by, membership.created_at, membership.expires_at, membership.digest_hour, app_user.id, app_user.display_name, app_user.handle, app_user.timezone, app_user.created_at, app_user.last_garden_id, garden.id, garden.name, garden.created_at
+SELECT membership.id, membership.garden_id, membership.user_id, membership.role, membership.invited_by, membership.created_at, membership.expires_at, membership.digest_hour, app_user.id, app_user.display_name, app_user.handle, app_user.timezone, app_user.created_at, app_user.last_garden_id, app_user.closed_at, garden.id, garden.name, garden.created_at
 FROM membership
 JOIN app_user ON app_user.id = membership.user_id
 JOIN garden ON garden.id = membership.garden_id
@@ -139,6 +151,7 @@ func (q *Queries) GetMembershipWithUserAndGarden(ctx context.Context, gardenID u
 		&i.AppUser.Timezone,
 		&i.AppUser.CreatedAt,
 		&i.AppUser.LastGardenID,
+		&i.AppUser.ClosedAt,
 		&i.Garden.ID,
 		&i.Garden.Name,
 		&i.Garden.CreatedAt,
@@ -147,7 +160,7 @@ func (q *Queries) GetMembershipWithUserAndGarden(ctx context.Context, gardenID u
 }
 
 const listMembers = `-- name: ListMembers :many
-SELECT membership.id, membership.garden_id, membership.user_id, membership.role, membership.invited_by, membership.created_at, membership.expires_at, membership.digest_hour, app_user.id, app_user.display_name, app_user.handle, app_user.timezone, app_user.created_at, app_user.last_garden_id
+SELECT membership.id, membership.garden_id, membership.user_id, membership.role, membership.invited_by, membership.created_at, membership.expires_at, membership.digest_hour, app_user.id, app_user.display_name, app_user.handle, app_user.timezone, app_user.created_at, app_user.last_garden_id, app_user.closed_at
 FROM membership
 JOIN app_user ON app_user.id = membership.user_id
 WHERE membership.garden_id = $1
@@ -185,6 +198,7 @@ func (q *Queries) ListMembers(ctx context.Context, gardenID uuid.UUID) ([]ListMe
 			&i.AppUser.Timezone,
 			&i.AppUser.CreatedAt,
 			&i.AppUser.LastGardenID,
+			&i.AppUser.ClosedAt,
 		); err != nil {
 			return nil, err
 		}

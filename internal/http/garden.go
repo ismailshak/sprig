@@ -78,6 +78,9 @@ type gardenPage struct {
 	// Storage is the sentence under the Photos heading, saying how much of the
 	// garden's photo storage is used.
 	Storage string
+	// Delete is the URL of the Delete garden page, linked at the bottom. Empty
+	// for a reader who may not delete the garden.
+	Delete string
 }
 
 // careTypeRow is one care type in the list. A closed row is a link to the care
@@ -367,6 +370,9 @@ func (h *more) renderGarden(w http.ResponseWriter, r *http.Request, page gardenP
 	page.AddType = careTypesPath
 	page.EditName = principal.Can(auth.GardenEdit)
 	page.ManageTypes = principal.Can(auth.CareTypeManage)
+	if principal.Can(auth.GardenDelete) {
+		page.Delete = deleteGardenPath
+	}
 	if page.ManageTypes {
 		types, err := h.queries.ListCareTypesWithEvents(r.Context(), principal.Garden.ID)
 		if err != nil {

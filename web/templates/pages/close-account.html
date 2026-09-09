@@ -1,0 +1,21 @@
+{{define "title"}}Close account · sprig{{end}}
+
+{{/* An account in no garden gets the page without the tab bar, because every
+     tab needs a garden. */}}
+{{define "app-class"}}{{if .InGarden}}app{{else}}app app--bare{{end}}{{end}}
+
+{{/* An account that is the only owner of a garden gets the reason it cannot
+     close instead of the button. */}}
+{{define "main"}}
+{{template "more-topbar" .Bar}}
+<div class="app__body app__body--sub">
+{{with .SoleOwnerNotice}}
+<p class="lead">{{.}}</p>
+{{else}}
+<p class="lead">Closing your account deletes your passkeys and recovery codes, signs you out on every device and removes you from every garden. Your name stays on everything you’ve logged. This can’t be undone.</p>
+<form method="post" action="{{.Action}}"><button class="wide-action" type="submit">Close account</button></form>
+{{end}}
+</div>
+{{end}}
+
+{{define "nav"}}{{if .InGarden}}{{template "tabs" "More"}}{{end}}{{end}}

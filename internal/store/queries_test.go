@@ -448,6 +448,10 @@ func TestQueries_EveryQueryOnAGardenScopedTableBindsTheGarden(t *testing.T) {
 		if len(touched) == 0 {
 			continue
 		}
+		// Closing an account deletes its sessions in every garden at once.
+		if query.name == "DeleteUserSessions" && slices.Equal(touched, []string{"session"}) {
+			continue
+		}
 		if slices.Equal(touched, []string{"session"}) {
 			if !strings.Contains(query.sql, "@token_hash") {
 				t.Errorf("%s reads session and takes no @token_hash, so it can return another garden's rows", query.name)
@@ -458,6 +462,11 @@ func TestQueries_EveryQueryOnAGardenScopedTableBindsTheGarden(t *testing.T) {
 		// token in the URL, before any garden is known. Every other read of
 		// invite binds @garden_id.
 		if slices.Equal(touched, []string{"invite"}) && strings.Contains(query.sql, "@token_hash") {
+			continue
+		}
+		// Closing an account deletes the re-enrolment links made for it in
+		// every garden at once.
+		if query.name == "DeleteUserReenrolmentInvites" && slices.Equal(touched, []string{"invite"}) {
 			continue
 		}
 		// A bearer token is found by its hash before any garden is known, so

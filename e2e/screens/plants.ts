@@ -38,6 +38,12 @@ export class PlantsScreen {
   picture(name: string): Locator {
     return this.rowNamed(name).locator('img');
   }
+
+  // The link at the bottom of the list to the Archived plants page. Its text
+  // is the count, such as "3 archived".
+  archivedLink(): Locator {
+    return this.page.getByRole('link', { name: /\d+ archived$/ });
+  }
 }
 
 // The es2024 target predates RegExp.escape.

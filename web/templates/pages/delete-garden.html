@@ -1,0 +1,21 @@
+{{define "title"}}Delete garden · sprig{{end}}
+
+{{/* The garden's name has to be typed rather than a button pressed, because
+     this is the one action that removes plants, activity and photos with no
+     way to undo it. */}}
+{{define "main"}}
+{{template "more-topbar" .Bar}}
+<div class="app__body app__body--sub">
+<p class="lead">Deleting {{.Name}} deletes its plants, schedules, activity and photos. Everyone in it loses access. This can’t be undone.</p>
+<form method="post" action="{{.Action}}" novalidate>
+<div class="field">
+<label class="field__label" for="name">Type {{.Name}} to confirm</label>
+<input class="input" id="name" name="name" type="text" value="{{.Typed}}" autocomplete="off">
+{{with .Error}}<p class="field__error">{{.}}</p>{{end}}
+</div>
+<button class="wide-action" type="submit">Delete garden</button>
+</form>
+</div>
+{{end}}
+
+{{define "nav"}}{{template "tabs" "More"}}{{end}}

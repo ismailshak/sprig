@@ -1,0 +1,21 @@
+{{define "title"}}Archived plants · sprig{{end}}
+
+{{/* Every archived plant in the garden, most recently archived first. Restore
+     is on the plant's page. */}}
+{{define "main"}}
+{{template "more-topbar" .Bar}}
+<div class="app__body app__body--sub">
+{{if .Plants}}
+<ul class="list">
+{{range .Plants}}{{template "plant-row" .}}
+{{end}}</ul>
+{{else}}
+<div class="empty">
+<span class="empty__mark">{{template "icon-plants"}}</span>
+<h2 class="empty__title">No archived plants</h2>
+</div>
+{{end}}
+</div>
+{{end}}
+
+{{define "nav"}}{{template "tabs" "Plants"}}{{end}}

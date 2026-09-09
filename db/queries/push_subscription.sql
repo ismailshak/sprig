@@ -47,3 +47,6 @@ ORDER BY membership.created_at, membership.id, push_subscription.created_at, pus
 -- reads its own endpoint and not the row's id.
 SELECT * FROM push_subscription
 WHERE user_id = @user_id AND endpoint = @endpoint;
+
+-- name: DeleteUserPushSubscriptions :exec
+DELETE FROM push_subscription WHERE user_id = @user_id;

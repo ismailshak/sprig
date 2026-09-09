@@ -62,8 +62,14 @@ func (h *plants) load(ctx context.Context, principal auth.Principal) (plantsPage
 	if err != nil {
 		return plantsPage{}, fmt.Errorf("list the latest care: %w", err)
 	}
+	archived, err := h.queries.CountArchivedPlants(ctx, principal.Garden.ID)
+	if err != nil {
+		return plantsPage{}, fmt.Errorf("count the archived plants: %w", err)
+	}
 
-	return newPlantsPage(principal, list, schedule.Resolve(schedules, latest, now), now), nil
+	page := newPlantsPage(principal, list, schedule.Resolve(schedules, latest, now), now)
+	page.Archived = archivedLink(archived)
+	return page, nil
 }
 
 type plantsPage struct {
@@ -71,6 +77,9 @@ type plantsPage struct {
 	// may not create a plant gets neither, rather than disabled buttons.
 	Add   bool
 	Rooms []roomSection
+	// Archived is the link to the Archived plants page at the bottom of the
+	// list, nil when nothing is archived.
+	Archived *link
 }
 
 type roomSection struct {
@@ -89,8 +98,12 @@ type plantRow struct {
 	Sub          string
 	SubBotanical bool
 	// Standing is the overdue text, empty unless a care is overdue. A care due
-	// today is not mentioned because Today already says so.
+	// today is not mentioned because Today already says so. Only the Plants
+	// page sets it.
 	Standing string
+	// ArchivedOn is the day the plant was archived, such as "Archived 12 Aug". Only
+	// the Archived plants page sets it.
+	ArchivedOn string
 	// Picture is the URL of the plant's profile picture as a square, empty for
 	// a plant with no picture.
 	Picture string

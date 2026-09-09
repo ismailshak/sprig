@@ -24,6 +24,9 @@
 <button class="wide-action" type="submit">Save changes</button>
 </form>
 <ul class="list">{{template "link-row" .Codes}}</ul>
+{{/* The link is not styled as a warning, because rose means overdue in this
+     app. Closing is confirmed on the page it opens. */}}
+<a class="foot-link" href="{{.Close}}">Close account{{template "icon-chevron"}}</a>
 </div>
 {{end}}
 

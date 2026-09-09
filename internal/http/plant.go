@@ -123,6 +123,9 @@ func (d plantDetail) offers() []offer {
 }
 
 type plantPage struct {
+	// Back is the link in the top bar. It goes to Plants, or to Archived
+	// plants when the plant is archived.
+	Back link
 	Name string
 	// Botanical is true when the heading is the botanical name, which is shown
 	// in italics.
@@ -136,13 +139,16 @@ type plantPage struct {
 	PictureHref  string
 	PictureFocus string
 	// Names is the plant's other names, the common name before the botanical.
-	Names    []plantName
-	Room     string
+	Names []plantName
+	Room  string
+	// Archived is the line under the room, such as "Archived 12 Aug". Empty
+	// unless the plant is archived.
+	Archived string
 	Schedule []scheduleRow
 	// Log is the URL the Log care button opens the sheet from. Empty for a
 	// reader who may not log care and for an archived plant.
 	Log string
-	// Foot is nil for an archived plant.
+	// Foot is nil for a reader who may neither edit nor archive the plant.
 	Foot *plantFoot
 	// Details is nil when the plant has no facts, no note and no acquired
 	// date. The section is not rendered then.
@@ -212,6 +218,7 @@ type recentLine struct {
 func newPlantPage(principal auth.Principal, d plantDetail) plantPage {
 	plant := d.plant
 	page := plantPage{
+		Back:      link{Label: "Plants", Href: plantsPath},
 		Name:      plant.DisplayName(),
 		Botanical: plant.BotanicalOnly(),
 		Names:     otherNames(plant),
@@ -237,6 +244,9 @@ func newPlantPage(principal auth.Principal, d plantDetail) plantPage {
 		page.Activity = &link{Label: "All activity", Href: plantActivityPath(plant.ID)}
 	}
 	if plant.ArchivedAt != nil {
+		page.Back = link{Label: "Archived plants", Href: archivedPlantsPath}
+		page.Archived = archivedWord(*plant.ArchivedAt, d.now)
+		page.Foot = newPlantFoot(principal, plant)
 		return page
 	}
 	if principal.Can(auth.CareLog) {
@@ -250,9 +260,13 @@ func newPlantPage(principal auth.Principal, d plantDetail) plantPage {
 }
 
 // plantFoot is the buttons at the bottom of a plant's page: Edit plant and
-// Archive, or the archive confirmation that replaces them.
+// Archive, the archive confirmation that replaces them, or Restore on an
+// archived plant.
 type plantFoot struct {
-	Edit string
+	// Restore is the URL the Restore button posts to. It is set only for an
+	// archived plant. The other fields are empty then.
+	Restore string
+	Edit    string
 	// Archive is the URL for archiving. A GET renders the confirmation and a
 	// POST archives.
 	Archive string
@@ -264,9 +278,16 @@ type plantFoot struct {
 	Keep   string
 }
 
-// newPlantFoot builds the plantFoot with its buttons showing. It returns nil for a
-// reader who may neither edit nor archive.
+// newPlantFoot builds the buttons with Asking false. For
+// an archived plant it sets Restore alone. It returns nil for a reader who may
+// neither edit nor archive.
 func newPlantFoot(principal auth.Principal, plant store.Plant) *plantFoot {
+	if plant.ArchivedAt != nil {
+		if !principal.Can(auth.PlantArchive) {
+			return nil
+		}
+		return &plantFoot{Restore: restorePlantPath(plant.ID)}
+	}
 	foot := &plantFoot{Name: plant.DisplayName(), Keep: plantPath(plant.ID)}
 	if principal.Can(auth.PlantEdit) {
 		foot.Edit = editPlantPath(plant.ID)

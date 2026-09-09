@@ -20,6 +20,7 @@ const (
 	PhotoDeleteOwn  Capability = "photo.delete_own"
 	PhotoDeleteAny  Capability = "photo.delete_any"
 	GardenEdit      Capability = "garden.edit"
+	GardenDelete    Capability = "garden.delete"
 	CareTypeManage  Capability = "care_type.manage"
 	MemberInvite    Capability = "member.invite"
 	MemberManage    Capability = "member.manage"
@@ -31,7 +32,7 @@ var allCapabilities = []Capability{
 	PlantCreate, PlantEdit, PlantArchive, ScheduleEdit,
 	CareLog, CareEditOwn, CareDeleteOwn, CareEditAny, CareDeleteAny,
 	PhotoAdd, PhotoSetProfile, PhotoDeleteOwn, PhotoDeleteAny,
-	GardenEdit, CareTypeManage, MemberInvite, MemberManage, TokenManage,
+	GardenEdit, GardenDelete, CareTypeManage, MemberInvite, MemberManage, TokenManage,
 }
 
 // Capabilities is the set of capabilities a role grants. A nil set grants nothing.

@@ -56,6 +56,11 @@ WHERE garden_id = @garden_id AND user_id = @user_id;
 DELETE FROM membership
 WHERE garden_id = @garden_id AND user_id = @user_id;
 
+-- Deletes the account's memberships in every garden. There is no garden id
+-- because the query spans them all.
+-- name: DeleteUserMemberships :exec
+DELETE FROM membership WHERE user_id = @user_id;
+
 -- CreateMembership inserts the membership row and returns it. The caller also
 -- writes the two notification_preference rows every membership has.
 -- name: CreateMembership :one

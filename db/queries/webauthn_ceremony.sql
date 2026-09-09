@@ -15,3 +15,6 @@ RETURNING *;
 -- a ceremony starts.
 -- name: DeleteExpiredCeremonies :exec
 DELETE FROM webauthn_ceremony WHERE expires_at <= @now;
+
+-- name: DeleteUserCeremonies :exec
+DELETE FROM webauthn_ceremony WHERE user_id = @user_id::uuid;
