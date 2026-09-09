@@ -49,23 +49,23 @@ Decisions already taken. Changing one is a conversation, not a refactor.
 
 ## Layout
 
-| Path                 | Holds                                                        |
-| -------------------- | ------------------------------------------------------------ |
-| `cmd/sprig/`         | The server binary                                            |
-| `cmd/seed/`          | The development seed. Not in the image                       |
-| `internal/http/`     | Middleware, handlers, the template tree                      |
-| `internal/store/`    | The pgx pool and sqlc-generated queries                      |
-| `internal/schedule/` | Due-date computation                                         |
-| `internal/auth/`     | Passkeys, sessions, API tokens, authorisation checks         |
-| `internal/photo/`    | Photo writes, reads and quota                                |
-| `internal/push/`     | Subscriptions, VAPID sends, the digest job                   |
-| `internal/build/`    | The running binary's version, revision and toolchain         |
-| `internal/pgtest/`   | Throwaway Postgres databases for tests                       |
+| Path                 | Holds                                                             |
+| -------------------- | ----------------------------------------------------------------- |
+| `cmd/sprig/`         | The server binary                                                 |
+| `cmd/seed/`          | The development seed. Not in the image                            |
+| `internal/http/`     | Middleware, handlers, the template tree                           |
+| `internal/store/`    | The pgx pool and sqlc-generated queries                           |
+| `internal/schedule/` | Due-date computation                                              |
+| `internal/auth/`     | Passkeys, sessions, API tokens, authorisation checks              |
+| `internal/photo/`    | Photo writes, reads and quota                                     |
+| `internal/push/`     | Subscriptions, VAPID sends, the digest job                        |
+| `internal/build/`    | The running binary's version, revision and toolchain              |
+| `internal/pgtest/`   | Throwaway Postgres databases for tests                            |
 | `db/migrations/`     | goose migrations, embedded, run at startup under an advisory lock |
-| `db/queries/`        | The `.sql` files sqlc generates from                         |
-| `web/templates/`     | `html/template` files, embedded                              |
-| `web/static/`        | CSS, javascript, vendored htmx, icons |
-| `e2e/`               | The Playwright tests                                         |
+| `db/queries/`        | The `.sql` files sqlc generates from                              |
+| `web/templates/`     | `html/template` files, embedded                                   |
+| `web/static/`        | CSS, javascript, vendored htmx, icons                             |
+| `e2e/`               | The Playwright tests                                              |
 
 ## Testing
 

@@ -57,15 +57,17 @@ description = "Regenerate the sqlc queries in internal/store from db/queries"
 run = "sqlc generate"
 
 [tasks.format]
-description = "Format the e2e subproject and the app's JavaScript with prettier"
+description = "Format the e2e subproject, the app's JavaScript and the markdown at the root with prettier"
 dir = "e2e"
 run = [
   "pnpm install --frozen-lockfile",
   "pnpm run format",
-  # The app's scripts are outside this directory, so they are named here and
-  # given the same config. The glob does not reach the vendored htmx. That is
-  # a directory below, under web/static/vendor.
-  "pnpm exec prettier --write --config .prettierrc.json ../web/static/*.js",
+  # The app's scripts and the root markdown are outside this directory, so
+  # they are named here and given the same config. The script glob does not
+  # reach the vendored htmx. That is a directory below, under web/static/vendor.
+  # The two markdown files are named rather than globbed, because the root
+  # also holds markdown that is excluded from git.
+  "pnpm exec prettier --write --config .prettierrc.json ../web/static/*.js ../README.md ../CLAUDE.md",
 ]
 
 [tasks.hooks]
