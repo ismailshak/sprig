@@ -185,3 +185,13 @@ func TestPhotoForm_ThePostIsBoundToTheSessionsGarden(t *testing.T) {
 		t.Errorf("a member of another garden got %d, want %d", rec.Code, http.StatusNotFound)
 	}
 }
+
+func TestPhotoForm_AddAPhotoHasNoFocusField(t *testing.T) {
+	f := plantFormOn(t)
+
+	page := f.addPhotoPage(t, bigFellaID).Body.String()
+
+	if strings.Contains(page, `name="focus"`) {
+		t.Error("Add a photo has a focus field, want none, because a progress photo is not cropped")
+	}
+}

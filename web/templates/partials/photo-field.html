@@ -9,6 +9,11 @@
 {{if .Removable}}{{/* The save reads this input to clear the plant's profile
      picture. The page's script sets it to 1 when Remove is pressed. */}}
 <input id="photo-removed" name="photo-removed" type="hidden" value="{{if .Removed}}1{{end}}">
+{{end}}{{with .Focus}}{{/* Which part of the picture the plant's page shows, as
+     "x,y" in percentages. The page's script sets it as the frame is dragged.
+     Add a photo has no such input, because a progress photo is not
+     cropped. */}}
+<input id="photo-focus" name="focus" type="hidden" value="{{.}}">
 {{end}}<button class="photo-field__empty" id="photo-add" type="button"{{if .Picture}} hidden{{end}}>{{template "icon-camera"}}<span>{{.Choose}}</span></button>
 {{/* A post refused for another field is rendered again with an empty file
      input, because a server cannot fill one. */}}
@@ -19,8 +24,12 @@
      another photo does not make room. */}}
 {{with .Full}}<p class="field__error">{{.}}</p>{{end}}
 <div id="photo-chosen"{{if not .Picture}} hidden{{end}}>
-<img class="photo-field__pic" id="photo-preview"{{if .Picture}} src="{{.Picture}}" alt="Current photo"{{else}} alt="Chosen photo"{{end}}>
-<div class="photo-field__actions">
+{{/* On the plant form the page's script adds a frame inside this div, over
+     the preview. The frame is the 5 by 3 box the plant's page shows the
+     picture in, dragged to the part of the photo to show. */}}
+<div class="photo-field__crop" id="photo-crop"><img class="photo-field__pic" id="photo-preview"{{if .Picture}} src="{{.Picture}}" alt="Current photo"{{else}} alt="Chosen photo"{{end}}></div>
+{{if .Focus}}<p class="photo-field__hint">Drag the frame to set the part the plant’s page shows.</p>
+{{end}}<div class="photo-field__actions">
 <button class="care care--outline care--small" id="photo-replace" type="button">Replace</button>
 <button class="sched__cancel" id="photo-remove" type="button">Remove</button>
 </div>

@@ -2,6 +2,7 @@ package http
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"uuid"
 
@@ -27,6 +28,13 @@ func picturePath(plant store.Plant) string {
 		return ""
 	}
 	return photoFullPath(plant.ID, *plant.ProfilePhotoID)
+}
+
+// focusPosition is the photo's focal point as a CSS object-position, such as
+// "50% 0%". It sets which part of the photo is shown once the plant's page has
+// cropped it to a 5:3 box.
+func focusPosition(p store.Photo) string {
+	return fmt.Sprintf("%d%% %d%%", p.FocusX, p.FocusY)
 }
 
 // squarePicturePath is the URL of the square variant of the plant's profile

@@ -830,8 +830,11 @@ a.foot-link { text-decoration: none; color: var(--ink-2); }
 
 .hero__pic > svg { width: 62%; max-width: 260px; height: auto; }
 
-/* A photo of any shape is cropped to the 5:3 box rather than squashed. */
-.hero__img { width: 100%; height: 100%; object-fit: cover; }
+/* A photo of any shape is cropped to the 5:3 box rather than squashed. The
+   image is positioned over the box instead of laid out as a grid item, because
+   a tall grid item grows the row to its own height and is then not cropped at
+   all. */
+.hero__img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 
 /* A plant with no picture shows a leaf in the box. */
 .hero__pic--none { color: var(--ink-3); }
@@ -1225,9 +1228,9 @@ a.foot-link { text-decoration: none; color: var(--ink-2); }
 /* Archive is not delete and is not styled as a warning. Rose in this app means
    overdue, and using it for an ordinary tidy-up would blur the two. */
 
-/* The edit form's Archive is a link, because the confirmation is asked on the
-   plant's own page. */
-a.plant__archive { text-decoration: none; }
+/* On the plant form Cancel is a link rather than a button, so the underline
+   is removed. */
+a.plant__keep { text-decoration: none; }
 
 .plant__archive,
 .plant__keep {
@@ -1352,9 +1355,8 @@ a.plant__archive { text-decoration: none; }
 .photo-field { margin-bottom: 4px; }
 
 /* Empty, the picture field is the height of an ordinary field. Filled, it takes
-   the 5:3 ratio the plant page uses, so what is framed here is what will be
-   shown there. The first version used a dashed 5:3 box when empty, and it spent
-   a quarter of the first screen on an empty box. */
+   the 5:3 ratio the plant page uses. The first version used a dashed 5:3 box
+   when empty, and it spent a quarter of the first screen on an empty box. */
 .photo-field__empty {
   display: flex;
   align-items: center;
@@ -1384,6 +1386,36 @@ a.plant__archive { text-decoration: none; }
   object-fit: cover;
 }
 .photo-field__pic > svg { width: 62%; max-width: 260px; height: auto; }
+
+/* On the plant form the page's script adds this modifier. The preview then
+   shows the whole photo at its own shape, capped so a tall one leaves room for
+   the form. The frame's box-shadow shades everything outside the frame. This
+   container's overflow cuts that shadow off at the photo's edge. */
+.photo-field__crop--on { position: relative; width: fit-content; max-width: 100%; overflow: hidden; border-radius: var(--radius); }
+.photo-field__crop--on > .photo-field__pic {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  height: auto;
+  max-height: 60vh;
+  aspect-ratio: auto;
+  object-fit: contain;
+}
+/* The frame is the 5:3 box the plant's page shows the picture in. It is
+   dragged over the photo to the part to show. */
+.photo-field__frame {
+  position: absolute;
+  box-sizing: border-box;
+  border: 2px solid #fff;
+  border-radius: 4px;
+  box-shadow: 0 0 0 100vmax rgba(8, 12, 11, .5);
+  cursor: grab;
+  /* The browser would otherwise scroll the page when a finger drags the frame. */
+  touch-action: none;
+}
+.photo-field__frame:active { cursor: grabbing; }
+.photo-field__frame:focus-visible { outline: 2px solid var(--accent); outline-offset: -4px; }
+.photo-field__hint { margin: 8px 0 0; font-size: 13px; color: var(--ink-3); }
 
 .photo-field__actions {
   display: flex;
@@ -2292,6 +2324,11 @@ a.wide-action {
 }
 
 .photo__meta { margin: 12px 0 0; font-size: 14px; color: var(--ink-2); }
+
+/* Delete is directly under the caption and lines up with it. The side padding
+   that widens the tap target on the plant's page would otherwise indent it. */
+.app__body--photo .plant__foot { margin-top: 0; }
+.app__body--photo .plant__foot:not(.plant__foot--asking) .plant__archive { padding-left: 0; }
 
 @media (min-width: 900px) {
   .tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }
