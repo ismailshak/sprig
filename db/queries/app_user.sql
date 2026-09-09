@@ -1,11 +1,15 @@
--- Both queries serve the development sign-in. It lists accounts and signs one
--- in by handle alone. Closed accounts are left out because nothing may sign in
--- as them. Nothing in a production build calls either query.
+-- ListUsers lists the accounts the development sign-in offers. Closed accounts
+-- are left out because nothing may sign in as them. Only a build tagged dev
+-- calls it.
 -- name: ListUsers :many
 SELECT * FROM app_user
 WHERE closed_at IS NULL
 ORDER BY created_at, id;
 
+-- GetUserByHandle returns the account with that handle. The development
+-- sign-in and sprig admin invite both name an account by it. A closed account
+-- is left out, because nothing may sign in as one and no link may be issued
+-- for one.
 -- name: GetUserByHandle :one
 SELECT * FROM app_user
 WHERE handle = @handle AND closed_at IS NULL;

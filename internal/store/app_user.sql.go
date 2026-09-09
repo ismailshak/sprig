@@ -109,6 +109,10 @@ SELECT id, display_name, handle, timezone, created_at, last_garden_id, closed_at
 WHERE handle = $1 AND closed_at IS NULL
 `
 
+// GetUserByHandle returns the account with that handle. The development
+// sign-in and sprig admin invite both name an account by it. A closed account
+// is left out, because nothing may sign in as one and no link may be issued
+// for one.
 func (q *Queries) GetUserByHandle(ctx context.Context, handle string) (AppUser, error) {
 	row := q.db.QueryRow(ctx, getUserByHandle, handle)
 	var i AppUser
@@ -166,9 +170,9 @@ WHERE closed_at IS NULL
 ORDER BY created_at, id
 `
 
-// Both queries serve the development sign-in. It lists accounts and signs one
-// in by handle alone. Closed accounts are left out because nothing may sign in
-// as them. Nothing in a production build calls either query.
+// ListUsers lists the accounts the development sign-in offers. Closed accounts
+// are left out because nothing may sign in as them. Only a build tagged dev
+// calls it.
 func (q *Queries) ListUsers(ctx context.Context) ([]AppUser, error) {
 	rows, err := q.db.Query(ctx, listUsers)
 	if err != nil {

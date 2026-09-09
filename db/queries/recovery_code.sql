@@ -34,3 +34,14 @@ WHERE code_hash = @code_hash AND used_at IS NULL;
 UPDATE recovery_code SET used_at = @now::timestamptz
 WHERE code_hash = @code_hash AND used_at IS NULL
 RETURNING user_id;
+
+-- DeleteSupersededRecoveryCodes deletes every code that is not in its
+-- account's newest batch. It normally finds none, because the Recovery codes
+-- page deletes the old batch in the transaction that writes the new one. The
+-- newest batch is kept whole, used codes included, because the page counts
+-- them.
+-- name: DeleteSupersededRecoveryCodes :execrows
+DELETE FROM recovery_code
+WHERE generated_at < (
+    SELECT max(newest.generated_at) FROM recovery_code AS newest
+    WHERE newest.user_id = recovery_code.user_id);

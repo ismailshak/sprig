@@ -102,6 +102,24 @@ func (q *Queries) DeleteReenrolmentInvites(ctx context.Context, gardenID uuid.UU
 	return result.RowsAffected(), nil
 }
 
+const deleteSpentInvites = `-- name: DeleteSpentInvites :execrows
+DELETE FROM invite
+WHERE (redeemed_at IS NOT NULL AND redeemed_at <= $1::timestamptz)
+   OR (user_id IS NOT NULL AND redeemed_at IS NULL AND expires_at <= $1::timestamptz)
+`
+
+// DeleteSpentInvites deletes the invites no page lists once they are @before
+// or older: a redeemed invite of either kind, and an expired re-enrolment
+// link. An expired join invite is kept, because People lists it under Pending
+// invites with a Revoke button.
+func (q *Queries) DeleteSpentInvites(ctx context.Context, before time.Time) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteSpentInvites, before)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteUserReenrolmentInvites = `-- name: DeleteUserReenrolmentInvites :exec
 DELETE FROM invite
 WHERE user_id = $1::uuid AND redeemed_at IS NULL

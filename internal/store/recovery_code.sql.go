@@ -39,6 +39,26 @@ func (q *Queries) DeleteRecoveryCodes(ctx context.Context, userID uuid.UUID) err
 	return err
 }
 
+const deleteSupersededRecoveryCodes = `-- name: DeleteSupersededRecoveryCodes :execrows
+DELETE FROM recovery_code
+WHERE generated_at < (
+    SELECT max(newest.generated_at) FROM recovery_code AS newest
+    WHERE newest.user_id = recovery_code.user_id)
+`
+
+// DeleteSupersededRecoveryCodes deletes every code that is not in its
+// account's newest batch. It normally finds none, because the Recovery codes
+// page deletes the old batch in the transaction that writes the new one. The
+// newest batch is kept whole, used codes included, because the page counts
+// them.
+func (q *Queries) DeleteSupersededRecoveryCodes(ctx context.Context) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteSupersededRecoveryCodes)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getLiveRecoveryCode = `-- name: GetLiveRecoveryCode :one
 SELECT user_id FROM recovery_code
 WHERE code_hash = $1 AND used_at IS NULL
