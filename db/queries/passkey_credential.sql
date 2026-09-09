@@ -15,8 +15,8 @@ WHERE k.user_id = @user_id AND k.id = @passkey_id
   AND 1 < (SELECT count(*) FROM passkey_credential AS held WHERE held.user_id = k.user_id);
 
 -- name: CreatePasskey :one
-INSERT INTO passkey_credential (user_id, credential_id, name, public_key, sign_count, flags, transports)
-VALUES (@user_id, @credential_id, @name, @public_key, @sign_count, @flags, @transports)
+INSERT INTO passkey_credential (user_id, credential_id, name, public_key, sign_count, flags, transports, aaguid)
+VALUES (@user_id, @credential_id, @name, @public_key, @sign_count, @flags, @transports, @aaguid)
 RETURNING *;
 
 -- Sign-in has no username field, so the credential the browser returns is the

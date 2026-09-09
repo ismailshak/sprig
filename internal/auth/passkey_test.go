@@ -1,6 +1,9 @@
 package auth
 
-import "testing"
+import (
+	"testing"
+	"uuid"
+)
 
 func TestCloned_ACounterIsACopyOnlyWhenItFailsToAdvanceOnADeviceThatKeepsOne(t *testing.T) {
 	cases := []struct {
@@ -38,5 +41,27 @@ func TestStoredCount_ACounterOutsideTheRangeWebAuthnCountsInRefusesEveryAssertio
 		if got := storedCount(count); !Cloned(got, 4294967295) {
 			t.Errorf("a stored counter of %d reads as %d, which accepted an assertion", count, got)
 		}
+	}
+}
+
+func TestAaguidOf_AnAllZeroOrMalformedAAGUIDIsNil(t *testing.T) {
+	if got := aaguidOf(make([]byte, 16)); got != nil {
+		t.Errorf("the all-zero AAGUID is %v, want nil, because it names no provider", got)
+	}
+	if got := aaguidOf([]byte{1, 2, 3}); got != nil {
+		t.Errorf("a 3-byte AAGUID is %v, want nil", got)
+	}
+	if got := aaguidOf(nil); got != nil {
+		t.Errorf("a missing AAGUID is %v, want nil", got)
+	}
+}
+
+func TestAaguidOf_ASixteenByteAAGUIDIsKeptAsAUUID(t *testing.T) {
+	want := uuid.MustParse("bada5566-a7aa-401f-bd96-45619a55120d")
+
+	got := aaguidOf(want[:])
+
+	if got == nil || *got != want {
+		t.Errorf("aaguidOf = %v, want %s", got, want)
 	}
 }

@@ -212,6 +212,7 @@ func (p *Passkeys) saveRegistration(ctx context.Context, session webauthn.Sessio
 		SignCount:    int64(credential.Authenticator.SignCount),
 		Flags:        int16(credential.Flags.ProtocolValue()),
 		Transports:   transportNames(credential.Transport),
+		Aaguid:       aaguidOf(credential.Authenticator.AAGUID),
 	})
 	if store.CredentialTaken(err) {
 		return store.PasskeyCredential{}, ErrAlreadyRegistered
@@ -220,6 +221,20 @@ func (p *Passkeys) saveRegistration(ctx context.Context, session webauthn.Sessio
 		return store.PasskeyCredential{}, fmt.Errorf("save the passkey: %w", err)
 	}
 	return saved, nil
+}
+
+// aaguidOf returns the authenticator's AAGUID as a uuid, and nil when raw is
+// not 16 bytes or is all zeros. An authenticator sends all zeros when it will
+// not say what it is.
+func aaguidOf(raw []byte) *uuid.UUID {
+	if len(raw) != len(uuid.UUID{}) {
+		return nil
+	}
+	id := uuid.UUID(raw)
+	if id == uuid.Nil() {
+		return nil
+	}
+	return &id
 }
 
 // BeginSetup starts enrolling the first device of an account that has no row

@@ -128,6 +128,18 @@ func (q *Queries) GetUserByHandle(ctx context.Context, handle string) (AppUser, 
 	return i, err
 }
 
+const handleExists = `-- name: HandleExists :one
+SELECT EXISTS (SELECT 1 FROM app_user WHERE handle = $1)
+`
+
+// A closed account keeps its row and its handle, so its handle counts as taken.
+func (q *Queries) HandleExists(ctx context.Context, handle string) (bool, error) {
+	row := q.db.QueryRow(ctx, handleExists, handle)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const listGardensOnlyThisUserOwns = `-- name: ListGardensOnlyThisUserOwns :many
 SELECT garden.id, garden.name, garden.created_at FROM garden
 JOIN membership AS mine ON mine.garden_id = garden.id

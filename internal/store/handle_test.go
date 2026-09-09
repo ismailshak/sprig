@@ -1,9 +1,11 @@
 package store
 
 import (
+	"errors"
 	"regexp"
 	"strings"
 	"testing"
+	"uuid"
 )
 
 func TestHandleCandidate_ANameBecomesItsLowerCaseSlug(t *testing.T) {
@@ -70,5 +72,75 @@ func TestNormaliseHandle_AGeneratedHandleIsUnchanged(t *testing.T) {
 				t.Errorf("handleCandidate(%q, %d) = %q and NormaliseHandle rewrites it to %q", displayName, attempt, handle, got)
 			}
 		}
+	}
+}
+
+func TestCreateAccountWithHandle_AHandleAnotherAccountHoldsIsRefused(t *testing.T) {
+	tx := sharedTx(t)
+	q := New(tx)
+	if _, err := q.CreateAccountWithHandle(t.Context(), uuid.NewV7(), "Wren", "wren_hale", "Europe/London"); err != nil {
+		t.Fatalf("the first account: %v", err)
+	}
+
+	_, err := q.CreateAccountWithHandle(t.Context(), uuid.NewV7(), "Wren Hale", "wren_hale", "Europe/London")
+
+	if !errors.Is(err, ErrHandleTaken) {
+		t.Errorf("the second account was refused with %v, want ErrHandleTaken", err)
+	}
+	var accounts int
+	if err := tx.QueryRow(t.Context(), "SELECT count(*) FROM app_user WHERE handle = $1", "wren_hale").Scan(&accounts); err != nil {
+		t.Fatal(err)
+	}
+	if accounts != 1 {
+		t.Errorf("%d accounts hold the handle, want the first alone", accounts)
+	}
+}
+
+func TestCreateAccountWithHandle_TheHandleIsWrittenAsGivenAndNoSuffixIsAdded(t *testing.T) {
+	q := New(sharedTx(t))
+
+	user, err := q.CreateAccountWithHandle(t.Context(), uuid.NewV7(), "Wren Hale", "wren", "Europe/London")
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	if user.Handle != "wren" {
+		t.Errorf("the account's handle is %q, want wren", user.Handle)
+	}
+}
+
+func TestFreeHandle_ANameNoAccountHoldsGetsItsSlug(t *testing.T) {
+	q := New(sharedTx(t))
+
+	handle, err := q.FreeHandle(t.Context(), "Wren Hale")
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	if handle != "wren_hale" {
+		t.Errorf("the handle is %q, want wren_hale", handle)
+	}
+}
+
+func TestFreeHandle_ANameAnotherAccountHoldsGetsASuffixNoAccountHolds(t *testing.T) {
+	q := New(sharedTx(t))
+	if _, err := q.CreateAccountWithHandle(t.Context(), uuid.NewV7(), "Wren", "wren", "Europe/London"); err != nil {
+		t.Fatal(err)
+	}
+
+	handle, err := q.FreeHandle(t.Context(), "Wren")
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !regexp.MustCompile(`^wren_[a-z2-7]{4}$`).MatchString(handle) {
+		t.Errorf("the handle is %q, want wren and a four character suffix", handle)
+	}
+	taken, err := q.HandleExists(t.Context(), handle)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if taken {
+		t.Errorf("%q is held by an account", handle)
 	}
 }

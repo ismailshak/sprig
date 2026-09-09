@@ -175,8 +175,10 @@ type ListCareTypesWithEventsRow struct {
 	Events   int64
 }
 
-// The Garden page lists the types that have been turned off as well, and the
-// count decides whether a row offers Turn it off or Delete.
+// The only list that includes the types that have been turned off. The Garden
+// page uses the count to decide whether a row offers Turn it off or Delete.
+// The Activity page fills its care filter from the same list, because a type
+// that is off still has events in the log.
 func (q *Queries) ListCareTypesWithEvents(ctx context.Context, gardenID uuid.UUID) ([]ListCareTypesWithEventsRow, error) {
 	rows, err := q.db.Query(ctx, listCareTypesWithEvents, gardenID)
 	if err != nil {

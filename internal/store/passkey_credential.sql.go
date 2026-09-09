@@ -13,9 +13,9 @@ import (
 )
 
 const createPasskey = `-- name: CreatePasskey :one
-INSERT INTO passkey_credential (user_id, credential_id, name, public_key, sign_count, flags, transports)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
-RETURNING id, user_id, credential_id, name, public_key, sign_count, flags, transports, created_at, last_used_at
+INSERT INTO passkey_credential (user_id, credential_id, name, public_key, sign_count, flags, transports, aaguid)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING id, user_id, credential_id, name, public_key, sign_count, flags, transports, aaguid, created_at, last_used_at
 `
 
 type CreatePasskeyParams struct {
@@ -26,6 +26,7 @@ type CreatePasskeyParams struct {
 	SignCount    int64
 	Flags        int16
 	Transports   []string
+	Aaguid       *uuid.UUID
 }
 
 func (q *Queries) CreatePasskey(ctx context.Context, arg CreatePasskeyParams) (PasskeyCredential, error) {
@@ -37,6 +38,7 @@ func (q *Queries) CreatePasskey(ctx context.Context, arg CreatePasskeyParams) (P
 		arg.SignCount,
 		arg.Flags,
 		arg.Transports,
+		arg.Aaguid,
 	)
 	var i PasskeyCredential
 	err := row.Scan(
@@ -48,6 +50,7 @@ func (q *Queries) CreatePasskey(ctx context.Context, arg CreatePasskeyParams) (P
 		&i.SignCount,
 		&i.Flags,
 		&i.Transports,
+		&i.Aaguid,
 		&i.CreatedAt,
 		&i.LastUsedAt,
 	)
@@ -87,7 +90,7 @@ func (q *Queries) DeleteUserPasskeys(ctx context.Context, userID uuid.UUID) erro
 }
 
 const getPasskeyByCredentialID = `-- name: GetPasskeyByCredentialID :one
-SELECT k.id, k.user_id, k.credential_id, k.name, k.public_key, k.sign_count, k.flags, k.transports, k.created_at, k.last_used_at, u.id, u.display_name, u.handle, u.timezone, u.created_at, u.last_garden_id, u.closed_at
+SELECT k.id, k.user_id, k.credential_id, k.name, k.public_key, k.sign_count, k.flags, k.transports, k.aaguid, k.created_at, k.last_used_at, u.id, u.display_name, u.handle, u.timezone, u.created_at, u.last_garden_id, u.closed_at
 FROM passkey_credential AS k
 JOIN app_user AS u ON u.id = k.user_id
 WHERE k.credential_id = $1
@@ -112,6 +115,7 @@ func (q *Queries) GetPasskeyByCredentialID(ctx context.Context, credentialID str
 		&i.PasskeyCredential.SignCount,
 		&i.PasskeyCredential.Flags,
 		&i.PasskeyCredential.Transports,
+		&i.PasskeyCredential.Aaguid,
 		&i.PasskeyCredential.CreatedAt,
 		&i.PasskeyCredential.LastUsedAt,
 		&i.AppUser.ID,
@@ -126,7 +130,7 @@ func (q *Queries) GetPasskeyByCredentialID(ctx context.Context, credentialID str
 }
 
 const listPasskeys = `-- name: ListPasskeys :many
-SELECT id, user_id, credential_id, name, public_key, sign_count, flags, transports, created_at, last_used_at FROM passkey_credential
+SELECT id, user_id, credential_id, name, public_key, sign_count, flags, transports, aaguid, created_at, last_used_at FROM passkey_credential
 WHERE user_id = $1
 ORDER BY created_at, id
 `
@@ -149,6 +153,7 @@ func (q *Queries) ListPasskeys(ctx context.Context, userID uuid.UUID) ([]Passkey
 			&i.SignCount,
 			&i.Flags,
 			&i.Transports,
+			&i.Aaguid,
 			&i.CreatedAt,
 			&i.LastUsedAt,
 		); err != nil {

@@ -20,6 +20,12 @@ CREATE TABLE passkey_credential (
     -- was given, so a credential stored without it is refused at sign-in.
     flags         smallint NOT NULL DEFAULT 0,
     transports    text[] COLLATE "C",
+    -- The authenticator's AAGUID from the registration. It names the provider
+    -- that holds the passkey: iCloud Keychain, 1Password and so on. The
+    -- Passkeys page labels a row from it, and falls back to name for an AAGUID
+    -- it does not know. NULL for an all-zero AAGUID, and on a row registered
+    -- before the column existed.
+    aaguid        uuid,
     created_at    timestamptz NOT NULL DEFAULT now(),
     last_used_at  timestamptz,
 

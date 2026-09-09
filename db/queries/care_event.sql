@@ -42,6 +42,12 @@ LIMIT @count;
 --
 -- plant_id is null for the whole garden, or a plant id to show only that plant.
 --
+-- care_type_id is null for every care type, or a care type id to show only
+-- that care. since and until are the ends of the date range the page is
+-- filtered to, as instants: the start of the first day and the start of the
+-- day after the last, in the reader's timezone. Either is null when that end
+-- is open.
+--
 -- before_at and before_id are null for the newest page, and otherwise hold the
 -- performed_at and id of the last event on the previous page. Both columns are
 -- compared because backdated events can share a performed_at to the minute.
@@ -53,6 +59,9 @@ JOIN care_type ON care_type.id = care_event.care_type_id AND care_type.garden_id
 JOIN app_user ON app_user.id = care_event.performed_by
 WHERE care_event.garden_id = @garden_id
   AND (sqlc.narg('plant_id')::uuid IS NULL OR care_event.plant_id = sqlc.narg('plant_id'))
+  AND (sqlc.narg('care_type_id')::uuid IS NULL OR care_event.care_type_id = sqlc.narg('care_type_id'))
+  AND (sqlc.narg('since')::timestamptz IS NULL OR care_event.performed_at >= sqlc.narg('since'))
+  AND (sqlc.narg('until')::timestamptz IS NULL OR care_event.performed_at < sqlc.narg('until'))
   AND (sqlc.narg('before_at')::timestamptz IS NULL
        OR (care_event.performed_at, care_event.id) < (sqlc.narg('before_at'), sqlc.narg('before_id')::uuid))
 ORDER BY care_event.performed_at DESC, care_event.id DESC

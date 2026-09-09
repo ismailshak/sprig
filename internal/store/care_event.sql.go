@@ -179,18 +179,24 @@ JOIN care_type ON care_type.id = care_event.care_type_id AND care_type.garden_id
 JOIN app_user ON app_user.id = care_event.performed_by
 WHERE care_event.garden_id = $1
   AND ($2::uuid IS NULL OR care_event.plant_id = $2)
-  AND ($3::timestamptz IS NULL
-       OR (care_event.performed_at, care_event.id) < ($3, $4::uuid))
+  AND ($3::uuid IS NULL OR care_event.care_type_id = $3)
+  AND ($4::timestamptz IS NULL OR care_event.performed_at >= $4)
+  AND ($5::timestamptz IS NULL OR care_event.performed_at < $5)
+  AND ($6::timestamptz IS NULL
+       OR (care_event.performed_at, care_event.id) < ($6, $7::uuid))
 ORDER BY care_event.performed_at DESC, care_event.id DESC
-LIMIT $5
+LIMIT $8
 `
 
 type ListCareEventLogParams struct {
-	GardenID uuid.UUID
-	PlantID  *uuid.UUID
-	BeforeAt *time.Time
-	BeforeID *uuid.UUID
-	Count    int32
+	GardenID   uuid.UUID
+	PlantID    *uuid.UUID
+	CareTypeID *uuid.UUID
+	Since      *time.Time
+	Until      *time.Time
+	BeforeAt   *time.Time
+	BeforeID   *uuid.UUID
+	Count      int32
 }
 
 type ListCareEventLogRow struct {
@@ -206,6 +212,12 @@ type ListCareEventLogRow struct {
 //
 // plant_id is null for the whole garden, or a plant id to show only that plant.
 //
+// care_type_id is null for every care type, or a care type id to show only
+// that care. since and until are the ends of the date range the page is
+// filtered to, as instants: the start of the first day and the start of the
+// day after the last, in the reader's timezone. Either is null when that end
+// is open.
+//
 // before_at and before_id are null for the newest page, and otherwise hold the
 // performed_at and id of the last event on the previous page. Both columns are
 // compared because backdated events can share a performed_at to the minute.
@@ -213,6 +225,9 @@ func (q *Queries) ListCareEventLog(ctx context.Context, arg ListCareEventLogPara
 	rows, err := q.db.Query(ctx, listCareEventLog,
 		arg.GardenID,
 		arg.PlantID,
+		arg.CareTypeID,
+		arg.Since,
+		arg.Until,
 		arg.BeforeAt,
 		arg.BeforeID,
 		arg.Count,
