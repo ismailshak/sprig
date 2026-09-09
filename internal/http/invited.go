@@ -21,13 +21,13 @@ import (
 // holds only its hash.
 const invitedPattern = "/invite/{token}"
 
-// invitedPath is the URL of the page for one token. The form on it posts to
-// the same URL.
-func invitedPath(token string) string { return "/invite/" + token }
+// InvitedPath is the URL of the page for one token. The form on it posts to
+// the same URL. It is exported because sprig admin invite prints the link.
+func InvitedPath(token string) string { return "/invite/" + token }
 
 // invitedChallengePath is the URL the page's script posts the form's fields
 // to for a registration challenge.
-func invitedChallengePath(token string) string { return invitedPath(token) + "/challenge" }
+func invitedChallengePath(token string) string { return InvitedPath(token) + "/challenge" }
 
 // afterInvitePath is the URL a completed join redirects to: the Install sprig
 // page with no tab bar and a link to Today at the end.
@@ -97,8 +97,9 @@ type invitedPage struct {
 	// Reenrol is true for a link that adds a device to an account already in
 	// the garden. The form then has no fields.
 	Reenrol bool
-	// By is the display name of the person who created the invite. Garden is
-	// the name of the garden the link joins.
+	// By is the display name of the person who created the invite, or empty
+	// for a re-enrolment link the operator made with sprig admin invite.
+	// Garden is the name of the garden the link joins.
 	By        string
 	Garden    string
 	Name      string
@@ -139,9 +140,15 @@ func newInvitedPage(token string, open openInvite, form joinForm, propose bool) 
 		Garden:    open.row.Garden.Name,
 		Name:      form.name,
 		Zone:      timezoneField{Zones: zoneOptions(form.zone), Propose: propose},
-		Action:    invitedPath(token),
+		Action:    InvitedPath(token),
 		Challenge: invitedChallengePath(token),
 		Field:     credentialField,
+	}
+	// sprig admin invite sets created_by to the account the link is for.
+	// Emptying By makes the page say the link signs you in, instead of
+	// naming the person as the sender of their own link.
+	if page.Reenrol && invite.CreatedBy == open.member.ID {
+		page.By = ""
 	}
 	if !page.Reenrol {
 		page.SignInToJoin = signInToAcceptPath(token)

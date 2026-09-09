@@ -225,9 +225,9 @@ var routeAccess = map[string]access{
 	// never issued, so the handler renders the page for a link that cannot be
 	// redeemed. There is no foreign path, because the token is what says which
 	// garden the link is for.
-	"GET /invite/{token}":            {public: true, path: invitedPath("no-such-token")},
+	"GET /invite/{token}":            {public: true, path: InvitedPath("no-such-token")},
 	"POST /invite/{token}/challenge": {public: true, path: invitedChallengePath("no-such-token")},
-	"POST /invite/{token}":           {public: true, path: invitedPath("no-such-token")},
+	"POST /invite/{token}":           {public: true, path: InvitedPath("no-such-token")},
 	// A recovery code is presented before any session exists, so the page,
 	// the check, the challenge and the post that saves the passkey are all
 	// public. A post with no body names no code and is refused before it

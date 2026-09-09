@@ -495,15 +495,15 @@ func TestInvited_ASignedInBrowserOpeningAJoinLinkIsSentToAcceptItAsThatAccount(t
 	}
 	cookie := f.handler.sessions.Cookie(token)
 
-	rec := f.request(t, f.handler.show, sitterLink, invitedPath(sitterLink), nil, cookie)
+	rec := f.request(t, f.handler.show, sitterLink, InvitedPath(sitterLink), nil, cookie)
 
 	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != acceptPath(sitterLink) {
 		t.Errorf("status = %d, Location = %q, want %d to %s", rec.Code, rec.Header().Get("Location"), http.StatusSeeOther, acceptPath(sitterLink))
 	}
-	if rec := f.request(t, f.handler.show, samsLink, invitedPath(samsLink), nil, cookie); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "Add this device to your account") {
+	if rec := f.request(t, f.handler.show, samsLink, InvitedPath(samsLink), nil, cookie); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "Add this device to your account") {
 		t.Errorf("a re-enrolment link: status = %d, want the form, because the link adds a device to the account it names:\n%s", rec.Code, text(rec.Body.String()))
 	}
-	unusable(t, f.request(t, f.handler.show, usedLink, invitedPath(usedLink), nil, cookie))
+	unusable(t, f.request(t, f.handler.show, usedLink, InvitedPath(usedLink), nil, cookie))
 }
 
 func TestInvited_ABrowserWhoseMembershipEndedOpeningAJoinLinkIsSentToAcceptItAsThatAccount(t *testing.T) {
@@ -515,7 +515,7 @@ func TestInvited_ABrowserWhoseMembershipEndedOpeningAJoinLinkIsSentToAcceptItAsT
 		t.Fatalf("starting Clare's session: %v", err)
 	}
 
-	rec := f.request(t, f.handler.show, sitterLink, invitedPath(sitterLink), nil, f.handler.sessions.Cookie(token))
+	rec := f.request(t, f.handler.show, sitterLink, InvitedPath(sitterLink), nil, f.handler.sessions.Cookie(token))
 
 	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != acceptPath(sitterLink) {
 		t.Errorf("status = %d, Location = %q, want %d to %s, because the account is still Clare's", rec.Code, rec.Header().Get("Location"), http.StatusSeeOther, acceptPath(sitterLink))
