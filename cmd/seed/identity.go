@@ -2,14 +2,19 @@ package main
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
 	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"time"
 	"uuid"
 
+	"github.com/go-webauthn/webauthn/protocol"
 	"github.com/jackc/pgx/v5"
 
 	"github.com/ismailshak/sprig/internal/auth"
+	"github.com/ismailshak/sprig/internal/auth/passkeytest"
 )
 
 // The rows the More screens read belong to Ellie and Home, so signing in as
@@ -23,26 +28,57 @@ const (
 	kitchenDisplayToken = "sprg_7c1f-development-kitchen-display"
 	spareDisplayToken   = "sprg_2ea8-development-spare-display"
 	sitterInviteToken   = "development-sitter-invite"
+
+	// iPhonePublicKey is the public half of the key pair behind Ellie's iPhone
+	// passkey, as an uncompressed P-256 point in hex. The e2e harness holds the
+	// private half and loads it into a virtual authenticator, so a browser
+	// under test signs in as Ellie without registering a passkey first.
+	iPhonePublicKey = "0403d09a22d0ea716a403f4020b297c06a8e6bc9e740a8a2b2fd147c783ed086a9d1d4161840af16083c1c6ed0176f924fe8039925a5aebe66cfb2b5c77927cd18"
 )
 
+// syncedPasskeyFlags is the authenticator flags byte a passkey synced through
+// something like iCloud Keychain sends. It says the person was present and
+// verified, and the credential is eligible for backup and backed up. The e2e
+// harness sets the same two backup flags on Ellie's iPhone passkey, because
+// the server refuses a sign-in whose backup-eligible flag differs from the
+// stored one.
+const syncedPasskeyFlags = protocol.FlagUserPresent | protocol.FlagUserVerified | protocol.FlagBackupEligible | protocol.FlagBackupState
+
 type passkey struct {
-	id          uuid.UUID
-	owner       *person
-	name        string
+	id    uuid.UUID
+	owner *person
+	name  string
+	// publicKey is the COSE-encoded public key the row stores. A passkey
+	// without one gets a text label in its place and can sign nobody in.
+	publicKey   []byte
+	flags       protocol.AuthenticatorFlags
 	transports  []string
 	daysOld     int
 	usedDaysAgo int
 }
 
-// passkeys returns two credentials for Ellie. The public key is a text label
-// rather than a COSE key and there is no private key, so neither can sign
-// anyone in. Code that parses a stored key fails on both, so passkey flows are
-// tested with a credential the browser registered.
+// passkeys returns Ellie's two credentials. The iPhone one has a real key
+// pair. The MacBook Air one stores a text label in place of a key, so it only
+// fills a row on the Passkeys page.
 func passkeys() []passkey {
 	return []passkey{
-		{id: seedID(tablePasskeyCredential, 1), owner: &ellie, name: "iPhone", transports: []string{"internal", "hybrid"}, daysOld: ellie.daysOld},
+		{id: seedID(tablePasskeyCredential, 1), owner: &ellie, name: "iPhone", publicKey: passkeytest.COSEKey(iPhoneKey()), flags: syncedPasskeyFlags, transports: []string{"internal", "hybrid"}, daysOld: ellie.daysOld},
 		{id: seedID(tablePasskeyCredential, 2), owner: &ellie, name: "MacBook Air", transports: []string{"internal"}, daysOld: 600, usedDaysAgo: 4},
 	}
+}
+
+// iPhoneKey parses iPhonePublicKey. It panics when the constant is not a point
+// on P-256, because nothing else checks it.
+func iPhoneKey() *ecdsa.PublicKey {
+	point, err := hex.DecodeString(iPhonePublicKey)
+	if err != nil {
+		panic(fmt.Sprintf("iPhonePublicKey is not hex: %v", err))
+	}
+	key, err := ecdsa.ParseUncompressedPublicKey(elliptic.P256(), point)
+	if err != nil {
+		panic(fmt.Sprintf("iPhonePublicKey is not a point on P-256: %v", err))
+	}
+	return key
 }
 
 type invite struct {
@@ -132,11 +168,15 @@ func (b *browser) endpoint() string {
 // writes those.
 func writeIdentity(ctx context.Context, tx pgx.Tx, ref time.Time) error {
 	for _, k := range passkeys() {
+		key := k.publicKey
+		if key == nil {
+			key = []byte("development passkey with no private half: " + k.name)
+		}
 		if _, err := tx.Exec(ctx,
-			`INSERT INTO passkey_credential (id, user_id, credential_id, name, public_key, transports, created_at, last_used_at)
-				VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+			`INSERT INTO passkey_credential (id, user_id, credential_id, name, public_key, flags, transports, created_at, last_used_at)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
 			k.id, k.owner.id, base64.RawURLEncoding.EncodeToString(k.id[:]), k.name,
-			[]byte("development passkey with no private half: "+k.name), k.transports,
+			key, int16(k.flags), k.transports,
 			ref.AddDate(0, 0, -k.daysOld), ref.AddDate(0, 0, -k.usedDaysAgo),
 		); err != nil {
 			return fmt.Errorf("writing %s's passkey %s: %w", k.owner.handle, k.name, err)

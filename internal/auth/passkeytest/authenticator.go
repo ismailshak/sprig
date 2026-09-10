@@ -1,7 +1,7 @@
 // Package passkeytest is a passkey in software. A test uses it to answer a
 // registration or a sign-in challenge the way a browser and a device would, so
 // the whole ceremony can run against the server with no browser in the loop.
-// Nothing outside a test imports it.
+// Only tests and the development seed import it.
 package passkeytest
 
 import (
@@ -108,7 +108,7 @@ func (a *Authenticator) Register(creation *protocol.CredentialCreation) string {
 	authData = append(authData, make([]byte, 16)...) // The AAGUID. All zero means the device does not say what it is.
 	authData = binary.BigEndian.AppendUint16(authData, credentialIDLength)
 	authData = append(authData, a.credentialID...)
-	authData = append(authData, a.coseKey()...)
+	authData = append(authData, COSEKey(&a.key.PublicKey)...)
 
 	// The attestation object is a CBOR map with the format "none", an empty
 	// statement, and the authenticator data. Keys are in the order CTAP2's
@@ -211,11 +211,12 @@ func (a *Authenticator) authData(extra byte) []byte {
 	return binary.BigEndian.AppendUint32(data, a.Counter)
 }
 
-// coseKey is the public key as COSE encodes an EC2 key: a CBOR map of the key
-// type, the algorithm, the curve and the two coordinates.
-func (a *Authenticator) coseKey() []byte {
+// COSEKey encodes a P-256 public key the way COSE encodes an EC2 key: a CBOR
+// map of the key type, the algorithm, the curve and the two coordinates. This
+// is the form a passkey_credential row stores.
+func COSEKey(public *ecdsa.PublicKey) []byte {
 	// Bytes is the uncompressed point: one byte of 0x04, then x, then y.
-	point, err := a.key.PublicKey.Bytes()
+	point, err := public.Bytes()
 	if err != nil {
 		panic(err)
 	}
