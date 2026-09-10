@@ -17,7 +17,7 @@ import (
 
 // invitePath is the URL of the Invite someone page, linked at the bottom of
 // People.
-const invitePath = peoplePath + "/invite"
+const invitePath = PeoplePath + "/invite"
 
 // peopleID is both the HTML id of the page under the top bar and the name of
 // the template that renders it. Every form and link on the page swaps it.
@@ -26,7 +26,7 @@ const peopleID = "people"
 // memberPath is the URL prefix for one member's controls. The member is named
 // by handle, because two members can have the same display name.
 func memberPath(handle string) string {
-	return peoplePath + "/" + url.PathEscape(handle)
+	return PeoplePath + "/" + url.PathEscape(handle)
 }
 
 // removeMemberPath is the URL behind a row's Remove link. A GET renders People
@@ -44,7 +44,7 @@ func reenrolMemberPath(handle string) string {
 
 // revokeInvitePath is the URL an invite row's Revoke button posts to.
 func revokeInvitePath(inviteID uuid.UUID) string {
-	return peoplePath + "/invites/" + inviteID.String() + "/revoke"
+	return PeoplePath + "/invites/" + inviteID.String() + "/revoke"
 }
 
 // roleWhat is the one-sentence description of each role, shown on a member's
@@ -220,13 +220,13 @@ func (h *more) saveMembers(w http.ResponseWriter, r *http.Request) {
 	err = h.queries.InTx(r.Context(), func(q *store.Queries) error {
 		for _, change := range changes {
 			if change.role != "" {
-				params := store.SetMemberRoleParams{Role: change.role, GardenID: principal.Garden.ID, UserID: change.userID}
+				params := store.SetMemberRoleParams{Role: change.role, GardenID: principal.Garden.ID, UserID: change.user.ID}
 				if _, err := q.SetMemberRole(r.Context(), params); err != nil {
 					return err
 				}
 			}
 			if change.ends != nil {
-				params := store.SetMembershipEndParams{ExpiresAt: change.ends, GardenID: principal.Garden.ID, UserID: change.userID}
+				params := store.SetMembershipEndParams{ExpiresAt: change.ends, GardenID: principal.Garden.ID, UserID: change.user.ID}
 				if _, err := q.SetMembershipEnd(r.Context(), params); err != nil {
 					return err
 				}
@@ -237,6 +237,17 @@ func (h *more) saveMembers(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		h.templates.serverError(h.logger, w, r, "save the members", err)
 		return
+	}
+	ended := false
+	for _, change := range changes {
+		if change.role != "" {
+			h.notify.call(r.Context(), change.user, roleChangedNotification(principal.Garden.Name, change.role))
+		}
+		ended = ended || change.ends != nil
+	}
+	// The deadlines job sends when a membership's end date passes.
+	if ended {
+		h.wake.call()
 	}
 	h.peopleSaved(w, r, savedAnnouncement)
 }
@@ -249,15 +260,15 @@ func (h *more) peopleSaved(w http.ResponseWriter, r *http.Request, announce stri
 		h.renderPeople(w, r, peopleState{announce: announce})
 		return
 	}
-	http.Redirect(w, r, peoplePath, http.StatusSeeOther)
+	http.Redirect(w, r, PeoplePath, http.StatusSeeOther)
 }
 
 // memberChange is one row's post, after the values have been checked. role is
 // empty and ends is nil where that control was left alone.
 type memberChange struct {
-	userID uuid.UUID
-	role   string
-	ends   *time.Time
+	user store.AppUser
+	role string
+	ends *time.Time
 }
 
 // postedChanges reads the role and the end date each member's row posted. It
@@ -272,7 +283,7 @@ func postedChanges(members []store.ListMembersRow, principal auth.Principal, pos
 		if member.AppUser.ID == principal.User.ID {
 			continue
 		}
-		change := memberChange{userID: member.AppUser.ID}
+		change := memberChange{user: member.AppUser}
 		if role := posted.Get(roleField(member.AppUser.Handle)); role != "" && role != member.Membership.Role {
 			if !slices.Contains(offeredRoles, role) {
 				return nil, false
@@ -325,6 +336,7 @@ func (h *more) removeMember(w http.ResponseWriter, r *http.Request) {
 		h.templates.notFound(w, r)
 		return
 	}
+	h.notify.call(r.Context(), member.AppUser, membershipRemovedNotification(PrincipalFrom(r).Garden.Name))
 	h.peopleSaved(w, r, member.AppUser.DisplayName+" removed.")
 }
 
@@ -449,7 +461,7 @@ func (h *more) renderPeople(w http.ResponseWriter, r *http.Request, state people
 	collides := collidingNames(members)
 	page := peoplePage{
 		Bar:     moreBar("People"),
-		Action:  peoplePath,
+		Action:  PeoplePath,
 		Members: memberRows(members, principal, collides, state.asking, h.now()),
 		Save:    len(members) > 1,
 		Invites: inviteRows(invites, h.now().In(locationFor(principal.User))),
@@ -538,7 +550,7 @@ func newMemberRow(member store.ListMembersRow, principal auth.Principal, collide
 			Ask:    "Remove " + row.Who + "?",
 			Action: removeMemberPath(handle),
 			Form:   "remove-" + handle,
-			Keep:   peoplePath,
+			Keep:   PeoplePath,
 		}
 	}
 	return row

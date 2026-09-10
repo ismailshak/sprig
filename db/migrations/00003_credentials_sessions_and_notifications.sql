@@ -184,7 +184,26 @@ INSERT INTO notification_kind (name) VALUES
     -- What is due today, sent once a day at the membership's digest_hour.
     ('digest'),
     -- Sent when someone else in the garden logs care.
-    ('activity');
+    ('activity'),
+    -- The kinds below have no notification_preference row. Each is sent to
+    -- every browser the person has subscribed. Removing a browser on the
+    -- Notifications page is the way to stop it.
+    -- Sent to the person who issued an invite when it is accepted.
+    ('invite_accepted'),
+    -- Sent to everyone who can manage the garden's tokens a week before a
+    -- token expires, and again when it has.
+    ('token_expiring'),
+    ('token_expired'),
+    -- Sent to a sitter and to the person who invited them when the sitting's
+    -- end date passes.
+    ('sitting_ended'),
+    -- Sent to the person whose role was changed, or whose membership was
+    -- removed, from the People page.
+    ('role_changed'),
+    ('membership_removed'),
+    -- Sent to everyone who can delete any photo when an upload takes the
+    -- garden's photo storage to 90% of the quota.
+    ('storage_nearly_full');
 
 -- One row per membership per kind that has a switch on the Notifications page.
 -- Per membership rather than per user, because a person may want a digest for
@@ -202,13 +221,16 @@ CREATE TABLE notification_preference (
 -- before it sends, so a second attempt after a restart hits the primary key
 -- and sends nothing. A notification sent from a request handler, such as when
 -- somebody logs care, is sent once per request and writes no row here.
+-- storage_nearly_full is the exception. The photo upload handler writes a row
+-- here so that a garden that stays over the threshold is told once.
 CREATE TABLE notification_send (
     membership_id uuid NOT NULL REFERENCES membership (id) ON DELETE CASCADE,
     kind          text COLLATE "C" NOT NULL REFERENCES notification_kind (name),
-    -- Identifies which send of this kind the row is for. The job builds the
-    -- string: the date in the member's timezone for a digest, the schedule and
-    -- the due time for a reminder, the token and the threshold for an expiry
-    -- warning. Text rather than a date because only the digest is once a day.
+    -- Identifies which send of this kind the row is for. The sender builds
+    -- the string: the date in the member's timezone for a digest, the token id
+    -- for a token expiry, the membership id and the end date for a sitting,
+    -- the share and the quota for storage. Text rather than a date because
+    -- only the digest is once a day.
     send_key      text COLLATE "C" NOT NULL,
     sent_at       timestamptz NOT NULL DEFAULT now(),
     PRIMARY KEY (membership_id, kind, send_key)

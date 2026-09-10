@@ -35,6 +35,9 @@ type plants struct {
 	templates *Templates
 	// now supplies the current time, so a test can fix the day.
 	now func() time.Time
+	// notify tells the members who can delete any photo that the garden's
+	// photo storage is nearly full.
+	notify notifyUser
 }
 
 func (h *plants) show(w http.ResponseWriter, r *http.Request) {

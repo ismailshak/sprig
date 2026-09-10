@@ -14,7 +14,7 @@ import (
 
 // revokeTokenPath is the URL a token row's Revoke or Remove button posts to.
 func revokeTokenPath(tokenID uuid.UUID) string {
-	return tokensPath + "/" + tokenID.String() + "/revoke"
+	return TokensPath + "/" + tokenID.String() + "/revoke"
 }
 
 // tokensID is both the HTML id of the page's body and the name of the
@@ -123,6 +123,8 @@ func (h *more) createToken(w http.ResponseWriter, r *http.Request) {
 		h.templates.serverError(h.logger, w, r, "create the token", err)
 		return
 	}
+	// The deadlines job sends when the token expires.
+	h.wake.call()
 
 	page := tokensPage{
 		Lives: lifeOptions(defaultTokenLife),
@@ -157,11 +159,13 @@ func (h *more) revokeToken(w http.ResponseWriter, r *http.Request) {
 		h.templates.notFound(w, r)
 		return
 	}
+	// The deadlines job skips a revoked token, so its next send may be later.
+	h.wake.call()
 	if isHTMX(r) {
 		h.renderTokens(w, r, tokensPage{Lives: lifeOptions(defaultTokenLife)}, 0, "Token revoked.")
 		return
 	}
-	http.Redirect(w, r, tokensPath, http.StatusSeeOther)
+	http.Redirect(w, r, TokensPath, http.StatusSeeOther)
 }
 
 // renderTokens fills in the list and writes the page. A status of zero means
@@ -174,7 +178,7 @@ func (h *more) renderTokens(w http.ResponseWriter, r *http.Request, page tokensP
 		return
 	}
 	page.Bar = moreBar("Tokens")
-	page.Action = tokensPath
+	page.Action = TokensPath
 	page.Tokens = tokenRows(tokens, h.now().In(locationFor(principal.User)))
 	for _, row := range page.Tokens {
 		page.AnyExpired = page.AnyExpired || row.Expired

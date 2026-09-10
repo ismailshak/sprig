@@ -141,8 +141,10 @@ func (h *invited) accept(w http.ResponseWriter, r *http.Request) {
 		h.templates.serverError(h.logger, w, r, "accept the invite", err)
 		return
 	}
+	h.notify.call(r.Context(), open.row.AppUser, inviteAcceptedNotification(open.row.Garden.Name, principal.User, invite.Role))
 	// The account may already have a subscribed browser, so the new membership
-	// can be due a digest at once.
+	// can be due a digest at once. The deadlines job sends when the
+	// membership's end date passes.
 	h.wake.call()
 	http.Redirect(w, r, todayPath, http.StatusSeeOther)
 }

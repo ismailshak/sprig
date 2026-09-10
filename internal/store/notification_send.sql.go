@@ -34,6 +34,32 @@ func (q *Queries) ClaimNotificationSend(ctx context.Context, arg ClaimNotificati
 	return result.RowsAffected(), nil
 }
 
+const deleteNotificationSends = `-- name: DeleteNotificationSends :execrows
+DELETE FROM notification_send
+USING membership
+WHERE membership.id = notification_send.membership_id
+  AND membership.garden_id = $1
+  AND notification_send.kind = $2
+  AND notification_send.send_key = $3
+`
+
+type DeleteNotificationSendsParams struct {
+	GardenID uuid.UUID
+	Kind     string
+	SendKey  string
+}
+
+// Deletes the ledger rows of one kind and send key across the garden's
+// members, so the same send can be made again. The photo delete handler uses
+// it once a deletion takes the garden back under the storage threshold.
+func (q *Queries) DeleteNotificationSends(ctx context.Context, arg DeleteNotificationSendsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteNotificationSends, arg.GardenID, arg.Kind, arg.SendKey)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const listDigestMembers = `-- name: ListDigestMembers :many
 SELECT membership.id AS membership_id, membership.garden_id, membership.user_id, membership.digest_hour,
     app_user.handle, app_user.timezone, garden.name AS garden_name,

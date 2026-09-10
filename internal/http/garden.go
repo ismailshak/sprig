@@ -427,16 +427,12 @@ func (h *more) renderGarden(w http.ResponseWriter, r *http.Request, page gardenP
 	h.templates.render(w, r, v, page)
 }
 
-// nearlyFull is the share of the quota at which the storage line adds the
-// sentence about deleting photos. Below it there is nothing to act on.
-const nearlyFull = 0.9
-
 // storageLine is the sentence under Photos on the Garden page, such as "312 MB
 // of 1 GB of photo storage used." From nearlyFull of the quota up it adds
 // that deleting photos makes room.
 func storageLine(usage photo.Usage) string {
 	line := storageFigure(usage.Used) + " of " + storageFigure(usage.Quota) + " of photo storage used."
-	if float64(usage.Used) < nearlyFull*float64(usage.Quota) {
+	if !nearlyFullReached(usage) {
 		return line
 	}
 	return line + " When it’s full, delete photos to make room."

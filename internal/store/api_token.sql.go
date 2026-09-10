@@ -117,6 +117,77 @@ func (q *Queries) ListAPITokens(ctx context.Context, gardenID uuid.UUID) ([]APIT
 	return items, nil
 }
 
+const listTokenDeadlines = `-- name: ListTokenDeadlines :many
+SELECT api_token.id, api_token.garden_id, api_token.name, api_token.token_hash, api_token.prefix, api_token.created_by, api_token.created_at, api_token.expires_at, api_token.last_used_at, api_token.revoked_at, membership.id AS membership_id, membership.user_id,
+    app_user.handle, app_user.timezone, garden.name AS garden_name
+FROM api_token
+JOIN garden ON garden.id = api_token.garden_id
+JOIN membership ON membership.garden_id = api_token.garden_id
+    AND (membership.expires_at IS NULL OR membership.expires_at > $1::timestamptz)
+JOIN role_capability ON role_capability.role = membership.role AND role_capability.capability = $2
+JOIN app_user ON app_user.id = membership.user_id
+WHERE api_token.revoked_at IS NULL
+  AND api_token.expires_at > $3::timestamptz
+  AND EXISTS (SELECT 1 FROM push_subscription WHERE push_subscription.user_id = membership.user_id)
+ORDER BY api_token.expires_at, api_token.id, membership.created_at, membership.id
+`
+
+type ListTokenDeadlinesParams struct {
+	Now        time.Time
+	Capability string
+	Since      time.Time
+}
+
+type ListTokenDeadlinesRow struct {
+	APIToken     APIToken
+	MembershipID uuid.UUID
+	UserID       uuid.UUID
+	Handle       string
+	Timezone     string
+	GardenName   string
+}
+
+// Every unrevoked token expiring after @since, paired with each member of its
+// garden whose role grants @capability and whose membership has not ended at
+// @now. A member with no browser subscribed is left out, so the job never
+// claims a ledger row and then sends nothing. There is no @garden_id because
+// the job runs across every garden.
+func (q *Queries) ListTokenDeadlines(ctx context.Context, arg ListTokenDeadlinesParams) ([]ListTokenDeadlinesRow, error) {
+	rows, err := q.db.Query(ctx, listTokenDeadlines, arg.Now, arg.Capability, arg.Since)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTokenDeadlinesRow
+	for rows.Next() {
+		var i ListTokenDeadlinesRow
+		if err := rows.Scan(
+			&i.APIToken.ID,
+			&i.APIToken.GardenID,
+			&i.APIToken.Name,
+			&i.APIToken.TokenHash,
+			&i.APIToken.Prefix,
+			&i.APIToken.CreatedBy,
+			&i.APIToken.CreatedAt,
+			&i.APIToken.ExpiresAt,
+			&i.APIToken.LastUsedAt,
+			&i.APIToken.RevokedAt,
+			&i.MembershipID,
+			&i.UserID,
+			&i.Handle,
+			&i.Timezone,
+			&i.GardenName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const revokeAPIToken = `-- name: RevokeAPIToken :execrows
 UPDATE api_token SET revoked_at = $1::timestamptz
 WHERE garden_id = $2 AND id = $3 AND revoked_at IS NULL

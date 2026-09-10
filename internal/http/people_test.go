@@ -66,7 +66,7 @@ func peopleGarden(t *testing.T) *moreFixture {
 func TestPeople_TheReadersOwnRowHasNoRoleSelectAndNoRemove(t *testing.T) {
 	f := peopleGarden(t)
 
-	row := memberNamed(t, f.page(t, f.handler.people, peoplePath), "Ellie")
+	row := memberNamed(t, f.page(t, f.handler.people, PeoplePath), "Ellie")
 
 	if row.role != "" {
 		t.Errorf("your own row offers the role %q, and an owner demoting themselves leaves a garden nobody can administer", row.role)
@@ -85,7 +85,7 @@ func TestPeople_TheReadersOwnRowHasNoRoleSelectAndNoRemove(t *testing.T) {
 func TestPeople_APermanentMemberHasBothRolesTheirOwnSelectedAndNoEndDate(t *testing.T) {
 	f := peopleGarden(t)
 
-	row := memberNamed(t, f.page(t, f.handler.people, peoplePath), "Sam")
+	row := memberNamed(t, f.page(t, f.handler.people, PeoplePath), "Sam")
 
 	if row.role != "member" {
 		t.Errorf("Sam's row has %q selected, want %q", row.role, "member")
@@ -107,7 +107,7 @@ func TestPeople_APermanentMemberHasBothRolesTheirOwnSelectedAndNoEndDate(t *test
 func TestPeople_ASitterWhoseAccessEndsShowsTheDayAndKeepsTheRoleSelect(t *testing.T) {
 	f := peopleGarden(t)
 
-	row := memberNamed(t, f.page(t, f.handler.people, peoplePath), "Jo")
+	row := memberNamed(t, f.page(t, f.handler.people, PeoplePath), "Jo")
 
 	if want := "Sitter · until 11 Sep"; row.meta != want {
 		t.Errorf("Jo's second line reads %q, want %q", row.meta, want)
@@ -125,7 +125,7 @@ func TestPeople_ASitterWhoseAccessEndsShowsTheDayAndKeepsTheRoleSelect(t *testin
 
 func TestPeople_AMembershipThatHasEndedIsGreyKeepsItsPlaceAndHasNoRoleSelect(t *testing.T) {
 	f := peopleGarden(t)
-	page := f.page(t, f.handler.people, peoplePath)
+	page := f.page(t, f.handler.people, PeoplePath)
 
 	row := memberNamed(t, page, "Clare")
 
@@ -148,13 +148,13 @@ func TestPeople_AMembershipThatHasEndedIsGreyKeepsItsPlaceAndHasNoRoleSelect(t *
 
 func TestPeople_AHandleIsShownOnlyWhereTwoMembersShareADisplayName(t *testing.T) {
 	f := peopleGarden(t)
-	if handle := memberNamed(t, f.page(t, f.handler.people, peoplePath), "Sam").handle; handle != "" {
+	if handle := memberNamed(t, f.page(t, f.handler.people, PeoplePath), "Sam").handle; handle != "" {
 		t.Fatalf("Sam's row shows the handle %q, and no other member is called Sam", handle)
 	}
 
 	f.exec(t, "INSERT INTO app_user (id, display_name, handle, timezone) VALUES ($1, 'Ellie', 'ellie2', 'Europe/London')", peopleSecondID)
 	f.exec(t, "INSERT INTO membership (garden_id, user_id, role, digest_hour) VALUES ($1, $2, 'sitter', 8)", moreGardenID, peopleSecondID)
-	page := f.page(t, f.handler.people, peoplePath)
+	page := f.page(t, f.handler.people, PeoplePath)
 
 	for _, want := range []string{"ellie", "ellie2"} {
 		if !strings.Contains(page, `<span class="row__handle">`+want+`</span>`) {
@@ -169,12 +169,12 @@ func TestPeople_AHandleIsShownOnlyWhereTwoMembersShareADisplayName(t *testing.T)
 func TestPeople_PendingInvitesIsAbsentOnceEveryInviteIsGone(t *testing.T) {
 	f := peopleGarden(t)
 
-	if got := invitesShown(f.page(t, f.handler.people, peoplePath)); len(got) != 2 {
+	if got := invitesShown(f.page(t, f.handler.people, PeoplePath)); len(got) != 2 {
 		t.Fatalf("Pending invites holds %v, want the live invite and the one that ran out", got)
 	}
 
 	f.exec(t, "DELETE FROM invite WHERE garden_id = $1", moreGardenID)
-	page := f.page(t, f.handler.people, peoplePath)
+	page := f.page(t, f.handler.people, PeoplePath)
 
 	if strings.Contains(page, "Pending invites") {
 		t.Error("Pending invites is on the page with nothing in it")
@@ -184,7 +184,7 @@ func TestPeople_PendingInvitesIsAbsentOnceEveryInviteIsGone(t *testing.T) {
 func TestPeople_AnInviteSaysWhenItWasSentAndWhetherItHasRunOut(t *testing.T) {
 	f := peopleGarden(t)
 
-	got := invitesShown(f.page(t, f.handler.people, peoplePath))
+	got := invitesShown(f.page(t, f.handler.people, PeoplePath))
 
 	want := []string{"Sitter Sent Tuesday · expires in 5 days", "Member Sent 26 Aug · expired"}
 	if !slices.Equal(got, want) {
@@ -199,7 +199,7 @@ func TestPeople_AnInviteThatRunsOutLaterTodayReadsAsExpiringInADay(t *testing.T)
 		VALUES ($1, $2, 'later-today', 'sitter', $3, $4, $5)`,
 		pendingInviteID, moreGardenID, moreUserID, thursday.AddDate(0, 0, -7), thursday.Add(3*time.Hour))
 
-	got := invitesShown(f.page(t, f.handler.people, peoplePath))
+	got := invitesShown(f.page(t, f.handler.people, PeoplePath))
 
 	if want := []string{"Sitter Sent 27 Aug · expires in 1 day"}; !slices.Equal(got, want) {
 		t.Errorf("Pending invites reads %v, want %v; the link works until this afternoon", got, want)
@@ -212,12 +212,12 @@ func TestPeople_AnInviteThatRunsOutLaterTodayReadsAsExpiringInADay(t *testing.T)
 func TestPeople_ARoleSavedOnAMemberIsTheOneTheirRowShowsAfterwards(t *testing.T) {
 	f := peopleGarden(t)
 
-	rec := f.do(t, f.handler.saveMembers, peoplePath, url.Values{"role.sam": {"sitter"}})
+	rec := f.do(t, f.handler.saveMembers, PeoplePath, url.Values{"role.sam": {"sitter"}})
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusSeeOther, rec.Body.String())
 	}
 
-	row := memberNamed(t, f.page(t, f.handler.people, peoplePath), "Sam")
+	row := memberNamed(t, f.page(t, f.handler.people, PeoplePath), "Sam")
 	if row.role != "sitter" {
 		t.Errorf("Sam's row has %q selected after the save, want %q", row.role, "sitter")
 	}
@@ -229,7 +229,7 @@ func TestPeople_ARoleSavedOnAMemberIsTheOneTheirRowShowsAfterwards(t *testing.T)
 func TestPeople_ARoleTheSelectDoesNotOfferIsRefusedAndTheMemberIsUnchanged(t *testing.T) {
 	f := peopleGarden(t)
 
-	rec := f.do(t, f.handler.saveMembers, peoplePath, url.Values{"role.sam": {"owner"}})
+	rec := f.do(t, f.handler.saveMembers, PeoplePath, url.Values{"role.sam": {"owner"}})
 
 	if rec.Code != http.StatusBadRequest {
 		t.Errorf("status = %d, want %d", rec.Code, http.StatusBadRequest)
@@ -244,7 +244,7 @@ func TestPeople_ARoleTheSelectDoesNotOfferLeavesTheRowsAboveItUnchanged(t *testi
 
 	// Sam's row is above Jo's, so Sam is written first if the save writes as
 	// it reads.
-	rec := f.do(t, f.handler.saveMembers, peoplePath, url.Values{"role.sam": {"sitter"}, "role.jo": {"owner"}})
+	rec := f.do(t, f.handler.saveMembers, PeoplePath, url.Values{"role.sam": {"sitter"}, "role.jo": {"owner"}})
 
 	if rec.Code != http.StatusBadRequest {
 		t.Errorf("status = %d, want %d", rec.Code, http.StatusBadRequest)
@@ -257,7 +257,7 @@ func TestPeople_ARoleTheSelectDoesNotOfferLeavesTheRowsAboveItUnchanged(t *testi
 func TestPeople_ARolePostedForTheReadersOwnRowIsIgnored(t *testing.T) {
 	f := peopleGarden(t)
 
-	f.do(t, f.handler.saveMembers, peoplePath, url.Values{"role.ellie": {"sitter"}})
+	f.do(t, f.handler.saveMembers, PeoplePath, url.Values{"role.ellie": {"sitter"}})
 
 	if role := roleOf(t, f, moreUserID); role != "owner" {
 		t.Errorf("the reader's role is %q, and their own row has no select to post from", role)
@@ -267,9 +267,9 @@ func TestPeople_ARolePostedForTheReadersOwnRowIsIgnored(t *testing.T) {
 func TestPeople_ANewDateOnAMembershipThatEndedGivesTheRowItsRoleSelectBack(t *testing.T) {
 	f := peopleGarden(t)
 
-	f.do(t, f.handler.saveMembers, peoplePath, url.Values{"until.clare": {"2026-10-01"}})
+	f.do(t, f.handler.saveMembers, PeoplePath, url.Values{"until.clare": {"2026-10-01"}})
 
-	row := memberNamed(t, f.page(t, f.handler.people, peoplePath), "Clare")
+	row := memberNamed(t, f.page(t, f.handler.people, PeoplePath), "Clare")
 	if row.off {
 		t.Error("Clare's access runs to October and the row is still greyed")
 	}
@@ -284,7 +284,7 @@ func TestPeople_ANewDateOnAMembershipThatEndedGivesTheRowItsRoleSelectBack(t *te
 func TestPeople_AnEndDatePostedForAPermanentMembershipIsNotWritten(t *testing.T) {
 	f := peopleGarden(t)
 
-	f.do(t, f.handler.saveMembers, peoplePath, url.Values{"until.sam": {"2026-10-01"}})
+	f.do(t, f.handler.saveMembers, PeoplePath, url.Values{"until.sam": {"2026-10-01"}})
 
 	var ends *time.Time
 	row := f.tx.QueryRow(t.Context(), "SELECT expires_at FROM membership WHERE garden_id = $1 AND user_id = $2", moreGardenID, otherUserID)
@@ -305,7 +305,7 @@ func TestPeople_AMembersEndDateIsShownAndSavedInTheirOwnZone(t *testing.T) {
 	f.exec(t, `INSERT INTO membership (garden_id, user_id, role, created_at, expires_at, digest_hour)
 		VALUES ($1, $2, 'sitter', '2026-01-05T00:00:00Z', '2026-09-14T02:00:00Z', 8)`, moreGardenID, peopleFinnID)
 
-	row := memberNamed(t, f.page(t, f.handler.people, peoplePath), "Finn")
+	row := memberNamed(t, f.page(t, f.handler.people, PeoplePath), "Finn")
 	if want := "Sitter · until 13 Sep"; row.meta != want {
 		t.Errorf("Finn's second line reads %q, want %q; the day is the one where they are", row.meta, want)
 	}
@@ -313,7 +313,7 @@ func TestPeople_AMembersEndDateIsShownAndSavedInTheirOwnZone(t *testing.T) {
 		t.Errorf("the end date field holds %q, want %q", row.until, "2026-09-13")
 	}
 
-	f.do(t, f.handler.saveMembers, peoplePath, url.Values{"until.finn": {"2026-09-20"}})
+	f.do(t, f.handler.saveMembers, PeoplePath, url.Values{"until.finn": {"2026-09-20"}})
 
 	var ends time.Time
 	stored := f.tx.QueryRow(t.Context(), "SELECT expires_at FROM membership WHERE garden_id = $1 AND user_id = $2", moreGardenID, peopleFinnID)
@@ -424,18 +424,18 @@ func TestPeople_AReenrolmentLinkIsShownOnceAndOnlyItsHashIsStored(t *testing.T) 
 	if stored != auth.HashToken(token) {
 		t.Error("the stored hash is not the hash of the link that was shown")
 	}
-	if strings.Contains(f.page(t, f.handler.people, peoplePath), token) {
+	if strings.Contains(f.page(t, f.handler.people, PeoplePath), token) {
 		t.Error("the link is on the page again on the next request, and it is shown exactly once")
 	}
 }
 
 func TestPeople_AReenrolmentLinkIsNotListedUnderPendingInvites(t *testing.T) {
 	f := peopleGarden(t)
-	before := invitesShown(f.page(t, f.handler.people, peoplePath))
+	before := invitesShown(f.page(t, f.handler.people, PeoplePath))
 
 	f.memberPage(t, http.MethodPost, f.handler.reenrolMember, "sam", reenrolMemberPath("sam"))
 
-	after := invitesShown(f.page(t, f.handler.people, peoplePath))
+	after := invitesShown(f.page(t, f.handler.people, PeoplePath))
 	if !slices.Equal(before, after) {
 		t.Errorf("Pending invites reads %v after a re-enrolment and %v before, and Sam is already a member", after, before)
 	}
@@ -477,7 +477,7 @@ func TestPeople_RevokingAnInviteTakesItOutOfTheList(t *testing.T) {
 		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusSeeOther, rec.Body.String())
 	}
 
-	got := invitesShown(f.page(t, f.handler.people, peoplePath))
+	got := invitesShown(f.page(t, f.handler.people, PeoplePath))
 	if want := []string{"Member Sent 26 Aug · expired"}; !slices.Equal(got, want) {
 		t.Errorf("Pending invites reads %v, want %v", got, want)
 	}
@@ -718,5 +718,45 @@ func TestPeople_ARevokeSentAsASwapGetsThePageUnderTheBarWithoutThatInvite(t *tes
 	}
 	if !strings.Contains(body, revokeInvitePath(peopleExpiredID)) {
 		t.Errorf("the invite that ran out is no longer listed:\n%s", text(body))
+	}
+}
+
+func TestPeople_AMemberWhoseRoleChangedIsToldTheNewRole(t *testing.T) {
+	f := peopleGarden(t)
+	got := captureUserNotifications(&f.handler.notify)
+
+	f.do(t, f.handler.saveMembers, PeoplePath, url.Values{"role.sam": {"sitter"}, "role.jo": {"sitter"}})
+
+	// Jo is a sitter already, so their row changed nothing and they are not
+	// told.
+	if len(*got) != 1 || (*got)[0].user.ID != otherUserID || (*got)[0].n != roleChangedNotification("Rosewood", "sitter") {
+		t.Errorf("notified %+v, want Sam alone, told the role is now Sitter", *got)
+	}
+}
+
+func TestPeople_ANewEndDateWakesTheJobsAndARoleChangeDoesNot(t *testing.T) {
+	f := peopleGarden(t)
+	woken := 0
+	f.handler.wake = countingWake(&woken)
+
+	f.do(t, f.handler.saveMembers, PeoplePath, url.Values{"role.sam": {"sitter"}})
+	if woken != 0 {
+		t.Errorf("a role change woke the jobs %d times, want 0: no instant moved", woken)
+	}
+
+	f.do(t, f.handler.saveMembers, PeoplePath, url.Values{"until.jo": {"2026-10-01"}})
+	if woken != 1 {
+		t.Errorf("an end date woke the jobs %d times, want 1", woken)
+	}
+}
+
+func TestPeople_ARemovedMemberIsToldAndTheNotificationOpensNothing(t *testing.T) {
+	f := peopleGarden(t)
+	got := captureUserNotifications(&f.handler.notify)
+
+	f.member(t, http.MethodPost, f.handler.removeMember, "sam", removeMemberPath("sam"))
+
+	if len(*got) != 1 || (*got)[0].user.ID != otherUserID || (*got)[0].n != membershipRemovedNotification("Rosewood") {
+		t.Errorf("notified %+v, want Sam told he was removed from Rosewood", *got)
 	}
 }

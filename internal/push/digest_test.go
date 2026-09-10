@@ -1,7 +1,6 @@
 package push
 
 import (
-	"context"
 	"log/slog"
 	"net/http"
 	"slices"
@@ -552,22 +551,6 @@ func freshRosewood(t *testing.T, service *pushService) store.DBTX {
 	return pool
 }
 
-// start runs the job until the test ends.
-func start(t *testing.T, digest *Digest) {
-	t.Helper()
-
-	ctx, stop := context.WithCancel(t.Context())
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		digest.Run(ctx)
-	}()
-	t.Cleanup(func() {
-		stop()
-		<-done
-	})
-}
-
 // waitForFirstSend returns the time the push service was sent its first
 // message. It fails the test if none arrives within the deadline.
 func waitForFirstSend(t *testing.T, service *pushService, within time.Duration) time.Time {
@@ -607,7 +590,7 @@ func TestRun_ADigestGoesOutWithinASecondOfTheHour(t *testing.T) {
 	// fails on how late the digest was and not on how long the wait was.
 	started := time.Now()
 	hour := started.Add(500 * time.Millisecond)
-	start(t, newDigest(t, pool, service, shifted(noon.Add(-500*time.Millisecond), started)))
+	startJob(t, newDigest(t, pool, service, shifted(noon.Add(-500*time.Millisecond), started)).Run)
 
 	sent := waitForFirstSend(t, service, 20*time.Second)
 
@@ -625,7 +608,7 @@ func TestRun_AnHourChangedTakesEffectWithoutWaitingForTheTimer(t *testing.T) {
 		t.Fatalf("moving every hour to the evening: %v", err)
 	}
 	digest := newDigest(t, pool, service, shifted(noon.Add(30*time.Second), time.Now()))
-	start(t, digest)
+	startJob(t, digest.Run)
 	time.Sleep(200 * time.Millisecond)
 	if got := service.received(); len(got) != 0 {
 		t.Fatalf("the push service received %q before anybody's hour", got)

@@ -208,7 +208,7 @@ func TestNotifications_SavingWritesBothTypesAndTheHour(t *testing.T) {
 	}
 }
 
-func countingWake(calls *int) wakeDigest {
+func countingWake(calls *int) wakeJobs {
 	return func() { *calls++ }
 }
 

@@ -147,6 +147,7 @@ func (h *plants) deletePhoto(w http.ResponseWriter, r *http.Request) {
 		h.templates.serverError(h.logger, w, r, "delete the photo", err)
 		return
 	}
+	h.clearStorageNotification(r.Context(), principal)
 	http.Redirect(w, r, photosPath(plant.ID), http.StatusSeeOther)
 }
 

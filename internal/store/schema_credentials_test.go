@@ -159,7 +159,7 @@ func TestSchema_DeletingAMembershipDeletesItsClaimedSends(t *testing.T) {
 	}
 }
 
-func TestSchema_TheNotificationKindTableHoldsExactlyTheTwoKinds(t *testing.T) {
+func TestSchema_TheNotificationKindTableHoldsEveryKindTheAppSends(t *testing.T) {
 	pool := migratedPool(t)
 
 	rows, err := pool.Query(t.Context(), "SELECT name FROM notification_kind ORDER BY name")
@@ -170,7 +170,8 @@ func TestSchema_TheNotificationKindTableHoldsExactlyTheTwoKinds(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reading notification_kind: %v", err)
 	}
-	if want := []string{"activity", "digest"}; !slices.Equal(got, want) {
+	want := []string{"activity", "digest", "invite_accepted", "membership_removed", "role_changed", "sitting_ended", "storage_nearly_full", "token_expired", "token_expiring"}
+	if !slices.Equal(got, want) {
 		t.Errorf("notification_kind holds %v, want %v", got, want)
 	}
 }

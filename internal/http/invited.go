@@ -197,7 +197,9 @@ type invited struct {
 	templates *Templates
 	// now supplies the current time, so a test can fix the day.
 	now  func() time.Time
-	wake wakeDigest
+	wake wakeJobs
+	// notify tells the person who created an invite that it was accepted.
+	notify notifyUser
 }
 
 // open looks up the token in the path and reports whether the link can be
@@ -398,6 +400,11 @@ func (h *invited) redeem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	user, passkey, err := h.join(r, open, form)
+	if err == nil {
+		h.notify.call(r.Context(), open.row.AppUser, inviteAcceptedNotification(open.row.Garden.Name, user, open.row.Invite.Role))
+		// The deadlines job sends when the new membership's end date passes.
+		h.wake.call()
+	}
 	h.finish(w, r, page, "join the garden", user, open.row.Invite.GardenID, passkey, remindersPath, err)
 }
 

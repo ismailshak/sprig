@@ -639,7 +639,7 @@ func TestInvited_ABrowserAlreadySignedInGetsANewSessionInPlaceOfItsOld(t *testin
 func invitedMux(t *testing.T, f *invitedFixture) http.Handler {
 	t.Helper()
 	f.exec(t, `UPDATE invite SET expires_at = now() + interval '7 days', membership_expires_at = now() + interval '14 days' WHERE token_hash = $1`, auth.HashToken(sitterLink))
-	return New(testLogger, f.handler.sessions, f.handler.passkeys, rejectEveryToken, noLiveToken, f.queries, testPhotos(t), testTemplates(), testAssets(), "", false, testPushKey, nil, nil, nil)
+	return New(testLogger, f.handler.sessions, f.handler.passkeys, rejectEveryToken, noLiveToken, f.queries, testPhotos(t), testTemplates(), testAssets(), "", false, testPushKey, nil, nil, nil, nil)
 }
 
 // postFrom posts form to path from address through handler.
@@ -755,5 +755,40 @@ func TestInvited_AHandleAnotherAccountHoldsIsRefusedOnTheChallengeAndNamedOnTheP
 	}
 	if at := f.redeemedAt(t, sitterLink); at != nil {
 		t.Error("the refused post marked the invite used")
+	}
+}
+
+func TestInvited_JoiningTellsTheInviterAndWakesTheJobs(t *testing.T) {
+	f := invitedGarden(t)
+	got := captureUserNotifications(&f.handler.notify)
+	woken := 0
+	f.handler.wake = countingWake(&woken)
+
+	rec := f.redeem(t, sitterLink, aJoinForm(), aDevice())
+
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusSeeOther, rec.Body.String())
+	}
+	if len(*got) != 1 || (*got)[0].user.ID != moreUserID || (*got)[0].n.Body != "Robin joined as a sitter." {
+		t.Errorf("notified %+v, want Ellie told that Robin joined as a sitter", *got)
+	}
+	if woken != 1 {
+		t.Errorf("the jobs were woken %d times, want 1: the sitting's end date is an instant the deadlines job sends at", woken)
+	}
+}
+
+func TestInvited_ARefusedJoinTellsNobody(t *testing.T) {
+	f := invitedGarden(t)
+	got := captureUserNotifications(&f.handler.notify)
+
+	// The post arrives with no ceremony cookie, so the passkey is refused
+	// and nothing is written.
+	rec := f.request(t, f.handler.redeem, sitterLink, InvitedPath(sitterLink), aJoinForm())
+
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusUnprocessableEntity, rec.Body.String())
+	}
+	if len(*got) != 0 {
+		t.Errorf("notified %+v, want nobody: nobody joined", *got)
 	}
 }

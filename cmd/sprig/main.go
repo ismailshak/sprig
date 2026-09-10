@@ -177,40 +177,49 @@ func run(ctx context.Context, getenv func(string) string, stdout io.Writer) erro
 	}
 
 	// The Notifications page gives pushKey to the browser to subscribe with.
-	// With push off there is no key, no digest job and no activity
-	// notification.
+	// With push off there is no key, no jobs and no notification of any kind.
 	pushKey := ""
 	var digest *push.Digest
-	var activity *push.Activity
+	var deadlines *push.Deadlines
+	var notifier *push.Notifier
 	var wake func()
 	var notify func(context.Context, uuid.UUID, uuid.UUID, push.Notification)
+	var notifyUser func(context.Context, store.AppUser, push.Notification)
 	var test func(context.Context, store.PushSubscription, push.Notification) error
 	if cfg.pushEnabled {
 		pushKey = cfg.push.Public
 		sender := push.NewSender(cfg.push, nil)
 		digest = push.NewDigest(logger, queries, sender, cfg.baseURL.String())
-		activity = push.NewActivity(logger, queries, sender, cfg.baseURL.String())
-		wake = digest.Wake
-		notify = activity.Send
+		deadlines = push.NewDeadlines(logger, queries, sender, cfg.baseURL.String(), sprighttp.TokensPath, sprighttp.PeoplePath)
+		notifier = push.NewNotifier(logger, queries, sender, cfg.baseURL.String())
+		// One wake for both jobs, so a handler need not know which job its
+		// change moves. A look that finds nothing changed is cheap.
+		wake = func() {
+			digest.Wake()
+			deadlines.Wake()
+		}
+		notify = notifier.SendActivity
+		notifyUser = notifier.SendToUser
 		test = push.NewTestMessage(queries, sender, cfg.baseURL.String()).Send
 	}
-	handler := sprighttp.New(logger, sessions, passkeys, resolver, tokens, queries, photos, templates, assets, cfg.trustedIPHeader, cfg.signupEnabled, pushKey, wake, notify, test)
+	handler := sprighttp.New(logger, sessions, passkeys, resolver, tokens, queries, photos, templates, assets, cfg.trustedIPHeader, cfg.signupEnabled, pushKey, wake, notify, notifyUser, test)
 
-	// run does not return until the sweep and the digest job have stopped and
-	// every activity notification has finished sending. The deferred
-	// pool.Close would otherwise close the pool under one of them.
+	// run does not return until the sweep and the two push jobs have stopped
+	// and every notification a handler started has finished sending. The
+	// deferred pool.Close would otherwise close the pool under one of them.
 	jobCtx, stopJobs := context.WithCancel(ctx)
 	defer stopJobs()
 	var jobs sync.WaitGroup
 	jobs.Go(func() { auth.NewSweeper(logger, queries, cfg.sessionTTL).Run(jobCtx) })
 	if cfg.pushEnabled {
 		jobs.Go(func() { digest.Run(jobCtx) })
+		jobs.Go(func() { deadlines.Run(jobCtx) })
 	}
 	err = serve(ctx, logger, listener, handler)
 	stopJobs()
 	jobs.Wait()
-	if activity != nil {
-		activity.Wait()
+	if notifier != nil {
+		notifier.Wait()
 	}
 	return err
 }

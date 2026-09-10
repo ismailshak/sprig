@@ -21,10 +21,17 @@ const (
 	notificationsPath = morePath + "/notifications"
 	appearancePath    = morePath + "/appearance"
 	gardenPath        = morePath + "/garden"
-	peoplePath        = morePath + "/people"
-	tokensPath        = morePath + "/tokens"
 	installPath       = "/install"
 	signOutPath       = "/signout"
+)
+
+// PeoplePath and TokensPath are the URLs of the People and Tokens pages. The
+// push notifications for a token expiring and a sitting ending open them. They
+// are exported because the job that sends those notifications is built outside
+// this package.
+const (
+	PeoplePath = morePath + "/people"
+	TokensPath = morePath + "/tokens"
 )
 
 // more serves the fourth tab: the index of everything that is not about
@@ -44,7 +51,10 @@ type more struct {
 	// to subscribe with. It is empty when push is off, and the page then says
 	// notifications are not enabled.
 	pushKey string
-	wake    wakeDigest
+	wake    wakeJobs
+	// notify sends one person a notification about their role, their
+	// membership or an invite they created.
+	notify notifyUser
 	// test sends the Notifications page's test message to one browser. It is
 	// nil when push is off.
 	test sendTest
@@ -164,10 +174,10 @@ func newMorePage(principal auth.Principal, state moreState, info build.Info) mor
 		rows = append(rows, linkRow{Label: "Garden", Href: gardenPath})
 	}
 	if principal.Can(auth.MemberManage) {
-		rows = append(rows, linkRow{Label: "People", Href: peoplePath, Note: pendingNote(state.pendingInvites)})
+		rows = append(rows, linkRow{Label: "People", Href: PeoplePath, Note: pendingNote(state.pendingInvites)})
 	}
 	if principal.Can(auth.TokenManage) {
-		rows = append(rows, linkRow{Label: "Tokens", Href: tokensPath})
+		rows = append(rows, linkRow{Label: "Tokens", Href: TokensPath})
 	}
 	return morePage{Rows: rows, Version: info.Version, Revision: shortRevision(info.Revision)}
 }
