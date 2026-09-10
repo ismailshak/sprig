@@ -171,3 +171,43 @@ func TestPasskeys_ARemoveSentAsASwapGetsTheListWithoutThatRow(t *testing.T) {
 		t.Errorf("the passkeys left are %v, want the MacBook Air alone", rows)
 	}
 }
+
+func TestPasskeys_RemovingThePasskeyThisSessionSignedInWithRedirectsToSignIn(t *testing.T) {
+	f := moreGarden(t)
+	f.principal.Session.PasskeyCredentialID = &phoneKeyID
+
+	rec := f.remove(t, f.handler.removePasskey, "key", phoneKeyID, removePasskeyPath(phoneKeyID))
+
+	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != signInPath {
+		t.Errorf("status = %d to %q, want %d to %s", rec.Code, rec.Header().Get("Location"), http.StatusSeeOther, signInPath)
+	}
+}
+
+func TestPasskeys_RemovingAPasskeyThisSessionDidNotSignInWithGetsTheList(t *testing.T) {
+	f := moreGarden(t)
+	f.principal.Session.PasskeyCredentialID = &laptopKeyID
+
+	rec := f.swap(t, f.handler.removePasskey, removePasskeyPath(phoneKeyID), passkeysListID, "key", phoneKeyID.String(), url.Values{})
+
+	if got := rec.Header().Get("HX-Redirect"); got != "" {
+		t.Fatalf("HX-Redirect = %q, want the list and no redirect", got)
+	}
+	rows := stackedRowsOf(fragment(t, rec, passkeysListID))
+	if len(rows) != 1 || rows[0].name != "MacBook Air" {
+		t.Errorf("the passkeys left are %v, want the MacBook Air alone", rows)
+	}
+}
+
+func TestPasskeys_ARemoveOfThisSessionsPasskeySentAsASwapRedirectsToSignIn(t *testing.T) {
+	f := moreGarden(t)
+	f.principal.Session.PasskeyCredentialID = &phoneKeyID
+
+	rec := f.swap(t, f.handler.removePasskey, removePasskeyPath(phoneKeyID), passkeysListID, "key", phoneKeyID.String(), url.Values{})
+
+	if got := rec.Header().Get("HX-Redirect"); got != signInPath {
+		t.Errorf("HX-Redirect = %q, want %s", got, signInPath)
+	}
+	if rec.Body.Len() != 0 {
+		t.Errorf("the response has a body htmx would swap in:\n%s", rec.Body.String())
+	}
+}

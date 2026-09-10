@@ -13,7 +13,7 @@ func removePasskeyPath(passkeyID uuid.UUID) string {
 }
 
 // passkeysListID is both the HTML id of the list and the name of the template
-// that renders it. Every Remove swaps it.
+// that renders it. Remove swaps it.
 const passkeysListID = "passkeys-list"
 
 // passkeyProviders names the passkey provider for each AAGUID an
@@ -104,10 +104,12 @@ func (h *more) renderPasskeys(w http.ResponseWriter, r *http.Request) {
 
 // removePasskey deletes one credential. The sessions that passkey signed in
 // are deleted with it, so a browser holding one of them is sent to the sign-in
-// page on its next request. Removing the last credential is refused by the
-// query, because an account with none has no way back in. The delete runs
-// under a lock on the account's row, so two removals sent at the same moment
-// cannot both pass that check and empty the list.
+// page on its next request. When the removed passkey is the one this session
+// signed in with, the response redirects to the sign-in page instead of the
+// list, because that session was deleted with it. Removing the last credential
+// is refused by the query, because an account with none has no way back in.
+// The delete runs under a lock on the account's row, so two removals sent at
+// the same moment cannot both pass that check and empty the list.
 func (h *more) removePasskey(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	passkeyID, err := uuid.Parse(r.PathValue("key"))
@@ -132,6 +134,16 @@ func (h *more) removePasskey(w http.ResponseWriter, r *http.Request) {
 	// are all 404, since none of the three was a button this page offered.
 	if removed == 0 {
 		h.templates.notFound(w, r)
+		return
+	}
+	if signedInBy := principal.Session.PasskeyCredentialID; signedInBy != nil && *signedInBy == passkeyID {
+		// The browser follows a 303 itself, so htmx would swap the sign-in
+		// page into the list. HX-Redirect loads it as a page instead.
+		if isHTMX(r) {
+			w.Header().Set("HX-Redirect", signInPath)
+			return
+		}
+		http.Redirect(w, r, signInPath, http.StatusSeeOther)
 		return
 	}
 	if isHTMX(r) {
