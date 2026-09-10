@@ -82,4 +82,33 @@ export class TodayScreen {
   feedUndo(): Locator {
     return this.feed().getByRole('button', { name: 'Undo' });
   }
+
+  // The URL the daily notification opens: Today with the query string that
+  // shows the Remind me again banner.
+  async openFromNotification(): Promise<void> {
+    await this.page.goto('/?from=digest');
+  }
+
+  // The server swaps the Remind me again banner in under this id.
+  remindAgain(): Locator {
+    return this.page.locator('#remind-again');
+  }
+
+  remindIn(delay: 'In 1 hour' | 'In 2 hours'): Locator {
+    return this.remindAgain().getByRole('button', { name: delay });
+  }
+
+  remindAt(): Locator {
+    return this.remindAgain().getByLabel('Time');
+  }
+
+  remindMe(): Locator {
+    return this.remindAgain().getByRole('button', { name: 'Remind me' });
+  }
+
+  // Without JavaScript the link is a navigation to Today rather than hiding
+  // the banner.
+  dismissRemindAgain(): Locator {
+    return this.remindAgain().getByRole('link', { name: 'Dismiss' });
+  }
 }
