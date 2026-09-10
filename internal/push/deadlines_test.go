@@ -2,6 +2,7 @@ package push
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"slices"
@@ -9,6 +10,7 @@ import (
 	"time"
 	"uuid"
 
+	"github.com/ismailshak/sprig/internal/auth"
 	"github.com/ismailshak/sprig/internal/pgtest"
 	"github.com/ismailshak/sprig/internal/store"
 )
@@ -40,6 +42,30 @@ func endSitting(t *testing.T, db store.DBTX, endsAt time.Time) {
 	_, err := db.Exec(t.Context(), "UPDATE membership SET role = 'sitter', invited_by = $1, expires_at = $2 WHERE id = $3", ellieID, endsAt, samMembershipID)
 	if err != nil {
 		t.Fatalf("ending Sam's sitting: %v", err)
+	}
+}
+
+var (
+	upstairsID              = uuid.MustParse("00000000-0000-7000-8000-000000000241")
+	robinUpstairsMembership = uuid.MustParse("00000000-0000-7000-8000-000000000242")
+	samUpstairsMembership   = uuid.MustParse("00000000-0000-7000-8000-000000000243")
+	upstairsTokenID         = uuid.MustParse("00000000-0000-7000-8000-000000000244")
+)
+
+// seedUpstairs writes a second garden, Upstairs, owned by Robin and with Sam
+// as a member. Robin has no browser subscribed, so a deadline query over
+// Upstairs returns Sam's row alone.
+func seedUpstairs(t *testing.T, db store.DBTX) {
+	t.Helper()
+
+	if _, err := db.Exec(t.Context(), "INSERT INTO garden (id, name) VALUES ($1, 'Upstairs')", upstairsID); err != nil {
+		t.Fatalf("seeding Upstairs: %v", err)
+	}
+	_, err := db.Exec(t.Context(), `INSERT INTO membership (id, garden_id, user_id, role, digest_hour) VALUES
+		($1, $3, $4, 'owner', 13), ($2, $3, $5, 'member', 8)`,
+		robinUpstairsMembership, samUpstairsMembership, upstairsID, robinID, samID)
+	if err != nil {
+		t.Fatalf("seeding Upstairs: %v", err)
 	}
 }
 
@@ -410,6 +436,66 @@ func TestDeadlines_AnOwnerWhoDidNotIssueTheSittingIsNotToldItEnded(t *testing.T)
 	}
 }
 
+func TestListTokenDeadlines_EachRowNamesTheGardensOwnerAndWhetherTheRecipientIsTheOwner(t *testing.T) {
+	tx := pgtest.Tx(t, migrateSchema)
+	service := newPushService(t, http.StatusCreated)
+	seedRosewood(t, tx, service)
+	seedUpstairs(t, tx)
+	made, expires := noon.AddDate(0, 0, -30), noon.AddDate(0, 0, 3)
+	giveToken(t, tx, rosewoodID, kitchenTokenID, made, expires, nil)
+	giveToken(t, tx, upstairsID, upstairsTokenID, made, expires, nil)
+
+	rows, err := store.New(tx).ListTokenDeadlines(t.Context(), store.ListTokenDeadlinesParams{
+		Now:        noon,
+		Capability: string(auth.TokenManage),
+		Since:      noon.AddDate(0, 0, -7),
+	})
+
+	if err != nil {
+		t.Fatalf("listing the tokens: %v", err)
+	}
+	// Ellie owns Rosewood and Robin owns Upstairs, so Sam's two rows name
+	// different people.
+	got := make([]string, 0, len(rows))
+	for _, row := range rows {
+		got = append(got, fmt.Sprintf("%s %s %s %t", row.Handle, row.GardenName, row.OwnerName, row.RecipientOwns))
+	}
+	want := []string{"ellie Rosewood Ellie true", "sam Rosewood Ellie false", "sam Upstairs Robin false"}
+	if !slices.Equal(got, want) {
+		t.Errorf("the rows are %q, want %q", got, want)
+	}
+}
+
+func TestListSittingDeadlines_EachRowNamesTheGardensOwnerAndWhetherTheRecipientIsTheOwner(t *testing.T) {
+	tx := pgtest.Tx(t, migrateSchema)
+	service := newPushService(t, http.StatusCreated)
+	seedRosewood(t, tx, service)
+	seedUpstairs(t, tx)
+	ended := noon.Add(-time.Hour)
+	endSitting(t, tx, ended)
+	// Sam is a sitter in Upstairs too, issued by Robin. It ends at the same
+	// instant as the Rosewood sitting.
+	if _, err := tx.Exec(t.Context(), "UPDATE membership SET role = 'sitter', invited_by = $1, expires_at = $2 WHERE id = $3", robinID, ended, samUpstairsMembership); err != nil {
+		t.Fatal(err)
+	}
+
+	rows, err := store.New(tx).ListSittingDeadlines(t.Context(), noon, noon.AddDate(0, 0, -7))
+
+	if err != nil {
+		t.Fatalf("listing the sittings: %v", err)
+	}
+	// Ellie owns Rosewood and Robin owns Upstairs, so Sam's two rows name
+	// different people.
+	got := make([]string, 0, len(rows))
+	for _, row := range rows {
+		got = append(got, fmt.Sprintf("%s %s %s %t", row.Handle, row.GardenName, row.OwnerName, row.RecipientOwns))
+	}
+	want := []string{"sam Rosewood Ellie false", "ellie Rosewood Ellie true", "sam Upstairs Robin false"}
+	if !slices.Equal(got, want) {
+		t.Errorf("the rows are %q, want %q", got, want)
+	}
+}
+
 func TestTokenExpiringNotification_NamesTheTokenByNameAndPrefixWithTheDateInTheRecipientsZone(t *testing.T) {
 	// Noon UTC on the 10th is the small hours of the 11th in Auckland.
 	auckland, err := time.LoadLocation("Pacific/Auckland")
@@ -435,7 +521,7 @@ func TestTokenExpiredNotification_SaysTheTokenHasExpiredAndOpensTokens(t *testin
 }
 
 func TestSittingEndedNotification_TheSittersOpensNothingAndTheInvitersOpensPeople(t *testing.T) {
-	// Sam sat Ellie's garden. Sam is told as a non-owner, Ellie as the owner.
+	// The inviter here is Ellie, the owner, and the sitter is not.
 	row := store.ListSittingDeadlinesRow{SitterName: "Sam", GardenName: "Rosewood", OwnerName: "Ellie", IsSitter: true}
 	people := "https://sprig.example.com/more/people"
 

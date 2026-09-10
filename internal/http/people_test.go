@@ -757,6 +757,6 @@ func TestPeople_ARemovedMemberIsToldAndTheNotificationOpensNothing(t *testing.T)
 	f.member(t, http.MethodPost, f.handler.removeMember, "sam", removeMemberPath("sam"))
 
 	if len(*got) != 1 || (*got)[0].user.ID != otherUserID || (*got)[0].n != membershipRemovedNotification("Ellie’s Rosewood") {
-		t.Errorf("notified %+v, want Sam told he was removed from Rosewood", *got)
+		t.Errorf("notified %+v, want Sam told he was removed from Ellie’s Rosewood", *got)
 	}
 }

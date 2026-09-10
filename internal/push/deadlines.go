@@ -171,23 +171,24 @@ func tokenNamed(token store.APIToken) string {
 
 // tokenExpiringNotification reads "The kitchen display (sprg_7c1f…) in
 // Ellie’s Rosewood expires on 10 Sep." with the date in the recipient's
-// timezone, and opens Tokens. garden is the name GardenNamed gives it.
+// timezone, and opens Tokens.
 func tokenExpiringNotification(garden string, token store.APIToken, loc *time.Location, tokensURL string) Notification {
 	return Notification{Title: "Token expires soon", Body: tokenNamed(token) + " in " + garden + " expires on " + token.ExpiresAt.In(loc).Format("2 Jan") + ".", URL: tokensURL}
 }
 
 // tokenExpiredNotification reads "The kitchen display (sprg_7c1f…) in Ellie’s
-// Rosewood has expired." and opens Tokens. garden is the name GardenNamed
-// gives it.
+// Rosewood has expired." and opens Tokens.
 func tokenExpiredNotification(garden string, token store.APIToken, tokensURL string) Notification {
 	return Notification{Title: "Token expired", Body: tokenNamed(token) + " in " + garden + " has expired.", URL: tokensURL}
 }
 
-// sittingEndedNotification is what one recipient of a sitting's end gets. The
-// sitter's reads "Your access to Ellie’s Rosewood has ended." and opens
-// nothing, because their access is gone and every page would send them to
-// sign in. The inviter's reads "Sam no longer has access to Rosewood." and
-// opens People.
+// sittingEndedNotification is what one recipient is told when a sitter's
+// access to a garden ends. The sitter's reads "Your access to Ellie’s
+// Rosewood has ended." and opens nothing, because their access is gone and
+// every page would send them to sign in. The inviter's reads "Sam no longer
+// has access to Ellie’s Rosewood." and opens People. It is not "Sam’s access
+// to Ellie’s Rosewood has ended", because two possessives in a row read
+// heavily.
 func sittingEndedNotification(row store.ListSittingDeadlinesRow, peopleURL string) Notification {
 	garden := GardenNamed(row.GardenName, row.OwnerName, row.RecipientOwns)
 	if row.IsSitter {

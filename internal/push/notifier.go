@@ -86,9 +86,9 @@ func (p *Notifier) absolute(path string) string {
 	return absolute(p.baseURL, path)
 }
 
-// GardenNamed is how a notification names a garden: "Ellie’s Rosewood" to
-// anyone but the owner, and "Rosewood" to the owner, who would otherwise read
-// their own name. It is the garden's name alone when no owner is left.
+// GardenNamed is the name a notification gives a garden. It is "Ellie’s
+// Rosewood" to anyone but the owner, and "Rosewood" to the owner. When
+// ownerName is empty the garden has no owner left, so everyone gets "Rosewood".
 func GardenNamed(garden, ownerName string, toOwner bool) string {
 	if toOwner || ownerName == "" {
 		return garden

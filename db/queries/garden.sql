@@ -9,10 +9,9 @@ RETURNING *;
 -- name: GetGarden :one
 SELECT * FROM garden WHERE id = @garden_id;
 
--- The garden's owner: the oldest owner membership, the person who created the
--- garden unless they have left it. No row when no owner is left. A
--- notification names another person's garden after its owner, "Ellie's
--- Rosewood", and the owner's own garden by its name alone.
+-- The garden's owner, taken from the oldest owner membership. That is the
+-- person who created the garden unless they have left it. No row when the
+-- garden has no owner.
 -- name: GetGardenOwner :one
 SELECT app_user.id, app_user.display_name
 FROM membership

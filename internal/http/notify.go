@@ -34,10 +34,9 @@ func storageKey(usage photo.Usage) string {
 	return strconv.FormatFloat(nearlyFull, 'f', -1, 64) + " " + strconv.FormatInt(usage.Quota, 10)
 }
 
-// gardenNamer reads the garden's owner once and returns the function that
-// names the garden to one recipient: "Ellie’s Rosewood", or "Rosewood" when
-// the recipient is Ellie. The owner is read rather than taken from the
-// request, because the person making the request is not always the owner.
+// gardenNamer reads the garden's owner once and returns a function that names
+// the garden for one recipient. The name is "Ellie’s Rosewood" to anyone but
+// Ellie and "Rosewood" to Ellie.
 func gardenNamer(ctx context.Context, queries *store.Queries, garden store.Garden) (func(recipient uuid.UUID) string, error) {
 	owner, err := queries.GetGardenOwner(ctx, garden.ID)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -53,7 +52,7 @@ func gardenNamer(ctx context.Context, queries *store.Queries, garden store.Garde
 
 // inviteAcceptedNotification is what the person who created an invite gets
 // when it is accepted. It reads "Robin joined Ellie’s Rosewood as a sitter."
-// and opens People. garden is the name gardenNamedFor gives it.
+// and opens People.
 func inviteAcceptedNotification(garden string, joined store.AppUser, role string) push.Notification {
 	return push.Notification{Title: "Invite accepted", Body: joined.DisplayName + " joined " + garden + " as a " + role + ".", URL: PeoplePath}
 }

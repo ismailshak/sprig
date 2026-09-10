@@ -769,8 +769,10 @@ func TestInvited_JoiningTellsTheInviterAndWakesTheJobs(t *testing.T) {
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusSeeOther, rec.Body.String())
 	}
+	// Ellie owns Rosewood, so her notification names the garden without her
+	// own name in front of it.
 	if len(*got) != 1 || (*got)[0].user.ID != moreUserID || (*got)[0].n.Body != "Robin joined Rosewood as a sitter." {
-		t.Errorf("notified %+v, want Ellie told that Robin joined Rosewood as a sitter, the garden named plainly because she owns it", *got)
+		t.Errorf("notified %+v, want Ellie told that Robin joined Rosewood as a sitter", *got)
 	}
 	if woken != 1 {
 		t.Errorf("the jobs were woken %d times, want 1: the sitting's end date is an instant the deadlines job sends at", woken)

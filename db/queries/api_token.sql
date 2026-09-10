@@ -30,9 +30,9 @@ UPDATE api_token SET last_used_at = @now::timestamptz WHERE token_hash = @token_
 -- Every unrevoked token expiring after @since, paired with each member of its
 -- garden whose role grants @capability and whose membership has not ended at
 -- @now. A member with no browser subscribed is left out, so the job never
--- claims a ledger row and then sends nothing. owner_name is the garden's
--- owner's display name, or empty when no owner is left, and recipient_owns is
--- whether the member is that owner. There is no @garden_id because the job
+-- claims a ledger row and then sends nothing. owner_name is the display name
+-- of the garden's owner, empty when the garden has no owner. recipient_owns is
+-- true when the member is that owner. There is no @garden_id because the job
 -- runs across every garden.
 -- name: ListTokenDeadlines :many
 SELECT sqlc.embed(api_token), membership.id AS membership_id, membership.user_id,

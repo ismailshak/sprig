@@ -105,9 +105,9 @@ RETURNING *;
 -- person who invited them where that person is still a member at @now. One row
 -- per recipient, with is_sitter telling the two apart. A recipient with no
 -- browser subscribed is left out, so the job never claims a ledger row and then
--- sends nothing. owner_name is the garden's owner's display name, or empty when
--- no owner is left, and recipient_owns is whether the recipient is that owner.
--- There is no @garden_id because the job runs across every garden.
+-- sends nothing. owner_name is the display name of the garden's owner, empty
+-- when the garden has no owner. recipient_owns is true when the recipient is
+-- that owner. There is no @garden_id because the job runs across every garden.
 -- name: ListSittingDeadlines :many
 SELECT sitting.id AS sitting_id, sitting.expires_at::timestamptz AS ends_at,
     sitter.display_name AS sitter_name, garden.name AS garden_name,

@@ -165,7 +165,7 @@ func TestNotifier_DeletesABrowserThePushServiceReportsGone(t *testing.T) {
 	}
 }
 
-func TestGardenNamed_NamesAnotherPersonsGardenAfterItsOwnerAndTheOwnersOwnByNameAlone(t *testing.T) {
+func TestGardenNamed_AGardenIsNamedAfterItsOwnerToEveryoneButTheOwner(t *testing.T) {
 	if got, want := GardenNamed("Rosewood", "Ellie", false), "Ellie’s Rosewood"; got != want {
 		t.Errorf("to a member the garden is %q, want %q", got, want)
 	}

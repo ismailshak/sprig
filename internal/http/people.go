@@ -215,7 +215,8 @@ func (h *more) saveMembers(w http.ResponseWriter, r *http.Request) {
 		h.templates.badRequest(w, r)
 		return
 	}
-	// The owner is read before the write, so a failed read costs nothing.
+	// The owner is read before the transaction, so a failed read leaves
+	// nothing written.
 	gardenNamed, err := gardenNamer(r.Context(), h.queries, principal.Garden)
 	if err != nil {
 		h.templates.serverError(h.logger, w, r, "read the garden's owner", err)

@@ -74,10 +74,9 @@ type GetGardenOwnerRow struct {
 	DisplayName string
 }
 
-// The garden's owner: the oldest owner membership, the person who created the
-// garden unless they have left it. No row when no owner is left. A
-// notification names another person's garden after its owner, "Ellie's
-// Rosewood", and the owner's own garden by its name alone.
+// The garden's owner, taken from the oldest owner membership. That is the
+// person who created the garden unless they have left it. No row when the
+// garden has no owner.
 func (q *Queries) GetGardenOwner(ctx context.Context, gardenID uuid.UUID) (GetGardenOwnerRow, error) {
 	row := q.db.QueryRow(ctx, getGardenOwner, gardenID)
 	var i GetGardenOwnerRow

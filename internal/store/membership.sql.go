@@ -418,9 +418,9 @@ type ListSittingDeadlinesRow struct {
 // person who invited them where that person is still a member at @now. One row
 // per recipient, with is_sitter telling the two apart. A recipient with no
 // browser subscribed is left out, so the job never claims a ledger row and then
-// sends nothing. owner_name is the garden's owner's display name, or empty when
-// no owner is left, and recipient_owns is whether the recipient is that owner.
-// There is no @garden_id because the job runs across every garden.
+// sends nothing. owner_name is the display name of the garden's owner, empty
+// when the garden has no owner. recipient_owns is true when the recipient is
+// that owner. There is no @garden_id because the job runs across every garden.
 func (q *Queries) ListSittingDeadlines(ctx context.Context, now time.Time, since time.Time) ([]ListSittingDeadlinesRow, error) {
 	rows, err := q.db.Query(ctx, listSittingDeadlines, now, since)
 	if err != nil {

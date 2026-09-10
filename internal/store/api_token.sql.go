@@ -162,9 +162,9 @@ type ListTokenDeadlinesRow struct {
 // Every unrevoked token expiring after @since, paired with each member of its
 // garden whose role grants @capability and whose membership has not ended at
 // @now. A member with no browser subscribed is left out, so the job never
-// claims a ledger row and then sends nothing. owner_name is the garden's
-// owner's display name, or empty when no owner is left, and recipient_owns is
-// whether the member is that owner. There is no @garden_id because the job
+// claims a ledger row and then sends nothing. owner_name is the display name
+// of the garden's owner, empty when the garden has no owner. recipient_owns is
+// true when the member is that owner. There is no @garden_id because the job
 // runs across every garden.
 func (q *Queries) ListTokenDeadlines(ctx context.Context, arg ListTokenDeadlinesParams) ([]ListTokenDeadlinesRow, error) {
 	rows, err := q.db.Query(ctx, listTokenDeadlines, arg.Now, arg.Capability, arg.Since)
