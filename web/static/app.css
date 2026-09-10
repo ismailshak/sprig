@@ -2505,19 +2505,13 @@ a.wide-action {
 
 /* A photo's box has its size before the bytes arrive: the tile is square, the
    plant's picture is 5:3, the photo page's box has the photo's proportions.
-   The js attribute on the root says a script is running, and under it a photo
-   stays hidden until the page's script marks it loaded. The hiding is in the
-   stylesheet rather than set by that script, because the browser starts
-   painting a slow JPEG before a deferred script has arrived. The animation
-   shows the photo after 10s in case that script never runs. */
-[data-js] img[data-photo]:not(.photo--loaded) {
-  opacity: 0;
-  animation: photo-reveal 0s linear 10s forwards;
-}
+   The js attribute on the root says the head script is running, and under it
+   a photo stays hidden until that script marks it loaded. A photo that loaded
+   after the first paint also gets photo--fade, so only a photo that was
+   painted blank fades in. One the browser already held is shown outright. */
+[data-js] img[data-photo]:not(.photo--loaded) { opacity: 0; }
 
-img[data-photo] { transition: opacity .15s; }
-
-@keyframes photo-reveal { to { opacity: 1; } }
+img[data-photo].photo--fade { transition: opacity .15s; }
 
 /* The spinner is a ring with one accent-coloured quarter, turning, centred in
    the box. The tile, the strip's thumbnail and the photo page's box are given
