@@ -6,10 +6,17 @@
      The member rows are inside one form with Save changes under them, so
      changing two people's roles is one post. Sign-in link and Remove leave the
      page instead of saving it, and forms cannot nest, so each has an empty form
-     after the list that the row's button names in its form attribute. */}}
+     after the list that the row's button names in its form attribute.
+
+     With JavaScript every form and link here swaps the page under the top
+     bar, because each changes the list, and a sign-in link adds a box above
+     it. show scrolls that box into view. */}}
 {{define "main"}}
 {{template "more-topbar" .Bar}}
-<div class="app__body app__body--sub">
+{{template "people" .}}
+{{end}}
+
+{{define "people"}}<div class="app__body app__body--sub" id="people">
 {{with .Secret}}
 <div class="section">
 {{template "secret" .}}
@@ -18,7 +25,7 @@
 {{end}}
 <div class="section">
 <div class="section__head"><h2 class="section__title">Members</h2></div>
-<form method="post" action="{{.Action}}" novalidate>
+<form method="post" action="{{.Action}}" novalidate hx-post="{{.Action}}" hx-target="#people" hx-swap="outerHTML settle:0ms">
 <ul class="list">
 {{range .Members}}{{template "member-row" .}}{{end}}
 </ul>
@@ -27,8 +34,8 @@
 {{/* The forms a row's own buttons submit. Each is empty apart from its action,
      because the button that submits it is in the row above. */}}
 {{range .Members}}
-{{if .ReenrolForm}}<form id="{{.ReenrolForm}}" method="post" action="{{.Reenrol}}"></form>{{end}}
-{{with .Asking}}<form id="{{.Form}}" method="post" action="{{.Action}}"></form>{{end}}
+{{if .ReenrolForm}}<form id="{{.ReenrolForm}}" method="post" action="{{.Reenrol}}" hx-post="{{.Reenrol}}" hx-target="#people" hx-swap="outerHTML settle:0ms show:#people:top"></form>{{end}}
+{{with .Asking}}<form id="{{.Form}}" method="post" action="{{.Action}}" hx-post="{{.Action}}" hx-target="#people" hx-swap="outerHTML settle:0ms"></form>{{end}}
 {{end}}
 </div>
 {{with .Invites}}
@@ -44,14 +51,13 @@
 <span class="row__part">{{.Expires}}</span>
 </span>
 </span>
-<form method="post" action="{{.Revoke}}"><button class="row__drop" type="submit">Revoke</button></form>
+<form method="post" action="{{.Revoke}}" hx-post="{{.Revoke}}" hx-target="#people" hx-swap="outerHTML settle:0ms"><button class="row__drop" type="submit">Revoke</button></form>
 </li>
 {{end}}</ul>
 </div>
 {{end}}
 {{with .InviteSomeone}}<a class="wide-action" href="{{.}}">Invite someone</a>{{end}}
-</div>
-{{end}}
+</div>{{end}}
 
 {{/* One person's row. The reader's own row has no select, no date and no
      Remove, because an owner who demoted or removed themselves would leave a
@@ -61,7 +67,7 @@
 <span class="row__ask">{{.Asking.Ask}}</span>
 <p class="row__why">{{.Who}} will lose access to this garden. Their name stays on everything they’ve logged, and you can invite them again later.</p>
 <div class="row__buttons">
-<a class="sched__cancel" href="{{.Asking.Keep}}">Cancel</a>
+<a class="sched__cancel" href="{{.Asking.Keep}}" hx-get="{{.Asking.Keep}}" hx-target="#people" hx-swap="outerHTML settle:0ms">Cancel</a>
 <button class="care care--small" type="submit" form="{{.Asking.Form}}">Remove</button>
 </div>
 {{else}}
@@ -80,7 +86,7 @@
 {{with .Roles}}<select class="input input--unit" name="{{$.RoleField}}" aria-label="{{$.RoleLabel}}">{{template "options" .}}</select>{{end}}
 <span class="row__acts">
 <button class="row__drop" type="submit" form="{{.ReenrolForm}}" aria-label="Sign-in link for {{.Who}}">Sign-in link</button>
-<a class="row__drop" href="{{.Remove}}" aria-label="Remove {{.Who}}">Remove</a>
+<a class="row__drop" href="{{.Remove}}" aria-label="Remove {{.Who}}" hx-get="{{.Remove}}" hx-target="#people" hx-swap="outerHTML settle:0ms">Remove</a>
 </span>
 </span>
 {{end}}

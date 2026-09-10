@@ -6,7 +6,12 @@
    The form has data-key, the VAPID public key to subscribe with, and
    data-subscribe, the URL the subscription is posted to. Each checkbox under
    What to send has data-notify. Each Remove form has data-endpoint, the push
-   service URL of its row. */
+   service URL of its row.
+
+   Remove and Send test notification are htmx swaps of the Subscribed devices
+   section. The push API work each needs first is done in htmx's confirm
+   event. That event holds the request until issueRequest is called. The
+   listener is on the document, so it covers the forms a swap brings in. */
 (function () {
   const form = document.getElementById('push-form');
   if (!form || !window.sprigPush) return;
@@ -56,31 +61,34 @@
     form.submit();
   });
 
-  // Remove on this browser's own row unsubscribes it from the push service
-  // before the post deletes the row. Another browser's row is only the post.
-  for (const remove of document.querySelectorAll('form[data-endpoint]')) {
-    remove.addEventListener('submit', async (event) => {
+  document.addEventListener('htmx:confirm', (event) => {
+    const form = event.detail.elt;
+    if (!(form instanceof HTMLFormElement)) return;
+    if (form.dataset.endpoint !== undefined) {
       event.preventDefault();
-      const subscription = await push.current();
-      if (subscription && subscription.endpoint === remove.dataset.endpoint) {
-        // A failed unsubscribe is ignored. The row is deleted either way, so
-        // nothing will be sent to the subscription again.
-        await subscription.unsubscribe().catch(() => {});
-      }
-      remove.submit();
-    });
+      unsubscribe(form).finally(() => event.detail.issueRequest(true));
+    } else if (form.id === 'push-test') {
+      event.preventDefault();
+      fillEndpoint(form).finally(() => event.detail.issueRequest(true));
+    }
+  });
+
+  // unsubscribe takes this browser off the push service when the Remove form
+  // is for this browser's own row. Another browser's row needs only the post.
+  async function unsubscribe(remove) {
+    const subscription = await push.current();
+    if (subscription && subscription.endpoint === remove.dataset.endpoint) {
+      // A failed unsubscribe is ignored. The row is deleted either way, so
+      // nothing will be sent to the subscription again.
+      await subscription.unsubscribe().catch(() => {});
+    }
   }
 
-  // The hidden endpoint field tells the server which browser to send the test
-  // to. Only the push API can read it, so the script fills the field in before
-  // the form posts.
-  const test = document.getElementById('push-test');
-  if (test) {
-    test.addEventListener('submit', async (event) => {
-      event.preventDefault();
-      const subscription = await push.current();
-      if (subscription) test.elements.endpoint.value = subscription.endpoint;
-      test.submit();
-    });
+  // fillEndpoint puts this browser's push subscription URL in the test form's
+  // hidden field, so the server knows which browser to send the test to. Only
+  // the push API can read it.
+  async function fillEndpoint(test) {
+    const subscription = await push.current();
+    if (subscription) test.elements.endpoint.value = subscription.endpoint;
   }
 })();

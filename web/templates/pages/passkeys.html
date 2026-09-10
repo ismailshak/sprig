@@ -8,20 +8,7 @@
 {{template "more-topbar" .Bar}}
 <div class="app__body app__body--sub">
 <p class="lead">Passkeys sign you in with your device’s face, fingerprint or PIN. Add one on each device you use.</p>
-<ul class="list">
-{{range .Keys}}<li class="row row--setting row--stack">
-<span class="row__text">
-<span class="row__name">{{.Name}}</span>
-<span class="row__meta"><span class="row__part">{{.Used}}</span></span>
-</span>
-{{/* Remove is a post of its own, so each row has its own form. */}}
-{{with .Remove}}<form method="post" action="{{.}}"><button class="row__drop" type="submit">Remove</button></form>{{end}}
-</li>
-{{end}}</ul>
-{{/* The reason is under the list rather than in a dialog after the press,
-     because removing the last passkey is the one action here that nothing can
-     undo. */}}
-{{if .OnlyOne}}<p class="note">Your only passkey can’t be removed. Add one on another device first.</p>{{end}}
+{{template "passkeys-list" .}}
 {{/* Only the browser can talk to the device holding a passkey, so a script
      drives this form. It posts to data-challenge for a challenge, puts the
      browser's credential in the hidden field, then posts the form. The button
@@ -38,6 +25,26 @@
 </form>
 </div>
 {{end}}
+
+{{/* The list and the note under it. Remove swaps this and not the page, so
+     the Add passkey form below keeps the listeners the page's script gave
+     it. */}}
+{{define "passkeys-list"}}<div id="passkeys-list">
+<ul class="list">
+{{range .Keys}}<li class="row row--setting row--stack">
+<span class="row__text">
+<span class="row__name">{{.Name}}</span>
+<span class="row__meta"><span class="row__part">{{.Used}}</span></span>
+</span>
+{{/* Remove is a post of its own, so each row has its own form. */}}
+{{with .Remove}}<form method="post" action="{{.}}" hx-post="{{.}}" hx-target="#passkeys-list" hx-swap="outerHTML settle:0ms"><button class="row__drop" type="submit">Remove</button></form>{{end}}
+</li>
+{{end}}</ul>
+{{/* The reason is under the list rather than in a dialog after the press,
+     because removing the last passkey is the one action here that nothing can
+     undo. */}}
+{{if .OnlyOne}}<p class="note">Your only passkey can’t be removed. Add one on another device first.</p>{{end}}
+</div>{{end}}
 
 {{define "script"}}<script src="{{asset "passkey.js"}}" defer></script>{{end}}
 

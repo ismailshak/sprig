@@ -3,6 +3,7 @@ package http
 import (
 	"errors"
 	"net/http"
+	"net/url"
 	"slices"
 	"strings"
 	"testing"
@@ -157,5 +158,16 @@ func TestPasskeys_APasskeyFromAKnownProviderIsNamedAfterTheProvider(t *testing.T
 	}
 	if !slices.Equal(rows, want) {
 		t.Errorf("the passkeys are %v, want %v", rows, want)
+	}
+}
+
+func TestPasskeys_ARemoveSentAsASwapGetsTheListWithoutThatRow(t *testing.T) {
+	f := moreGarden(t)
+
+	rec := f.swap(t, f.handler.removePasskey, removePasskeyPath(phoneKeyID), passkeysListID, "key", phoneKeyID.String(), url.Values{})
+
+	rows := stackedRowsOf(fragment(t, rec, passkeysListID))
+	if len(rows) != 1 || rows[0].name != "MacBook Air" {
+		t.Errorf("the passkeys left are %v, want the MacBook Air alone", rows)
 	}
 }

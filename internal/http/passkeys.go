@@ -12,6 +12,10 @@ func removePasskeyPath(passkeyID uuid.UUID) string {
 	return passkeysPath + "/" + passkeyID.String() + "/remove"
 }
 
+// passkeysListID is both the HTML id of the list and the name of the template
+// that renders it. Every Remove swaps it.
+const passkeysListID = "passkeys-list"
+
 // passkeyProviders names the passkey provider for each AAGUID an
 // authenticator sends at registration. The AAGUIDs are the published ones from
 // the passkey-authenticator-aaguids list.
@@ -80,6 +84,10 @@ type passkeyRow struct {
 }
 
 func (h *more) passkeys(w http.ResponseWriter, r *http.Request) {
+	h.renderPasskeys(w, r)
+}
+
+func (h *more) renderPasskeys(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	keys, err := h.queries.ListPasskeys(r.Context(), principal.User.ID)
 	if err != nil {
@@ -87,7 +95,11 @@ func (h *more) passkeys(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	page := newPasskeysPage(keys, h.now().In(locationFor(principal.User)))
-	h.templates.render(w, r, view{page: "passkeys"}, page)
+	v := view{page: "passkeys"}
+	if r.Header.Get("HX-Target") == passkeysListID {
+		v.fragment = passkeysListID
+	}
+	h.templates.render(w, r, v, page)
 }
 
 // removePasskey deletes one credential. The sessions that passkey signed in
@@ -120,6 +132,10 @@ func (h *more) removePasskey(w http.ResponseWriter, r *http.Request) {
 	// are all 404, since none of the three was a button this page offered.
 	if removed == 0 {
 		h.templates.notFound(w, r)
+		return
+	}
+	if isHTMX(r) {
+		h.renderPasskeys(w, r)
 		return
 	}
 	http.Redirect(w, r, passkeysPath, http.StatusSeeOther)

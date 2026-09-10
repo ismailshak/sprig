@@ -19,6 +19,10 @@ import (
 // People.
 const invitePath = peoplePath + "/invite"
 
+// peopleID is both the HTML id of the page under the top bar and the name of
+// the template that renders it. Every form and link on the page swaps it.
+const peopleID = "people"
+
 // memberPath is the URL prefix for one member's controls. The member is named
 // by handle, because two members can have the same display name.
 func memberPath(handle string) string {
@@ -231,6 +235,16 @@ func (h *more) saveMembers(w http.ResponseWriter, r *http.Request) {
 		h.templates.serverError(h.logger, w, r, "save the members", err)
 		return
 	}
+	h.peopleSaved(w, r)
+}
+
+// peopleSaved finishes a write from the People page. A swap gets the page
+// under the top bar as it now is, and a plain post is redirected to People.
+func (h *more) peopleSaved(w http.ResponseWriter, r *http.Request) {
+	if isHTMX(r) {
+		h.renderPeople(w, r, peopleState{})
+		return
+	}
 	http.Redirect(w, r, peoplePath, http.StatusSeeOther)
 }
 
@@ -305,7 +319,7 @@ func (h *more) removeMember(w http.ResponseWriter, r *http.Request) {
 		h.templates.notFound(w, r)
 		return
 	}
-	http.Redirect(w, r, peoplePath, http.StatusSeeOther)
+	h.peopleSaved(w, r)
 }
 
 // reenrolMember handles POST /more/people/{member}/reenrol. It creates an
@@ -345,7 +359,7 @@ func (h *more) revokeInvite(w http.ResponseWriter, r *http.Request) {
 		h.templates.notFound(w, r)
 		return
 	}
-	http.Redirect(w, r, peoplePath, http.StatusSeeOther)
+	h.peopleSaved(w, r)
 }
 
 // memberFromPath reads the member the URL names. It writes a 404 and returns
@@ -438,7 +452,11 @@ func (h *more) renderPeople(w http.ResponseWriter, r *http.Request, state people
 	if principal.Can(auth.MemberInvite) {
 		page.InviteSomeone = invitePath
 	}
-	h.templates.render(w, r, view{page: "people"}, page)
+	v := view{page: "people"}
+	if r.Header.Get("HX-Target") == peopleID {
+		v.fragment = peopleID
+	}
+	h.templates.render(w, r, v, page)
 }
 
 // reenrolBox builds the box holding a new re-enrolment link and the paragraph

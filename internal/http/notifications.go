@@ -134,7 +134,18 @@ type browserRow struct {
 	Remove string
 }
 
+// devicesID is both the HTML id of the Subscribed devices section and the
+// name of the template that renders it. Remove and Send test notification
+// swap it.
+const devicesID = "devices"
+
 func (h *more) notifications(w http.ResponseWriter, r *http.Request) {
+	h.renderNotifications(w, r, testResultLines[r.URL.Query().Get(testResultParam)])
+}
+
+// renderNotifications writes the page, with testResult under the Send test
+// notification button.
+func (h *more) renderNotifications(w http.ResponseWriter, r *http.Request, testResult string) {
 	principal := PrincipalFrom(r)
 	preferences, err := h.queries.ListNotificationPreferences(r.Context(), principal.Membership.ID)
 	if err != nil {
@@ -151,15 +162,21 @@ func (h *more) notifications(w http.ResponseWriter, r *http.Request) {
 	page := newNotificationsPage(principal.User.Timezone, notificationOn(preferences, digestKind),
 		notificationOn(preferences, activityKind), principal.Membership.DigestHour, subscriptions, now)
 	page.Key = h.pushKey
-	page.TestResult = testResultLines[r.URL.Query().Get(testResultParam)]
+	page.TestResult = testResult
 	page.Saved = saved(r)
-	h.templates.render(w, r, view{page: "notifications"}, page)
+	v := view{page: "notifications"}
+	if r.Header.Get("HX-Target") == devicesID {
+		v.fragment = devicesID
+	}
+	h.templates.render(w, r, v, page)
 }
 
 // sendTestNotification sends the test message to the browser whose endpoint
-// the form posted, then redirects to the Notifications page with the outcome
-// in the query string. An endpoint that is empty or another account's matches
-// no row. The outcome is then testNone.
+// the form posted. A swap gets the Subscribed devices section with the
+// outcome under the button, and a plain post is redirected to the
+// Notifications page with the outcome in the query string. An endpoint that
+// is empty or another account's matches no row. The outcome is then
+// testNone.
 func (h *more) sendTestNotification(w http.ResponseWriter, r *http.Request) {
 	// With push off no browser can be subscribed, so the route is a 404.
 	if h.pushKey == "" || h.test == nil {
@@ -187,6 +204,10 @@ func (h *more) sendTestNotification(w http.ResponseWriter, r *http.Request) {
 			h.logger.ErrorContext(r.Context(), "test notification not sent", slog.Any("error", err))
 			result = testFailed
 		}
+	}
+	if isHTMX(r) {
+		h.renderNotifications(w, r, testResultLines[result])
+		return
 	}
 	http.Redirect(w, r, notificationsPath+"?"+testResultParam+"="+result, http.StatusSeeOther)
 }
@@ -329,6 +350,10 @@ func (h *more) removeBrowser(w http.ResponseWriter, r *http.Request) {
 	// since neither was a button this page offered.
 	if removed == 0 {
 		h.templates.notFound(w, r)
+		return
+	}
+	if isHTMX(r) {
+		h.renderNotifications(w, r, "")
 		return
 	}
 	http.Redirect(w, r, notificationsPath, http.StatusSeeOther)

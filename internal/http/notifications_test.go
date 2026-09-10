@@ -658,3 +658,26 @@ func TestSendTest_WithPushOffTheRouteIsNotFound(t *testing.T) {
 		t.Errorf("status = %d, want %d", rec.Code, http.StatusNotFound)
 	}
 }
+
+func TestNotifications_ATestSentAsASwapGetsTheDevicesWithTheOutcomeUnderTheButton(t *testing.T) {
+	f := moreGarden(t)
+	f.handler.test = (&recordedSends{}).send
+
+	rec := f.swap(t, f.handler.sendTestNotification, sendTestPath, devicesID, "", "", url.Values{"endpoint": {""}})
+
+	body := fragment(t, rec, devicesID)
+	if !strings.Contains(text(body), testResultLines[testNone]) {
+		t.Errorf("the response does not say this device is not subscribed:\n%s", text(body))
+	}
+}
+
+func TestNotifications_ARemoveSentAsASwapGetsTheDevicesWithoutThatRow(t *testing.T) {
+	f := moreGarden(t)
+
+	rec := f.swap(t, f.handler.removeBrowser, removeBrowserPath(phonePushID), devicesID, "browser", phonePushID.String(), url.Values{})
+
+	body := fragment(t, rec, devicesID)
+	if strings.Contains(body, removeBrowserPath(phonePushID)) {
+		t.Errorf("the removed browser is still listed:\n%s", text(body))
+	}
+}

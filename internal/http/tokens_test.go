@@ -268,3 +268,25 @@ func selectedOption(page string) string {
 	}
 	return ""
 }
+
+func TestTokens_ARevokeSentAsASwapGetsThePageUnderTheBarWithoutThatRow(t *testing.T) {
+	f := tokenGarden(t)
+
+	rec := f.swap(t, f.handler.revokeToken, revokeTokenPath(kitchenTokenID), tokensID, "token", kitchenTokenID.String(), url.Values{})
+
+	rows := tokensShown(fragment(t, rec, tokensID))
+	if len(rows) != 1 || rows[0].name != "The spare display" {
+		t.Errorf("the list reads %+v after revoking the kitchen display", rows)
+	}
+}
+
+func TestTokens_ACreateSentAsASwapGetsThePageUnderTheBarWithTheNewToken(t *testing.T) {
+	f := tokenGarden(t)
+
+	rec := f.swap(t, f.handler.createToken, tokensPath, tokensID, "", "", url.Values{"name": {"The greenhouse pi"}, "expiry": {"30"}})
+
+	body := fragment(t, rec, tokensID)
+	if !strings.Contains(body, "Your new token") {
+		t.Errorf("the response does not show the new token:\n%s", text(body))
+	}
+}

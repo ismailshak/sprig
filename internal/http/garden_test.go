@@ -68,11 +68,11 @@ func (f *moreFixture) careType(t *testing.T, handler http.HandlerFunc, slug, pat
 }
 
 var (
-	careTypeLink   = regexp.MustCompile(`(?s)<a class="row row--link row--setting[^"]*" href="([^"]+)">(.*?)</a>`)
+	careTypeLink   = regexp.MustCompile(`(?s)<a class="row row--link row--setting[^"]*" href="([^"]+)"[^>]*>(.*?)</a>`)
 	careTypeForm   = regexp.MustCompile(`(?s)<form class="[^"]*row--editing[^"]*" method="post" action="([^"]+)"[^>]*>(.*?)</form>`)
 	careTypeField  = regexp.MustCompile(`<input class="input" type="text" name="name" value="([^"]*)"`)
 	careTypeWhyRow = regexp.MustCompile(`(?s)<p class="row__why">(.*?)</p>`)
-	careTypeDrop   = regexp.MustCompile(`(?s)<button class="row__drop" type="submit" formaction="([^"]+)">(.*?)</button>`)
+	careTypeDrop   = regexp.MustCompile(`(?s)<button class="row__drop" type="submit" formaction="([^"]+)"[^>]*>(.*?)</button>`)
 	gardenNameRow  = regexp.MustCompile(`<input class="input" id="name" name="name" type="text" value="([^"]*)">`)
 )
 
@@ -697,5 +697,30 @@ func TestStorageLine_TheLineAddsWhatToDeleteFromNineTenthsOfTheQuota(t *testing.
 		if got := storageLine(photo.Usage{Used: c.used, Quota: c.quota}); got != c.want {
 			t.Errorf("storageLine(%d of %d) = %q, want %q", c.used, c.quota, got, c.want)
 		}
+	}
+}
+
+func TestGarden_ARenameSentAsASwapGetsTheCareTypesWithEveryRowClosedAndNotTheWholePage(t *testing.T) {
+	f := careTypeGarden(t)
+
+	rec := f.swap(t, f.handler.renameCareType, careTypePath("feed"), careTypesID, "care", "feed", url.Values{"name": {"Fertilise"}})
+
+	body := fragment(t, rec, careTypesID)
+	if strings.Contains(body, "row--editing") {
+		t.Errorf("a row is still open after the save:\n%s", body)
+	}
+	if names := listedNames(listedTypesOf(body)); !slices.Contains(names, "Fertilise") {
+		t.Errorf("the list reads %v, want Fertilise in it", names)
+	}
+}
+
+func TestGarden_ARowOpenedBySwapGetsTheCareTypesWithThatRowAsAForm(t *testing.T) {
+	f := careTypeGarden(t)
+
+	rec := f.swap(t, f.handler.editCareType, careTypePath("feed"), careTypesID, "care", "feed", nil)
+
+	body := fragment(t, rec, careTypesID)
+	if got := editorOn(t, body); got.name != "Feed" {
+		t.Errorf("the open row holds %q, want Feed", got.name)
 	}
 }

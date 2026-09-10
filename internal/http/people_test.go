@@ -691,3 +691,28 @@ func ariaLabels(page string) map[string]string {
 	}
 	return out
 }
+
+func TestPeople_ARemoveSentAsASwapGetsThePageUnderTheBarWithoutThatMember(t *testing.T) {
+	f := peopleGarden(t)
+
+	rec := f.swap(t, f.handler.removeMember, removeMemberPath("sam"), peopleID, "member", "sam", url.Values{})
+
+	body := fragment(t, rec, peopleID)
+	if strings.Contains(text(body), "Sam") {
+		t.Errorf("Sam is still on the page after the remove:\n%s", text(body))
+	}
+}
+
+func TestPeople_ARevokeSentAsASwapGetsThePageUnderTheBarWithoutThatInvite(t *testing.T) {
+	f := peopleGarden(t)
+
+	rec := f.swap(t, f.handler.revokeInvite, revokeInvitePath(pendingInviteID), peopleID, "invite", pendingInviteID.String(), url.Values{})
+
+	body := fragment(t, rec, peopleID)
+	if strings.Contains(body, revokeInvitePath(pendingInviteID)) {
+		t.Errorf("the revoked invite is still listed:\n%s", text(body))
+	}
+	if !strings.Contains(body, revokeInvitePath(peopleExpiredID)) {
+		t.Errorf("the invite that ran out is no longer listed:\n%s", text(body))
+	}
+}

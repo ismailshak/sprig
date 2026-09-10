@@ -17,6 +17,10 @@ func revokeTokenPath(tokenID uuid.UUID) string {
 	return tokensPath + "/" + tokenID.String() + "/revoke"
 }
 
+// tokensID is both the HTML id of the page's body and the name of the
+// template that renders it. Create token and every Revoke swap it.
+const tokensID = "tokens"
+
 // tokenNameMissing is the message under the name field when it is posted
 // empty. The name is what tells one row from the next, so a token cannot be
 // created without one.
@@ -153,6 +157,10 @@ func (h *more) revokeToken(w http.ResponseWriter, r *http.Request) {
 		h.templates.notFound(w, r)
 		return
 	}
+	if isHTMX(r) {
+		h.renderTokens(w, r, tokensPage{Lives: lifeOptions(defaultTokenLife)}, 0)
+		return
+	}
 	http.Redirect(w, r, tokensPath, http.StatusSeeOther)
 }
 
@@ -171,7 +179,11 @@ func (h *more) renderTokens(w http.ResponseWriter, r *http.Request, page tokensP
 	for _, row := range page.Tokens {
 		page.AnyExpired = page.AnyExpired || row.Expired
 	}
-	h.templates.render(w, r, view{page: "tokens", status: status}, page)
+	v := view{page: "tokens", status: status}
+	if r.Header.Get("HX-Target") == tokensID {
+		v.fragment = tokensID
+	}
+	h.templates.render(w, r, v, page)
 }
 
 // tokens holds no revoked rows, so a row that is not live is one past its

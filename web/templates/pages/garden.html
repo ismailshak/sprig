@@ -2,8 +2,9 @@
 
 {{/* The garden's name, its care types and its photo storage. A care type is
      renamed, turned off or deleted from its own row: the row is a link to its
-     own URL, and that URL renders this page with the row as a form. Nothing
-     here needs JavaScript, so the row opens by navigating to it. */}}
+     own URL, and that URL renders this page with the row as a form. With
+     JavaScript the link, the form and its buttons swap the Care types section
+     instead of loading the page. */}}
 {{define "main"}}
 {{template "more-topbar" .Bar}}
 <div class="app__body app__body--sub">
@@ -18,22 +19,7 @@
 {{if .Saved}}{{template "saved"}}{{end}}
 </form>
 {{end}}
-{{if .ManageTypes}}
-<div class="section">
-<div class="section__head"><h2 class="section__title">Care types</h2></div>
-<ul class="list">
-{{range .Types}}<li>
-{{if .Editor}}{{template "care-type-editor" .Editor}}{{else}}
-<a class="row row--link row--setting{{if .Off}} row--off{{end}}" href="{{.Edit}}">
-<span class="row__label">{{.Name}}</span>
-{{if .Off}}<span class="row__note">Off</span>{{end}}
-<span class="row__go">{{template "icon-chevron"}}</span>
-</a>
-{{end}}</li>
-{{end}}</ul>
-<a class="care care--outline" href="{{.AddType}}">Add care type</a>
-</div>
-{{end}}
+{{if .ManageTypes}}{{template "care-types" .}}{{end}}
 {{/* A sentence rather than a meter, because there is nothing to do about the
      figure until the garden is nearly full. */}}
 <div class="section">
@@ -46,6 +32,24 @@
 </div>
 {{end}}
 
+{{/* The Care types section. Every link and button in it swaps the whole
+     section, because opening a row closes any other and a save changes the
+     list. */}}
+{{define "care-types"}}<div class="section" id="care-types">
+<div class="section__head"><h2 class="section__title">Care types</h2></div>
+<ul class="list">
+{{range .Types}}<li>
+{{if .Editor}}{{template "care-type-editor" .Editor}}{{else}}
+<a class="row row--link row--setting{{if .Off}} row--off{{end}}" href="{{.Edit}}" hx-get="{{.Edit}}" hx-target="#care-types" hx-swap="outerHTML settle:0ms">
+<span class="row__label">{{.Name}}</span>
+{{if .Off}}<span class="row__note">Off</span>{{end}}
+<span class="row__go">{{template "icon-chevron"}}</span>
+</a>
+{{end}}</li>
+{{end}}</ul>
+<a class="care care--outline" href="{{.AddType}}" hx-get="{{.AddType}}" hx-target="#care-types" hx-swap="outerHTML settle:0ms">Add care type</a>
+</div>{{end}}
+
 {{/* A care type's row while it is being edited. The form is the row, so one
      care type is saved on its own.
 
@@ -53,16 +57,16 @@
      drop button to the left, because pressing Enter in the name field submits
      the form's first button and that must not be the one that deletes the care
      type. */}}
-{{define "care-type-editor"}}<form class="row row--editing" method="post" action="{{.Action}}" novalidate>
+{{define "care-type-editor"}}<form class="row row--editing" method="post" action="{{.Action}}" novalidate hx-post="{{.Action}}" hx-target="#care-types" hx-swap="outerHTML settle:0ms">
 <input class="input" type="text" name="name" value="{{.Name}}" aria-label="Care type name" autofocus>
 {{with .Error}}<p class="field__error">{{.}}</p>{{end}}
 {{with .Why}}<p class="row__why">{{.}}</p>{{end}}
 <div class="row__buttons">
 <span>
-<a class="sched__cancel" href="{{.Cancel}}">Cancel</a>
+<a class="sched__cancel" href="{{.Cancel}}" hx-get="{{.Cancel}}" hx-target="#care-types" hx-swap="outerHTML settle:0ms">Cancel</a>
 <button class="care care--small" type="submit">Save</button>
 </span>
-{{with .Drop}}<button class="row__drop" type="submit" formaction="{{.Action}}">{{.Label}}</button>{{end}}
+{{with .Drop}}<button class="row__drop" type="submit" formaction="{{.Action}}" hx-post="{{.Action}}" hx-target="#care-types" hx-swap="outerHTML settle:0ms">{{.Label}}</button>{{end}}
 </div>
 </form>{{end}}
 
