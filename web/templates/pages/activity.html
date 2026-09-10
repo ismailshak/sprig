@@ -23,11 +23,19 @@
 {{end}}
 
 {{/* The filters and the list under one id. Apply and Clear swap this. A saved
-     correction swaps the list alone. */}}
-{{define "log"}}<div id="log">
-{{template "log-filters" .Filters}}
-{{template "log-body" .}}
+     correction swaps the list alone.
+
+     hx-history-elt makes this the element htmx saves and restores for Back and
+     Forward, instead of the whole body. Every link here that pushes a URL
+     changes only what is inside it. */}}
+{{define "log"}}<div id="log" hx-history-elt>
+{{template "log-contents" .}}
 </div>{{end}}
+
+{{/* What a history restore that missed htmx's cache gets: the inside of #log,
+     because htmx puts the response inside the element it restores. */}}
+{{define "log-contents"}}{{template "log-filters" .Filters}}
+{{template "log-body" .}}{{end}}
 
 {{/* The care type and date range the log is filtered to, in a details element
      that renders closed. The form submits with GET, so a filtered log has a
@@ -148,4 +156,5 @@
 
 {{define "overlay"}}{{template "sheet" .}}{{end}}
 
-{{define "script"}}<script src="{{asset "sheet.js"}}" defer></script>{{end}}
+{{define "script"}}<script src="{{asset "sheet.js"}}" defer></script>
+<script src="{{asset "history.js"}}" defer></script>{{end}}

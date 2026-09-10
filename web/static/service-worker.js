@@ -72,8 +72,11 @@ async function page(event) {
     !response.redirected &&
     (response.headers.get('Content-Type') || '').startsWith('text/html')
   ) {
-    const pages = await caches.open(PAGES_CACHE);
-    await pages.put(request.url, response.clone());
+    // The copy is stored after the response is handed to the browser, so the
+    // page is not held back while its body is read into the cache. Until the
+    // page arrives the browser shows the address in place of a title.
+    const copy = response.clone();
+    event.waitUntil(caches.open(PAGES_CACHE).then((pages) => pages.put(request.url, copy)));
   }
   return response;
 }

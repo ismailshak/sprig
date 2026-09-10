@@ -17,7 +17,11 @@ test("the garden's name is saved and Today is headed with it", async ({ garden, 
   await expect(page.getByRole('heading', { name: 'The Roof', level: 1 })).toBeVisible();
 });
 
-test('a care type with care logged against it can be turned off and not deleted', async ({ garden, plant, page }) => {
+test('a care type with care logged against it can be turned off and not deleted @swap', async ({
+  garden,
+  plant,
+  page,
+}) => {
   await garden.open();
   await garden.row(careTypes.repot).click();
 
@@ -30,7 +34,7 @@ test('a care type with care logged against it can be turned off and not deleted'
   await expect(plant.scheduleRow(careTypes.repot)).toHaveCount(0);
 });
 
-test('an event stays on the log after its care type is turned off', async ({ garden, activity, page }) => {
+test('an event stays on the log after its care type is turned off @swap', async ({ garden, activity, page }) => {
   await garden.open();
   await garden.row(careTypes.repot).click();
   await garden.drop('Turn off').click();
@@ -39,7 +43,7 @@ test('an event stays on the log after its care type is turned off', async ({ gar
   await expect(activity.rows().filter({ hasText: 'Repotted' })).toHaveCount(1);
 });
 
-test('a care type that was turned off is offered again once it is back on', async ({ garden, plant }) => {
+test('a care type that was turned off is offered again once it is back on @swap', async ({ garden, plant }) => {
   await garden.open();
   await garden.row(careTypes.mist).click();
 
@@ -50,7 +54,7 @@ test('a care type that was turned off is offered again once it is back on', asyn
   await expect(plant.scheduleRow(careTypes.mist)).toContainText('Not scheduled');
 });
 
-test('a renamed care type keeps the schedules it had', async ({ garden, plant }) => {
+test('a renamed care type keeps the schedules it had @swap', async ({ garden, plant }) => {
   await garden.open();
   await garden.row(careTypes.water).click();
 
@@ -63,7 +67,7 @@ test('a renamed care type keeps the schedules it had', async ({ garden, plant })
   await expect(plant.scheduleRow('Watering')).toContainText('Every 3 weeks');
 });
 
-test('a care type nothing has been logged against is added and then deleted', async ({ garden, page }) => {
+test('a care type nothing has been logged against is added and then deleted @swap', async ({ garden, page }) => {
   await garden.open();
   await garden.addType().click();
 
@@ -78,7 +82,7 @@ test('a care type nothing has been logged against is added and then deleted', as
   await expect(garden.row('Prune')).toHaveCount(0);
 });
 
-test('a name another care type already has is refused and the page says which', async ({ garden, page }) => {
+test('a name another care type already has is refused and the page says which @swap', async ({ garden, page }) => {
   await garden.open();
   await garden.addType().click();
 
@@ -89,7 +93,7 @@ test('a name another care type already has is refused and the page says which', 
   await expect(garden.row(careTypes.water)).toHaveCount(1);
 });
 
-test('a care type left without a name is refused', async ({ garden, page }) => {
+test('a care type left without a name is refused @swap', async ({ garden, page }) => {
   await garden.open();
   await garden.row(careTypes.feed).click();
 

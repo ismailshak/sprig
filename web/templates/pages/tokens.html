@@ -5,7 +5,14 @@
      without asking first. */}}
 {{define "main"}}
 {{template "more-topbar" .Bar}}
-<div class="app__body app__body--sub">
+{{template "tokens" .}}
+{{end}}
+
+{{/* The page under the top bar. Create token and each Revoke swap all of it,
+     because a new token changes the top of the page, the list and the form,
+     and a revoke changes the list and the note under it. show scrolls the new
+     token into view, since it is above the form that made it. */}}
+{{define "tokens"}}<div class="app__body app__body--sub" id="tokens">
 {{if .Secret}}
 {{template "secret" .Secret}}
 {{else}}
@@ -23,7 +30,7 @@
 </span>
 <span class="row__life">{{.Life}}</span>
 </span>
-<form method="post" action="{{.Revoke}}"><button class="row__drop" type="submit">{{.Drop}}</button></form>
+<form method="post" action="{{.Revoke}}" hx-post="{{.Revoke}}" hx-target="#tokens" hx-swap="outerHTML settle:0ms"><button class="row__drop" type="submit">{{.Drop}}</button></form>
 </li>
 {{end}}</ul>
 {{if .AnyExpired}}
@@ -32,7 +39,7 @@
 {{else}}
 <p class="note">No tokens yet.</p>
 {{end}}
-<form class="section" method="post" action="{{.Action}}" novalidate>
+<form class="section" method="post" action="{{.Action}}" novalidate hx-post="{{.Action}}" hx-target="#tokens" hx-swap="outerHTML settle:0ms show:#tokens:top">
 <div class="section__head"><h2 class="section__title">New token</h2></div>
 <div class="field">
 <label class="field__label" for="name">Name <span class="field__hint">e.g. Kitchen display</span></label>
@@ -45,8 +52,7 @@
 </div>
 <button class="wide-action" type="submit">Create token</button>
 </form>
-</div>
-{{end}}
+</div>{{end}}
 
 {{define "script"}}<script src="{{asset "copy.js"}}" defer></script>{{end}}
 

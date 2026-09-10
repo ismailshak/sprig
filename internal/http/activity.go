@@ -250,10 +250,19 @@ const logBodyID = "log-body"
 // and Clear swap it, because they change the filters as well as the rows.
 const logID = "log"
 
+// logContents is the template rendering what is inside #log. htmx fetches it
+// for a Back or Forward whose page is no longer in its cache, and puts the
+// response inside the #log the page still has.
+const logContents = "log-contents"
+
 // logFragment picks the part of the page a swap returns. A swap aimed at the
 // log body gets that alone, one aimed at the filters and the body gets those,
-// and everything else, a page navigation included, gets the whole page.
+// a history restore gets the inside of #log, and everything else, a page
+// navigation included, gets the whole page.
 func logFragment(r *http.Request) string {
+	if r.Header.Get("HX-History-Restore-Request") == "true" {
+		return logContents
+	}
 	switch r.Header.Get("HX-Target") {
 	case logBodyID:
 		return logBodyID

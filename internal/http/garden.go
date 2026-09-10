@@ -41,6 +41,11 @@ func deleteCareTypePath(slug string) string {
 	return careTypePath(slug) + "/delete"
 }
 
+// careTypesID is both the HTML id of the Care types section and the name of
+// the template that renders it. Every link and button in the section swaps
+// it.
+const careTypesID = "care-types"
+
 // The messages shown under a name field when a form is refused.
 const (
 	gardenNameMissing   = "Enter a garden name."
@@ -203,7 +208,7 @@ func (h *more) createCareType(w http.ResponseWriter, r *http.Request) {
 		h.templates.serverError(h.logger, w, r, "create the care type", err)
 		return
 	}
-	http.Redirect(w, r, gardenPath, http.StatusSeeOther)
+	h.careTypesSaved(w, r)
 }
 
 // editCareType handles GET /more/garden/types/{care}. It renders the Garden
@@ -256,7 +261,7 @@ func (h *more) renameCareType(w http.ResponseWriter, r *http.Request) {
 		h.templates.serverError(h.logger, w, r, "rename the care type", err)
 		return
 	}
-	http.Redirect(w, r, gardenPath, http.StatusSeeOther)
+	h.careTypesSaved(w, r)
 }
 
 // turnOffCareType handles POST /more/garden/types/{care}/off. The type leaves
@@ -300,7 +305,7 @@ func (h *more) deleteCareType(w http.ResponseWriter, r *http.Request) {
 		h.templates.notFound(w, r)
 		return
 	}
-	http.Redirect(w, r, gardenPath, http.StatusSeeOther)
+	h.careTypesSaved(w, r)
 }
 
 // afterCareTypeChange finishes turning a care type off or back on. A statement
@@ -313,8 +318,19 @@ func (h *more) afterCareTypeChange(w http.ResponseWriter, r *http.Request, what 
 	case err != nil:
 		h.templates.serverError(h.logger, w, r, what, err)
 	default:
-		http.Redirect(w, r, gardenPath, http.StatusSeeOther)
+		h.careTypesSaved(w, r)
 	}
+}
+
+// careTypesSaved finishes a write to a care type. A swap gets the Care types
+// section with every row closed, and a plain post is redirected to the Garden
+// page.
+func (h *more) careTypesSaved(w http.ResponseWriter, r *http.Request) {
+	if isHTMX(r) {
+		h.renderGarden(w, r, gardenPage{Name: PrincipalFrom(r).Garden.Name}, careTypeEdit{}, 0)
+		return
+	}
+	http.Redirect(w, r, gardenPath, http.StatusSeeOther)
 }
 
 // careTypeFromPath reads the care type the URL names. It writes the response
@@ -390,7 +406,11 @@ func (h *more) renderGarden(w http.ResponseWriter, r *http.Request, page gardenP
 		return
 	}
 	page.Storage = storageLine(usage)
-	h.templates.render(w, r, view{page: "garden", status: status}, page)
+	v := view{page: "garden", status: status}
+	if r.Header.Get("HX-Target") == careTypesID {
+		v.fragment = careTypesID
+	}
+	h.templates.render(w, r, v, page)
 }
 
 // nearlyFull is the share of the quota at which the storage line adds the

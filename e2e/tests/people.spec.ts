@@ -13,7 +13,7 @@ test.beforeEach(async ({ page }) => {
   await signIn(page, seeded.ellie.handle);
 });
 
-test("a member's new role is what their row says after the save", async ({ people }) => {
+test("a member's new role is what their row says after the save @swap", async ({ people }) => {
   await people.open();
 
   await people.role(seeded.sam.name).selectOption('sitter');
@@ -45,7 +45,7 @@ test("a sitter's row says when their access ends and a permanent member's row ha
   await expect(people.until(seeded.sam.name)).toHaveCount(0);
 });
 
-test('a membership that has ended is offered no role until it is given a new date', async ({ people }) => {
+test('a membership that has ended is offered no role until it is given a new date @swap', async ({ people }) => {
   await people.open();
 
   await expect(people.row(seeded.clare.name)).toContainText(/Access ended \w+/);
@@ -58,7 +58,7 @@ test('a membership that has ended is offered no role until it is given a new dat
   await expect(people.role(seeded.clare.name)).toHaveValue('sitter');
 });
 
-test('removing a member asks first, and keeping them leaves the row where it was', async ({ people, page }) => {
+test('removing a member asks first, and keeping them leaves the row where it was @swap', async ({ people, page }) => {
   await people.open();
 
   await people.remove(seeded.sam.name).click();
@@ -69,7 +69,10 @@ test('removing a member asks first, and keeping them leaves the row where it was
   await expect(people.remove(seeded.sam.name)).toBeVisible();
 });
 
-test('a removed member leaves the list and the care they logged keeps their name', async ({ people, activity }) => {
+test('a removed member leaves the list and the care they logged keeps their name @swap', async ({
+  people,
+  activity,
+}) => {
   await people.open();
   await people.remove(seeded.sam.name).click();
   await people.confirmRemove().click();
@@ -79,7 +82,7 @@ test('a removed member leaves the list and the care they logged keeps their name
   await expect(activity.rows().filter({ hasText: seeded.sam.name }).first()).toBeVisible();
 });
 
-test('a re-enrolment link is shown once and is gone on the next visit', async ({ people }) => {
+test('a re-enrolment link is shown once and is gone on the next visit @swap', async ({ people }) => {
   await people.open();
 
   await people.reenrol(seeded.sam.name).click();
@@ -89,7 +92,7 @@ test('a re-enrolment link is shown once and is gone on the next visit', async ({
   await expect(people.link()).toHaveCount(0);
 });
 
-test('Pending invites is not shown once the last invite is revoked', async ({ people }) => {
+test('Pending invites is not shown once the last invite is revoked @swap', async ({ people }) => {
   await people.open();
 
   await expect(people.invited()).toBeVisible();

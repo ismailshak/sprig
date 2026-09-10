@@ -55,7 +55,15 @@
 <button class="wide-action" type="submit">Save changes</button>
 {{if .Saved}}{{template "saved"}}{{end}}
 </form>
-<div class="section">
+{{template "devices" .}}
+{{end}}
+</div>
+{{end}}
+
+{{/* The Subscribed devices section. Remove and Send test notification swap
+     it, because a remove changes the list and a test writes its outcome under
+     the button. */}}
+{{define "devices"}}<div class="section" id="devices">
 <div class="section__head"><h2 class="section__title">Subscribed devices</h2></div>
 {{if .Browsers}}
 <ul class="list">
@@ -66,13 +74,13 @@
 </span>
 {{/* data-endpoint lets the script tell this browser's own row from the
      others, so Remove on it unsubscribes the browser too. */}}
-<form method="post" action="{{.Remove}}" data-endpoint="{{.Endpoint}}"><button class="row__drop" type="submit">Remove</button></form>
+<form method="post" action="{{.Remove}}" data-endpoint="{{.Endpoint}}" hx-post="{{.Remove}}" hx-target="#devices" hx-swap="outerHTML settle:0ms"><button class="row__drop" type="submit">Remove</button></form>
 </li>
 {{end}}</ul>
 {{/* The script fills endpoint with this browser's push subscription URL.
      Without JavaScript it stays empty, so the page says this browser is not
      subscribed. */}}
-<form method="post" action="{{.Test}}" id="push-test">
+<form method="post" action="{{.Test}}" id="push-test" hx-post="{{.Test}}" hx-target="#devices" hx-swap="outerHTML settle:0ms">
 <input type="hidden" name="endpoint" value="">
 <button class="wide-action" type="submit">Send test notification</button>
 </form>
@@ -80,10 +88,7 @@
 <p class="note">No devices are subscribed. Turn on a notification and save to subscribe this device.</p>
 {{end}}
 {{with .TestResult}}<p class="note" role="status">{{.}}</p>{{end}}
-</div>
-{{end}}
-</div>
-{{end}}
+</div>{{end}}
 
 {{define "script"}}<script src="{{asset "push.js"}}" defer></script>
 <script src="{{asset "notifications.js"}}" defer></script>{{end}}

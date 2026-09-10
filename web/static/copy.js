@@ -5,24 +5,31 @@
    data-copy attribute. Without a script the value is still on the page as
    text to select. */
 (function () {
-  const buttons = document.querySelectorAll('button[data-copy]');
-  if (buttons.length === 0 || !navigator.clipboard || typeof navigator.clipboard.writeText !== 'function') return;
+  if (!navigator.clipboard || typeof navigator.clipboard.writeText !== 'function') return;
 
-  for (const button of buttons) {
-    button.hidden = false;
-    const label = button.textContent;
-    button.addEventListener('click', async () => {
-      try {
-        await navigator.clipboard.writeText(button.dataset.copy);
-        button.textContent = 'Copied';
-      } catch {
-        // The browser refused the write, in a window without focus for
-        // example. The value is still on the page to select.
-        button.textContent = 'Couldn’t copy';
-      }
-      setTimeout(() => {
-        button.textContent = label;
-      }, 2000);
-    });
+  // A token and a sign-in link arrive by an htmx swap, so the buttons in
+  // swapped content are shown too. htmx fires load for the whole body once it
+  // starts, so a button already shown is skipped.
+  show(document);
+  document.addEventListener('htmx:load', (event) => show(event.target));
+
+  function show(root) {
+    for (const button of root.querySelectorAll('button[data-copy][hidden]')) {
+      button.hidden = false;
+      const label = button.textContent;
+      button.addEventListener('click', async () => {
+        try {
+          await navigator.clipboard.writeText(button.dataset.copy);
+          button.textContent = 'Copied';
+        } catch {
+          // The browser refused the write, in a window without focus for
+          // example. The value is still on the page to select.
+          button.textContent = 'Couldn’t copy';
+        }
+        setTimeout(() => {
+          button.textContent = label;
+        }, 2000);
+      });
+    }
   }
 })();

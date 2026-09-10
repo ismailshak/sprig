@@ -19,7 +19,7 @@ test('a token that has run out reads as expired and offers Remove where a live o
   await expect(tokens.row(seeded.spare)).toContainText(/sprg_\w+…/);
 });
 
-test('a new token is shown once, joins the list, and is gone on the next visit', async ({ tokens, page }) => {
+test('a new token is shown once, joins the list, and is gone on the next visit @swap', async ({ tokens, page }) => {
   await tokens.open();
 
   await tokens.name().fill('The greenhouse pi');
@@ -56,7 +56,7 @@ test('without JavaScript the new token has no Copy button @nojs', async ({ token
   await expect(tokens.copy()).toBeHidden();
 });
 
-test('a token with no name is refused and says so under the field', async ({ tokens, page }) => {
+test('a token with no name is refused and says so under the field @swap', async ({ tokens, page }) => {
   await tokens.open();
 
   await tokens.expiry().selectOption('90');
@@ -67,7 +67,7 @@ test('a token with no name is refused and says so under the field', async ({ tok
   await expect(tokens.token()).toHaveCount(0);
 });
 
-test('a revoked token leaves the list and the rest stay', async ({ tokens }) => {
+test('a revoked token leaves the list and the rest stay @swap', async ({ tokens }) => {
   await tokens.open();
 
   await tokens.row(seeded.kitchen).getByRole('button').click();

@@ -7,7 +7,7 @@ test.beforeEach(async ({ page }) => {
   await signIn(page, people.ellie.handle);
 });
 
-test('the last passkey offers no Remove and the page says why', async ({ page, passkeys }) => {
+test('the last passkey offers no Remove and the page says why @swap', async ({ page, passkeys }) => {
   await passkeys.open();
   await expect(passkeys.row(devices.phone)).toBeVisible();
 

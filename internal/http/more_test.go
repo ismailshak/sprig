@@ -170,6 +170,49 @@ func (f *moreFixture) remove(t *testing.T, handler http.HandlerFunc, wildcard st
 	return rec
 }
 
+// swap makes the request an htmx swap aimed at target sends: a POST of form,
+// or a GET when form is nil. wildcard is set to id the way the mux would set
+// it from the URL, and left alone when it is empty.
+func (f *moreFixture) swap(t *testing.T, handler http.HandlerFunc, path, target, wildcard, id string, form url.Values) *httptest.ResponseRecorder {
+	t.Helper()
+
+	ctx := context.WithValue(t.Context(), principalKey, f.principal)
+	method, body := http.MethodGet, io.Reader(nil)
+	if form != nil {
+		method, body = http.MethodPost, strings.NewReader(form.Encode())
+	}
+	req := httptest.NewRequestWithContext(ctx, method, path, body)
+	if form != nil {
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	}
+	req.Header.Set("HX-Request", "true")
+	req.Header.Set("HX-Target", target)
+	if wildcard != "" {
+		req.SetPathValue(wildcard, id)
+	}
+	rec := httptest.NewRecorder()
+	handler(rec, req)
+	return rec
+}
+
+// fragment returns the body of a swap's response. It fails on any status but
+// 200, on a whole page, and on a response without the element with id in it.
+func fragment(t *testing.T, rec *httptest.ResponseRecorder, id string) string {
+	t.Helper()
+
+	body := rec.Body.String()
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusOK, body)
+	}
+	if strings.HasPrefix(body, "<!doctype html>") {
+		t.Fatalf("the response is the whole page, want the %s element alone:\n%.120s", id, body)
+	}
+	if !strings.Contains(body, `id="`+id+`"`) {
+		t.Fatalf("the response does not hold the %s element:\n%.200s", id, body)
+	}
+	return body
+}
+
 // page renders a GET and fails on any status but 200.
 func (f *moreFixture) page(t *testing.T, handler http.HandlerFunc, path string) string {
 	t.Helper()
