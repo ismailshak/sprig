@@ -62,6 +62,7 @@ func (q *Queries) DeleteNotificationSends(ctx context.Context, arg DeleteNotific
 
 const listDigestMembers = `-- name: ListDigestMembers :many
 SELECT membership.id AS membership_id, membership.garden_id, membership.user_id, membership.digest_hour,
+    membership.remind_again_at,
     app_user.handle, app_user.timezone, garden.name AS garden_name,
     coalesce((SELECT max(send_key) FROM notification_send
         WHERE notification_send.membership_id = membership.id AND notification_send.kind = 'digest'), '')::text AS sent_through
@@ -76,14 +77,15 @@ ORDER BY membership.created_at, membership.id
 `
 
 type ListDigestMembersRow struct {
-	MembershipID uuid.UUID
-	GardenID     uuid.UUID
-	UserID       uuid.UUID
-	DigestHour   int16
-	Handle       string
-	Timezone     string
-	GardenName   string
-	SentThrough  string
+	MembershipID  uuid.UUID
+	GardenID      uuid.UUID
+	UserID        uuid.UUID
+	DigestHour    int16
+	RemindAgainAt *time.Time
+	Handle        string
+	Timezone      string
+	GardenName    string
+	SentThrough   string
 }
 
 // Every membership the digest job may have to send to: the digest switched on,
@@ -91,8 +93,9 @@ type ListDigestMembersRow struct {
 // member with no browser is left out rather than having their day claimed with
 // nothing sent, so a browser subscribed within the hour after their hour still
 // gets that day's digest. sent_through is the latest send key in the ledger for
-// the membership, or empty. There is no @garden_id because the job runs across
-// every garden.
+// the membership, or empty. remind_again_at is the instant the member asked for
+// today's digest again, or NULL. There is no @garden_id because the job runs
+// across every garden.
 func (q *Queries) ListDigestMembers(ctx context.Context, now time.Time) ([]ListDigestMembersRow, error) {
 	rows, err := q.db.Query(ctx, listDigestMembers, now)
 	if err != nil {
@@ -107,6 +110,7 @@ func (q *Queries) ListDigestMembers(ctx context.Context, now time.Time) ([]ListD
 			&i.GardenID,
 			&i.UserID,
 			&i.DigestHour,
+			&i.RemindAgainAt,
 			&i.Handle,
 			&i.Timezone,
 			&i.GardenName,

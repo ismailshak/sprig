@@ -118,6 +118,10 @@ CREATE TABLE membership (
     -- default, so every insert names an hour and the hour a new membership
     -- starts on is decided in the application.
     digest_hour smallint NOT NULL,
+    -- The instant the member asked to be sent today's digest again, from the
+    -- Remind me again banner on Today. NULL when no resend is waiting. The
+    -- digest job clears it in the transaction that sends the resend.
+    remind_again_at timestamptz,
     UNIQUE (garden_id, user_id)
 );
 

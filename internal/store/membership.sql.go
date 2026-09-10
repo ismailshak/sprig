@@ -12,10 +12,29 @@ import (
 	"uuid"
 )
 
+const clearRemindAgain = `-- name: ClearRemindAgain :exec
+UPDATE membership SET remind_again_at = NULL
+WHERE garden_id = $1 AND id = $2 AND remind_again_at = $3
+`
+
+type ClearRemindAgainParams struct {
+	GardenID      uuid.UUID
+	MembershipID  uuid.UUID
+	RemindAgainAt *time.Time
+}
+
+// Clears the resend the digest job is sending, in the transaction that sends
+// it. The instant is matched so a later one the member set while the job was
+// sending is kept.
+func (q *Queries) ClearRemindAgain(ctx context.Context, arg ClearRemindAgainParams) error {
+	_, err := q.db.Exec(ctx, clearRemindAgain, arg.GardenID, arg.MembershipID, arg.RemindAgainAt)
+	return err
+}
+
 const createMembership = `-- name: CreateMembership :one
 INSERT INTO membership (garden_id, user_id, role, invited_by, expires_at, digest_hour)
 VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, garden_id, user_id, role, invited_by, created_at, expires_at, digest_hour
+RETURNING id, garden_id, user_id, role, invited_by, created_at, expires_at, digest_hour, remind_again_at
 `
 
 type CreateMembershipParams struct {
@@ -48,6 +67,7 @@ func (q *Queries) CreateMembership(ctx context.Context, arg CreateMembershipPara
 		&i.CreatedAt,
 		&i.ExpiresAt,
 		&i.DigestHour,
+		&i.RemindAgainAt,
 	)
 	return i, err
 }
@@ -81,7 +101,7 @@ func (q *Queries) DeleteUserMemberships(ctx context.Context, userID uuid.UUID) e
 }
 
 const getMemberByHandle = `-- name: GetMemberByHandle :one
-SELECT membership.id, membership.garden_id, membership.user_id, membership.role, membership.invited_by, membership.created_at, membership.expires_at, membership.digest_hour, app_user.id, app_user.display_name, app_user.handle, app_user.timezone, app_user.created_at, app_user.last_garden_id, app_user.closed_at
+SELECT membership.id, membership.garden_id, membership.user_id, membership.role, membership.invited_by, membership.created_at, membership.expires_at, membership.digest_hour, membership.remind_again_at, app_user.id, app_user.display_name, app_user.handle, app_user.timezone, app_user.created_at, app_user.last_garden_id, app_user.closed_at
 FROM membership
 JOIN app_user ON app_user.id = membership.user_id
 WHERE membership.garden_id = $1 AND app_user.handle = $2
@@ -106,6 +126,7 @@ func (q *Queries) GetMemberByHandle(ctx context.Context, gardenID uuid.UUID, han
 		&i.Membership.CreatedAt,
 		&i.Membership.ExpiresAt,
 		&i.Membership.DigestHour,
+		&i.Membership.RemindAgainAt,
 		&i.AppUser.ID,
 		&i.AppUser.DisplayName,
 		&i.AppUser.Handle,
@@ -118,7 +139,7 @@ func (q *Queries) GetMemberByHandle(ctx context.Context, gardenID uuid.UUID, han
 }
 
 const getMembershipWithUserAndGarden = `-- name: GetMembershipWithUserAndGarden :one
-SELECT membership.id, membership.garden_id, membership.user_id, membership.role, membership.invited_by, membership.created_at, membership.expires_at, membership.digest_hour, app_user.id, app_user.display_name, app_user.handle, app_user.timezone, app_user.created_at, app_user.last_garden_id, app_user.closed_at, garden.id, garden.name, garden.created_at
+SELECT membership.id, membership.garden_id, membership.user_id, membership.role, membership.invited_by, membership.created_at, membership.expires_at, membership.digest_hour, membership.remind_again_at, app_user.id, app_user.display_name, app_user.handle, app_user.timezone, app_user.created_at, app_user.last_garden_id, app_user.closed_at, garden.id, garden.name, garden.created_at
 FROM membership
 JOIN app_user ON app_user.id = membership.user_id
 JOIN garden ON garden.id = membership.garden_id
@@ -145,6 +166,7 @@ func (q *Queries) GetMembershipWithUserAndGarden(ctx context.Context, gardenID u
 		&i.Membership.CreatedAt,
 		&i.Membership.ExpiresAt,
 		&i.Membership.DigestHour,
+		&i.Membership.RemindAgainAt,
 		&i.AppUser.ID,
 		&i.AppUser.DisplayName,
 		&i.AppUser.Handle,
@@ -160,7 +182,7 @@ func (q *Queries) GetMembershipWithUserAndGarden(ctx context.Context, gardenID u
 }
 
 const listMembers = `-- name: ListMembers :many
-SELECT membership.id, membership.garden_id, membership.user_id, membership.role, membership.invited_by, membership.created_at, membership.expires_at, membership.digest_hour, app_user.id, app_user.display_name, app_user.handle, app_user.timezone, app_user.created_at, app_user.last_garden_id, app_user.closed_at
+SELECT membership.id, membership.garden_id, membership.user_id, membership.role, membership.invited_by, membership.created_at, membership.expires_at, membership.digest_hour, membership.remind_again_at, app_user.id, app_user.display_name, app_user.handle, app_user.timezone, app_user.created_at, app_user.last_garden_id, app_user.closed_at
 FROM membership
 JOIN app_user ON app_user.id = membership.user_id
 WHERE membership.garden_id = $1
@@ -192,6 +214,7 @@ func (q *Queries) ListMembers(ctx context.Context, gardenID uuid.UUID) ([]ListMe
 			&i.Membership.CreatedAt,
 			&i.Membership.ExpiresAt,
 			&i.Membership.DigestHour,
+			&i.Membership.RemindAgainAt,
 			&i.AppUser.ID,
 			&i.AppUser.DisplayName,
 			&i.AppUser.Handle,
@@ -211,7 +234,7 @@ func (q *Queries) ListMembers(ctx context.Context, gardenID uuid.UUID) ([]ListMe
 }
 
 const listMembersWithCapability = `-- name: ListMembersWithCapability :many
-SELECT membership.id, membership.garden_id, membership.user_id, membership.role, membership.invited_by, membership.created_at, membership.expires_at, membership.digest_hour, app_user.id, app_user.display_name, app_user.handle, app_user.timezone, app_user.created_at, app_user.last_garden_id, app_user.closed_at
+SELECT membership.id, membership.garden_id, membership.user_id, membership.role, membership.invited_by, membership.created_at, membership.expires_at, membership.digest_hour, membership.remind_again_at, app_user.id, app_user.display_name, app_user.handle, app_user.timezone, app_user.created_at, app_user.last_garden_id, app_user.closed_at
 FROM membership
 JOIN app_user ON app_user.id = membership.user_id
 JOIN role_capability ON role_capability.role = membership.role AND role_capability.capability = $1
@@ -251,6 +274,7 @@ func (q *Queries) ListMembersWithCapability(ctx context.Context, arg ListMembers
 			&i.Membership.CreatedAt,
 			&i.Membership.ExpiresAt,
 			&i.Membership.DigestHour,
+			&i.Membership.RemindAgainAt,
 			&i.AppUser.ID,
 			&i.AppUser.DisplayName,
 			&i.AppUser.Handle,
@@ -270,7 +294,7 @@ func (q *Queries) ListMembersWithCapability(ctx context.Context, arg ListMembers
 }
 
 const listMembershipsForUser = `-- name: ListMembershipsForUser :many
-SELECT membership.id, membership.garden_id, membership.user_id, membership.role, membership.invited_by, membership.created_at, membership.expires_at, membership.digest_hour FROM membership
+SELECT membership.id, membership.garden_id, membership.user_id, membership.role, membership.invited_by, membership.created_at, membership.expires_at, membership.digest_hour, membership.remind_again_at FROM membership
 JOIN app_user ON app_user.id = membership.user_id
 WHERE membership.user_id = $1
 ORDER BY membership.garden_id = app_user.last_garden_id DESC NULLS LAST, membership.created_at, membership.id
@@ -298,6 +322,7 @@ func (q *Queries) ListMembershipsForUser(ctx context.Context, userID uuid.UUID) 
 			&i.CreatedAt,
 			&i.ExpiresAt,
 			&i.DigestHour,
+			&i.RemindAgainAt,
 		); err != nil {
 			return nil, err
 		}
@@ -310,7 +335,7 @@ func (q *Queries) ListMembershipsForUser(ctx context.Context, userID uuid.UUID) 
 }
 
 const listMembershipsWithGardensForUser = `-- name: ListMembershipsWithGardensForUser :many
-SELECT membership.id, membership.garden_id, membership.user_id, membership.role, membership.invited_by, membership.created_at, membership.expires_at, membership.digest_hour, garden.id, garden.name, garden.created_at,
+SELECT membership.id, membership.garden_id, membership.user_id, membership.role, membership.invited_by, membership.created_at, membership.expires_at, membership.digest_hour, membership.remind_again_at, garden.id, garden.name, garden.created_at,
     coalesce(owner.display_name, '')::text AS owner_name,
     coalesce(owner.id = membership.user_id, false)::boolean AS reader_owns
 FROM membership
@@ -358,6 +383,7 @@ func (q *Queries) ListMembershipsWithGardensForUser(ctx context.Context, userID 
 			&i.Membership.CreatedAt,
 			&i.Membership.ExpiresAt,
 			&i.Membership.DigestHour,
+			&i.Membership.RemindAgainAt,
 			&i.Garden.ID,
 			&i.Garden.Name,
 			&i.Garden.CreatedAt,
@@ -456,7 +482,7 @@ const renewMembership = `-- name: RenewMembership :one
 UPDATE membership
 SET role = $1, invited_by = $2, expires_at = $3
 WHERE garden_id = $4 AND user_id = $5
-RETURNING id, garden_id, user_id, role, invited_by, created_at, expires_at, digest_hour
+RETURNING id, garden_id, user_id, role, invited_by, created_at, expires_at, digest_hour, remind_again_at
 `
 
 type RenewMembershipParams struct {
@@ -489,6 +515,7 @@ func (q *Queries) RenewMembership(ctx context.Context, arg RenewMembershipParams
 		&i.CreatedAt,
 		&i.ExpiresAt,
 		&i.DigestHour,
+		&i.RemindAgainAt,
 	)
 	return i, err
 }
@@ -547,4 +574,22 @@ func (q *Queries) SetMembershipEnd(ctx context.Context, arg SetMembershipEndPara
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const setRemindAgain = `-- name: SetRemindAgain :exec
+UPDATE membership SET remind_again_at = $1
+WHERE garden_id = $2 AND user_id = $3
+`
+
+type SetRemindAgainParams struct {
+	RemindAgainAt *time.Time
+	GardenID      uuid.UUID
+	UserID        uuid.UUID
+}
+
+// The instant the Remind me again banner on Today asked for the digest to be
+// sent again. It replaces any earlier one still waiting.
+func (q *Queries) SetRemindAgain(ctx context.Context, arg SetRemindAgainParams) error {
+	_, err := q.db.Exec(ctx, setRemindAgain, arg.RemindAgainAt, arg.GardenID, arg.UserID)
+	return err
 }
