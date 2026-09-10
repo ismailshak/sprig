@@ -123,8 +123,7 @@ func (h *activity) readEvent(w http.ResponseWriter, r *http.Request) (event, boo
 
 // correct handles GET /plants/{plant}/log/{event} and opens the sheet over the
 // row, filled in from the event. A page navigation gets the whole activity page
-// with the sheet on it, the swap that opens the sheet gets the dialog, and the
-// swap that switches the care type gets the form alone.
+// with the sheet on it and the swap that opens the sheet gets the dialog.
 func (h *activity) correct(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	e, ok := h.readEvent(w, r)
@@ -136,17 +135,7 @@ func (h *activity) correct(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// A GET with no "when" is a row opening the sheet for the first time, so
-	// the fields come from the event. With one it is a chip under Care fetching
-	// the sheet again, and the fields come from the form it submitted.
 	d := draftOf(e)
-	if r.URL.Query().Get("when") != "" {
-		d, ok = readDraft(r.URL.Query())
-		if !ok {
-			h.templates.badRequest(w, r)
-			return
-		}
-	}
 
 	s, err := h.sheetOver(r, principal, e, d)
 	switch {
@@ -167,8 +156,7 @@ func (h *activity) correct(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	page.Sheet = s
-	v := view{page: "activity", fragment: sheetFragment(r), announce: sheetAnnouncement(r, page.Sheet)}
-	h.templates.render(w, r, v, page)
+	h.templates.render(w, r, view{page: "activity", fragment: "sheet"}, page)
 }
 
 // save handles POST /plants/{plant}/log/{event} and writes the correction. The

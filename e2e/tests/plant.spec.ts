@@ -92,8 +92,8 @@ test('the sheet opened from a plant offers every care type in the garden', async
   await plant.logCare();
 
   await expect(sheet.dialog()).toHaveAccessibleName(`Log care for ${seeded.doris.name}`);
-  await expect(sheet.careChip('Water')).toHaveAttribute('aria-pressed', 'true');
-  await expect(sheet.careChip('Repot')).toBeVisible();
+  await expect(sheet.chip('Water')).toBeChecked();
+  await expect(sheet.chip('Repot')).toBeVisible();
 });
 
 test("the sheet opened from a plant's page has no link back to that page", async ({ plant, sheet }) => {
@@ -119,7 +119,7 @@ test("a care with no schedule can be logged from the plant's page @swap", async 
   await plant.open(seeded.doris);
   await plant.logCare();
 
-  await sheet.careChip('Repot').click();
+  await sheet.chip('Repot').check();
   await sheet.submit('Log repotting');
 
   await expect(plant.recentLines().first()).toContainText('You repotted · today');

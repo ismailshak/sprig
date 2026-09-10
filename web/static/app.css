@@ -34,6 +34,11 @@ button {
   cursor: pointer;
 }
 
+/* One focus ring for everything. The browser's own is a different blue in
+   each browser. A control inside a card, which clips what overflows it, draws
+   the ring inset instead. */
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
 /* ------------------------------------------------------------------ app shell */
 
 .app {
@@ -193,6 +198,9 @@ button {
 .list--flush { padding: 0; }
 .list .row + .row,
 .list li + li .row { border-top: var(--row-divider); }
+
+.row--link:focus-visible,
+.row__open:focus-visible { outline-offset: -2px; }
 
 /* A row that opens something is a link filling its box, so the cursor comes
    from the link and a row that opens nothing gets none. Hover styling is
@@ -356,6 +364,9 @@ a.empty__action { display: inline-flex; align-items: center; }
 .nav__item svg { width: 22px; height: 22px; }
 /* The page's own tab, and on a page reached from Plants or More that tab. */
 .nav__item[aria-current] { color: var(--accent); }
+/* The tabs sit 2px apart on the rail, so a ring outside one would overlap
+   the next. */
+.nav__item:focus-visible { outline-offset: -2px; }
 
 .summary__count {
   font-variant-numeric: lining-nums tabular-nums;
@@ -469,8 +480,8 @@ a.empty__action { display: inline-flex; align-items: center; }
 
 @keyframes grace-drain { to { transform: scaleX(0) } }
 
-/* The bar pauses while Undo has a focus ring, because the row is not removed
-   until focus leaves it. A bar that ran out would say the window had closed.
+/* The bar pauses while Undo has a focus ring. The page's script does not
+   remove the row until the bar has run out, so the pause holds the row too.
    A mouse click on Log focuses Undo without a ring, so the bar keeps running
    there. */
 .row--done:has(:focus-visible)::after { animation-play-state: paused; }
@@ -578,8 +589,6 @@ body:has(dialog[open]) { overscroll-behavior: none; }
   color: var(--ink); background: var(--bg);
   border: 1px solid var(--line); border-radius: var(--radius);
 }
-
-.input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 /* The Handle field on Set up your garden and an invite's join form: the input
    and, with JavaScript, a button that asks the server for a free handle. The
@@ -693,8 +702,6 @@ legend.field__label { float: left; width: 100%; padding: 0; }
    around a float. */
 legend.field__label + * { clear: both; }
 
-.sheet__default { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
-
 /* The Outcome chips decide whether When it happened or Ask again in is shown.
    The When chips decide whether the time input, the date and time input, or
    neither is shown. */
@@ -702,6 +709,24 @@ legend.field__label + * { clear: both; }
 .sheet__form:not(:has([name="outcome"][value="skipped"]:checked)) .sheet__skipped,
 .sheet__form:not(:has([name="when"][value="today"]:checked, [name="when"][value="yesterday"]:checked)) .sheet__clock,
 .sheet__form:not(:has([name="when"][value="other"]:checked)) .sheet__at { display: none; }
+
+/* The Care chips decide which Remind me in chips and which Log button show.
+   Each care type's are the nth sheet__for in their box, where its chip is the
+   nth under Care. CSS can pair the checked chip with its box only by position,
+   so there is one line per position. A garden with more than 12 care types
+   shows every care type's. */
+.sheet__form:has(.sheet__cares > :nth-child(1) > :checked) .sheet__for:not(:nth-child(1)),
+.sheet__form:has(.sheet__cares > :nth-child(2) > :checked) .sheet__for:not(:nth-child(2)),
+.sheet__form:has(.sheet__cares > :nth-child(3) > :checked) .sheet__for:not(:nth-child(3)),
+.sheet__form:has(.sheet__cares > :nth-child(4) > :checked) .sheet__for:not(:nth-child(4)),
+.sheet__form:has(.sheet__cares > :nth-child(5) > :checked) .sheet__for:not(:nth-child(5)),
+.sheet__form:has(.sheet__cares > :nth-child(6) > :checked) .sheet__for:not(:nth-child(6)),
+.sheet__form:has(.sheet__cares > :nth-child(7) > :checked) .sheet__for:not(:nth-child(7)),
+.sheet__form:has(.sheet__cares > :nth-child(8) > :checked) .sheet__for:not(:nth-child(8)),
+.sheet__form:has(.sheet__cares > :nth-child(9) > :checked) .sheet__for:not(:nth-child(9)),
+.sheet__form:has(.sheet__cares > :nth-child(10) > :checked) .sheet__for:not(:nth-child(10)),
+.sheet__form:has(.sheet__cares > :nth-child(11) > :checked) .sheet__for:not(:nth-child(11)),
+.sheet__form:has(.sheet__cares > :nth-child(12) > :checked) .sheet__for:not(:nth-child(12)) { display: none; }
 
 /* ================================================================== desktop */
 
@@ -1005,7 +1030,7 @@ a.foot-link { text-decoration: none; color: var(--ink-2); }
 
 /* The negative offset puts the focus outline inside the link's edge, because
    the list around the row cuts off anything drawn outside it. */
-.sched > a:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.sched > a:focus-visible { outline-offset: -2px; }
 
 .sched__icon {
   display: grid;
@@ -1071,7 +1096,7 @@ a.foot-link { text-decoration: none; color: var(--ink-2); }
 /* The negative offset puts the focus outline inside the button's edge. The
    list around the row is a card with overflow: hidden. An outline drawn
    outside that edge would be cut off. */
-.sched__open:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.sched__open:focus-visible { outline-offset: -2px; }
 
 /* The editing row replaces the due date column with buttons, so it has less
    space between its parts than a row being read. */
@@ -1530,7 +1555,7 @@ a.plant__keep { text-decoration: none; }
   touch-action: none;
 }
 .photo-field__frame:active { cursor: grabbing; }
-.photo-field__frame:focus-visible { outline: 2px solid var(--accent); outline-offset: -4px; }
+.photo-field__frame:focus-visible { outline-offset: -4px; }
 .photo-field__hint { margin: 8px 0 0; font-size: 13px; color: var(--ink-3); }
 
 .photo-field__actions {

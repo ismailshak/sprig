@@ -12,8 +12,8 @@ test('clicking a care row opens the log sheet for that care', async ({ today, sh
 
   await expect(sheet.dialog()).toHaveAccessibleName('Log care for Nigel');
   await expect(sheet.dialog().getByRole('link', { name: /Nigel/ })).toBeVisible();
-  await expect(sheet.careChip('Water')).toHaveAttribute('aria-pressed', 'true');
-  await expect(sheet.careChip('Feed')).toHaveAttribute('aria-pressed', 'false');
+  await expect(sheet.chip('Water')).toBeChecked();
+  await expect(sheet.chip('Feed')).not.toBeChecked();
   await expect(sheet.chip('Just now')).toBeChecked();
   await expect(sheet.dialog().getByRole('button', { name: 'Log watering' })).toBeVisible();
 });
@@ -57,14 +57,14 @@ test('a skip makes the care due again after the chosen number of days @swap', as
   await expect(row).toContainText('Water tomorrow');
 });
 
-test("switching the care type relabels the usual chip with that type's interval @swap", async ({ today, sheet }) => {
+test("choosing another care type shows that type's usual interval", async ({ today, sheet }) => {
   await today.openSheet(plants.nigel, 'water');
   await sheet.chip('Skipped').check();
   await expect(sheet.chip('4 days (usual)')).toBeVisible();
 
-  await sheet.careChip('Feed').click();
+  await sheet.chip('Feed').check();
 
-  await expect(sheet.careChip('Feed')).toHaveAttribute('aria-pressed', 'true');
+  await expect(sheet.chip('4 days (usual)')).toBeHidden();
   await expect(sheet.chip('21 days (usual)')).toBeVisible();
   await expect(sheet.chip('Skipped')).toBeChecked();
   await expect(sheet.dialog().getByRole('button', { name: 'Log skip' })).toBeVisible();
@@ -117,7 +117,7 @@ test('logging from the sheet is announced with what is left and where Undo is @j
 
 // The wait is the 4s window plus the 320ms collapse after it, rounded up. A
 // row still on the page afterwards was held by the focus.
-test('the undo window stays open while Undo has keyboard focus and closes when focus leaves @js', async ({
+test('the undo window pauses while Undo has keyboard focus and resumes when focus leaves @js', async ({
   page,
   today,
 }) => {
@@ -125,10 +125,16 @@ test('the undo window stays open while Undo has keyboard focus and closes when f
   await page.keyboard.press('Enter');
   await expect(today.undoButton(plants.doris, 'water')).toBeFocused();
 
+  // 5s is the 4s window plus the 320ms collapse, so the row would be gone by
+  // now if focus had not paused it.
   await page.waitForTimeout(5000);
   await expect(today.undoButton(plants.doris, 'water')).toBeVisible();
 
+  // Focus arrived before the window started, so the whole 4s is left once
+  // focus leaves. Halfway through it the row is still there.
   await page.keyboard.press('Tab');
+  await page.waitForTimeout(2000);
+  await expect(today.undoButton(plants.doris, 'water')).toBeVisible();
 
   await expect(today.careRow(plants.doris, 'water')).toHaveCount(0);
 });

@@ -3,7 +3,6 @@ package http
 import (
 	"context"
 	"errors"
-	"maps"
 	"net/http"
 	"net/url"
 	"slices"
@@ -23,10 +22,6 @@ import (
 // sheetID is the HTML id of the sheet, on the open dialog and on the empty
 // placeholder it swaps with. A request targeting it asks for the sheet alone.
 const sheetID = "sheet"
-
-// sheetFormID is the HTML id of the sheet's form. A chip under Care swaps this
-// element, not the whole dialog.
-const sheetFormID = "sheet-form"
 
 const (
 	whenNow       = "now"
@@ -96,7 +91,10 @@ type draft struct {
 
 // readDraft fills a draft from a query string or a posted form. It returns
 // false for a value the sheet never offers: an unknown "over", an unknown
-// outcome, a When not in the chips, or an "again" that is not a number.
+// outcome, a When not in the chips, or a reminder that is not a number. The
+// reminder is read from the field named after the care, "again-water", because
+// every care type's Remind me in chips are in the form and only the chosen
+// type's are shown.
 func readDraft(values url.Values) (draft, bool) {
 	d := draft{
 		Row:   values.Get("row"),
@@ -131,7 +129,7 @@ func readDraft(values url.Values) (draft, bool) {
 	if !chipsHave(whens, d.When) {
 		return d, false
 	}
-	if again := values.Get("again"); again != "" {
+	if again := values.Get(againField(d.Care)); again != "" {
 		n, err := strconv.ParseInt(again, 10, 32)
 		if err != nil {
 			return d, false
@@ -189,18 +187,23 @@ type chip struct {
 	On    bool
 }
 
-// hidden is one hidden input on the sheet's form.
-type hidden struct {
-	Name  string
-	Value string
+// careOption is one care type the sheet offers: its chip under Care and the
+// two parts of the form that depend on it. The template renders every option's
+// parts and the stylesheet shows the chosen one's.
+type careOption struct {
+	chip
+	// Noun is the care type as a noun, such as "watering", for the Log button.
+	Noun string
+	// Reminders is the Remind me in chips for this care type, under the field
+	// name againField gives.
+	Reminders []chip
 }
 
-func hiddenValues(values url.Values) []hidden {
-	out := make([]hidden, 0, len(values))
-	for _, name := range slices.Sorted(maps.Keys(values)) {
-		out = append(out, hidden{Name: name, Value: values.Get(name)})
-	}
-	return out
+// againField is the name of the Remind me in field for one care type. Each
+// type's chips are their own radio group, so choosing another care type does
+// not clear the choice made under this one.
+func againField(care string) string {
+	return "again-" + care
 }
 
 func chipsHave(chips []chip, value string) bool {
@@ -246,8 +249,7 @@ func offerFor(offers []offer, slug string) (offer, bool) {
 // sheet is the data the log-care sheet renders from, on Today and on a plant's
 // page.
 type sheet struct {
-	// Path is the URL the sheet's form posts to, and the URL a chip under Care
-	// fetches the sheet again from.
+	// Path is the URL the sheet's form posts to.
 	Path string
 	// Target is the HTML id of the element the post replaces: the care row on
 	// Today, the log body on the Activity page. It is empty on a plant's page,
@@ -256,9 +258,9 @@ type sheet struct {
 	Over   string
 	Label  string
 	Plant  sheetPlant
-	// Cares is one chip per care type the sheet offers. The template renders
+	// Cares is one option per care type the sheet offers. The template renders
 	// the Care field only when there is more than one.
-	Cares   []chip
+	Cares   []careOption
 	Row     string
 	Care    string
 	Skipped bool
@@ -268,9 +270,11 @@ type sheet struct {
 	// WhenError is the message shown under the When chips after a refused post,
 	// and is empty otherwise.
 	WhenError string
+	// Reminders is the Remind me in chips of the chosen care type, the ones a
+	// post is checked against.
 	Reminders []chip
 	Note      string
-	// Noun is the care type as a noun, such as "watering".
+	// Noun is the chosen care type as a noun, such as "watering".
 	Noun string
 	// Correcting is true for the sheet opened over an event already logged.
 	// Its primary button reads Save changes rather than naming the care.
@@ -283,24 +287,9 @@ type sheet struct {
 	Delete string
 	// DeleteTarget is the HTML id of the row the delete replaces.
 	DeleteTarget string
-	// Query is the Activity page's own query string as hidden fields, empty
-	// unless Correcting. A chip under Care submits the form as a GET, and a GET
-	// form replaces the query string of the URL it posts to, so without these
-	// fields the filter and the paging cursor would be lost.
-	Query []hidden
 	// careTypeID is the id of the care type Care names, so the post does not
 	// look it up again.
 	careTypeID uuid.UUID
-	// usual is the interval in days of the chip marked "(usual)" under Remind
-	// me in.
-	usual int32
-}
-
-// careChosen is the sentence a chip under Care announces when it replaces the
-// form. It names the care and the reminder marked usual, because that chip is
-// the part of the form that changes with the care type.
-func (s *sheet) careChosen() string {
-	return capitalise(s.Noun) + ". The usual reminder is " + daysWord(int(s.usual)) + "."
 }
 
 type sheetPlant struct {
@@ -339,7 +328,11 @@ func newSheet(plant store.Plant, offers []offer, care offer, d draft, now time.T
 		if o.CareType.Slug == d.Row {
 			s.Target = careRowID(plant, o.CareType)
 		}
-		s.Cares = append(s.Cares, chip{Value: o.CareType.Slug, Label: o.CareType.Name, On: o.CareType.ID == care.CareType.ID})
+		s.Cares = append(s.Cares, careOption{
+			chip:      chip{Value: o.CareType.Slug, Label: o.CareType.Name, On: o.CareType.ID == care.CareType.ID},
+			Noun:      careNoun(o.CareType),
+			Reminders: reminderChips(usualDays(o.Schedule), d.Again),
+		})
 	}
 	for _, w := range whens {
 		w.On = w.Value == d.When
@@ -350,10 +343,6 @@ func newSheet(plant store.Plant, offers []offer, care offer, d draft, now time.T
 	}
 	if s.At == "" {
 		s.At = now.Format(atLayout)
-	}
-	s.usual = usualDays(care.Schedule)
-	if s.usual == 0 {
-		s.usual = fallbackReminderDays
 	}
 	s.Reminders = reminderChips(usualDays(care.Schedule), d.Again)
 	return s
@@ -378,7 +367,6 @@ func (s *sheet) forEvent(principal auth.Principal, e event, d draft) {
 	s.Target = logBodyID
 	// Row names a care row on Today, and this sheet is not open over one.
 	s.Row = ""
-	s.Query = hiddenValues(e.q.values())
 	s.Correcting = true
 	s.Logged = loggedLine(principal, e)
 	if mayDelete(principal, e.care()) {
@@ -408,6 +396,11 @@ func (s *sheet) offerReminder(days *int32, selected int32) {
 		}
 	}
 	s.Reminders = slices.Insert(s.Reminders, at, chip{Value: value, Label: daysWord(int(*days)), On: *days == selected})
+	for i := range s.Cares {
+		if s.Cares[i].On {
+			s.Cares[i].Reminders = s.Reminders
+		}
+	}
 }
 
 // accept returns the time a posted draft is logged at. A skip whose interval
@@ -492,10 +485,9 @@ func reminderChips(usual, selected int32) []chip {
 	return out
 }
 
-// sheet handles GET /plants/{plant}/log. A page navigation gets the whole page,
-// the swap that opens the sheet gets the dialog, and the swap that switches the
-// care type gets the form alone. The "over" value decides which page the sheet
-// is rendered on.
+// sheet handles GET /plants/{plant}/log. A page navigation gets the whole page
+// and the swap that opens the sheet gets the dialog. The "over" value decides
+// which page the sheet is rendered on.
 func (h *today) sheet(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	plantID, err := uuid.Parse(r.PathValue("plant"))
@@ -535,8 +527,7 @@ func (h *today) sheet(w http.ResponseWriter, r *http.Request) {
 
 	page := newTodayPage(principal, g)
 	page.Sheet = newSheet(lines[0].Plant, offersOf(lines), offerOf(care), d, g.now)
-	v := view{page: "today", fragment: sheetFragment(r), announce: sheetAnnouncement(r, page.Sheet)}
-	h.templates.render(w, r, v, page)
+	h.templates.render(w, r, view{page: "today", fragment: "sheet"}, page)
 }
 
 // plantSheet renders the same sheet on a plant's own page. It offers every care
@@ -566,8 +557,7 @@ func (h *today) plantSheet(w http.ResponseWriter, r *http.Request, principal aut
 	page := newPlantPage(principal, detail)
 	page.Sheet = newSheet(detail.plant, detail.offers(), care, d, detail.now)
 	page.Sheet.forPlant()
-	v := view{page: "plant", fragment: sheetFragment(r), announce: sheetAnnouncement(r, page.Sheet)}
-	h.templates.render(w, r, v, page)
+	h.templates.render(w, r, view{page: "plant", fragment: "sheet"}, page)
 }
 
 // chosenCare picks the care type the sheet on a plant's page opens on. With
@@ -585,26 +575,6 @@ func chosenCare(detail plantDetail, d draft) (offer, bool) {
 		return offer{}, false
 	}
 	return offers[0], true
-}
-
-// sheetFragment picks which part of the page a swap returns. A swap targeting
-// the form gets the form alone, because replacing the whole dialog would replay
-// its entrance animation and lose its scroll position.
-func sheetFragment(r *http.Request) string {
-	if r.Header.Get("HX-Target") == sheetFormID {
-		return "sheet-form"
-	}
-	return "sheet"
-}
-
-// sheetAnnouncement is what a swap of the sheet announces. Only a chip under
-// Care announces anything. The sheet opening moves focus into the dialog and a
-// screen reader reads it from there.
-func sheetAnnouncement(r *http.Request, s *sheet) string {
-	if r.Header.Get("HX-Target") != sheetFormID {
-		return ""
-	}
-	return s.careChosen()
 }
 
 // log handles POST /plants/{plant}/log and logs the care the draft describes.

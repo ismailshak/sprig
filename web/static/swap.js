@@ -15,9 +15,9 @@
 
    The undo window. A logged row sends a request of its own when its window
    ends. On Today that request removes the row and on Activity it replaces it.
-   While the row's Undo button has a focus ring the request is held, so a
-   keyboard user does not lose the button they are about to press. It is sent
-   once focus leaves the row. */
+   The stylesheet pauses the row's drain bar while Undo has a focus ring, and
+   the request is not sent until the bar has run out, so the bar and the row
+   agree on how long is left. */
 (function () {
   const status = document.getElementById('status');
   // controls matches every control Tab can reach.
@@ -74,19 +74,19 @@
     status.classList.add('status--shown');
   }
 
-  // Only a logged row holds its request back, and only when no press sent it.
-  // row--done is the class the stylesheet pauses the drain bar on, so the bar
-  // and the request are held on the same condition.
+  // htmx's delay fires once and cannot pause, so when it fires the request
+  // waits for the drain bar's animation to finish. A pause on the bar delays
+  // the request by the same amount. Pressing Undo swaps the row out, which
+  // cancels the animation, and the request is never sent.
   document.addEventListener('htmx:confirm', (event) => {
     const { elt, triggeringEvent, issueRequest } = event.detail;
     if (triggeringEvent || !elt.classList.contains('row--done')) return;
-    if (!elt.querySelector(':focus-visible')) return;
+    const bar = elt.getAnimations({ subtree: true }).find((a) => a.animationName === 'grace-drain');
+    if (!bar || bar.playState === 'finished') return;
     event.preventDefault();
-    const release = (focusEvent) => {
-      if (elt.contains(focusEvent.relatedTarget)) return;
-      elt.removeEventListener('focusout', release);
-      issueRequest(true);
-    };
-    elt.addEventListener('focusout', release);
+    bar.finished.then(
+      () => issueRequest(true),
+      () => {},
+    );
   });
 })();
