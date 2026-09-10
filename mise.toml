@@ -16,6 +16,7 @@ pnpm = "11.25.0"
 
 "go:github.com/pressly/goose/v3/cmd/goose" = "v3.28.0" # Only the migrate tasks need the binary because the app runs goose as a library at startup
 "go:github.com/bokwoon95/wgo" = "v0.7.1" # Only the dev task uses wgo, which restarts the server when a file changes
+"go:golang.org/x/vuln/cmd/govulncheck" = "v1.8.0"
 
 [tasks.build]
 description = "Build the server binary at ./sprig"
@@ -41,6 +42,10 @@ run = "go run ./cmd/seed"
 [tasks.lint]
 description = "Run golangci-lint over the whole module, and check the generated queries are current"
 run = ["sqlc diff", "golangci-lint run"]
+
+[tasks.vulncheck]
+description = "Report the known vulnerabilities the module's code can reach"
+run = "govulncheck -tags dev ./..."
 
 # The app applies its own migrations at startup.
 [tasks.migrate]

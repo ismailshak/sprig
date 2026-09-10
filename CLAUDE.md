@@ -16,6 +16,7 @@ mise run seed      # load the seed gardens into the dev database
 mise run test      # Go tests against a throwaway Postgres
 mise run e2e       # Playwright suite, with a throwaway app and Postgres stack per worker
 mise run lint
+mise run vulncheck
 mise run format    # prettier over e2e and the app's scripts in web/static
 mise run hooks     # point git at .githooks, once per clone
 mise run migrate
