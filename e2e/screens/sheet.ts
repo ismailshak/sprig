@@ -7,12 +7,8 @@ export class SheetScreen {
     return this.page.getByRole('dialog');
   }
 
-  // A chip under Care is a button, not a radio, because clicking it fetches
-  // the sheet again for that care type.
-  careChip(care: string): Locator {
-    return this.dialog().getByRole('button', { name: care, exact: true });
-  }
-
+  // Every chip on the sheet is a radio: the care type, the outcome, when it
+  // happened and the reminder.
   chip(label: string): Locator {
     return this.dialog().getByRole('radio', { name: label, exact: true });
   }

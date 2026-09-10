@@ -152,8 +152,8 @@ export class PlantScreen {
     return this.page.locator('#plant-foot');
   }
 
-  // Restore posts and redirects with no confirmation step. The click is a full
-  // navigation.
+  // Restore has no confirmation step. With JavaScript it swaps the page under
+  // the top bar. Without JavaScript the post redirects back to the page.
   async restore(): Promise<void> {
     await this.page.getByRole('button', { name: 'Restore' }).click();
     await this.page.waitForLoadState();

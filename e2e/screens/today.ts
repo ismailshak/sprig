@@ -62,6 +62,17 @@ export class TodayScreen {
     return this.page.locator('#activity');
   }
 
+  // The live region every swap writes its announcement into. It is in the
+  // layout on every page, under this id.
+  announcement(): Locator {
+    return this.page.locator('#status');
+  }
+
+  // The link filling a care row. It opens the log-care sheet.
+  rowLink(plant: Plant, care: string): Locator {
+    return this.careRow(plant, care).getByRole('link');
+  }
+
   feedLines(): Locator {
     return this.feed().locator('> div');
   }

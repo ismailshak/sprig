@@ -24,6 +24,14 @@ func lateWord(days int) string {
 	return daysWord(days) + " late"
 }
 
+// photosWord counts photos, such as "1 older photo" or "24 older photos".
+func photosWord(n int) string {
+	if n == 1 {
+		return "1 older photo"
+	}
+	return fmt.Sprintf("%d older photos", n)
+}
+
 // overdueWord returns how far past due a schedule is, in lower case, such as
 // "3 days late". A schedule precise only to a month names the month instead: a
 // repot planned for March reads "overdue since March" on 1 April, since "31

@@ -29,7 +29,8 @@
 <ul class="list">
 {{range .Members}}{{template "member-row" .}}{{end}}
 </ul>
-{{if .Save}}<button class="wide-action" type="submit">Save changes</button>{{end}}
+{{/* The button has an id so htmx puts focus back on it after the swap. */}}
+{{if .Save}}<button class="wide-action" type="submit" id="save">Save changes</button>{{end}}
 </form>
 {{/* The forms a row's own buttons submit. Each is empty apart from its action,
      because the button that submits it is in the row above. */}}
@@ -67,7 +68,7 @@
 <span class="row__ask">{{.Asking.Ask}}</span>
 <p class="row__why">{{.Who}} will lose access to this garden. Their name stays on everything they’ve logged, and you can invite them again later.</p>
 <div class="row__buttons">
-<a class="sched__cancel" href="{{.Asking.Keep}}" hx-get="{{.Asking.Keep}}" hx-target="#people" hx-swap="outerHTML settle:0ms">Cancel</a>
+<a class="sched__cancel" href="{{.Asking.Keep}}" hx-get="{{.Asking.Keep}}" hx-target="#people" hx-swap="outerHTML settle:0ms" autofocus>Cancel</a>
 <button class="care care--small" type="submit" form="{{.Asking.Form}}">Remove</button>
 </div>
 {{else}}

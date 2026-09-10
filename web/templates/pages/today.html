@@ -53,10 +53,13 @@
      reader's role in it. The dialog has the log-care sheet's id, so a swap
      replaces one sheet with the other. The scrim and Cancel are buttons in a
      method="dialog" form, so they close the dialog without JavaScript. The
-     garden the session is on is text. Every other row is a button filling the
-     row, in a form of its own, that posts the switch. */}}
-{{define "garden-sheet"}}<dialog open class="sheet" id="sheet" aria-labelledby="garden-sheet-title">
-<form method="dialog"><button class="sheet__scrim" aria-label="Close"></button></form>
+     scrim is a pointer target only, out of the tab order and hidden from
+     screen readers, because Cancel and Escape close the sheet for everyone
+     else. tabindex -1 lets the script focus the dialog once it is modal
+     without making it a Tab stop. The garden the session is on is text. Every other row is a button filling the row, in a form of its
+     own, that posts the switch. */}}
+{{define "garden-sheet"}}<dialog open class="sheet" id="sheet" aria-labelledby="garden-sheet-title" tabindex="-1">
+<form method="dialog"><button class="sheet__scrim" tabindex="-1" aria-hidden="true"></button></form>
 <div class="sheet__panel">
 <div class="sheet__grip"></div>
 <h2 class="sheet__title" id="garden-sheet-title">Switch garden</h2>

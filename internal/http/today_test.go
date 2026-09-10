@@ -590,7 +590,7 @@ var (
 // captures its href.
 var switchLink = regexp.MustCompile(`<a class="topbar__switch" href="([^"]+)" aria-label="Switch garden"`)
 
-var gardenSheet = regexp.MustCompile(`(?s)<dialog open class="sheet" id="sheet" aria-labelledby="garden-sheet-title">(.*?)</dialog>`)
+var gardenSheet = regexp.MustCompile(`(?s)<dialog open class="sheet" id="sheet" aria-labelledby="garden-sheet-title" tabindex="-1">(.*?)</dialog>`)
 
 var (
 	gardenRowName     = regexp.MustCompile(`(?s)<span class="row__name">(.*?)</span>\s*<span class="row__meta">`)

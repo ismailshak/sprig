@@ -120,10 +120,7 @@ test('an event logged as the wrong care is corrected to the right one @swap', as
   await page.goto(`/activity?plant=${seeded.bigFella.id}`);
   await activity.openSheet(activity.rows().first());
 
-  await sheet.careChip('Feed').click();
-  // The chip fetches the sheet again, and the Save button posts the care it
-  // will log, so the submit has to wait for the sheet that comes back.
-  await expect(sheet.careChip('Feed')).toHaveAttribute('aria-pressed', 'true');
+  await sheet.chip('Feed').check();
   await sheet.submit('Save changes');
 
   // The log filtered to one plant heads each row with the care rather than the

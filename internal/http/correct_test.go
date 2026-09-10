@@ -71,20 +71,11 @@ func (f *logFixture) eventRequest(t *testing.T, method, target string, plantID, 
 
 // openSheet requests the correcting sheet. Any extra query values are the ones
 // a chip under Care resubmits the form with.
-func (f *logFixture) openSheet(t *testing.T, plantID, eventID uuid.UUID, q logQuery, extra url.Values, htmx bool) *httptest.ResponseRecorder {
+func (f *logFixture) openSheet(t *testing.T, plantID, eventID uuid.UUID, q logQuery, htmx bool) *httptest.ResponseRecorder {
 	t.Helper()
 
-	target := eventPath(plantID, eventID, "", q)
-	if len(extra) > 0 {
-		if strings.Contains(target, "?") {
-			target += "&"
-		} else {
-			target += "?"
-		}
-		target += extra.Encode()
-	}
 	rec := httptest.NewRecorder()
-	f.handler.correct(rec, f.eventRequest(t, http.MethodGet, target, plantID, eventID, nil, htmx))
+	f.handler.correct(rec, f.eventRequest(t, http.MethodGet, eventPath(plantID, eventID, "", q), plantID, eventID, nil, htmx))
 	return rec
 }
 
@@ -140,7 +131,7 @@ func hiddenFields(markup string) url.Values {
 func TestCorrect_TheSheetOverARowIsFilledInFromTheEvent(t *testing.T) {
 	f := rosewoodCorrections(t)
 	// Nigel was fed at six yesterday evening, with a note.
-	rec := f.openSheet(t, nigelID, f.eventID(t, nigelID), logQuery{}, nil, false)
+	rec := f.openSheet(t, nigelID, f.eventID(t, nigelID), logQuery{}, false)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d:\n%s", rec.Code, rec.Body.String())
 	}
@@ -150,8 +141,8 @@ func TestCorrect_TheSheetOverARowIsFilledInFromTheEvent(t *testing.T) {
 	}
 
 	by := fields(dialog)
-	if m := pressedButton.FindStringSubmatch(by["Care"]); m == nil || m[1] != "Feed" {
-		t.Errorf("Care does not have Feed pressed:\n%s", by["Care"])
+	if got := checked(by["Care"]); got != "Feed" {
+		t.Errorf("Care is %q, want Feed", got)
 	}
 	if got := checked(by["Outcome"]); got != "Done" {
 		t.Errorf("Outcome is %q, want Done", got)
@@ -177,51 +168,27 @@ func TestCorrect_TheSheetOffersEveryCareTypeInTheGarden(t *testing.T) {
 	f := rosewoodCorrections(t)
 	// Big Fella is scheduled for watering alone, and the garden has two care
 	// types, because an event can be of any type.
-	dialog := dialogElement.FindString(f.openSheet(t, bigFellaID, f.eventID(t, bigFellaID), logQuery{}, nil, false).Body.String())
+	dialog := dialogElement.FindString(f.openSheet(t, bigFellaID, f.eventID(t, bigFellaID), logQuery{}, false).Body.String())
 
 	if got := chips(fields(dialog)["Care"]); strings.Join(got, "|") != "Water|Feed" {
 		t.Errorf("Care offers %v, want every care type in the garden", got)
 	}
 }
 
-func TestCorrect_TheSheetsFormSendsBackThePlantTheLogIsFilteredTo(t *testing.T) {
+func TestCorrect_TheSheetsFormPostsToAURLThatKeepsTheLogsFilter(t *testing.T) {
 	f := rosewoodCorrections(t)
-	// A chip under Care submits the form as a GET, and a GET form replaces the
-	// query string of the URL it submits to, so a filter held only in the URL
-	// would be dropped the moment somebody changed the care type.
 	q := logQuery{plant: &nigelID}
-	dialog := dialogElement.FindString(f.openSheet(t, nigelID, f.eventID(t, nigelID), q, nil, false).Body.String())
+	dialog := dialogElement.FindString(f.openSheet(t, nigelID, f.eventID(t, nigelID), q, false).Body.String())
 
-	if got := hiddenFields(dialog).Get(plantParam); got != nigelID.String() {
-		t.Errorf("the form sends plant=%q, want the plant the log is filtered to", got)
-	}
-}
-
-func TestCorrect_ACareChipKeepsTheFieldsAlreadyFilledIn(t *testing.T) {
-	f := rosewoodCorrections(t)
-	// The chip resubmits the form, so everything on it comes back in the query.
-	extra := url.Values{"care": {"water"}, "outcome": {"skipped"}, "when": {"yesterday"}, "time": {"18:00"}, "again": {"3"}, "note": {"New pot"}}
-	dialog := dialogElement.FindString(f.openSheet(t, nigelID, f.eventID(t, nigelID), logQuery{}, extra, false).Body.String())
-
-	by := fields(dialog)
-	if m := pressedButton.FindStringSubmatch(by["Care"]); m == nil || m[1] != "Water" {
-		t.Errorf("Care does not have Water pressed:\n%s", by["Care"])
-	}
-	if got := checked(by["Outcome"]); got != "Skipped" {
-		t.Errorf("Outcome is %q, want the Skipped the chip resubmitted", got)
-	}
-	if got := checked(by["Remind me in"]); got != "3 days" {
-		t.Errorf("Remind me in is %q, want the three days the chip resubmitted", got)
-	}
-	if !strings.Contains(dialog, `value="New pot"`) {
-		t.Errorf("the note the chip resubmitted is not in the sheet:\n%s", dialog)
+	if form := sheetForm.FindString(dialog); !strings.Contains(form, plantParam+"="+nigelID.String()) {
+		t.Errorf("the form does not post to the filtered log:\n%s", form)
 	}
 }
 
 func TestCorrect_ASkipShowsTheIntervalItWasLoggedWith(t *testing.T) {
 	f := rosewoodCorrections(t)
 	// Doris was skipped for two days, and is watered every 21.
-	dialog := dialogElement.FindString(f.openSheet(t, dorisID, f.eventID(t, dorisID), logQuery{}, nil, false).Body.String())
+	dialog := dialogElement.FindString(f.openSheet(t, dorisID, f.eventID(t, dorisID), logQuery{}, false).Body.String())
 
 	by := fields(dialog)
 	if got := checked(by["Outcome"]); got != "Skipped" {
@@ -237,20 +204,19 @@ func TestCorrect_AnIntervalTheScheduleNoLongerOffersIsStillOnTheSheet(t *testing
 	// A skip logged when the schedule said five days. Nothing offers five now
 	// that Doris is watered every 21.
 	f.exec(t, "UPDATE care_event SET override_interval_days = 5 WHERE plant_id = $1", dorisID)
-	dialog := dialogElement.FindString(f.openSheet(t, dorisID, f.eventID(t, dorisID), logQuery{}, nil, false).Body.String())
+	dialog := dialogElement.FindString(f.openSheet(t, dorisID, f.eventID(t, dorisID), logQuery{}, false).Body.String())
 
-	by := fields(dialog)
-	if got := chips(by["Remind me in"]); strings.Join(got, "|") != "1 day|2 days|3 days|5 days|21 days (usual)" {
+	if got := chips(remindersFor(dialog, "water")); strings.Join(got, "|") != "1 day|2 days|3 days|5 days|21 days (usual)" {
 		t.Errorf("Remind me in offers %v, want the five days the skip holds among the chips", got)
 	}
-	if got := checked(by["Remind me in"]); got != "5 days" {
+	if got := checked(remindersFor(dialog, "water")); got != "5 days" {
 		t.Errorf("Remind me in is %q, want the five days the skip holds", got)
 	}
 }
 
 func TestCorrect_TheSheetSaysWhoLoggedTheCareAndWhen(t *testing.T) {
 	f := rosewoodCorrections(t)
-	dialog := dialogElement.FindString(f.openSheet(t, nigelID, f.eventID(t, nigelID), logQuery{}, nil, false).Body.String())
+	dialog := dialogElement.FindString(f.openSheet(t, nigelID, f.eventID(t, nigelID), logQuery{}, false).Body.String())
 
 	m := loggedLead.FindStringSubmatch(dialog)
 	if m == nil {
@@ -265,7 +231,7 @@ func TestCorrect_CareEnteredADayAfterItWasGivenNamesBothDays(t *testing.T) {
 	f := rosewoodCorrections(t)
 	// Nigel was fed yesterday evening and written down this morning.
 	f.exec(t, "UPDATE care_event SET recorded_at = $2 WHERE plant_id = $1", nigelID, at(time.September, 3, 8, 0))
-	dialog := dialogElement.FindString(f.openSheet(t, nigelID, f.eventID(t, nigelID), logQuery{}, nil, false).Body.String())
+	dialog := dialogElement.FindString(f.openSheet(t, nigelID, f.eventID(t, nigelID), logQuery{}, false).Body.String())
 
 	m := loggedLead.FindStringSubmatch(dialog)
 	if m == nil {
@@ -446,7 +412,7 @@ func TestCorrect_ASheetOpenedUnderACareTypeTheGardenDoesNotHaveIsNotFound(t *tes
 	f := rosewoodCorrections(t)
 	eventID := f.eventID(t, bigFellaID)
 
-	rec := f.openSheet(t, bigFellaID, eventID, logQuery{care: "prune"}, nil, false)
+	rec := f.openSheet(t, bigFellaID, eventID, logQuery{care: "prune"}, false)
 
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("status = %d, want %d, the same as the log itself gives that URL", rec.Code, http.StatusNotFound)
@@ -485,7 +451,7 @@ func TestCorrect_ASitterMayNotCorrectCareSomebodyElseGave(t *testing.T) {
 	// Doris was skipped by Sam, and the reader is not Sam.
 	eventID := f.eventID(t, dorisID)
 
-	if got := f.openSheet(t, dorisID, eventID, logQuery{}, nil, false).Code; got != http.StatusNotFound {
+	if got := f.openSheet(t, dorisID, eventID, logQuery{}, false).Code; got != http.StatusNotFound {
 		t.Errorf("the sheet over somebody else's care got %d, want %d", got, http.StatusNotFound)
 	}
 	rec := f.save(t, dorisID, eventID, logQuery{}, url.Values{"care": {"water"}, "outcome": {"done"}, "when": {"today"}, "time": {"06:15"}}, false)
@@ -518,7 +484,7 @@ func TestCorrect_ACareTypeArchivedSinceIsStillOnTheSheet(t *testing.T) {
 	// Nigel was fed, and feeding has been turned off since. An archived care
 	// type is left out of the garden's list, and the event still holds it.
 	f.exec(t, "UPDATE care_type SET archived_at = now() WHERE garden_id = $1 AND slug = 'feed'", rosewoodID)
-	rec := f.openSheet(t, nigelID, f.eventID(t, nigelID), logQuery{}, nil, false)
+	rec := f.openSheet(t, nigelID, f.eventID(t, nigelID), logQuery{}, false)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d:\n%s", rec.Code, rec.Body.String())
 	}
@@ -527,8 +493,8 @@ func TestCorrect_ACareTypeArchivedSinceIsStillOnTheSheet(t *testing.T) {
 	if got := chips(by["Care"]); strings.Join(got, "|") != "Water|Feed" {
 		t.Errorf("Care offers %v, want the feed the event was logged as among them", got)
 	}
-	if m := pressedButton.FindStringSubmatch(by["Care"]); m == nil || m[1] != "Feed" {
-		t.Errorf("Care does not have Feed pressed:\n%s", by["Care"])
+	if got := checked(by["Care"]); got != "Feed" {
+		t.Errorf("Care is %q, want Feed", got)
 	}
 }
 
@@ -621,7 +587,7 @@ func TestCorrect_ASheetOverCareTheReaderMayNotDeleteHasNoDeleteButton(t *testing
 	// Doris's skip, which Sam logged, opens a sheet that saves but does not
 	// offer Delete.
 	f := grant(rosewoodLog(t), auth.CareEditOwn, auth.CareEditAny, auth.CareDeleteOwn)
-	rec := f.openSheet(t, dorisID, f.eventID(t, dorisID), logQuery{}, nil, false)
+	rec := f.openSheet(t, dorisID, f.eventID(t, dorisID), logQuery{}, false)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d:\n%s", rec.Code, rec.Body.String())
 	}
@@ -640,7 +606,7 @@ func TestCorrect_TheSheetOverAnOlderEventHoldsTheDayAndTimeItHappened(t *testing
 	// Trail Mix was watered at nine in the morning, thirteen days ago. Anything
 	// older than yesterday is edited on the day-and-time field rather than a
 	// chip, so that field has to hold the day the care happened.
-	dialog := dialogElement.FindString(f.openSheet(t, trailMixID, f.eventID(t, trailMixID), logQuery{}, nil, false).Body.String())
+	dialog := dialogElement.FindString(f.openSheet(t, trailMixID, f.eventID(t, trailMixID), logQuery{}, false).Body.String())
 
 	if got := checked(fields(dialog)["When"]); got != "Another day" {
 		t.Errorf("When is %q, want Another day", got)

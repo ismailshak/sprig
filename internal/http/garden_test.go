@@ -169,6 +169,24 @@ func (f *moreFixture) careTypeCount(t *testing.T, slug string) int {
 	return count
 }
 
+func TestGarden_ASaveOfTheNameShowsSavedUnderTheButtonWithoutReloadingThePage(t *testing.T) {
+	f := careTypeGarden(t)
+
+	rec := f.swap(t, f.handler.saveGardenName, gardenPath, gardenID, "", "", url.Values{"name": {"The Roof"}})
+
+	body := fragment(t, rec, gardenID)
+	page := withoutAnnouncement(body)
+	if !strings.Contains(page, `value="The Roof"`) || !strings.Contains(text(page), "Saved") {
+		t.Errorf("the swap does not show the saved name with Saved under the button:\n%s", text(page))
+	}
+	if !strings.Contains(body, `id="`+careTypesID+`"`) {
+		t.Errorf("the swap lost the Care types section:\n%s", text(body))
+	}
+	if !strings.Contains(body, announced(savedAnnouncement)) {
+		t.Errorf("the swap does not announce the save:\n%s", body)
+	}
+}
+
 func TestGarden_SavingWritesTheGardensName(t *testing.T) {
 	f := careTypeGarden(t)
 

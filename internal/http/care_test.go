@@ -38,17 +38,6 @@ func (f *todayFixture) sheet(t *testing.T, path string, htmx bool) *httptest.Res
 	return rec
 }
 
-func (f *todayFixture) sheetTargeting(t *testing.T, path, target string) *httptest.ResponseRecorder {
-	t.Helper()
-
-	req := f.sheetRequest(t, path)
-	req.Header.Set("HX-Request", "true")
-	req.Header.Set("HX-Target", target)
-	rec := httptest.NewRecorder()
-	f.handler.sheet(rec, req)
-	return rec
-}
-
 func (f *todayFixture) post(t *testing.T, plantID string, form url.Values, htmx bool) *httptest.ResponseRecorder {
 	t.Helper()
 
@@ -154,6 +143,18 @@ func checked(fieldset string) string {
 	return ""
 }
 
+// remindersFor returns the Remind me in fieldset for one care type. The form
+// holds one for every care type it offers and the stylesheet shows the chosen
+// type's.
+func remindersFor(markup, care string) string {
+	for _, fieldset := range fieldsetElement.FindAllString(markup, -1) {
+		if strings.Contains(fieldset, `name="`+againField(care)+`"`) {
+			return fieldset
+		}
+	}
+	return ""
+}
+
 func TestSheet_OpensOnTheCareOfTheRowItWasOpenedFrom(t *testing.T) {
 	f := rosewood(t)
 	rec := f.sheet(t, sheetPath(nigelID, "water"), false)
@@ -166,7 +167,7 @@ func TestSheet_OpensOnTheCareOfTheRowItWasOpenedFrom(t *testing.T) {
 		t.Fatalf("the page holds no dialog:\n%s", page)
 	}
 
-	if !strings.Contains(dialog, `<dialog open class="sheet" id="sheet" aria-label="Log care for Nigel">`) {
+	if !strings.Contains(dialog, `<dialog open class="sheet" id="sheet" aria-label="Log care for Nigel" tabindex="-1">`) {
 		t.Errorf("the dialog is not open under the sheet's id and named for Nigel:\n%s", dialog)
 	}
 	if !regexp.MustCompile(`<h1[^>]*>Rosewood</h1>`).MatchString(page) {
@@ -181,8 +182,8 @@ func TestSheet_OpensOnTheCareOfTheRowItWasOpenedFrom(t *testing.T) {
 	if got := chips(by["Care"]); strings.Join(got, "|") != "Water|Feed" {
 		t.Errorf("Care offers %v, want the two cares Nigel is scheduled for", got)
 	}
-	if m := pressedButton.FindStringSubmatch(by["Care"]); m == nil || m[1] != "Water" {
-		t.Errorf("Care does not have Water pressed:\n%s", by["Care"])
+	if got := checked(by["Care"]); got != "Water" {
+		t.Errorf("Care starts on %q, want Water", got)
 	}
 	if got := checked(by["Outcome"]); got != "Done" {
 		t.Errorf("Outcome starts on %q, want Done", got)
@@ -193,14 +194,14 @@ func TestSheet_OpensOnTheCareOfTheRowItWasOpenedFrom(t *testing.T) {
 	if got := checked(by["When"]); got != "Just now" {
 		t.Errorf("When starts on %q, want Just now", got)
 	}
-	if got := chips(by["Remind me in"]); strings.Join(got, "|") != "1 day|2 days|3 days|4 days (usual)" {
+	if got := chips(remindersFor(dialog, "water")); strings.Join(got, "|") != "1 day|2 days|3 days|4 days (usual)" {
 		t.Errorf("Remind me in offers %v, want three short re-checks and Nigel's own four days", got)
 	}
-	if got := checked(by["Remind me in"]); got != "2 days" {
+	if got := checked(remindersFor(dialog, "water")); got != "2 days" {
 		t.Errorf("Remind me in starts on %q, want 2 days", got)
 	}
-	if !strings.Contains(dialog, `<button class="sheet__go sheet__done" name="care" value="water">Log watering</button>`) {
-		t.Error("the primary button is not Log watering carrying the care")
+	if !strings.Contains(dialog, `<button class="sheet__go sheet__for">Log watering</button>`) {
+		t.Error("the primary button is not Log watering")
 	}
 	if !strings.Contains(dialog, `hx-target="#`+rowID(nigelID)+`"`) {
 		t.Error("the post does not aim at the row the sheet was opened from")
@@ -222,34 +223,21 @@ func TestSheet_APlantWithOneCareHasNoCareTypeChoice(t *testing.T) {
 	}
 }
 
-func TestSheet_SwitchingCareTypeKeepsTheDraftAndShowsThatTypesUsualInterval(t *testing.T) {
+func TestSheet_HoldsEveryCareTypesReminderChipsAndLogButton(t *testing.T) {
 	f := rosewood(t)
-	query := url.Values{
-		"row": {"water"}, "care": {"feed"}, "outcome": {"skipped"}, "again": {"3"}, "note": {"Soil still damp"},
-	}
-	dialog := dialogElement.FindString(f.sheet(t, logPath(nigelID)+"?"+query.Encode(), false).Body.String())
-	by := fields(dialog)
+	dialog := dialogElement.FindString(f.sheet(t, sheetPath(nigelID, "water"), false).Body.String())
 
-	if m := pressedButton.FindStringSubmatch(by["Care"]); m == nil || m[1] != "Feed" {
-		t.Errorf("Care does not have Feed pressed:\n%s", by["Care"])
+	if got := chips(remindersFor(dialog, "feed")); strings.Join(got, "|") != "1 day|2 days|3 days|21 days (usual)" {
+		t.Errorf("Remind me in for feeding offers %v, want its three weeks as the usual", got)
 	}
-	if got := checked(by["Outcome"]); got != "Skipped" {
-		t.Errorf("Outcome is %q after the switch, want Skipped kept", got)
+	if got := checked(remindersFor(dialog, "feed")); got != "2 days" {
+		t.Errorf("Remind me in for feeding starts on %q, want 2 days", got)
 	}
-	if got := chips(by["Remind me in"]); strings.Join(got, "|") != "1 day|2 days|3 days|21 days (usual)" {
-		t.Errorf("Remind me in offers %v, want the feeding's three weeks as the usual", got)
+	if !strings.Contains(dialog, `<button class="sheet__go sheet__for">Log feeding</button>`) {
+		t.Error("there is no Log feeding button for the stylesheet to show")
 	}
-	if got := checked(by["Remind me in"]); got != "3 days" {
-		t.Errorf("Remind me in is %q after the switch, want 3 days kept", got)
-	}
-	if !strings.Contains(dialog, `value="Soil still damp"`) {
-		t.Error("the note was lost in the switch")
-	}
-	if !strings.Contains(dialog, `<button class="sheet__go sheet__skipped" name="care" value="feed">Log skip</button>`) {
-		t.Error("the primary button is not Log skip carrying the feed")
-	}
-	if !strings.Contains(dialog, `<input type="hidden" name="row" value="water">`) || !strings.Contains(dialog, `hx-target="#`+rowID(nigelID)+`"`) {
-		t.Error("the sheet forgot which row it was opened from")
+	if !strings.Contains(dialog, `<button class="sheet__go sheet__skipped">Log skip</button>`) {
+		t.Error("there is no Log skip button")
 	}
 }
 
@@ -257,13 +245,13 @@ func TestSheet_ACareWithNoIntervalInDaysOffersSevenDays(t *testing.T) {
 	f := rosewood(t)
 	f.exec(t, "UPDATE care_schedule SET interval_count = 1, interval_unit = 'month' WHERE plant_id = $1", spikeID)
 	dialog := dialogElement.FindString(f.sheet(t, sheetPath(spikeID, "water"), false).Body.String())
-	if got := chips(fields(dialog)["Remind me in"]); strings.Join(got, "|") != "1 day|2 days|3 days|7 days" {
+	if got := chips(remindersFor(dialog, "water")); strings.Join(got, "|") != "1 day|2 days|3 days|7 days" {
 		t.Errorf("Remind me in offers %v, want a plain week where a month is not a number of days", got)
 	}
 
 	f.exec(t, "UPDATE care_schedule SET interval_count = 2, interval_unit = 'day' WHERE plant_id = $1", spikeID)
 	dialog = dialogElement.FindString(f.sheet(t, sheetPath(spikeID, "water"), false).Body.String())
-	if got := chips(fields(dialog)["Remind me in"]); strings.Join(got, "|") != "1 day|2 days (usual)|3 days" {
+	if got := chips(remindersFor(dialog, "water")); strings.Join(got, "|") != "1 day|2 days (usual)|3 days" {
 		t.Errorf("Remind me in offers %v, want the usual to take the short chip's place", got)
 	}
 }
@@ -278,18 +266,6 @@ func TestSheet_AnHTMXRequestGetsTheSheetAloneAndANavigationTheWholePage(t *testi
 	page := f.sheet(t, sheetPath(dorisID, "water"), false).Body.String()
 	if !strings.HasPrefix(page, "<!doctype html>") || !strings.Contains(page, "<dialog") {
 		t.Errorf("a navigation did not get the page with the dialog in it:\n%.200s", page)
-	}
-}
-
-func TestSheet_AnHTMXRequestTargetingTheFormGetsTheFormAlone(t *testing.T) {
-	f := rosewood(t)
-
-	swap := f.sheetTargeting(t, sheetPath(nigelID, "water"), sheetFormID).Body.String()
-	if !strings.HasPrefix(swap, `<form class="sheet__form" id="`+sheetFormID+`"`) {
-		t.Errorf("a swap naming the form did not start with it:\n%.200s", swap)
-	}
-	if strings.Contains(swap, "<dialog") {
-		t.Errorf("a swap naming the form carried the dialog, which would replay its animation:\n%.200s", swap)
 	}
 }
 
@@ -499,7 +475,7 @@ func TestLog_ATimeInTheFutureIsRefused(t *testing.T) {
 func TestLog_ASkipStoresTheOverrideIntervalInDays(t *testing.T) {
 	t.Run("a one to three day interval", func(t *testing.T) {
 		f := rosewood(t)
-		rec := f.post(t, nigelID.String(), url.Values{"row": {"water"}, "care": {"water"}, "outcome": {"skipped"}, "again": {"2"}, "note": {"  Soil still damp "}}, true)
+		rec := f.post(t, nigelID.String(), url.Values{"row": {"water"}, "care": {"water"}, "outcome": {"skipped"}, "again-water": {"2"}, "note": {"  Soil still damp "}}, true)
 		if rec.Code != http.StatusOK {
 			t.Fatalf("status = %d:\n%s", rec.Code, rec.Body.String())
 		}
@@ -517,7 +493,7 @@ func TestLog_ASkipStoresTheOverrideIntervalInDays(t *testing.T) {
 
 	t.Run("the usual interval", func(t *testing.T) {
 		f := rosewood(t)
-		f.post(t, nigelID.String(), url.Values{"care": {"water"}, "outcome": {"skipped"}, "again": {"4"}}, true)
+		f.post(t, nigelID.String(), url.Values{"care": {"water"}, "outcome": {"skipped"}, "again-water": {"4"}}, true)
 		if e := f.latest(t, nigelID); *e.OverrideIntervalDays != 4 {
 			t.Errorf("the override is %d, want Nigel's own 4", *e.OverrideIntervalDays)
 		}
@@ -525,7 +501,7 @@ func TestLog_ASkipStoresTheOverrideIntervalInDays(t *testing.T) {
 
 	t.Run("the usual interval of the selected care, not the row's", func(t *testing.T) {
 		f := rosewood(t)
-		f.post(t, nigelID.String(), url.Values{"row": {"water"}, "care": {"feed"}, "outcome": {"skipped"}, "again": {"21"}}, true)
+		f.post(t, nigelID.String(), url.Values{"row": {"water"}, "care": {"feed"}, "outcome": {"skipped"}, "again-feed": {"21"}}, true)
 		if e := f.latest(t, nigelID); *e.OverrideIntervalDays != 21 || e.CareTypeID != feedID {
 			t.Errorf("the event is %+v, want a feed skipped for its own three weeks", e)
 		}
@@ -536,7 +512,7 @@ func TestLog_ASkipStoresTheOverrideIntervalInDays(t *testing.T) {
 	for _, again := range []string{"0", "-1", "5", "4.5", "usual"} {
 		t.Run("an interval the chips did not offer, "+again, func(t *testing.T) {
 			f := rosewood(t)
-			rec := f.post(t, nigelID.String(), url.Values{"care": {"water"}, "outcome": {"skipped"}, "again": {again}}, true)
+			rec := f.post(t, nigelID.String(), url.Values{"care": {"water"}, "outcome": {"skipped"}, "again-water": {again}}, true)
 			if rec.Code != http.StatusBadRequest {
 				t.Errorf("again=%s got %d, want %d", again, rec.Code, http.StatusBadRequest)
 			}
@@ -548,7 +524,7 @@ func TestLog_ASkipStoresTheOverrideIntervalInDays(t *testing.T) {
 
 	t.Run("a done care stores no override whatever chip was selected", func(t *testing.T) {
 		f := rosewood(t)
-		f.post(t, nigelID.String(), url.Values{"care": {"water"}, "outcome": {"done"}, "again": {"3"}}, true)
+		f.post(t, nigelID.String(), url.Values{"care": {"water"}, "outcome": {"done"}, "again-water": {"3"}}, true)
 		if e := f.latest(t, nigelID); !e.Done || e.OverrideIntervalDays != nil {
 			t.Errorf("the event is %+v", e)
 		}
@@ -645,6 +621,41 @@ func TestLog_TheLoggedRowHasAnUndoButtonAndAGraceTimer(t *testing.T) {
 	}
 	if !strings.Contains(row, `hx-target="#`+rowID(dorisID)+`" hx-swap="outerHTML settle:0ms"`) {
 		t.Errorf("Undo does not swap the row it sits in:\n%s", row)
+	}
+}
+
+func TestLog_TheSwapSaysWhatWasLoggedWhatIsLeftAndWhereUndoIs(t *testing.T) {
+	f := rosewood(t)
+
+	rec := f.post(t, dorisID.String(), url.Values{"row": {"water"}, "care": {"water"}}, true)
+
+	body := rec.Body.String()
+	want := announced("You watered Doris. 2 plants due today, 1 of them overdue. Undo from the row now, or from Activity later.")
+	if !strings.Contains(body, want) {
+		t.Errorf("the swap does not announce the care, the count and where Undo is:\nwant %s\n%s", want, body)
+	}
+}
+
+func TestLog_ASkipIsAnnouncedAsSkipped(t *testing.T) {
+	f := rosewood(t)
+
+	rec := f.post(t, dorisID.String(), url.Values{"row": {"water"}, "care": {"water"}, "outcome": {"skipped"}, "again-water": {"2"}}, true)
+
+	want := announced("You skipped Doris. 2 plants due today, 1 of them overdue. Undo from the row now, or from Activity later.")
+	if !strings.Contains(rec.Body.String(), want) {
+		t.Errorf("the swap does not announce the skip:\nwant %s\n%s", want, rec.Body.String())
+	}
+}
+
+func TestUndo_TheSwapSaysUndoneAndWhatIsLeft(t *testing.T) {
+	f := rosewood(t)
+	f.post(t, dorisID.String(), url.Values{"row": {"water"}, "care": {"water"}}, true)
+	event := f.latest(t, dorisID)
+
+	rec := f.undo(t, dorisID, event.ID, "water", true)
+
+	if want := announced("Undone. 3 plants due today, 1 of them overdue."); !strings.Contains(rec.Body.String(), want) {
+		t.Errorf("the swap does not announce the undo:\nwant %s\n%s", want, rec.Body.String())
 	}
 }
 
@@ -937,7 +948,7 @@ func TestLog_ASkipIsNotifiedAsSkipped(t *testing.T) {
 	f := rosewood(t)
 	got := f.captureNotifications()
 
-	f.post(t, nigelID.String(), url.Values{"row": {"water"}, "care": {"feed"}, "outcome": {"skipped"}, "again": {"3"}}, true)
+	f.post(t, nigelID.String(), url.Values{"row": {"water"}, "care": {"feed"}, "outcome": {"skipped"}, "again-feed": {"3"}}, true)
 
 	if len(*got) != 1 || (*got)[0].n.Body != "Ellie skipped feeding Nigel." {
 		t.Errorf("notified %+v, want one notification saying Ellie skipped feeding Nigel.", *got)

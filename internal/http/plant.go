@@ -501,6 +501,10 @@ func (h *plants) plant(w http.ResponseWriter, r *http.Request) {
 // template that renders it, so the swap target and the fragment are one string.
 const plantFootID = "plant-foot"
 
+// plantBodyID is both the HTML id of the page under the top bar and the name
+// of the template that renders it. Restore swaps it.
+const plantBodyID = "plant"
+
 // plantSwap picks the fragment an htmx request gets and narrows the page to
 // what that fragment renders. A page navigation, or a swap targeting anything
 // else, gets the whole page. It returns false for a schedule row the page does
@@ -509,6 +513,9 @@ func plantSwap(r *http.Request, page *plantPage) (string, bool) {
 	target := r.Header.Get("HX-Target")
 	if target == plantFootID {
 		return plantFootID, true
+	}
+	if target == plantBodyID {
+		return plantBodyID, true
 	}
 	if slug, ok := scheduleRowSlug(target); ok {
 		row := page.rowFor(slug)

@@ -698,8 +698,12 @@ func TestPeople_ARemoveSentAsASwapGetsThePageUnderTheBarWithoutThatMember(t *tes
 	rec := f.swap(t, f.handler.removeMember, removeMemberPath("sam"), peopleID, "member", "sam", url.Values{})
 
 	body := fragment(t, rec, peopleID)
-	if strings.Contains(text(body), "Sam") {
-		t.Errorf("Sam is still on the page after the remove:\n%s", text(body))
+	page := text(withoutAnnouncement(body))
+	if strings.Contains(page, "Sam") {
+		t.Errorf("Sam is still on the page after the remove:\n%s", page)
+	}
+	if strings.Contains(body, removeMemberPath("sam")) {
+		t.Errorf("Sam's Remove is still on the page after the remove:\n%s", text(body))
 	}
 }
 

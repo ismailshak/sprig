@@ -78,7 +78,7 @@ type tokenRow struct {
 }
 
 func (h *more) tokens(w http.ResponseWriter, r *http.Request) {
-	h.renderTokens(w, r, tokensPage{Lives: lifeOptions(defaultTokenLife)}, 0)
+	h.renderTokens(w, r, tokensPage{Lives: lifeOptions(defaultTokenLife)}, 0, "")
 }
 
 // createToken handles POST /more/tokens. It renders the token rather than
@@ -106,7 +106,7 @@ func (h *more) createToken(w http.ResponseWriter, r *http.Request) {
 	name := strings.TrimSpace(r.PostForm.Get("name"))
 	if name == "" {
 		page := tokensPage{Name: name, NameError: tokenNameMissing, Lives: lifeOptions(days)}
-		h.renderTokens(w, r, page, http.StatusUnprocessableEntity)
+		h.renderTokens(w, r, page, http.StatusUnprocessableEntity, tokenNameMissing)
 		return
 	}
 
@@ -132,7 +132,7 @@ func (h *more) createToken(w http.ResponseWriter, r *http.Request) {
 			Why:   "This token is shown only once. Copy it now. It expires on " + dateWord(expires, locationFor(principal.User)) + ".",
 		},
 	}
-	h.renderTokens(w, r, page, 0)
+	h.renderTokens(w, r, page, 0, "Token created. It’s shown only once, above the list.")
 }
 
 // revokeToken handles POST /more/tokens/{token}/revoke. Revoke and Remove are
@@ -158,15 +158,15 @@ func (h *more) revokeToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if isHTMX(r) {
-		h.renderTokens(w, r, tokensPage{Lives: lifeOptions(defaultTokenLife)}, 0)
+		h.renderTokens(w, r, tokensPage{Lives: lifeOptions(defaultTokenLife)}, 0, "Token revoked.")
 		return
 	}
 	http.Redirect(w, r, tokensPath, http.StatusSeeOther)
 }
 
 // renderTokens fills in the list and writes the page. A status of zero means
-// 200.
-func (h *more) renderTokens(w http.ResponseWriter, r *http.Request, page tokensPage, status int) {
+// 200. announce is the sentence a swap puts in the live region.
+func (h *more) renderTokens(w http.ResponseWriter, r *http.Request, page tokensPage, status int, announce string) {
 	principal := PrincipalFrom(r)
 	tokens, err := h.queries.ListAPITokens(r.Context(), principal.Garden.ID)
 	if err != nil {
@@ -179,7 +179,7 @@ func (h *more) renderTokens(w http.ResponseWriter, r *http.Request, page tokensP
 	for _, row := range page.Tokens {
 		page.AnyExpired = page.AnyExpired || row.Expired
 	}
-	v := view{page: "tokens", status: status}
+	v := view{page: "tokens", status: status, announce: announce}
 	if r.Header.Get("HX-Target") == tokensID {
 		v.fragment = tokensID
 	}

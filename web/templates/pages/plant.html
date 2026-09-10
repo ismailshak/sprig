@@ -6,10 +6,14 @@
 <header class="topbar topbar--back">
 <a class="backlink" href="{{.Back.Href}}">{{template "icon-back"}}{{.Back.Label}}</a>
 </header>
-{{/* Sections are in phone order. Above 900px the stylesheet's grid areas move
-     the picture and the details into their own column, so the wide layout
-     reuses this markup. */}}
-<div class="app__body app__body--plant">
+{{template "plant" .}}
+{{end}}
+
+{{/* Everything under the top bar, and the fragment Restore swaps. Sections
+     are in phone order. Above 900px the stylesheet's grid areas move the
+     picture and the details into their own column, so the wide layout reuses
+     this markup. */}}
+{{define "plant"}}<div class="app__body app__body--plant" id="plant">
 <div class="hero">
 {{/* The picture is a link to that photo's own page. The expand mark in the
      corner is the only sign it is a link. */}}
@@ -78,8 +82,7 @@
 </section>
 
 {{template "plant-foot" .}}
-</div>
-{{end}}
+</div>{{end}}
 
 {{/* The rows of the Schedule section. Also the fragment returned when a swap
      targets one row. */}}
@@ -124,8 +127,10 @@
 {{template "schedule-controls" .}}
 {{if .Asking}}<div class="sched__confirm">
 <span class="sched__ask">Remove this schedule?</span>
+{{/* autofocus puts a keyboard user on the safe answer once the confirmation
+     has replaced the buttons. */}}
 <button class="sched__cancel" type="submit" formmethod="get" formaction="{{.Path}}"
- hx-get="{{.Path}}" hx-include="#{{.ID}}" hx-target="#{{.ID}}" hx-swap="outerHTML settle:0ms">Cancel</button>
+ hx-get="{{.Path}}" hx-include="#{{.ID}}" hx-target="#{{.ID}}" hx-swap="outerHTML settle:0ms" autofocus>Cancel</button>
 <button class="care care--small" type="submit" formaction="{{.Remove}}"
  hx-post="{{.Remove}}" hx-target="#{{.ID}}" hx-swap="outerHTML settle:0ms">Remove</button>
 </div>{{else}}<div class="sched__buttons">

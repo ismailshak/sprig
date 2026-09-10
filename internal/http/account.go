@@ -1,6 +1,7 @@
 package http
 
 import (
+	"cmp"
 	"context"
 	"net/http"
 	"slices"
@@ -33,8 +34,11 @@ type accountForm struct {
 }
 
 type accountPage struct {
-	Bar  topbar
-	Name string
+	Bar topbar
+	// Action is the URL the form posts to, in its action attribute and in
+	// hx-post.
+	Action string
+	Name   string
 	// NameError is shown under Display name, empty when the form is valid.
 	NameError string
 	Handle    string
@@ -65,6 +69,20 @@ func (h *more) account(w http.ResponseWriter, r *http.Request) {
 	h.templates.render(w, r, view{page: "account"}, page)
 }
 
+// accountID is both the HTML id of the page under the top bar and the name of
+// the template that renders it. Save changes swaps it.
+const accountID = "account"
+
+// renderAccount writes the page, or the page under the top bar for a swap of
+// it. A status of zero means 200.
+func (h *more) renderAccount(w http.ResponseWriter, r *http.Request, page accountPage, status int, announce string) {
+	v := view{page: "account", status: status, announce: announce}
+	if r.Header.Get("HX-Target") == accountID {
+		v.fragment = accountID
+	}
+	h.templates.render(w, r, v, page)
+}
+
 func (h *more) saveAccount(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	if err := r.ParseForm(); err != nil {
@@ -86,7 +104,7 @@ func (h *more) saveAccount(w http.ResponseWriter, r *http.Request) {
 
 	// The page is built before the update, because both refusals below
 	// re-render it: an empty field, and the unique index rejecting the handle.
-	// A save that goes through redirects and throws it away.
+	// A plain post that goes through redirects and throws it away.
 	page, err := h.newAccountPage(r.Context(), principal, form)
 	if err != nil {
 		h.templates.serverError(h.logger, w, r, "save the account", err)
@@ -95,7 +113,7 @@ func (h *more) saveAccount(w http.ResponseWriter, r *http.Request) {
 	page.NameError = nameErrorFor(form.name)
 	page.HandleError = handleErrorFor(form.handle)
 	if page.NameError != "" || page.HandleError != "" {
-		h.templates.render(w, r, view{page: "account", status: http.StatusUnprocessableEntity}, page)
+		h.renderAccount(w, r, page, http.StatusUnprocessableEntity, cmp.Or(page.NameError, page.HandleError))
 		return
 	}
 
@@ -108,7 +126,7 @@ func (h *more) saveAccount(w http.ResponseWriter, r *http.Request) {
 	switch err := h.queries.UpdateAccount(r.Context(), params); {
 	case store.HandleTaken(err):
 		page.HandleError = handleTakenMessage(form.handle)
-		h.templates.render(w, r, view{page: "account", status: http.StatusUnprocessableEntity}, page)
+		h.renderAccount(w, r, page, http.StatusUnprocessableEntity, page.HandleError)
 		return
 	case err != nil:
 		h.templates.serverError(h.logger, w, r, "save the account", err)
@@ -116,6 +134,14 @@ func (h *more) saveAccount(w http.ResponseWriter, r *http.Request) {
 	}
 	// The digest hour is read in the timezone just saved.
 	h.wake.call()
+	// With htmx the response is the page under the top bar with the Saved
+	// line on it. A plain post redirects to the page with Saved in the query
+	// string.
+	if isHTMX(r) {
+		page.Saved = true
+		h.renderAccount(w, r, page, 0, savedAnnouncement)
+		return
+	}
 	http.Redirect(w, r, savedURL(accountPath), http.StatusSeeOther)
 }
 
@@ -141,6 +167,7 @@ func handleErrorFor(handle string) string {
 func (h *more) newAccountPage(ctx context.Context, principal auth.Principal, form accountForm) (accountPage, error) {
 	page := accountPage{
 		Bar:    moreBar("Account"),
+		Action: accountPath,
 		Name:   form.name,
 		Handle: form.handle,
 		Codes:  linkRow{Label: "Recovery codes", Href: recoveryPath},

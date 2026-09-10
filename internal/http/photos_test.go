@@ -123,6 +123,23 @@ func TestPhotos_TheGridShowsTwentyFourPhotosAndTheOlderTileFetchesTheRest(t *tes
 	}
 }
 
+func TestPhotos_ALastPageOfOnePhotoIsAnnouncedAsOnePhoto(t *testing.T) {
+	f := plantFormOn(t)
+	for i := range gridPageSize + 1 {
+		f.storedPhoto(t, bigFellaID, readerID, thursday.Add(-time.Duration(i)*time.Minute))
+	}
+	m := olderTile.FindStringSubmatch(f.grid(t, bigFellaID, "", false).Body.String())
+	if m == nil {
+		t.Fatal("the first page has no Older photos tile")
+	}
+
+	second := f.grid(t, bigFellaID, strings.TrimPrefix(m[1], photosPath(bigFellaID)), true).Body.String()
+
+	if want := announced("1 older photo added."); !strings.Contains(second, want) {
+		t.Errorf("the last page is not announced as one photo:\nwant %s\n%s", want, second)
+	}
+}
+
 func TestPhotos_TheOlderPhotosLinkGetsTheWholePageWithTheRemainingTiles(t *testing.T) {
 	f := plantFormOn(t)
 	var ids []uuid.UUID

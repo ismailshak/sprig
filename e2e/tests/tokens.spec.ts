@@ -1,4 +1,5 @@
 import { people, tokens as seeded } from '../harness/garden';
+import { TokensScreen } from '../screens/tokens';
 import { signIn } from '../harness/signin';
 import { expect, test } from '../harness/test';
 
@@ -62,7 +63,7 @@ test('a token with no name is refused and says so under the field @swap', async 
   await tokens.expiry().selectOption('90');
   await tokens.create().click();
 
-  await expect(page.getByText(/^Enter a name\./)).toBeVisible();
+  await expect(page.getByRole('main').getByText(/^Enter a name\./)).toBeVisible();
   await expect(tokens.expiry()).toHaveValue('90');
   await expect(tokens.token()).toHaveCount(0);
 });
@@ -74,4 +75,22 @@ test('a revoked token leaves the list and the rest stay @swap', async ({ tokens 
 
   await expect(tokens.row(seeded.kitchen)).toHaveCount(0);
   await expect(tokens.row(seeded.spare)).toBeVisible();
+});
+
+// htmx does not swap an error response, so a failed swap leaves the page as it
+// was. The line at the top is the only sign the press did anything. The second
+// tab revokes the token first, so the button in this one points at a token
+// that is already gone.
+test('a swap that the server refuses says so at the top of the page @js', async ({ context, page, tokens }) => {
+  await tokens.open();
+  const secondTab = new TokensScreen(await context.newPage());
+  await secondTab.open();
+  await secondTab.row(seeded.kitchen).getByRole('button').click();
+  await expect(secondTab.row(seeded.kitchen)).toHaveCount(0);
+
+  await tokens.row(seeded.kitchen).getByRole('button').click();
+
+  const line = page.getByText('Page not found. There’s no page at this address.');
+  await expect(line).toBeInViewport();
+  await expect(tokens.row(seeded.kitchen)).toBeVisible();
 });

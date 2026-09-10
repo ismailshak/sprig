@@ -116,7 +116,8 @@ func (h *plants) photoGrid(w http.ResponseWriter, r *http.Request) {
 	for _, row := range rows {
 		page.Tiles = append(page.Tiles, newPhotoTile(plant, row.Photo, now))
 	}
-	h.templates.render(w, r, view{page: "photos", fragment: photoTilesFragment}, page)
+	v := view{page: "photos", fragment: photoTilesFragment, announce: photosWord(len(page.Tiles)) + " added."}
+	h.templates.render(w, r, v, page)
 }
 
 func newPhotoTile(plant store.Plant, p store.Photo, now time.Time) photoTile {

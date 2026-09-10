@@ -188,6 +188,9 @@ type peopleState struct {
 	// itself. Both are empty on every request that created no link.
 	reenrolled store.AppUser
 	link       string
+	// announce is the sentence a swap puts in the live region. Empty for a
+	// swap that announces nothing, such as Cancel on the remove confirmation.
+	announce string
 }
 
 func (h *more) people(w http.ResponseWriter, r *http.Request) {
@@ -235,14 +238,15 @@ func (h *more) saveMembers(w http.ResponseWriter, r *http.Request) {
 		h.templates.serverError(h.logger, w, r, "save the members", err)
 		return
 	}
-	h.peopleSaved(w, r)
+	h.peopleSaved(w, r, savedAnnouncement)
 }
 
-// peopleSaved finishes a write from the People page. A swap gets the page
-// under the top bar as it now is, and a plain post is redirected to People.
-func (h *more) peopleSaved(w http.ResponseWriter, r *http.Request) {
+// peopleSaved finishes a write from the People page. With htmx it renders the
+// page under the top bar and puts announce in the live region. A plain post
+// redirects to People.
+func (h *more) peopleSaved(w http.ResponseWriter, r *http.Request, announce string) {
 	if isHTMX(r) {
-		h.renderPeople(w, r, peopleState{})
+		h.renderPeople(w, r, peopleState{announce: announce})
 		return
 	}
 	http.Redirect(w, r, peoplePath, http.StatusSeeOther)
@@ -299,7 +303,9 @@ func (h *more) confirmRemoveMember(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	h.renderPeople(w, r, peopleState{asking: member.AppUser.Handle})
+	state := peopleState{asking: member.AppUser.Handle}
+	state.announce = "Remove " + member.AppUser.DisplayName + "? Cancel or Remove."
+	h.renderPeople(w, r, state)
 }
 
 // removeMember handles POST /more/people/{member}/remove. It deletes the
@@ -319,7 +325,7 @@ func (h *more) removeMember(w http.ResponseWriter, r *http.Request) {
 		h.templates.notFound(w, r)
 		return
 	}
-	h.peopleSaved(w, r)
+	h.peopleSaved(w, r, member.AppUser.DisplayName+" removed.")
 }
 
 // reenrolMember handles POST /more/people/{member}/reenrol. It creates an
@@ -338,7 +344,9 @@ func (h *more) reenrolMember(w http.ResponseWriter, r *http.Request) {
 		h.templates.serverError(h.logger, w, r, "make the re-enrolment link", err)
 		return
 	}
-	h.renderPeople(w, r, peopleState{reenrolled: member.AppUser, link: inviteLink(r, token)})
+	state := peopleState{reenrolled: member.AppUser, link: inviteLink(r, token)}
+	state.announce = "Sign-in link for " + member.AppUser.DisplayName + " is above the list."
+	h.renderPeople(w, r, state)
 }
 
 // revokeInvite handles POST /more/people/invites/{invite}/revoke. Deleting the
@@ -359,7 +367,7 @@ func (h *more) revokeInvite(w http.ResponseWriter, r *http.Request) {
 		h.templates.notFound(w, r)
 		return
 	}
-	h.peopleSaved(w, r)
+	h.peopleSaved(w, r, "Invite revoked.")
 }
 
 // memberFromPath reads the member the URL names. It writes a 404 and returns
@@ -452,7 +460,7 @@ func (h *more) renderPeople(w http.ResponseWriter, r *http.Request, state people
 	if principal.Can(auth.MemberInvite) {
 		page.InviteSomeone = invitePath
 	}
-	v := view{page: "people"}
+	v := view{page: "people", announce: state.announce}
 	if r.Header.Get("HX-Target") == peopleID {
 		v.fragment = peopleID
 	}

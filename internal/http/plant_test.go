@@ -86,7 +86,7 @@ var (
 	logLine     = regexp.MustCompile(`<li class="logline[^"]*">(.*?)</li>`)
 	logCare     = regexp.MustCompile(`<a [^>]*>Log care</a>`)
 	sheetForm   = regexp.MustCompile(`(?s)<form class="sheet__form".*?>`)
-	sheetChips  = regexp.MustCompile(`<button class="chip" name="care" value="([^"]+)"`)
+	sheetChips  = regexp.MustCompile(`<input type="radio" name="care" value="([^"]+)"`)
 	sheetPlantH = regexp.MustCompile(`<(a|div) class="sheet__plant"`)
 )
 
@@ -525,7 +525,7 @@ func TestPlantSheet_OpensOnTheCareDueSoonest(t *testing.T) {
 		rosewoodID, bigFellaID, feedID, day(time.September, 1))
 
 	body := f.sheet(t, plantSheetPath(bigFellaID), false).Body.String()
-	if !strings.Contains(body, `<button class="sheet__default" name="care" value="water"`) {
+	if !strings.Contains(body, `<input type="radio" name="care" value="water" checked>`) {
 		t.Errorf("the sheet did not open on the watering:\n%s", body)
 	}
 }

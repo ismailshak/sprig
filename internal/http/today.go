@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 	"uuid"
@@ -360,6 +361,29 @@ func swapHead(principal auth.Principal, g gardenDay) todayHead {
 	}
 	head.OOB = true
 	return head
+}
+
+// daySentence is the summary bar as one sentence, for the announcement a swap
+// makes: "3 plants due today, 1 of them overdue." It renders the bar's own
+// templates, so the bar and the sentence hold the same words.
+func (h *today) daySentence(head todayHead) string {
+	switch {
+	case head.Summary != nil:
+		return strconv.Itoa(head.Summary.Outstanding) + " " + h.templates.sentence("today", "day-due-words", head.Summary)
+	case head.Clear:
+		return h.templates.sentence("today", "day-clear-words", nil)
+	case head.Empty != nil:
+		return head.Empty.Title + "."
+	}
+	return ""
+}
+
+// loggedAnnouncement is the sentence the live region gets after care is logged
+// from Today: what was logged, what is left, and where Undo is. The row's Undo
+// goes when the undo window closes, so the sentence also points at Activity.
+func (h *today) loggedAnnouncement(principal auth.Principal, plant store.Plant, careType store.CareType, event store.CareEvent, head todayHead) string {
+	who, did := whoDid(principal, principal.User.DisplayName, event, careType)
+	return who + " " + did + " " + plant.DisplayName() + ". " + h.daySentence(head) + " Undo from the row now, or from Activity later."
 }
 
 // newTodayEmpty picks which empty state to show. The tick means something was

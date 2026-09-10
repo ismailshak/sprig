@@ -26,14 +26,12 @@ export class NotificationsScreen {
     return this.page.getByRole('button', { name: 'Save changes' });
   }
 
-  // saveChanges clicks Save changes and waits for the page the post redirects
-  // to to finish loading. The click returns before the post is sent, and the
-  // redirect is still navigating when its response arrives, so a test that
-  // opens a page after either would cancel the navigation under way.
+  // saveChanges clicks Save changes and waits for the Saved line. With
+  // JavaScript the save is a swap and without it a post and a redirect. The
+  // line is on the page once either has finished.
   async saveChanges(): Promise<void> {
-    const loaded = this.page.waitForEvent('load');
     await this.save().click();
-    await loaded;
+    await this.page.getByText('Saved', { exact: true }).waitFor();
   }
 
   // The line the page's script writes the browser's refusal into.
@@ -48,10 +46,5 @@ export class NotificationsScreen {
 
   sendTest(): Locator {
     return this.page.getByRole('button', { name: 'Send test notification' });
-  }
-
-  // The line under the Send test notification button saying how the test went.
-  testResult(): Locator {
-    return this.page.getByRole('status');
   }
 }

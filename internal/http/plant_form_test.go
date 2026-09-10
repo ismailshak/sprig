@@ -818,6 +818,9 @@ func TestPlantForm_AnHTMXRequestGetsTheRowAlone(t *testing.T) {
 	if !strings.Contains(page, `id="sched-repot"`) {
 		t.Error("the row came back without the id the swap replaces")
 	}
+	if want := announced("Repot now has When, Every and Seasonal."); !strings.Contains(page, want) {
+		t.Errorf("the swap does not announce the fields the row now has:\nwant %s\n%s", want, page)
+	}
 }
 
 func TestPlantForm_BothFormsOfferEveryRoomThePlantsAreIn(t *testing.T) {

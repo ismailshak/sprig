@@ -81,6 +81,10 @@ func saved(r *http.Request) bool {
 	return r.URL.Query().Has(savedParam)
 }
 
+// savedAnnouncement is the sentence the live region gets after a save that
+// swaps the page in place.
+const savedAnnouncement = "Saved."
+
 // moreBar is the top bar for a page reached from More's index, with its back
 // link pointing there.
 func moreBar(title string) topbar {

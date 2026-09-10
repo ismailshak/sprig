@@ -6,16 +6,25 @@
 {{template "activity" .Feed}}
 </div>{{end}}
 
+{{/* The words after the count in the summary bar. A swap of the day is
+     announced as the count and these words, so what the bar says and what is
+     read out cannot drift apart. */}}
+{{define "day-due-words"}}{{if eq .Outstanding 1}}plant{{else}}plants{{end}} due today{{if .Overdue}}, {{.Overdue}} of them overdue{{end}}.{{end}}
+
+{{/* The bar's line when nothing is left to do, and the announcement of a swap
+     that empties the day. */}}
+{{define "day-clear-words"}}All done for today.{{end}}
+
 {{/* The three variants share the id day-head, because a swap can replace any
      one of them with any other. */}}
 {{define "day-head"}}
 {{- with .Summary}}<div class="summary" id="day-head"{{if $.OOB}} hx-swap-oob="true"{{end}}>
 <span class="summary__count">{{.Outstanding}}</span>
-<span>{{if eq .Outstanding 1}}plant{{else}}plants{{end}} due today{{if .Overdue}}, {{.Overdue}} of them overdue{{end}}.</span>
+<span>{{template "day-due-words" .}}</span>
 </div>{{end}}
 {{- if .Clear}}<div class="summary summary--clear" id="day-head"{{if .OOB}} hx-swap-oob="true"{{end}}>
 <span class="summary__count">{{template "icon-check"}}</span>
-<span>All done for today.</span>
+<span>{{template "day-clear-words"}}</span>
 </div>{{end}}
 {{- with .Empty}}<div class="empty" id="day-head"{{if $.OOB}} hx-swap-oob="true"{{end}}>
 <span class="empty__mark">{{if .Done}}{{template "icon-check"}}{{else}}{{template "icon-plants"}}{{end}}</span>

@@ -2,11 +2,13 @@
 
 {{/* The back link goes to the plant's page. The plant is named in the link
      rather than in a title, because the page is the plant's photos and
-     nothing else. */}}
+     nothing else. The heading is for screen readers alone. It is there so
+     the page's headings start at h1 rather than at the sections' h2. */}}
 {{define "main"}}
 <header class="topbar topbar--back">
 <a class="backlink" href="{{.Back}}">{{template "icon-back"}}{{.Name}}</a>
 </header>
+<h1 class="visually-hidden">{{.Name}}’s photos</h1>
 <div class="app__body app__body--photos">
 {{if .Tiles}}
 <ul class="tiles" id="photo-grid">

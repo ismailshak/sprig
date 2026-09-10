@@ -108,6 +108,9 @@ func (h *plants) renderPhoto(w http.ResponseWriter, r *http.Request, asking bool
 	if r.Header.Get("HX-Target") == photoFootID {
 		v.fragment = photoFootID
 	}
+	if asking {
+		v.announce = "Delete this photo? This can’t be undone. Cancel or Delete."
+	}
 	h.templates.render(w, r, v, page)
 }
 
