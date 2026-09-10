@@ -18,10 +18,6 @@ import (
 // rows.
 const digestKind = "digest"
 
-// retryAfter is how long the job waits before looking again after a database
-// error.
-const retryAfter = time.Minute
-
 // Digest is the job that sends each member what is due in their garden, once a
 // day at the hour they chose in their timezone.
 //
@@ -37,8 +33,7 @@ type Digest struct {
 	todayURL string
 	// now supplies the current time, so a test can fix the day.
 	now func() time.Time
-	// wake is the channel Wake sends on. It is buffered to one, because two
-	// changes before the job next looks need only one look.
+	// wake is the channel Wake sends on.
 	wake chan struct{}
 	// skipped holds, per membership, the last digest instant dropped for being
 	// more than maxLate late. Every look drops the same one again, so the map
@@ -64,45 +59,13 @@ func NewDigest(logger *slog.Logger, queries *store.Queries, sender *Sender, base
 // committing a change to who gets a digest and when. It never blocks. A second
 // call before the job looks again does nothing.
 func (d *Digest) Wake() {
-	select {
-	case d.wake <- struct{}{}:
-	default:
-	}
+	wakeJob(d.wake)
 }
 
 // Run sends digests until ctx is done. It returns no error: a failed look is
 // logged and tried again after retryAfter.
 func (d *Digest) Run(ctx context.Context) {
-	for {
-		next, err := d.sendDue(ctx)
-		if ctx.Err() != nil {
-			return
-		}
-		if err != nil {
-			d.logger.Error("digest job failed", "err", err)
-			next = d.now().Add(retryAfter)
-		}
-
-		// A zero next means nobody has a digest coming. fire stays nil, so the
-		// select waits for a wake or for ctx to end.
-		var timer *time.Timer
-		var fire <-chan time.Time
-		if !next.IsZero() {
-			timer = time.NewTimer(next.Sub(d.now()))
-			fire = timer.C
-		}
-		select {
-		case <-ctx.Done():
-		case <-d.wake:
-		case <-fire:
-		}
-		if timer != nil {
-			timer.Stop()
-		}
-		if ctx.Err() != nil {
-			return
-		}
-	}
+	runJob(ctx, d.logger, "digest", d.now, d.wake, d.sendDue)
 }
 
 // sendDue sends every digest whose hour has come and returns the instant of
@@ -121,15 +84,7 @@ func (d *Digest) sendDue(ctx context.Context) (time.Time, error) {
 		}
 	}
 	for _, member := range members {
-		loc, err := time.LoadLocation(member.Timezone)
-		if err != nil {
-			// The Account page only offers names the zone database knows, so
-			// an unknown one means the row was written some other way. The
-			// hour is read in UTC, the fallback the pages use for the same
-			// column.
-			d.logger.Warn("digest timezone unknown", "user", member.Handle, "timezone", member.Timezone)
-			loc = time.UTC
-		}
+		loc := locationOf(d.logger, member.Handle, member.Timezone)
 		at, key, skipped := nextDigest(int(member.DigestHour), loc, member.SentThrough, now)
 		if !skipped.IsZero() && !d.skipped[member.MembershipID].Equal(skipped) {
 			d.skipped[member.MembershipID] = skipped

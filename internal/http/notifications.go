@@ -26,16 +26,29 @@ const (
 	activityKind = "activity"
 )
 
-// wakeDigest has the digest job work out its next send again. A handler calls
-// it after committing a change to who gets a digest and when: a type switched
-// on or off, the hour, an account's timezone, a browser subscribed, a garden
-// deleted, an account closed. Without it the job finds the change only when
-// its timer next fires. It is nil when push is off.
-type wakeDigest func()
+// wakeJobs has the digest and deadlines jobs work out their next send again.
+// A handler calls it after committing a change to when either job next sends:
+// a digest type switched on or off, the digest hour, an account's timezone, a
+// browser subscribed, a garden deleted, an account closed, a token created or
+// revoked, a membership's end date set or moved. Without it a job finds the
+// change only when its timer next fires. It is nil when push is off.
+type wakeJobs func()
 
-func (w wakeDigest) call() {
+func (w wakeJobs) call() {
 	if w != nil {
 		w()
+	}
+}
+
+// notifyUser sends one person a push notification on every browser they have
+// subscribed. It is nil when push is off. The notifications sent through it
+// have no switch on the Notifications page, so a person stops them by removing
+// the browser there.
+type notifyUser func(ctx context.Context, user store.AppUser, n push.Notification)
+
+func (f notifyUser) call(ctx context.Context, user store.AppUser, n push.Notification) {
+	if f != nil {
+		f(ctx, user, n)
 	}
 }
 

@@ -25,3 +25,14 @@ ORDER BY membership.created_at, membership.id;
 INSERT INTO notification_send (membership_id, kind, send_key)
 VALUES (@membership_id, @kind, @send_key)
 ON CONFLICT DO NOTHING;
+
+-- Deletes the ledger rows of one kind and send key across the garden's
+-- members, so the same send can be made again. The photo delete handler uses
+-- it once a deletion takes the garden back under the storage threshold.
+-- name: DeleteNotificationSends :execrows
+DELETE FROM notification_send
+USING membership
+WHERE membership.id = notification_send.membership_id
+  AND membership.garden_id = @garden_id
+  AND notification_send.kind = @kind
+  AND notification_send.send_key = @send_key;

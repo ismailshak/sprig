@@ -210,6 +210,65 @@ func (q *Queries) ListMembers(ctx context.Context, gardenID uuid.UUID) ([]ListMe
 	return items, nil
 }
 
+const listMembersWithCapability = `-- name: ListMembersWithCapability :many
+SELECT membership.id, membership.garden_id, membership.user_id, membership.role, membership.invited_by, membership.created_at, membership.expires_at, membership.digest_hour, app_user.id, app_user.display_name, app_user.handle, app_user.timezone, app_user.created_at, app_user.last_garden_id, app_user.closed_at
+FROM membership
+JOIN app_user ON app_user.id = membership.user_id
+JOIN role_capability ON role_capability.role = membership.role AND role_capability.capability = $1
+WHERE membership.garden_id = $2
+  AND (membership.expires_at IS NULL OR membership.expires_at > $3::timestamptz)
+ORDER BY membership.created_at, membership.id
+`
+
+type ListMembersWithCapabilityParams struct {
+	Capability string
+	GardenID   uuid.UUID
+	Now        time.Time
+}
+
+type ListMembersWithCapabilityRow struct {
+	Membership Membership
+	AppUser    AppUser
+}
+
+// The members of the garden whose role grants @capability and whose membership
+// has not ended at @now, oldest membership first.
+func (q *Queries) ListMembersWithCapability(ctx context.Context, arg ListMembersWithCapabilityParams) ([]ListMembersWithCapabilityRow, error) {
+	rows, err := q.db.Query(ctx, listMembersWithCapability, arg.Capability, arg.GardenID, arg.Now)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListMembersWithCapabilityRow
+	for rows.Next() {
+		var i ListMembersWithCapabilityRow
+		if err := rows.Scan(
+			&i.Membership.ID,
+			&i.Membership.GardenID,
+			&i.Membership.UserID,
+			&i.Membership.Role,
+			&i.Membership.InvitedBy,
+			&i.Membership.CreatedAt,
+			&i.Membership.ExpiresAt,
+			&i.Membership.DigestHour,
+			&i.AppUser.ID,
+			&i.AppUser.DisplayName,
+			&i.AppUser.Handle,
+			&i.AppUser.Timezone,
+			&i.AppUser.CreatedAt,
+			&i.AppUser.LastGardenID,
+			&i.AppUser.ClosedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listMembershipsForUser = `-- name: ListMembershipsForUser :many
 SELECT membership.id, membership.garden_id, membership.user_id, membership.role, membership.invited_by, membership.created_at, membership.expires_at, membership.digest_hour FROM membership
 JOIN app_user ON app_user.id = membership.user_id
@@ -304,6 +363,84 @@ func (q *Queries) ListMembershipsWithGardensForUser(ctx context.Context, userID 
 			&i.Garden.CreatedAt,
 			&i.OwnerName,
 			&i.ReaderOwns,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSittingDeadlines = `-- name: ListSittingDeadlines :many
+SELECT sitting.id AS sitting_id, sitting.expires_at::timestamptz AS ends_at,
+    sitter.display_name AS sitter_name, garden.name AS garden_name,
+    recipient.id AS membership_id, recipient.user_id, app_user.handle,
+    (recipient.id = sitting.id)::boolean AS is_sitter,
+    coalesce(owner.display_name, '')::text AS owner_name,
+    coalesce(owner.id = recipient.user_id, false)::boolean AS recipient_owns
+FROM membership sitting
+JOIN app_user sitter ON sitter.id = sitting.user_id
+JOIN garden ON garden.id = sitting.garden_id
+JOIN membership recipient ON recipient.garden_id = sitting.garden_id
+    AND (recipient.id = sitting.id
+        OR (recipient.user_id = sitting.invited_by AND (recipient.expires_at IS NULL OR recipient.expires_at > $1::timestamptz)))
+JOIN app_user ON app_user.id = recipient.user_id
+LEFT JOIN LATERAL (
+    SELECT app_user.id, app_user.display_name
+    FROM membership o
+    JOIN app_user ON app_user.id = o.user_id
+    WHERE o.garden_id = garden.id AND o.role = 'owner'
+    ORDER BY o.created_at, o.id
+    LIMIT 1
+) AS owner ON true
+WHERE sitting.expires_at IS NOT NULL AND sitting.expires_at > $2::timestamptz
+  AND EXISTS (SELECT 1 FROM push_subscription WHERE push_subscription.user_id = recipient.user_id)
+ORDER BY sitting.expires_at, sitting.id, recipient.id = sitting.id DESC
+`
+
+type ListSittingDeadlinesRow struct {
+	SittingID     uuid.UUID
+	EndsAt        time.Time
+	SitterName    string
+	GardenName    string
+	MembershipID  uuid.UUID
+	UserID        uuid.UUID
+	Handle        string
+	IsSitter      bool
+	OwnerName     string
+	RecipientOwns bool
+}
+
+// For every membership with an end date after @since: the sitter, and the
+// person who invited them where that person is still a member at @now. One row
+// per recipient, with is_sitter telling the two apart. A recipient with no
+// browser subscribed is left out, so the job never claims a ledger row and then
+// sends nothing. owner_name is the display name of the garden's owner, empty
+// when the garden has no owner. recipient_owns is true when the recipient is
+// that owner. There is no @garden_id because the job runs across every garden.
+func (q *Queries) ListSittingDeadlines(ctx context.Context, now time.Time, since time.Time) ([]ListSittingDeadlinesRow, error) {
+	rows, err := q.db.Query(ctx, listSittingDeadlines, now, since)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSittingDeadlinesRow
+	for rows.Next() {
+		var i ListSittingDeadlinesRow
+		if err := rows.Scan(
+			&i.SittingID,
+			&i.EndsAt,
+			&i.SitterName,
+			&i.GardenName,
+			&i.MembershipID,
+			&i.UserID,
+			&i.Handle,
+			&i.IsSitter,
+			&i.OwnerName,
+			&i.RecipientOwns,
 		); err != nil {
 			return nil, err
 		}

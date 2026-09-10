@@ -14,10 +14,10 @@ import (
 func TestSecurityHeaders_EveryRouteSetsAllFourHeaders(t *testing.T) {
 	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
 	queries := routeQueries(t)
-	stranger := New(logger, testSessions(), testPasskeys(), rejectEveryToken, noLiveToken, queries, testPhotos(t), testTemplates(), testAssets(), "", false, testPushKey, nil, nil, nil)
-	owner := New(logger, testSessions(), testPasskeys(), acceptEveryToken(memberWith(everyCapability())), noLiveToken, queries, testPhotos(t), testTemplates(), testAssets(), "", false, testPushKey, nil, nil, nil)
+	stranger := New(logger, testSessions(), testPasskeys(), rejectEveryToken, noLiveToken, queries, testPhotos(t), testTemplates(), testAssets(), "", false, testPushKey, nil, nil, nil, nil)
+	owner := New(logger, testSessions(), testPasskeys(), acceptEveryToken(memberWith(everyCapability())), noLiveToken, queries, testPhotos(t), testTemplates(), testAssets(), "", false, testPushKey, nil, nil, nil, nil)
 
-	for _, r := range routes(testLogger, testSessions(), testPasskeys(), nil, testPhotos(t), testTemplates(), testAssets(), "", false, testPushKey, nil, nil, nil) {
+	for _, r := range routes(testLogger, testSessions(), testPasskeys(), nil, testPhotos(t), testTemplates(), testAssets(), "", false, testPushKey, nil, nil, nil, nil) {
 		method, path := splitPattern(r.pattern)
 		if a := routeAccess[r.pattern]; a.path != "" {
 			path = a.path

@@ -42,7 +42,7 @@ func tokenGarden(t *testing.T) *moreFixture {
 func TestTokens_ALiveRowOffersRevokeAndAnExpiredOneOffersRemove(t *testing.T) {
 	f := tokenGarden(t)
 
-	rows := tokensShown(f.page(t, f.handler.tokens, tokensPath))
+	rows := tokensShown(f.page(t, f.handler.tokens, TokensPath))
 
 	// The newest row is at the top. A date inside the last week is named by its
 	// day, and the spare ran out on the Friday.
@@ -58,13 +58,13 @@ func TestTokens_ALiveRowOffersRevokeAndAnExpiredOneOffersRemove(t *testing.T) {
 func TestTokens_TheNoteUnderTheListSaysWhatHasHappenedOnceARowHasRunOut(t *testing.T) {
 	f := tokenGarden(t)
 
-	page := f.page(t, f.handler.tokens, tokensPath)
+	page := f.page(t, f.handler.tokens, TokensPath)
 	if !strings.Contains(page, "An expired token no longer works") {
 		t.Errorf("the note does not say a row has already run out:\n%s", page)
 	}
 
 	f.exec(t, "DELETE FROM api_token WHERE id = $1", spareTokenID)
-	page = f.page(t, f.handler.tokens, tokensPath)
+	page = f.page(t, f.handler.tokens, TokensPath)
 
 	if strings.Contains(page, "An expired token no longer works") {
 		t.Errorf("with every token working, the page still has the note about an expired one:\n%s", page)
@@ -74,7 +74,7 @@ func TestTokens_TheNoteUnderTheListSaysWhatHasHappenedOnceARowHasRunOut(t *testi
 func TestTokens_ANewTokenIsShownOnceAndOnlyItsHashIsStored(t *testing.T) {
 	f := tokenGarden(t)
 
-	rec := f.do(t, f.handler.createToken, tokensPath, url.Values{"name": {"The greenhouse pi"}, "expiry": {"30"}})
+	rec := f.do(t, f.handler.createToken, TokensPath, url.Values{"name": {"The greenhouse pi"}, "expiry": {"30"}})
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusOK, rec.Body.String())
 	}
@@ -99,7 +99,7 @@ func TestTokens_ANewTokenIsShownOnceAndOnlyItsHashIsStored(t *testing.T) {
 	if !strings.Contains(page, "It expires on 3 Oct") {
 		t.Errorf("the sentence under the token does not name the day it stops working:\n%s", page)
 	}
-	if strings.Contains(f.page(t, f.handler.tokens, tokensPath), token) {
+	if strings.Contains(f.page(t, f.handler.tokens, TokensPath), token) {
 		t.Error("the token is on the page again on the next request, and it is shown exactly once")
 	}
 }
@@ -112,7 +112,7 @@ var copyButton = regexp.MustCompile(`<button[^>]*data-copy="([^"]*)"[^>]*hidden>
 func TestTokens_ANewTokensCopyButtonHoldsTheTokenShown(t *testing.T) {
 	f := tokenGarden(t)
 
-	rec := f.do(t, f.handler.createToken, tokensPath, url.Values{"name": {"The greenhouse pi"}, "expiry": {"30"}})
+	rec := f.do(t, f.handler.createToken, TokensPath, url.Values{"name": {"The greenhouse pi"}, "expiry": {"30"}})
 
 	page := rec.Body.String()
 	m := copyButton.FindStringSubmatch(page)
@@ -127,7 +127,7 @@ func TestTokens_ANewTokensCopyButtonHoldsTheTokenShown(t *testing.T) {
 func TestTokens_AnExpiryLongerThanNinetyDaysIsRefusedAndNoTokenIsWritten(t *testing.T) {
 	f := tokenGarden(t)
 
-	rec := f.do(t, f.handler.createToken, tokensPath, url.Values{"name": {"The greenhouse pi"}, "expiry": {"365"}})
+	rec := f.do(t, f.handler.createToken, TokensPath, url.Values{"name": {"The greenhouse pi"}, "expiry": {"365"}})
 
 	if rec.Code != http.StatusBadRequest {
 		t.Errorf("status = %d, want %d", rec.Code, http.StatusBadRequest)
@@ -140,7 +140,7 @@ func TestTokens_AnExpiryLongerThanNinetyDaysIsRefusedAndNoTokenIsWritten(t *test
 func TestTokens_ATokenWithNoNameIsRefusedWithTheChosenExpiryStillSelected(t *testing.T) {
 	f := tokenGarden(t)
 
-	rec := f.do(t, f.handler.createToken, tokensPath, url.Values{"name": {"  "}, "expiry": {"90"}})
+	rec := f.do(t, f.handler.createToken, TokensPath, url.Values{"name": {"  "}, "expiry": {"90"}})
 
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusUnprocessableEntity)
@@ -160,7 +160,7 @@ func TestTokens_ATokenWithNoNameIsRefusedWithTheChosenExpiryStillSelected(t *tes
 func TestTokens_TheExpirySelectOffersThirtyDaysUntilSomethingElseIsChosen(t *testing.T) {
 	f := tokenGarden(t)
 
-	page := f.page(t, f.handler.tokens, tokensPath)
+	page := f.page(t, f.handler.tokens, TokensPath)
 
 	if got := lifeOptionsShown(page); !slices.Equal(got, []string{"7", "30", "60", "90"}) {
 		t.Errorf("the expiry select offers %v, want 7, 30, 60 and 90 days", got)
@@ -178,7 +178,7 @@ func TestTokens_RevokingATokenTakesItOutOfTheListAndLeavesTheRest(t *testing.T) 
 		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusSeeOther, rec.Body.String())
 	}
 
-	rows := tokensShown(f.page(t, f.handler.tokens, tokensPath))
+	rows := tokensShown(f.page(t, f.handler.tokens, TokensPath))
 	if len(rows) != 1 || rows[0].name != "The spare display" {
 		t.Errorf("the list reads %+v after revoking the kitchen display", rows)
 	}
@@ -283,10 +283,38 @@ func TestTokens_ARevokeSentAsASwapGetsThePageUnderTheBarWithoutThatRow(t *testin
 func TestTokens_ACreateSentAsASwapGetsThePageUnderTheBarWithTheNewToken(t *testing.T) {
 	f := tokenGarden(t)
 
-	rec := f.swap(t, f.handler.createToken, tokensPath, tokensID, "", "", url.Values{"name": {"The greenhouse pi"}, "expiry": {"30"}})
+	rec := f.swap(t, f.handler.createToken, TokensPath, tokensID, "", "", url.Values{"name": {"The greenhouse pi"}, "expiry": {"30"}})
 
 	body := fragment(t, rec, tokensID)
 	if !strings.Contains(body, "Your new token") {
 		t.Errorf("the response does not show the new token:\n%s", text(body))
+	}
+}
+
+func TestTokens_CreatingAndRevokingATokenEachWakeTheJobs(t *testing.T) {
+	f := tokenGarden(t)
+	woken := 0
+	f.handler.wake = countingWake(&woken)
+
+	f.do(t, f.handler.createToken, TokensPath, url.Values{"name": {"The greenhouse pi"}, "expiry": {"30"}})
+	if woken != 1 {
+		t.Errorf("creating a token woke the jobs %d times, want 1", woken)
+	}
+
+	f.remove(t, f.handler.revokeToken, "token", kitchenTokenID, revokeTokenPath(kitchenTokenID))
+	if woken != 2 {
+		t.Errorf("revoking a token woke the jobs %d times in all, want 2", woken)
+	}
+}
+
+func TestTokens_ARefusedCreateDoesNotWakeTheJobs(t *testing.T) {
+	f := tokenGarden(t)
+	woken := 0
+	f.handler.wake = countingWake(&woken)
+
+	f.do(t, f.handler.createToken, TokensPath, url.Values{"name": {""}, "expiry": {"30"}})
+
+	if woken != 0 {
+		t.Errorf("a create with no name woke the jobs %d times, want 0", woken)
 	}
 }

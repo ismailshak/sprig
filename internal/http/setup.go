@@ -166,7 +166,7 @@ type setup struct {
 	// enabled is SPRIG_SIGNUP_ENABLED: whether a stranger may create an
 	// account and a garden of their own.
 	enabled bool
-	wake    wakeDigest
+	wake    wakeJobs
 	// pushKey is the VAPID public key the Reminders page gives the browser to
 	// subscribe with. It is empty when push is off, and the page then sends
 	// the browser on to Today.

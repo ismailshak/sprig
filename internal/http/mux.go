@@ -46,18 +46,18 @@ type middleware func(http.Handler) http.Handler
 // the Notifications page gives the browser. It is empty when push is off.
 // test sends that page's test message to one browser. It is nil when push is
 // off.
-func routes(logger *slog.Logger, sessions *auth.Sessions, passkeys *auth.Passkeys, queries *store.Queries, photos *photo.Store, templates *Templates, assets *Assets, trustedIPHeader string, signupEnabled bool, pushKey string, wake func(), notify notifyActivity, test sendTest) []route {
+func routes(logger *slog.Logger, sessions *auth.Sessions, passkeys *auth.Passkeys, queries *store.Queries, photos *photo.Store, templates *Templates, assets *Assets, trustedIPHeader string, signupEnabled bool, pushKey string, wake wakeJobs, notify notifyActivity, notifyOne notifyUser, test sendTest) []route {
 	todayHandler := &today{logger: logger, queries: queries, templates: templates, now: time.Now, notify: notify, pushKey: pushKey}
-	plantsHandler := &plants{logger: logger, queries: queries, photos: photos, templates: templates, now: time.Now}
+	plantsHandler := &plants{logger: logger, queries: queries, photos: photos, templates: templates, now: time.Now, notify: notifyOne}
 	activityHandler := &activity{logger: logger, queries: queries, templates: templates, now: time.Now}
 	choresHandler := &chores{logger: logger, queries: queries, templates: templates, now: time.Now}
 	// The setup and invite pages use the resolver to tell whether the browser
 	// is already signed in.
 	resolver := auth.NewResolver(sessions, queries)
 	passkeyHandler := &passkeyCeremony{logger: logger, passkeys: passkeys, sessions: sessions, queries: queries, templates: templates, now: time.Now}
-	moreHandler := &more{logger: logger, sessions: sessions, queries: queries, photos: photos, templates: templates, build: build.Read(), now: time.Now, pushKey: pushKey, wake: wake, test: test}
+	moreHandler := &more{logger: logger, sessions: sessions, queries: queries, photos: photos, templates: templates, build: build.Read(), now: time.Now, pushKey: pushKey, wake: wake, notify: notifyOne, test: test}
 	setupHandler := &setup{logger: logger, passkeys: passkeys, sessions: sessions, resolver: resolver, queries: queries, templates: templates, now: time.Now, enabled: signupEnabled, wake: wake, pushKey: pushKey}
-	invitedHandler := &invited{logger: logger, passkeys: passkeys, sessions: sessions, resolver: resolver, queries: queries, templates: templates, now: time.Now, wake: wake}
+	invitedHandler := &invited{logger: logger, passkeys: passkeys, sessions: sessions, resolver: resolver, queries: queries, templates: templates, now: time.Now, wake: wake, notify: notifyOne}
 	recoverHandler := &recoverAccount{logger: logger, passkeys: passkeys, queries: queries, templates: templates, now: time.Now}
 	handleHandler := &handleSuggestions{queries: queries, templates: templates, logger: logger}
 	recoverLimit := newRecoverLimits(trustedIPHeader)
@@ -149,17 +149,17 @@ func routes(logger *slog.Logger, sessions *auth.Sessions, passkeys *auth.Passkey
 		{pattern: "POST " + careTypesPath + "/{care}/off", capability: auth.CareTypeManage, handler: http.HandlerFunc(moreHandler.turnOffCareType)},
 		{pattern: "POST " + careTypesPath + "/{care}/on", capability: auth.CareTypeManage, handler: http.HandlerFunc(moreHandler.turnOnCareType)},
 		{pattern: "POST " + careTypesPath + "/{care}/delete", capability: auth.CareTypeManage, handler: http.HandlerFunc(moreHandler.deleteCareType)},
-		{pattern: "GET " + peoplePath, capability: auth.MemberManage, handler: http.HandlerFunc(moreHandler.people)},
-		{pattern: "POST " + peoplePath, capability: auth.MemberManage, handler: http.HandlerFunc(moreHandler.saveMembers)},
+		{pattern: "GET " + PeoplePath, capability: auth.MemberManage, handler: http.HandlerFunc(moreHandler.people)},
+		{pattern: "POST " + PeoplePath, capability: auth.MemberManage, handler: http.HandlerFunc(moreHandler.saveMembers)},
 		{pattern: "GET " + invitePath, capability: auth.MemberInvite, handler: http.HandlerFunc(moreHandler.invite)},
 		{pattern: "POST " + invitePath, capability: auth.MemberInvite, handler: http.HandlerFunc(moreHandler.createInviteLink)},
-		{pattern: "POST " + peoplePath + "/invites/{invite}/revoke", capability: auth.MemberManage, handler: http.HandlerFunc(moreHandler.revokeInvite)},
-		{pattern: "GET " + peoplePath + "/{member}/remove", capability: auth.MemberManage, handler: http.HandlerFunc(moreHandler.confirmRemoveMember)},
-		{pattern: "POST " + peoplePath + "/{member}/remove", capability: auth.MemberManage, handler: http.HandlerFunc(moreHandler.removeMember)},
-		{pattern: "POST " + peoplePath + "/{member}/reenrol", capability: auth.MemberManage, handler: http.HandlerFunc(moreHandler.reenrolMember)},
-		{pattern: "GET " + tokensPath, capability: auth.TokenManage, handler: http.HandlerFunc(moreHandler.tokens)},
-		{pattern: "POST " + tokensPath, capability: auth.TokenManage, handler: http.HandlerFunc(moreHandler.createToken)},
-		{pattern: "POST " + tokensPath + "/{token}/revoke", capability: auth.TokenManage, handler: http.HandlerFunc(moreHandler.revokeToken)},
+		{pattern: "POST " + PeoplePath + "/invites/{invite}/revoke", capability: auth.MemberManage, handler: http.HandlerFunc(moreHandler.revokeInvite)},
+		{pattern: "GET " + PeoplePath + "/{member}/remove", capability: auth.MemberManage, handler: http.HandlerFunc(moreHandler.confirmRemoveMember)},
+		{pattern: "POST " + PeoplePath + "/{member}/remove", capability: auth.MemberManage, handler: http.HandlerFunc(moreHandler.removeMember)},
+		{pattern: "POST " + PeoplePath + "/{member}/reenrol", capability: auth.MemberManage, handler: http.HandlerFunc(moreHandler.reenrolMember)},
+		{pattern: "GET " + TokensPath, capability: auth.TokenManage, handler: http.HandlerFunc(moreHandler.tokens)},
+		{pattern: "POST " + TokensPath, capability: auth.TokenManage, handler: http.HandlerFunc(moreHandler.createToken)},
+		{pattern: "POST " + TokensPath + "/{token}/revoke", capability: auth.TokenManage, handler: http.HandlerFunc(moreHandler.revokeToken)},
 		{pattern: "GET " + choresPath, bearer: true, limits: choresLimits(), handler: http.HandlerFunc(choresHandler.show)},
 		// Every path no other route matches.
 		{pattern: "/", withoutGarden: true, handler: http.HandlerFunc(templates.notFound)},
@@ -261,14 +261,15 @@ var publicRoutes = map[string]bool{
 // still gets a request line. The cross-origin check is inside Logging and
 // Recover so a refused request is logged like any other. Authentication is
 // inside that so a cross-site post is refused before it costs a session
-// lookup. wake is called after a handler commits a change to who gets a
-// digest and when. notify is called after a handler records care, to send
-// the garden's other members a push notification about it. test sends the
-// Notifications page's test message to one browser. All three are nil when
-// push is off.
-func New(logger *slog.Logger, sessions *auth.Sessions, passkeys *auth.Passkeys, resolver, tokens Resolver, queries *store.Queries, photos *photo.Store, templates *Templates, assets *Assets, trustedIPHeader string, signupEnabled bool, pushKey string, wake func(), notify func(ctx context.Context, gardenID, actorID uuid.UUID, n push.Notification), test func(ctx context.Context, subscription store.PushSubscription, n push.Notification) error) http.Handler {
+// lookup. wake is called after a handler commits a change to what the two
+// push jobs send and when. notify is called after a handler records care, to
+// send the garden's other members a push notification about it. notifyUser
+// sends one person a notification about their access or their garden. test
+// sends the Notifications page's test message to one browser. All four are
+// nil when push is off.
+func New(logger *slog.Logger, sessions *auth.Sessions, passkeys *auth.Passkeys, resolver, tokens Resolver, queries *store.Queries, photos *photo.Store, templates *Templates, assets *Assets, trustedIPHeader string, signupEnabled bool, pushKey string, wake func(), notify func(ctx context.Context, gardenID, actorID uuid.UUID, n push.Notification), notifyUser func(ctx context.Context, user store.AppUser, n push.Notification), test func(ctx context.Context, subscription store.PushSubscription, n push.Notification) error) http.Handler {
 	mux := http.NewServeMux()
-	table := routes(logger, sessions, passkeys, queries, photos, templates, assets, trustedIPHeader, signupEnabled, pushKey, wake, notifyActivity(notify), sendTest(test))
+	table := routes(logger, sessions, passkeys, queries, photos, templates, assets, trustedIPHeader, signupEnabled, pushKey, wake, notify, notifyUser, test)
 	for _, r := range table {
 		h := r.handler
 		if r.capability != "" {

@@ -120,6 +120,11 @@ func (h *invited) accept(w http.ResponseWriter, r *http.Request) {
 	}
 
 	invite := open.row.Invite
+	gardenNamed, err := gardenNamer(r.Context(), h.queries, open.row.Garden)
+	if err != nil {
+		h.templates.serverError(h.logger, w, r, "read the garden's owner", err)
+		return
+	}
 	err = h.queries.InTx(r.Context(), func(q *store.Queries) error {
 		ctx := r.Context()
 		if err := writeAcceptance(ctx, q, h.now(), invite, existing, principal.User.ID); err != nil {
@@ -141,8 +146,10 @@ func (h *invited) accept(w http.ResponseWriter, r *http.Request) {
 		h.templates.serverError(h.logger, w, r, "accept the invite", err)
 		return
 	}
+	h.notify.call(r.Context(), open.row.AppUser, inviteAcceptedNotification(gardenNamed(open.row.AppUser.ID), principal.User, invite.Role))
 	// The account may already have a subscribed browser, so the new membership
-	// can be due a digest at once.
+	// can be due a digest at once. The deadlines job sends when the
+	// membership's end date passes.
 	h.wake.call()
 	http.Redirect(w, r, todayPath, http.StatusSeeOther)
 }

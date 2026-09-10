@@ -229,3 +229,111 @@ func TestPhotoForm_APhotoOverTheFileLimitIsRefusedWithTheLimitUnderTheField(t *t
 		t.Errorf("the directory holds %v, want nothing", got)
 	}
 }
+
+// storedPhotoIDs returns the ids of every photo in the garden, oldest first.
+func (f *formFixture) storedPhotoIDs(t *testing.T) []uuid.UUID {
+	t.Helper()
+
+	rows, err := f.tx.Query(t.Context(), "SELECT id FROM photo WHERE garden_id = $1 ORDER BY uploaded_at, id", rosewoodID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	var ids []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, id)
+	}
+	return ids
+}
+
+func TestPhotoForm_AnUploadThatFillsNinetyPercentOfTheQuotaTellsTheOwnerOnceUntilRoomIsMadeAgain(t *testing.T) {
+	f := plantFormOn(t)
+	f.withRavi(t)
+	got := captureUserNotifications(&f.handler.notify)
+	big, small := testJPEG(t, 3000, 2000), testJPEG(t, 8, 8)
+	// The big photo alone is over nine tenths of the quota, and the small one
+	// still fits after it.
+	f.photosWithRoomFor(t, len(big)+len(small)+len(small)+len(small))
+	if float64(len(big)+len(small)) < nearlyFull*float64(len(big)+3*len(small)) {
+		t.Fatal("the fixture's big photo does not reach nearly full on its own")
+	}
+
+	if rec := f.addPhoto(t, bigFellaID, big, small); rec.Code != http.StatusSeeOther {
+		t.Fatalf("the first upload: status = %d:\n%s", rec.Code, rec.Body.String())
+	}
+	if rec := f.addPhoto(t, bigFellaID, small, small); rec.Code != http.StatusSeeOther {
+		t.Fatalf("the second upload: status = %d:\n%s", rec.Code, rec.Body.String())
+	}
+
+	// Ravi is a member and cannot delete other people's photos, so only Ellie
+	// is told. Only the upload that crossed the line sends anything.
+	if len(*got) != 1 || (*got)[0].user.ID != readerID || (*got)[0].n.URL != photosPath(bigFellaID) {
+		t.Fatalf("notified %+v, want Ellie once, with the notification opening Big Fella's photos", *got)
+	}
+
+	// Deleting the big photo takes the garden back under the line. The next
+	// upload past it is sent for again.
+	if rec := f.deletePhoto(t, bigFellaID, f.storedPhotoIDs(t)[0]); rec.Code != http.StatusSeeOther {
+		t.Fatalf("the delete: status = %d:\n%s", rec.Code, rec.Body.String())
+	}
+	if rec := f.addPhoto(t, bigFellaID, big, small); rec.Code != http.StatusSeeOther {
+		t.Fatalf("the third upload: status = %d:\n%s", rec.Code, rec.Body.String())
+	}
+	if len(*got) != 2 {
+		t.Errorf("notified %+v, want Ellie a second time after room was made and used up again", *got)
+	}
+}
+
+func TestPhotoForm_AnUploadThatLeavesRoomTellsNobody(t *testing.T) {
+	f := plantFormOn(t)
+	got := captureUserNotifications(&f.handler.notify)
+	image, square := testJPEG(t, 30, 20), testJPEG(t, 8, 8)
+	f.photosWithRoomFor(t, 4*(len(image)+len(square)))
+
+	if rec := f.addPhoto(t, bigFellaID, image, square); rec.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d:\n%s", rec.Code, rec.Body.String())
+	}
+
+	if len(*got) != 0 {
+		t.Errorf("notified %+v, want nobody: the garden is a quarter full", *got)
+	}
+}
+
+func TestPlantForm_APhotoOnTheEditFormThatFillsTheGardenTellsTheOwner(t *testing.T) {
+	f := plantFormOn(t)
+	got := captureUserNotifications(&f.handler.notify)
+	values := addValues()
+	values.Set("nickname", "Big Fella")
+	image, square := testJPEG(t, 3000, 2000), testJPEG(t, 8, 8)
+	f.photosWithRoomFor(t, len(image)+len(square))
+	id := bigFellaID
+
+	if rec := f.postPhoto(t, &id, values, image, square); rec.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d:\n%s", rec.Code, rec.Body.String())
+	}
+
+	if len(*got) != 1 || (*got)[0].user.ID != readerID {
+		t.Errorf("notified %+v, want Ellie once", *got)
+	}
+}
+
+func TestPlantForm_APhotoOnTheAddFormThatFillsTheGardenTellsTheOwner(t *testing.T) {
+	f := plantFormOn(t)
+	got := captureUserNotifications(&f.handler.notify)
+	values := addValues()
+	values.Set("nickname", "Ada")
+	image, square := testJPEG(t, 3000, 2000), testJPEG(t, 8, 8)
+	f.photosWithRoomFor(t, len(image)+len(square))
+
+	if rec := f.postPhoto(t, nil, values, image, square); rec.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d:\n%s", rec.Code, rec.Body.String())
+	}
+
+	if len(*got) != 1 || (*got)[0].user.ID != readerID {
+		t.Errorf("notified %+v, want Ellie once", *got)
+	}
+}

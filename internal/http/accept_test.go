@@ -521,3 +521,17 @@ func TestInvited_ABrowserWhoseMembershipEndedOpeningAJoinLinkIsSentToAcceptItAsT
 		t.Errorf("status = %d, Location = %q, want %d to %s, because the account is still Clare's", rec.Code, rec.Header().Get("Location"), http.StatusSeeOther, acceptPath(sitterLink))
 	}
 }
+
+func TestAccept_TheInviterIsToldWhoJoinedAndAsWhat(t *testing.T) {
+	f := invitedGarden(t)
+	f.removeSamFromRosewood(t)
+	sam := f.startSessionFor(t, samOnFairview(), samsSession)
+	got := captureUserNotifications(&f.handler.notify)
+
+	f.accept(t, sitterLink, sam)
+
+	want := inviteAcceptedNotification("Rosewood", sam.User, "sitter")
+	if len(*got) != 1 || (*got)[0].user.ID != moreUserID || (*got)[0].n != want {
+		t.Errorf("notified %+v, want Ellie alone, sent %+v", *got, want)
+	}
+}

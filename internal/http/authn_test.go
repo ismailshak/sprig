@@ -462,7 +462,7 @@ func TestRequire_AMissingCapabilityIsTheSame404AsAnUnknownPath(t *testing.T) {
 	// against the 404 the route table serves and not one this test wrote. The
 	// body differs between a browser and a script, so the loop checks both.
 	app := New(testLogger, testSessions(), testPasskeys(), acceptEveryToken(sitterPrincipal()), noLiveToken, nil,
-		testPhotos(t), testTemplates(), testAssets(), "", false, testPushKey, nil, nil, nil)
+		testPhotos(t), testTemplates(), testAssets(), "", false, testPushKey, nil, nil, nil, nil)
 	for name, prepare := range map[string]func(*http.Request) *http.Request{"a browser": browsing, "a script": func(r *http.Request) *http.Request { return r }} {
 		unknown := httptest.NewRecorder()
 		app.ServeHTTP(unknown, prepare(signedIn(httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/nope", nil))))

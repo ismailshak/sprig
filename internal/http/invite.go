@@ -156,12 +156,12 @@ func madeInvitePage(link string, ends *time.Time, location *time.Location) invit
 			Why:   "This link is shown only once. Copy it now and send it to them.",
 		},
 		Made: made,
-		Done: peoplePath,
+		Done: PeoplePath,
 	}
 }
 
 // peopleBar is the top bar for a page reached from People, with its back link
 // pointing there.
 func peopleBar(title string) topbar {
-	return topbar{Href: peoplePath, Back: "People", Title: title}
+	return topbar{Href: PeoplePath, Back: "People", Title: title}
 }

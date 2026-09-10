@@ -764,6 +764,9 @@ func (h *plants) create(w http.ResponseWriter, r *http.Request) {
 		h.templates.serverError(h.logger, w, r, "add the plant", err)
 		return
 	}
+	if photoPosted(r) {
+		h.notifyStorage(r.Context(), principal, plant)
+	}
 	http.Redirect(w, r, plantPath(plant.ID), http.StatusSeeOther)
 }
 
@@ -892,6 +895,9 @@ func (h *plants) update(w http.ResponseWriter, r *http.Request) {
 	case err != nil:
 		h.templates.serverError(h.logger, w, r, "save the plant", err)
 		return
+	}
+	if photoPosted(r) {
+		h.notifyStorage(r.Context(), principal, plant)
 	}
 	http.Redirect(w, r, plantPath(plant.ID), http.StatusSeeOther)
 }

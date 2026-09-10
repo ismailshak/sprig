@@ -98,5 +98,6 @@ func (h *plants) addPhoto(w http.ResponseWriter, r *http.Request) {
 		h.templates.serverError(h.logger, w, r, "add the photo", err)
 		return
 	}
+	h.notifyStorage(r.Context(), principal, plant)
 	http.Redirect(w, r, photosPath(plant.ID), http.StatusSeeOther)
 }

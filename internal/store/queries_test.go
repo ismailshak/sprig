@@ -479,10 +479,16 @@ func TestQueries_EveryQueryOnAGardenScopedTableBindsTheGarden(t *testing.T) {
 		if slices.Equal(touched, []string{"membership"}) && strings.Contains(query.sql, "@user_id") {
 			continue
 		}
-		// The digest job runs across every garden rather than for one request.
-		// Each row it returns names a garden id. Every read the send then
-		// makes binds that id.
+		// The two push jobs run across every garden rather than for one
+		// request. Each row they return names one membership, and every read
+		// the send then makes binds that membership's user.
 		if query.name == "ListDigestMembers" && slices.Equal(touched, []string{"membership"}) {
+			continue
+		}
+		if query.name == "ListSittingDeadlines" && slices.Equal(touched, []string{"membership"}) {
+			continue
+		}
+		if query.name == "ListTokenDeadlines" && slices.Equal(touched, []string{"api_token", "membership"}) {
 			continue
 		}
 		// The sweep command compares every photo row with the files on disk.
