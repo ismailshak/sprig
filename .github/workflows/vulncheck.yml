@@ -1,0 +1,22 @@
+name: Vulncheck
+on:
+  schedule:
+    # 11:00 UTC on Sunday
+    - cron: "0 11 * * 0"
+  # GitHub stops the schedule after 60 days without a commit to the repository.
+  # A manual run restarts it.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  vulncheck:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v7
+      - name: Set up Go
+        uses: ./.github/actions/setup-go
+      - name: Check for reachable vulnerabilities
+        run: mise run vulncheck

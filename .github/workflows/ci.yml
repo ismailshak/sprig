@@ -41,6 +41,8 @@ jobs:
           mise run vendor:htmx
           git add --intent-to-add web/static/vendor
           git diff --stat --exit-code -- web/static/vendor
+      - name: Check for reachable vulnerabilities
+        run: mise run vulncheck
 
   test:
     runs-on: ubuntu-latest
