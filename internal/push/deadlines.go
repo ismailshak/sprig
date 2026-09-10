@@ -183,14 +183,10 @@ func tokenExpiredNotification(garden string, token store.APIToken, tokensURL str
 }
 
 // sittingEndedNotification is what one recipient is told when a sitter's
-// access to a garden ends. The title is "Access ended", the words the People
-// row uses, so it holds for any role whose access has an end date. The
-// sitter's reads "Your access to Ellie’s
-// Rosewood has ended." and opens nothing, because their access is gone and
-// every page would send them to sign in. The inviter's reads "Sam no longer
-// has access to Ellie’s Rosewood." and opens People. It is not "Sam’s access
-// to Ellie’s Rosewood has ended", because two possessives in a row read
-// heavily.
+// access to a garden ends. The sitter's reads "Your access to Ellie’s Rosewood
+// has ended." and opens nothing, because every page would send them to sign
+// in. The inviter's reads "Sam no longer has access to Rosewood." and opens
+// People. That line avoids two possessives in a row.
 func sittingEndedNotification(row store.ListSittingDeadlinesRow, peopleURL string) Notification {
 	garden := GardenNamed(row.GardenName, row.OwnerName, row.RecipientOwns)
 	if row.IsSitter {
