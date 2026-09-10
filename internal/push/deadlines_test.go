@@ -529,10 +529,10 @@ func TestSittingEndedNotification_TheSittersOpensNothingAndTheInvitersOpensPeopl
 	row.IsSitter, row.RecipientOwns = false, true
 	inviter := sittingEndedNotification(row, people)
 
-	if want := (Notification{Title: "Sitting ended", Body: "Your access to Ellie’s Rosewood has ended."}); sitter != want {
+	if want := (Notification{Title: "Access ended", Body: "Your access to Ellie’s Rosewood has ended."}); sitter != want {
 		t.Errorf("the sitter's notification is %+v, want %+v", sitter, want)
 	}
-	if want := (Notification{Title: "Sitting ended", Body: "Sam no longer has access to Rosewood.", URL: people}); inviter != want {
+	if want := (Notification{Title: "Access ended", Body: "Sam no longer has access to Rosewood.", URL: people}); inviter != want {
 		t.Errorf("the inviter's notification is %+v, want %+v", inviter, want)
 	}
 }
