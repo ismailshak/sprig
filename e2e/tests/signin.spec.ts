@@ -1,6 +1,7 @@
-import type { Browser, BrowserContext, Locator, Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import { attach, aWorkingDevice } from '../harness/authenticator';
-import { devices, people } from '../harness/garden';
+import { asAnotherBrowser } from '../harness/browser';
+import { devices, people, seededPasskey } from '../harness/garden';
 import { signIn } from '../harness/signin';
 import { expect, test } from '../harness/test';
 import { PasskeysScreen } from '../screens/passkeys';
@@ -60,6 +61,20 @@ test('a passkey registered on this device signs in @passkey', async ({ page, pas
   }
 });
 
+test('a passkey the seed holds signs in without registering one first @passkey', async ({ page, account, signin }) => {
+  await signin.open();
+  const detach = await attach(page, aWorkingDevice, seededPasskey);
+  try {
+    await signin.signIn().click();
+
+    await expect(page).toHaveURL('/');
+    await account.open();
+    await expect(account.name()).toHaveValue(people.ellie.name);
+  } finally {
+    await detach();
+  }
+});
+
 test('a device with no passkey signs nobody in, and the page says the browser does not say why @passkey', async ({
   page,
   signin,
@@ -77,18 +92,6 @@ test('a device with no passkey signs nobody in, and the page says the browser do
     await detach();
   }
 });
-
-// asAnotherBrowser opens a second browser context on the same app, so a test
-// can act on the account from one device while the other stays signed in. The
-// caller closes the context. The browser fixture would otherwise hold it open
-// for the rest of the worker.
-async function asAnotherBrowser(
-  browser: Browser,
-  baseURL: string | undefined,
-): Promise<{ page: Page; context: BrowserContext }> {
-  const context = await browser.newContext({ baseURL });
-  return { page: await context.newPage(), context };
-}
 
 test('removing a passkey signs out the device that signed in with it @passkey', async ({
   browser,

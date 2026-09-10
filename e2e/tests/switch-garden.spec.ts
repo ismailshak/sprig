@@ -1,4 +1,4 @@
-import { gardens, people } from '../harness/garden';
+import { gardens, invites, people } from '../harness/garden';
 import { signIn } from '../harness/signin';
 import { expect, test } from '../harness/test';
 
@@ -40,4 +40,32 @@ test('one garden has no switch icon and no owner line', async ({ page, today }) 
   await expect(page.getByRole('heading', { name: gardens.home.name })).toBeVisible();
   await expect(today.switchGarden()).toHaveCount(0);
   await expect(page.getByText(/’s garden$/)).toHaveCount(0);
+});
+
+test('deleting the garden you own lands you on Today in the garden you sit for @swap', async ({
+  page,
+  accept,
+  deleteGarden,
+  invited,
+  today,
+}) => {
+  // Robin owns Upstairs. Joining Home from the seeded invite makes Robin a
+  // sitter there and moves the session onto Home.
+  await signIn(page, people.robin.handle);
+  await invited.open(invites.sitter.token);
+  await accept.join(gardens.home.name).click();
+  await expect(page.getByRole('heading', { name: gardens.home.name })).toBeVisible();
+
+  await today.switchGarden().click();
+  await today.switchTo(gardens.upstairs.name).click();
+  await expect(page.getByRole('heading', { name: gardens.upstairs.name })).toBeVisible();
+
+  await deleteGarden.open();
+  await deleteGarden.name().fill(gardens.upstairs.name);
+  await deleteGarden.confirm().click();
+
+  await expect(page).toHaveURL('/');
+  await expect(page.getByRole('heading', { name: gardens.home.name })).toBeVisible();
+  await expect(page.getByText(`${people.ellie.name}’s garden`)).toBeVisible();
+  await expect(today.switchGarden()).toHaveCount(0);
 });

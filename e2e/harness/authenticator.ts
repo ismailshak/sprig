@@ -22,10 +22,18 @@ export type Device = {
 // is registered from one.
 export const aWorkingDevice: Device = { stores: true, verifies: true, unlocked: true };
 
+// Passkey is a credential the seed wrote. credentialId and userHandle are the
+// seed's UUIDs for the passkey row and the account. privateKey is the private
+// half of the key pair, in PKCS#8 and base64 encoded.
+export type Passkey = { credentialId: string; userHandle: string; privateKey: string };
+
 // attach adds a virtual authenticator to the page's browser and returns a
 // function that removes it. Everything the page does through
-// navigator.credentials goes to this authenticator until then.
-export async function attach(page: Page, device: Device): Promise<() => Promise<void>> {
+// navigator.credentials goes to this authenticator until then. A passkey is
+// added as a discoverable credential, so a sign-in finds it without
+// registering one first. The page has to be on the app already, because the
+// credential is stored under the hostname in the page's URL.
+export async function attach(page: Page, device: Device, passkey?: Passkey): Promise<() => Promise<void>> {
   const client = await page.context().newCDPSession(page);
   await client.send('WebAuthn.enable');
   const { authenticatorId } = await client.send('WebAuthn.addVirtualAuthenticator', {
@@ -41,10 +49,39 @@ export async function attach(page: Page, device: Device): Promise<() => Promise<
     },
   });
 
+  if (passkey) {
+    const rpId = new URL(page.url()).hostname;
+    if (!rpId) {
+      throw new Error('open a page on the app before loading a passkey: the passkey is bound to the hostname');
+    }
+    await client.send('WebAuthn.addCredential', {
+      authenticatorId,
+      credential: {
+        credentialId: base64Of(passkey.credentialId),
+        isResidentCredential: true,
+        rpId,
+        privateKey: passkey.privateKey,
+        userHandle: base64Of(passkey.userHandle),
+        signCount: 0,
+        // Both set, as they are on a synced passkey. The seed stores the
+        // same two flags, because the server refuses a sign-in whose
+        // backup-eligible flag differs from the stored one.
+        backupEligibility: true,
+        backupState: true,
+      },
+    });
+  }
+
   return async () => {
     await client.send('WebAuthn.removeVirtualAuthenticator', { authenticatorId });
     await client.detach();
   };
+}
+
+// base64Of returns a UUID's 16 bytes, base64 encoded. The DevTools protocol
+// takes binary fields in that form.
+function base64Of(uuid: string): string {
+  return Buffer.from(uuid.replaceAll('-', ''), 'hex').toString('base64');
 }
 
 // withDevice runs press with device plugged into the browser. The
