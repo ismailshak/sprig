@@ -984,3 +984,30 @@ func TestActivity_ACareTypeTurnedOffStillFiltersItsEvents(t *testing.T) {
 		t.Errorf("the rows are %v, want Nigel's feed, because its events are still in the log", rows)
 	}
 }
+
+func TestActivity_AHistoryRestoreGetsTheInsideOfTheLogAndNotTheElementItself(t *testing.T) {
+	f := rosewoodLog(t)
+	// htmx fetches this for a Back or Forward whose page is no longer in its
+	// cache, and puts the response inside the #log the page still has.
+	ctx := context.WithValue(t.Context(), principalKey, f.principal)
+	req := httptest.NewRequestWithContext(ctx, http.MethodGet, activityPath, nil)
+	req.Header.Set("HX-Request", "true")
+	req.Header.Set("HX-History-Restore-Request", "true")
+	rec := httptest.NewRecorder()
+
+	f.handler.show(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d:\n%s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if strings.HasPrefix(body, "<!doctype html>") {
+		t.Errorf("the response is the whole page, want the inside of the log alone:\n%.120s", body)
+	}
+	if strings.Contains(body, `id="`+logID+`"`) {
+		t.Errorf("the response holds the log element, which the page still has:\n%.200s", body)
+	}
+	if !strings.Contains(body, `id="`+logBodyID+`"`) || !strings.Contains(body, `id="filter-care"`) {
+		t.Errorf("the response does not hold the filters and the log body:\n%.200s", body)
+	}
+}

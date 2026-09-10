@@ -70,6 +70,22 @@ test('older activity opens the page below the newest, and latest activity return
   await expect(activity.items().first()).toHaveText(newest);
 });
 
+// With JavaScript, htmx handles Back on the activity page and puts the
+// earlier log back in place of the one shown.
+test('Back after Older activity shows the newest page again', async ({ page, activity }) => {
+  await activity.open();
+  const newest = (await activity.items().first().textContent()) ?? '';
+
+  await activity.older().click();
+  await expect(activity.items().first()).not.toHaveText(newest);
+
+  await page.goBack();
+
+  await expect(page).toHaveURL('/activity');
+  await expect(activity.items().first()).toHaveText(newest);
+  await expect(activity.older()).toBeVisible();
+});
+
 test('a row on the activity log opens a sheet filled in from the event', async ({ page, activity, sheet }) => {
   await page.goto(`/activity?plant=${seeded.bigFella.id}`);
 
