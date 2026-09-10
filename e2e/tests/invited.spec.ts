@@ -1,5 +1,5 @@
-import type { Browser, BrowserContext, Page } from '@playwright/test';
 import { aWorkingDevice, withDevice } from '../harness/authenticator';
+import { asAnotherBrowser } from '../harness/browser';
 import { gardens, invites, people } from '../harness/garden';
 import { signIn } from '../harness/signin';
 import { expect, test } from '../harness/test';
@@ -7,17 +7,6 @@ import { AccountScreen } from '../screens/account';
 import { AcceptScreen } from '../screens/accept';
 import { InvitedScreen } from '../screens/invited';
 import { PeopleScreen } from '../screens/people';
-
-// asAnotherBrowser opens a second browser context on the same app, so a test
-// can issue a link as the owner in one and open it in the other. The caller
-// closes the context.
-async function asAnotherBrowser(
-  browser: Browser,
-  baseURL: string | undefined,
-): Promise<{ page: Page; context: BrowserContext }> {
-  const context = await browser.newContext({ baseURL });
-  return { page: await context.newPage(), context };
-}
 
 test('joining through an invite link signs the sitter in and offers reminders before Today @passkey', async ({
   page,

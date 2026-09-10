@@ -1,6 +1,12 @@
-import { people as seeded } from '../harness/garden';
+import { aWorkingDevice, withDevice } from '../harness/authenticator';
+import { asAnotherBrowser } from '../harness/browser';
+import { plants, people as seeded } from '../harness/garden';
 import { signIn } from '../harness/signin';
 import { expect, test } from '../harness/test';
+import { InvitedScreen } from '../screens/invited';
+import { NoGardenScreen } from '../screens/no-garden';
+import { RemindersScreen } from '../screens/reminders';
+import { TodayScreen } from '../screens/today';
 
 // The sentences People and Invite someone both use for what a role can do. The
 // server writes them in one place, and these tests read them on both pages.
@@ -99,6 +105,53 @@ test('Pending invites is not shown once the last invite is revoked @swap', async
   await people.revoke().click();
 
   await expect(people.invited()).toHaveCount(0);
+});
+
+test('a sitter joins from an invite link and is in no garden once removed @passkey', async ({
+  browser,
+  baseURL,
+  activity,
+  invite,
+  people,
+}) => {
+  await people.open();
+  await people.inviteSomeone().click();
+  await invite.until().fill('2099-06-01');
+  await invite.create().click();
+  const token = InvitedScreen.tokenOf((await invite.link().textContent()) ?? '');
+
+  const { page: sitter, context } = await asAnotherBrowser(browser, baseURL);
+  try {
+    const invited = new InvitedScreen(sitter);
+    await withDevice(sitter, aWorkingDevice, async () => {
+      await invited.open(token);
+      await expect(sitter.getByText('You’ll join as a sitter.')).toBeVisible();
+      await invited.name().fill('Kim');
+      await invited.timezone().selectOption('Europe/London');
+      await invited.join().click();
+      await expect(sitter).toHaveURL('/setup/reminders');
+    });
+    await new RemindersScreen(sitter).notNow().click();
+    await expect(sitter).toHaveURL('/');
+
+    const sitterToday = new TodayScreen(sitter);
+    await sitterToday.careButton(plants.doris, 'water').click();
+    await expect(sitterToday.careRow(plants.doris, 'water').getByRole('button', { name: 'Water' })).toHaveCount(0);
+
+    await activity.open();
+    await expect(activity.rows().first()).toContainText(`${plants.doris.name} Kim watered`);
+
+    await people.open();
+    await expect(people.row('Kim')).toContainText('Sitter · until 1 Jun');
+    await people.remove('Kim').click();
+    await people.confirmRemove().click();
+    await expect(people.row('Kim')).toHaveCount(0);
+
+    await sitter.goto('/');
+    await expect(new NoGardenScreen(sitter).heading()).toBeVisible();
+  } finally {
+    await context.close();
+  }
 });
 
 test('pressing a role chip changes the sentence saying what that role can do', async ({ invite, page }) => {

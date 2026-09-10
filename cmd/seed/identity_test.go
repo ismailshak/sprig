@@ -1,11 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 	"time"
 	"uuid"
 
+	"github.com/go-webauthn/webauthn/protocol/webauthncose"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -124,6 +126,41 @@ func TestSeed_EllieHasAnIPhonePasskeyAndAMacBookAirPasskey(t *testing.T) {
 		if got := daysBetween(rows[i].LastUsed, ref); got != w.usedDays {
 			t.Errorf("%s was last used %d days ago, want %d", w.name, got, w.usedDays)
 		}
+	}
+}
+
+// The e2e harness signs in with the private half of this key, so the row has
+// to hold a key the server can parse.
+func TestSeed_ElliesIPhonePasskeyStoresTheDevelopmentKeyWithSyncedPasskeyFlags(t *testing.T) {
+	pool := seeded(t)
+
+	var stored []byte
+	var flags int16
+	if err := pool.QueryRow(t.Context(),
+		"SELECT public_key, flags FROM passkey_credential WHERE id = $1",
+		seedID(tablePasskeyCredential, 1),
+	).Scan(&stored, &flags); err != nil {
+		t.Fatalf("reading the iPhone passkey: %v", err)
+	}
+
+	parsed, err := webauthncose.ParsePublicKey(stored)
+	if err != nil {
+		t.Fatalf("the stored key does not parse: %v", err)
+	}
+	key, ok := parsed.(webauthncose.EC2PublicKeyData)
+	if !ok {
+		t.Fatalf("the stored key is %T, want an EC2 key", parsed)
+	}
+	want, err := iPhoneKey().Bytes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := append(append([]byte{0x04}, key.XCoord...), key.YCoord...)
+	if !bytes.Equal(got, want) {
+		t.Errorf("the stored key is the point %x, want %x", got, want)
+	}
+	if flags != int16(syncedPasskeyFlags) {
+		t.Errorf("the stored flags are %08b, want %08b", flags, syncedPasskeyFlags)
 	}
 }
 

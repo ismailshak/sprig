@@ -20,6 +20,17 @@ export const devices = {
   laptop: 'MacBook Air',
 } as const;
 
+// seededPasskey is Ellie's iPhone passkey, for a test to sign in as Ellie
+// through a virtual authenticator. privateKey is the private half of the key
+// pair, in PKCS#8 and base64 encoded. The seed stores the public half on the
+// passkey row. The pair is only ever used against a throwaway database.
+export const seededPasskey = {
+  credentialId: '00000000-0000-7000-8000-080000000001',
+  userHandle: '00000000-0000-7000-8000-020000000001',
+  privateKey:
+    'MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgiPIK+3yJComQZopJrnNR+Y1AJa2oqqStOny8knu3lEChRANCAAQD0Joi0OpxakA/QCCyl8BqjmvJ50CoorL9FHx4PtCGqdHUFhhArxYIPBxu0Bdvkk/oA5klpa6+Zs+ytcd5J80Y',
+} as const;
+
 // The browsers Ellie has subscribed to notifications in, one row each under
 // Subscribed devices. The server builds each name from the User-Agent the
 // seed writes. A User-Agent names no model, so the laptop's row says Mac.

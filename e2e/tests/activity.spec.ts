@@ -143,6 +143,32 @@ test('a deleted event is not on the log @swap', async ({ page, activity, sheet }
   await expect(page.locator(`#${id}`)).toHaveCount(0);
 });
 
+test('deleting a care from Activity puts the plant back in Overdue on Today @swap', async ({
+  today,
+  activity,
+  sheet,
+}) => {
+  await today.open();
+  const row = today.careRow(seeded.bigFella, 'water');
+  await expect(today.section('Overdue').locator(row)).toBeVisible();
+  await today.careButton(seeded.bigFella, 'water').click();
+  await expect(row.getByRole('button', { name: 'Water' })).toHaveCount(0);
+
+  // The seed writes nothing dated today, so the care just logged is the
+  // newest row.
+  await activity.open();
+  const logged = activity.rows().first();
+  await expect(logged).toContainText(seeded.bigFella.name);
+  await activity.openSheet(logged);
+  await sheet.deleteButton().click();
+  await expect(sheet.dialog()).toHaveCount(0);
+
+  await today.open();
+  await expect(today.section('Overdue').locator(row)).toBeVisible();
+  await expect(row).toContainText('2 days late');
+  await expect(row.getByRole('button', { name: 'Water' })).toBeVisible();
+});
+
 test('undoing a delete puts the event back on the log @js', async ({ page, activity, sheet }) => {
   await activity.open();
   const row = activity.rows().first();
