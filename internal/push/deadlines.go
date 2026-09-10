@@ -126,7 +126,7 @@ func (d *Deadlines) sendDue(ctx context.Context) (time.Time, error) {
 				soonest(warnAt)
 			case now.Before(token.ExpiresAt):
 				loc := locationOf(d.logger, row.Handle, row.Timezone)
-				n := tokenExpiringNotification(row.GardenName, token, loc, d.tokensURL)
+				n := tokenExpiringNotification(GardenNamed(row.GardenName, row.OwnerName, row.RecipientOwns), token, loc, d.tokensURL)
 				err := d.send(ctx, to, tokenExpiringKind, token.ID.String(), n, now)
 				if err != nil && failed(err, "token expiring not sent", "user", row.Handle, "garden", row.GardenName, "token", token.Prefix) {
 					return time.Time{}, err
@@ -137,7 +137,7 @@ func (d *Deadlines) sendDue(ctx context.Context) (time.Time, error) {
 			soonest(token.ExpiresAt)
 			continue
 		}
-		n := tokenExpiredNotification(row.GardenName, token, d.tokensURL)
+		n := tokenExpiredNotification(GardenNamed(row.GardenName, row.OwnerName, row.RecipientOwns), token, d.tokensURL)
 		err := d.send(ctx, to, tokenExpiredKind, token.ID.String(), n, now)
 		if err != nil && failed(err, "token expired not sent", "user", row.Handle, "garden", row.GardenName, "token", token.Prefix) {
 			return time.Time{}, err
@@ -169,27 +169,31 @@ func tokenNamed(token store.APIToken) string {
 	return token.Name + " (" + token.Prefix + "…)"
 }
 
-// tokenExpiringNotification reads "The kitchen display (sprg_7c1f…) expires
-// on 10 Sep." with the date in the recipient's timezone, and opens Tokens.
+// tokenExpiringNotification reads "The kitchen display (sprg_7c1f…) in
+// Ellie’s Rosewood expires on 10 Sep." with the date in the recipient's
+// timezone, and opens Tokens. garden is the name GardenNamed gives it.
 func tokenExpiringNotification(garden string, token store.APIToken, loc *time.Location, tokensURL string) Notification {
-	return Notification{Title: garden, Body: tokenNamed(token) + " expires on " + token.ExpiresAt.In(loc).Format("2 Jan") + ".", URL: tokensURL}
+	return Notification{Title: "Token expires soon", Body: tokenNamed(token) + " in " + garden + " expires on " + token.ExpiresAt.In(loc).Format("2 Jan") + ".", URL: tokensURL}
 }
 
-// tokenExpiredNotification reads "The kitchen display (sprg_7c1f…) has
-// expired." and opens Tokens.
+// tokenExpiredNotification reads "The kitchen display (sprg_7c1f…) in Ellie’s
+// Rosewood has expired." and opens Tokens. garden is the name GardenNamed
+// gives it.
 func tokenExpiredNotification(garden string, token store.APIToken, tokensURL string) Notification {
-	return Notification{Title: garden, Body: tokenNamed(token) + " has expired.", URL: tokensURL}
+	return Notification{Title: "Token expired", Body: tokenNamed(token) + " in " + garden + " has expired.", URL: tokensURL}
 }
 
 // sittingEndedNotification is what one recipient of a sitting's end gets. The
-// sitter's reads "Your access to Rosewood has ended." and opens nothing,
-// because their access is gone and every page would send them to sign in. The
-// inviter's reads "Sam’s access to Rosewood has ended." and opens People.
+// sitter's reads "Your access to Ellie’s Rosewood has ended." and opens
+// nothing, because their access is gone and every page would send them to
+// sign in. The inviter's reads "Sam no longer has access to Rosewood." and
+// opens People.
 func sittingEndedNotification(row store.ListSittingDeadlinesRow, peopleURL string) Notification {
+	garden := GardenNamed(row.GardenName, row.OwnerName, row.RecipientOwns)
 	if row.IsSitter {
-		return Notification{Title: row.GardenName, Body: "Your access to " + row.GardenName + " has ended."}
+		return Notification{Title: "Sitting ended", Body: "Your access to " + garden + " has ended."}
 	}
-	return Notification{Title: row.GardenName, Body: row.SitterName + "’s access to " + row.GardenName + " has ended.", URL: peopleURL}
+	return Notification{Title: "Sitting ended", Body: row.SitterName + " no longer has access to " + garden + ".", URL: peopleURL}
 }
 
 // sittingKey is the send key of a sitting's notification: the membership id

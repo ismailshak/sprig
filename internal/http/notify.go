@@ -2,7 +2,11 @@ package http
 
 import (
 	"context"
+	"errors"
 	"strconv"
+	"uuid"
+
+	"github.com/jackc/pgx/v5"
 
 	"github.com/ismailshak/sprig/internal/auth"
 	"github.com/ismailshak/sprig/internal/photo"
@@ -30,31 +34,51 @@ func storageKey(usage photo.Usage) string {
 	return strconv.FormatFloat(nearlyFull, 'f', -1, 64) + " " + strconv.FormatInt(usage.Quota, 10)
 }
 
+// gardenNamer reads the garden's owner once and returns the function that
+// names the garden to one recipient: "Ellie’s Rosewood", or "Rosewood" when
+// the recipient is Ellie. The owner is read rather than taken from the
+// request, because the person making the request is not always the owner.
+func gardenNamer(ctx context.Context, queries *store.Queries, garden store.Garden) (func(recipient uuid.UUID) string, error) {
+	owner, err := queries.GetGardenOwner(ctx, garden.ID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return func(uuid.UUID) string { return garden.Name }, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return func(recipient uuid.UUID) string {
+		return push.GardenNamed(garden.Name, owner.DisplayName, owner.ID == recipient)
+	}, nil
+}
+
 // inviteAcceptedNotification is what the person who created an invite gets
-// when it is accepted. It reads "Robin joined as a sitter." and opens People.
+// when it is accepted. It reads "Robin joined Ellie’s Rosewood as a sitter."
+// and opens People. garden is the name gardenNamedFor gives it.
 func inviteAcceptedNotification(garden string, joined store.AppUser, role string) push.Notification {
-	return push.Notification{Title: garden, Body: joined.DisplayName + " joined as a " + role + ".", URL: PeoplePath}
+	return push.Notification{Title: "Invite accepted", Body: joined.DisplayName + " joined " + garden + " as a " + role + ".", URL: PeoplePath}
 }
 
 // roleChangedNotification is what a member gets when their role is changed
-// on People. It opens Today.
+// on People. It reads "You’re now a sitter in Ellie’s Rosewood." and opens
+// Today.
 func roleChangedNotification(garden, role string) push.Notification {
-	return push.Notification{Title: garden, Body: "Your role in " + garden + " is now " + role + ".", URL: todayPath}
+	return push.Notification{Title: "Role changed", Body: "You’re now a " + role + " in " + garden + ".", URL: todayPath}
 }
 
 // membershipRemovedNotification is what a member gets when they are removed
 // on People. It opens nothing, because they can no longer open the garden.
 func membershipRemovedNotification(garden string) push.Notification {
-	return push.Notification{Title: garden, Body: "You’ve been removed from " + garden + "."}
+	return push.Notification{Title: "Removed from a garden", Body: "You’ve been removed from " + garden + "."}
 }
 
 // storageNotification is what the people who can delete any photo get when
-// an upload takes the garden to nearlyFull of the quota. It opens the photos
-// of the plant the upload was for.
+// an upload takes the garden to nearlyFull of the quota. It reads "920 MB of
+// 1 GB used in Rosewood. Delete photos to make room." and opens the photos of
+// the plant the upload was for.
 func storageNotification(garden string, usage photo.Usage, plant store.Plant) push.Notification {
 	return push.Notification{
-		Title: garden,
-		Body:  storageFigure(usage.Used) + " of " + storageFigure(usage.Quota) + " of photo storage used. Delete photos to make room.",
+		Title: "Photo storage nearly full",
+		Body:  storageFigure(usage.Used) + " of " + storageFigure(usage.Quota) + " used in " + garden + ". Delete photos to make room.",
 		URL:   photosPath(plant.ID),
 	}
 }
@@ -83,7 +107,11 @@ func (h *plants) notifyStorage(ctx context.Context, principal auth.Principal, pl
 		h.logger.Error("storage notification not sent", "garden", principal.Garden.Name, "err", err)
 		return
 	}
-	n := storageNotification(principal.Garden.Name, usage, plant)
+	gardenNamed, err := gardenNamer(ctx, h.queries, principal.Garden)
+	if err != nil {
+		h.logger.Error("storage notification not sent", "garden", principal.Garden.Name, "err", err)
+		return
+	}
 	for _, member := range members {
 		claimed, err := h.queries.ClaimNotificationSend(ctx, store.ClaimNotificationSendParams{
 			MembershipID: member.Membership.ID,
@@ -97,7 +125,7 @@ func (h *plants) notifyStorage(ctx context.Context, principal auth.Principal, pl
 		if claimed == 0 {
 			continue
 		}
-		h.notify.call(ctx, member.AppUser, n)
+		h.notify.call(ctx, member.AppUser, storageNotification(gardenNamed(member.AppUser.ID), usage, plant))
 	}
 }
 

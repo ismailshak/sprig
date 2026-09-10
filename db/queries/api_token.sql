@@ -30,17 +30,29 @@ UPDATE api_token SET last_used_at = @now::timestamptz WHERE token_hash = @token_
 -- Every unrevoked token expiring after @since, paired with each member of its
 -- garden whose role grants @capability and whose membership has not ended at
 -- @now. A member with no browser subscribed is left out, so the job never
--- claims a ledger row and then sends nothing. There is no @garden_id because
--- the job runs across every garden.
+-- claims a ledger row and then sends nothing. owner_name is the garden's
+-- owner's display name, or empty when no owner is left, and recipient_owns is
+-- whether the member is that owner. There is no @garden_id because the job
+-- runs across every garden.
 -- name: ListTokenDeadlines :many
 SELECT sqlc.embed(api_token), membership.id AS membership_id, membership.user_id,
-    app_user.handle, app_user.timezone, garden.name AS garden_name
+    app_user.handle, app_user.timezone, garden.name AS garden_name,
+    coalesce(owner.display_name, '')::text AS owner_name,
+    coalesce(owner.id = membership.user_id, false)::boolean AS recipient_owns
 FROM api_token
 JOIN garden ON garden.id = api_token.garden_id
 JOIN membership ON membership.garden_id = api_token.garden_id
     AND (membership.expires_at IS NULL OR membership.expires_at > @now::timestamptz)
 JOIN role_capability ON role_capability.role = membership.role AND role_capability.capability = @capability
 JOIN app_user ON app_user.id = membership.user_id
+LEFT JOIN LATERAL (
+    SELECT app_user.id, app_user.display_name
+    FROM membership o
+    JOIN app_user ON app_user.id = o.user_id
+    WHERE o.garden_id = garden.id AND o.role = 'owner'
+    ORDER BY o.created_at, o.id
+    LIMIT 1
+) AS owner ON true
 WHERE api_token.revoked_at IS NULL
   AND api_token.expires_at > @since::timestamptz
   AND EXISTS (SELECT 1 FROM push_subscription WHERE push_subscription.user_id = membership.user_id)

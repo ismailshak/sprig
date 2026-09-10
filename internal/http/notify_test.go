@@ -27,27 +27,27 @@ func captureUserNotifications(hook *notifyUser) *[]userNotified {
 }
 
 func TestInviteAcceptedNotification_NamesWhoJoinedAndAsWhatAndOpensPeople(t *testing.T) {
-	got := inviteAcceptedNotification("Rosewood", store.AppUser{DisplayName: "Robin"}, "sitter")
+	got := inviteAcceptedNotification("Ellie’s Rosewood", store.AppUser{DisplayName: "Robin"}, "sitter")
 
-	want := push.Notification{Title: "Rosewood", Body: "Robin joined as a sitter.", URL: PeoplePath}
+	want := push.Notification{Title: "Invite accepted", Body: "Robin joined Ellie’s Rosewood as a sitter.", URL: PeoplePath}
 	if got != want {
 		t.Errorf("the notification is %+v, want %+v", got, want)
 	}
 }
 
 func TestRoleChangedNotification_NamesTheGardenAndTheNewRoleAndOpensToday(t *testing.T) {
-	got := roleChangedNotification("Rosewood", "sitter")
+	got := roleChangedNotification("Ellie’s Rosewood", "sitter")
 
-	want := push.Notification{Title: "Rosewood", Body: "Your role in Rosewood is now sitter.", URL: todayPath}
+	want := push.Notification{Title: "Role changed", Body: "You’re now a sitter in Ellie’s Rosewood.", URL: todayPath}
 	if got != want {
 		t.Errorf("the notification is %+v, want %+v", got, want)
 	}
 }
 
 func TestMembershipRemovedNotification_NamesTheGardenAndOpensNothing(t *testing.T) {
-	got := membershipRemovedNotification("Rosewood")
+	got := membershipRemovedNotification("Ellie’s Rosewood")
 
-	want := push.Notification{Title: "Rosewood", Body: "You’ve been removed from Rosewood."}
+	want := push.Notification{Title: "Removed from a garden", Body: "You’ve been removed from Ellie’s Rosewood."}
 	if got != want {
 		t.Errorf("the notification is %+v, want %+v", got, want)
 	}
@@ -58,7 +58,7 @@ func TestStorageNotification_SaysHowMuchIsUsedAndOpensThePlantsPhotos(t *testing
 
 	got := storageNotification("Rosewood", usage, store.Plant{ID: dorisID})
 
-	want := push.Notification{Title: "Rosewood", Body: "920 MB of 1 GB of photo storage used. Delete photos to make room.", URL: photosPath(dorisID)}
+	want := push.Notification{Title: "Photo storage nearly full", Body: "920 MB of 1 GB used in Rosewood. Delete photos to make room.", URL: photosPath(dorisID)}
 	if got != want {
 		t.Errorf("the notification is %+v, want %+v", got, want)
 	}

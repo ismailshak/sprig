@@ -105,13 +105,16 @@ RETURNING *;
 -- person who invited them where that person is still a member at @now. One row
 -- per recipient, with is_sitter telling the two apart. A recipient with no
 -- browser subscribed is left out, so the job never claims a ledger row and then
--- sends nothing. There is no @garden_id because the job runs across every
--- garden.
+-- sends nothing. owner_name is the garden's owner's display name, or empty when
+-- no owner is left, and recipient_owns is whether the recipient is that owner.
+-- There is no @garden_id because the job runs across every garden.
 -- name: ListSittingDeadlines :many
 SELECT sitting.id AS sitting_id, sitting.expires_at::timestamptz AS ends_at,
     sitter.display_name AS sitter_name, garden.name AS garden_name,
     recipient.id AS membership_id, recipient.user_id, app_user.handle,
-    (recipient.id = sitting.id)::boolean AS is_sitter
+    (recipient.id = sitting.id)::boolean AS is_sitter,
+    coalesce(owner.display_name, '')::text AS owner_name,
+    coalesce(owner.id = recipient.user_id, false)::boolean AS recipient_owns
 FROM membership sitting
 JOIN app_user sitter ON sitter.id = sitting.user_id
 JOIN garden ON garden.id = sitting.garden_id
@@ -119,6 +122,14 @@ JOIN membership recipient ON recipient.garden_id = sitting.garden_id
     AND (recipient.id = sitting.id
         OR (recipient.user_id = sitting.invited_by AND (recipient.expires_at IS NULL OR recipient.expires_at > @now::timestamptz)))
 JOIN app_user ON app_user.id = recipient.user_id
+LEFT JOIN LATERAL (
+    SELECT app_user.id, app_user.display_name
+    FROM membership o
+    JOIN app_user ON app_user.id = o.user_id
+    WHERE o.garden_id = garden.id AND o.role = 'owner'
+    ORDER BY o.created_at, o.id
+    LIMIT 1
+) AS owner ON true
 WHERE sitting.expires_at IS NOT NULL AND sitting.expires_at > @since::timestamptz
   AND EXISTS (SELECT 1 FROM push_subscription WHERE push_subscription.user_id = recipient.user_id)
 ORDER BY sitting.expires_at, sitting.id, recipient.id = sitting.id DESC;

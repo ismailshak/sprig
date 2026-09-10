@@ -165,6 +165,18 @@ func TestNotifier_DeletesABrowserThePushServiceReportsGone(t *testing.T) {
 	}
 }
 
+func TestGardenNamed_NamesAnotherPersonsGardenAfterItsOwnerAndTheOwnersOwnByNameAlone(t *testing.T) {
+	if got, want := GardenNamed("Rosewood", "Ellie", false), "Ellie’s Rosewood"; got != want {
+		t.Errorf("to a member the garden is %q, want %q", got, want)
+	}
+	if got, want := GardenNamed("Rosewood", "Ellie", true), "Rosewood"; got != want {
+		t.Errorf("to the owner the garden is %q, want %q", got, want)
+	}
+	if got, want := GardenNamed("Rosewood", "", false), "Rosewood"; got != want {
+		t.Errorf("with no owner left the garden is %q, want %q", got, want)
+	}
+}
+
 func TestNotifier_TheNotificationsPathsAreMadeAbsoluteUnderTheBaseURL(t *testing.T) {
 	notifier := NewNotifier(slog.New(slog.DiscardHandler), nil, nil, "https://sprig.example.com/")
 

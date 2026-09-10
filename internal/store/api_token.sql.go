@@ -119,13 +119,23 @@ func (q *Queries) ListAPITokens(ctx context.Context, gardenID uuid.UUID) ([]APIT
 
 const listTokenDeadlines = `-- name: ListTokenDeadlines :many
 SELECT api_token.id, api_token.garden_id, api_token.name, api_token.token_hash, api_token.prefix, api_token.created_by, api_token.created_at, api_token.expires_at, api_token.last_used_at, api_token.revoked_at, membership.id AS membership_id, membership.user_id,
-    app_user.handle, app_user.timezone, garden.name AS garden_name
+    app_user.handle, app_user.timezone, garden.name AS garden_name,
+    coalesce(owner.display_name, '')::text AS owner_name,
+    coalesce(owner.id = membership.user_id, false)::boolean AS recipient_owns
 FROM api_token
 JOIN garden ON garden.id = api_token.garden_id
 JOIN membership ON membership.garden_id = api_token.garden_id
     AND (membership.expires_at IS NULL OR membership.expires_at > $1::timestamptz)
 JOIN role_capability ON role_capability.role = membership.role AND role_capability.capability = $2
 JOIN app_user ON app_user.id = membership.user_id
+LEFT JOIN LATERAL (
+    SELECT app_user.id, app_user.display_name
+    FROM membership o
+    JOIN app_user ON app_user.id = o.user_id
+    WHERE o.garden_id = garden.id AND o.role = 'owner'
+    ORDER BY o.created_at, o.id
+    LIMIT 1
+) AS owner ON true
 WHERE api_token.revoked_at IS NULL
   AND api_token.expires_at > $3::timestamptz
   AND EXISTS (SELECT 1 FROM push_subscription WHERE push_subscription.user_id = membership.user_id)
@@ -139,19 +149,23 @@ type ListTokenDeadlinesParams struct {
 }
 
 type ListTokenDeadlinesRow struct {
-	APIToken     APIToken
-	MembershipID uuid.UUID
-	UserID       uuid.UUID
-	Handle       string
-	Timezone     string
-	GardenName   string
+	APIToken      APIToken
+	MembershipID  uuid.UUID
+	UserID        uuid.UUID
+	Handle        string
+	Timezone      string
+	GardenName    string
+	OwnerName     string
+	RecipientOwns bool
 }
 
 // Every unrevoked token expiring after @since, paired with each member of its
 // garden whose role grants @capability and whose membership has not ended at
 // @now. A member with no browser subscribed is left out, so the job never
-// claims a ledger row and then sends nothing. There is no @garden_id because
-// the job runs across every garden.
+// claims a ledger row and then sends nothing. owner_name is the garden's
+// owner's display name, or empty when no owner is left, and recipient_owns is
+// whether the member is that owner. There is no @garden_id because the job
+// runs across every garden.
 func (q *Queries) ListTokenDeadlines(ctx context.Context, arg ListTokenDeadlinesParams) ([]ListTokenDeadlinesRow, error) {
 	rows, err := q.db.Query(ctx, listTokenDeadlines, arg.Now, arg.Capability, arg.Since)
 	if err != nil {
@@ -177,6 +191,8 @@ func (q *Queries) ListTokenDeadlines(ctx context.Context, arg ListTokenDeadlines
 			&i.Handle,
 			&i.Timezone,
 			&i.GardenName,
+			&i.OwnerName,
+			&i.RecipientOwns,
 		); err != nil {
 			return nil, err
 		}

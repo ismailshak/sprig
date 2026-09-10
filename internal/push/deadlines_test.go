@@ -417,9 +417,9 @@ func TestTokenExpiringNotification_NamesTheTokenByNameAndPrefixWithTheDateInTheR
 		t.Fatal(err)
 	}
 
-	got := tokenExpiringNotification("Rosewood", kitchenToken, auckland, "https://sprig.example.com/more/tokens")
+	got := tokenExpiringNotification("Ellie’s Rosewood", kitchenToken, auckland, "https://sprig.example.com/more/tokens")
 
-	want := Notification{Title: "Rosewood", Body: "The kitchen display (sprg_7c1f…) expires on 11 Sep.", URL: "https://sprig.example.com/more/tokens"}
+	want := Notification{Title: "Token expires soon", Body: "The kitchen display (sprg_7c1f…) in Ellie’s Rosewood expires on 11 Sep.", URL: "https://sprig.example.com/more/tokens"}
 	if got != want {
 		t.Errorf("the notification is %+v, want %+v", got, want)
 	}
@@ -428,24 +428,25 @@ func TestTokenExpiringNotification_NamesTheTokenByNameAndPrefixWithTheDateInTheR
 func TestTokenExpiredNotification_SaysTheTokenHasExpiredAndOpensTokens(t *testing.T) {
 	got := tokenExpiredNotification("Rosewood", kitchenToken, "https://sprig.example.com/more/tokens")
 
-	want := Notification{Title: "Rosewood", Body: "The kitchen display (sprg_7c1f…) has expired.", URL: "https://sprig.example.com/more/tokens"}
+	want := Notification{Title: "Token expired", Body: "The kitchen display (sprg_7c1f…) in Rosewood has expired.", URL: "https://sprig.example.com/more/tokens"}
 	if got != want {
 		t.Errorf("the notification is %+v, want %+v", got, want)
 	}
 }
 
 func TestSittingEndedNotification_TheSittersOpensNothingAndTheInvitersOpensPeople(t *testing.T) {
-	row := store.ListSittingDeadlinesRow{SitterName: "Sam", GardenName: "Rosewood", IsSitter: true}
+	// Sam sat Ellie's garden. Sam is told as a non-owner, Ellie as the owner.
+	row := store.ListSittingDeadlinesRow{SitterName: "Sam", GardenName: "Rosewood", OwnerName: "Ellie", IsSitter: true}
 	people := "https://sprig.example.com/more/people"
 
 	sitter := sittingEndedNotification(row, people)
-	row.IsSitter = false
+	row.IsSitter, row.RecipientOwns = false, true
 	inviter := sittingEndedNotification(row, people)
 
-	if want := (Notification{Title: "Rosewood", Body: "Your access to Rosewood has ended."}); sitter != want {
+	if want := (Notification{Title: "Sitting ended", Body: "Your access to Ellie’s Rosewood has ended."}); sitter != want {
 		t.Errorf("the sitter's notification is %+v, want %+v", sitter, want)
 	}
-	if want := (Notification{Title: "Rosewood", Body: "Sam’s access to Rosewood has ended.", URL: people}); inviter != want {
+	if want := (Notification{Title: "Sitting ended", Body: "Sam no longer has access to Rosewood.", URL: people}); inviter != want {
 		t.Errorf("the inviter's notification is %+v, want %+v", inviter, want)
 	}
 }

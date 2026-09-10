@@ -728,9 +728,9 @@ func TestPeople_AMemberWhoseRoleChangedIsToldTheNewRole(t *testing.T) {
 	f.do(t, f.handler.saveMembers, PeoplePath, url.Values{"role.sam": {"sitter"}, "role.jo": {"sitter"}})
 
 	// Jo is a sitter already, so their row changed nothing and they are not
-	// told.
-	if len(*got) != 1 || (*got)[0].user.ID != otherUserID || (*got)[0].n != roleChangedNotification("Rosewood", "sitter") {
-		t.Errorf("notified %+v, want Sam alone, told the role is now Sitter", *got)
+	// told. Sam is not the owner, so the garden is named after Ellie.
+	if len(*got) != 1 || (*got)[0].user.ID != otherUserID || (*got)[0].n != roleChangedNotification("Ellie’s Rosewood", "sitter") {
+		t.Errorf("notified %+v, want Sam alone, told he is now a sitter in Ellie’s Rosewood", *got)
 	}
 }
 
@@ -756,7 +756,7 @@ func TestPeople_ARemovedMemberIsToldAndTheNotificationOpensNothing(t *testing.T)
 
 	f.member(t, http.MethodPost, f.handler.removeMember, "sam", removeMemberPath("sam"))
 
-	if len(*got) != 1 || (*got)[0].user.ID != otherUserID || (*got)[0].n != membershipRemovedNotification("Rosewood") {
+	if len(*got) != 1 || (*got)[0].user.ID != otherUserID || (*got)[0].n != membershipRemovedNotification("Ellie’s Rosewood") {
 		t.Errorf("notified %+v, want Sam told he was removed from Rosewood", *got)
 	}
 }

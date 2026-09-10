@@ -215,6 +215,12 @@ func (h *more) saveMembers(w http.ResponseWriter, r *http.Request) {
 		h.templates.badRequest(w, r)
 		return
 	}
+	// The owner is read before the write, so a failed read costs nothing.
+	gardenNamed, err := gardenNamer(r.Context(), h.queries, principal.Garden)
+	if err != nil {
+		h.templates.serverError(h.logger, w, r, "read the garden's owner", err)
+		return
+	}
 
 	// One transaction, so a write that fails partway leaves no row changed.
 	err = h.queries.InTx(r.Context(), func(q *store.Queries) error {
@@ -241,7 +247,7 @@ func (h *more) saveMembers(w http.ResponseWriter, r *http.Request) {
 	ended := false
 	for _, change := range changes {
 		if change.role != "" {
-			h.notify.call(r.Context(), change.user, roleChangedNotification(principal.Garden.Name, change.role))
+			h.notify.call(r.Context(), change.user, roleChangedNotification(gardenNamed(change.user.ID), change.role))
 		}
 		ended = ended || change.ends != nil
 	}
@@ -327,6 +333,11 @@ func (h *more) removeMember(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	gardenNamed, err := gardenNamer(r.Context(), h.queries, PrincipalFrom(r).Garden)
+	if err != nil {
+		h.templates.serverError(h.logger, w, r, "read the garden's owner", err)
+		return
+	}
 	removed, err := h.queries.DeleteMembership(r.Context(), member.Membership.GardenID, member.AppUser.ID)
 	if err != nil {
 		h.templates.serverError(h.logger, w, r, "remove the member", err)
@@ -336,7 +347,7 @@ func (h *more) removeMember(w http.ResponseWriter, r *http.Request) {
 		h.templates.notFound(w, r)
 		return
 	}
-	h.notify.call(r.Context(), member.AppUser, membershipRemovedNotification(PrincipalFrom(r).Garden.Name))
+	h.notify.call(r.Context(), member.AppUser, membershipRemovedNotification(gardenNamed(member.AppUser.ID)))
 	h.peopleSaved(w, r, member.AppUser.DisplayName+" removed.")
 }
 

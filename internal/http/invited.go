@@ -399,9 +399,14 @@ func (h *invited) redeem(w http.ResponseWriter, r *http.Request) {
 		h.templates.render(w, r, view{page: "invited", status: http.StatusUnprocessableEntity}, page)
 		return
 	}
+	gardenNamed, err := gardenNamer(r.Context(), h.queries, open.row.Garden)
+	if err != nil {
+		h.templates.serverError(h.logger, w, r, "read the garden's owner", err)
+		return
+	}
 	user, passkey, err := h.join(r, open, form)
 	if err == nil {
-		h.notify.call(r.Context(), open.row.AppUser, inviteAcceptedNotification(open.row.Garden.Name, user, open.row.Invite.Role))
+		h.notify.call(r.Context(), open.row.AppUser, inviteAcceptedNotification(gardenNamed(open.row.AppUser.ID), user, open.row.Invite.Role))
 		// The deadlines job sends when the new membership's end date passes.
 		h.wake.call()
 	}
