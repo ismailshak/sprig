@@ -47,7 +47,7 @@ type middleware func(http.Handler) http.Handler
 // test sends that page's test message to one browser. It is nil when push is
 // off.
 func routes(logger *slog.Logger, sessions *auth.Sessions, passkeys *auth.Passkeys, queries *store.Queries, photos *photo.Store, templates *Templates, assets *Assets, trustedIPHeader string, signupEnabled bool, pushKey string, wake wakeJobs, notify notifyActivity, notifyOne notifyUser, test sendTest) []route {
-	todayHandler := &today{logger: logger, queries: queries, templates: templates, now: time.Now, notify: notify, pushKey: pushKey}
+	todayHandler := &today{logger: logger, queries: queries, templates: templates, now: time.Now, notify: notify, wake: wake, pushKey: pushKey}
 	plantsHandler := &plants{logger: logger, queries: queries, photos: photos, templates: templates, now: time.Now, notify: notifyOne}
 	activityHandler := &activity{logger: logger, queries: queries, templates: templates, now: time.Now}
 	choresHandler := &chores{logger: logger, queries: queries, templates: templates, now: time.Now}
@@ -67,6 +67,7 @@ func routes(logger *slog.Logger, sessions *auth.Sessions, passkeys *auth.Passkey
 		{pattern: "GET " + serviceWorkerPath, handler: http.HandlerFunc(newServiceWorker(assets, templates).serve)},
 		{pattern: "GET " + offlinePath, handler: offline(templates)},
 		{pattern: "GET /{$}", handler: http.HandlerFunc(todayHandler.show)},
+		{pattern: "POST " + RemindAgainPath, handler: http.HandlerFunc(todayHandler.remindAgain)},
 		{pattern: "GET /plants", handler: http.HandlerFunc(plantsHandler.show)},
 		{pattern: "GET " + archivedPlantsPath, handler: http.HandlerFunc(plantsHandler.archived)},
 		{pattern: "GET /plants/new", capability: auth.PlantCreate, handler: http.HandlerFunc(plantsHandler.newPlant)},

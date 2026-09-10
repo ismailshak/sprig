@@ -268,6 +268,8 @@ var routeAccess = map[string]access{
 	},
 	"GET /more/notifications":  {},
 	"POST /more/notifications": {anyMember: true},
+	// Remind me again sets a time on the reader's own membership.
+	"POST /remind-again": {anyMember: true},
 	// A subscription belongs to the account, so any member may post one and
 	// send their own browser a test.
 	"POST /more/notifications/browsers": {anyMember: true},

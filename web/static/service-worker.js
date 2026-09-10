@@ -109,25 +109,46 @@ async function postFetchedAt(clientId, fetchedAt) {
   }
 }
 
-// A push message is JSON with a title, a body, the URL to open and an icon
-// URL. The icon is the plant's picture when the notification is about one
-// plant, and empty otherwise.
+// A push message is JSON with a title, a body, the URL to open, an icon URL
+// and a tag. The icon is the plant's picture when the notification is about
+// one plant, and empty otherwise. A notification with the same tag as one
+// already showing replaces it. The daily digest also has an again object:
+// the URL its In 1 hour and In 2 hours buttons post to, the field name they
+// post, and one delay per button.
 self.addEventListener('push', (event) => {
   const notification = event.data ? event.data.json() : {};
-  event.waitUntil(
-    self.registration.showNotification(notification.title || 'sprig', {
-      body: notification.body,
-      icon: notification.icon || ICON,
-      data: { url: notification.url },
-    }),
-  );
+  const options = {
+    body: notification.body,
+    icon: notification.icon || ICON,
+    tag: notification.tag,
+    data: { url: notification.url, again: notification.again },
+  };
+  if (notification.again) {
+    options.actions = notification.again.delays.map((delay) => ({ action: delay.value, title: delay.label }));
+  }
+  event.waitUntil(self.registration.showNotification(notification.title || 'sprig', options));
 });
 
-// Pressing the notification navigates a window sprig already has open to the
-// URL, or opens a new one.
+// Pressing a delay button posts that delay to the Remind me again URL and
+// opens no window. The response is a redirect to Today, left unfollowed by
+// redirect: 'manual'. Pressing the notification itself navigates a
+// window sprig already has open to the URL, or opens a new one.
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const url = event.notification.data && event.notification.data.url;
+  const data = event.notification.data || {};
+  if (event.action && data.again) {
+    event.waitUntil(
+      fetch(data.again.url, {
+        method: 'POST',
+        credentials: 'same-origin',
+        redirect: 'manual',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ [data.again.field]: event.action }),
+      }),
+    );
+    return;
+  }
+  const url = data.url;
   if (!url) return;
   event.waitUntil(
     self.clients.matchAll({ type: 'window' }).then(async (windows) => {
