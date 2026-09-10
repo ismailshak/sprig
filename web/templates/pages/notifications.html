@@ -1,8 +1,15 @@
 {{define "title"}}Notifications · sprig{{end}}
 
+{{/* With JavaScript, Save changes swaps the page under the top bar with the
+     Saved line on it. The page's script holds the request in htmx's confirm
+     event first, while it subscribes this browser to push. Without JavaScript
+     the post redirects to this page with Saved in the query string. */}}
 {{define "main"}}
 {{template "more-topbar" .Bar}}
-<div class="app__body app__body--sub">
+{{template "notifications" .}}
+{{end}}
+
+{{define "notifications"}}<div class="app__body app__body--sub" id="notifications">
 {{if not .Key}}
 <p class="lead">Notifications aren’t enabled on this server.</p>
 {{else}}
@@ -15,7 +22,7 @@
 </div>
 {{/* data-key is the VAPID public key this browser subscribes with, and
      data-subscribe the URL the script posts the subscription to. */}}
-<form method="post" action="{{.Action}}" novalidate id="push-form" data-key="{{.Key}}" data-subscribe="{{.Subscribe}}">
+<form method="post" action="{{.Action}}" novalidate id="push-form" data-key="{{.Key}}" data-subscribe="{{.Subscribe}}" hx-post="{{.Action}}" hx-target="#notifications" hx-swap="outerHTML settle:0ms">
 <div class="section">
 <div class="section__head"><h2 class="section__title">Send me</h2></div>
 <ul class="list">
@@ -52,13 +59,13 @@
 <p class="note">{{$.Zone}} time. Change it in <a href="{{$.Account}}">Account</a>.</p>
 </div>
 {{end}}
-<button class="wide-action" type="submit">Save changes</button>
+{{/* The button has an id so htmx puts focus back on it after the swap. */}}
+<button class="wide-action" type="submit" id="save">Save changes</button>
 {{if .Saved}}{{template "saved"}}{{end}}
 </form>
 {{template "devices" .}}
 {{end}}
-</div>
-{{end}}
+</div>{{end}}
 
 {{/* The Subscribed devices section. Remove and Send test notification swap
      it, because a remove changes the list and a test writes its outcome under
@@ -87,6 +94,9 @@
 {{else}}
 <p class="note">No devices are subscribed. Turn on a notification and save to subscribe this device.</p>
 {{end}}
+{{/* role="status" has a screen reader read the line out after a post that
+     reloads the page. With JavaScript the swap announces it through the
+     layout's live region instead. */}}
 {{with .TestResult}}<p class="note" role="status">{{.}}</p>{{end}}
 </div>{{end}}
 

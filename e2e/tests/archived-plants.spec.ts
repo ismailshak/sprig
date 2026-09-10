@@ -36,7 +36,7 @@ test("an archived plant's page goes back to Archived plants", async ({ archivedP
   await expect(page).toHaveURL('/plants/archived');
 });
 
-test('an archived plant is restored from its page and listed on Plants again', async ({
+test('an archived plant is restored from its page and listed on Plants again @swap', async ({
   archivedPlants,
   plant,
   plants,

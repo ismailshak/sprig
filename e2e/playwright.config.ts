@@ -41,11 +41,13 @@ export default defineConfig({
   // reads what the service worker serves. @push marks a test that needs the
   // push API: the Notifications form, the Reminders page's offer and the
   // banner on Today. The emulated iPhone runs as a Safari tab that has none.
+  // @wide marks behaviour that differs above 900px, where the sheet is a
+  // centred dialog rather than a panel at the bottom.
   projects: [
     {
       name: 'phone',
       use: { ...devices['iPhone 16'] },
-      grepInvert: /@nojs|@passkey|@offline|@push/,
+      grepInvert: /@nojs|@passkey|@offline|@push|@wide/,
     },
     {
       name: 'phone-nojs',
@@ -58,11 +60,11 @@ export default defineConfig({
     // navigation with no network even when a service worker has a response for
     // it. @push runs here because desktop Chrome has the push API. It is a
     // desktop Chrome, so this is also the only project running at a width
-    // where the pages take their wide layout.
+    // where the pages take their wide layout. @wide needs that width.
     {
       name: 'desktop',
       use: { ...devices['Desktop Chrome'] },
-      grep: /@passkey|@offline|@push/,
+      grep: /@passkey|@offline|@push|@wide/,
     },
   ],
 });

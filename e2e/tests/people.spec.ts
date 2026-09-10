@@ -63,7 +63,7 @@ test('removing a member asks first, and keeping them leaves the row where it was
 
   await people.remove(seeded.sam.name).click();
 
-  await expect(page.getByText(`Remove ${seeded.sam.name}?`)).toBeVisible();
+  await expect(page.getByRole('main').getByText(`Remove ${seeded.sam.name}?`)).toBeVisible();
   await expect(page.getByText(/Their name stays on everything they’ve logged/)).toBeVisible();
   await people.cancelRemove().click();
   await expect(people.remove(seeded.sam.name)).toBeVisible();

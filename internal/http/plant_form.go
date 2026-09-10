@@ -665,7 +665,8 @@ func (h *plants) newPlant(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		page.Schedules = []scheduleField{row}
-		h.templates.render(w, r, view{page: plantFormPageName, fragment: "schedule-fields"}, page)
+		v := view{page: plantFormPageName, fragment: "schedule-fields", announce: row.nowShows()}
+		h.templates.render(w, r, v, page)
 		return
 	}
 
@@ -927,7 +928,8 @@ func (h *plants) confirmArchive(w http.ResponseWriter, r *http.Request) {
 		h.templates.notFound(w, r)
 		return
 	}
-	h.templates.render(w, r, view{page: "plant", fragment: fragment}, page)
+	announce := "Archive " + detail.plant.DisplayName() + "? It’s removed from Plants but keeps its activity and photos. Cancel or Archive."
+	h.templates.render(w, r, view{page: "plant", fragment: fragment, announce: announce}, page)
 }
 
 // archive handles POST /plants/{plant}/archive. A plant is archived rather

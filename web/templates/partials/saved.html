@@ -1,5 +1,5 @@
-{{/* The line under a Save button on the page its save redirected to. It says
-     the save happened, because the page otherwise looks the same as before
-     the button was pressed. role="status" has a screen reader read it out
-     without moving focus. */}}
-{{define "saved"}}<p class="saved" role="status">Saved</p>{{end}}
+{{/* The line under a Save button after a save. It says the save happened,
+     because the page otherwise looks the same as before the button was
+     pressed. With JavaScript the swap that brings it in also announces it
+     through the layout's live region, so the line itself has no role. */}}
+{{define "saved"}}<p class="saved">Saved</p>{{end}}

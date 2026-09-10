@@ -757,6 +757,73 @@ func TestActivity_ASwapAimedAtTheLogBodyGetsTheListAndNotTheWholePage(t *testing
 	}
 }
 
+// swap requests the log the way a filter, the pager or a row whose window has
+// closed does: an htmx GET aimed at target. trigger is the HTML id of the
+// element that sent the request. htmx sends it as the HX-Trigger header. It
+// is empty for a control with no id.
+func (f *logFixture) swap(t *testing.T, url, target, trigger string) string {
+	t.Helper()
+
+	ctx := context.WithValue(t.Context(), principalKey, f.principal)
+	req := httptest.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	req.Header.Set("HX-Request", "true")
+	req.Header.Set("HX-Target", target)
+	if trigger != "" {
+		req.Header.Set("HX-Trigger", trigger)
+	}
+	rec := httptest.NewRecorder()
+	f.handler.show(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	return rec.Body.String()
+}
+
+func TestActivity_ApplyingACareFilterAnnouncesWhatTheLogIsFilteredTo(t *testing.T) {
+	f := rosewoodLog(t)
+
+	body := f.swap(t, activityPath+"?care=water", logID, "")
+
+	if want := announced("Filtered to Water."); !strings.Contains(body, want) {
+		t.Errorf("the swap does not announce the filter:\nwant %s\n%s", want, body)
+	}
+}
+
+func TestActivity_ClearingTheFiltersAnnouncesThatTheyAreCleared(t *testing.T) {
+	f := rosewoodLog(t)
+
+	body := f.swap(t, activityPath, logID, "")
+
+	if want := announced("Filters cleared."); !strings.Contains(body, want) {
+		t.Errorf("the swap does not announce the cleared filters:\nwant %s\n%s", want, body)
+	}
+}
+
+func TestActivity_TheOlderLinkAnnouncesThatThePageMoved(t *testing.T) {
+	f := rosewoodLog(t)
+	f.waterings(t, nigelID, daysBack(30, 50)...)
+	href := pagerLink(f.show(t), olderLink)
+	if href == "" {
+		t.Fatal("the first page has no Older activity link")
+	}
+
+	body := f.swap(t, href, logBodyID, "")
+
+	if want := announced("Older activity."); !strings.Contains(body, want) {
+		t.Errorf("the swap does not announce the older page:\nwant %s\n%s", want, body)
+	}
+}
+
+func TestActivity_TheSwapThatRemovesADeletedRowAnnouncesNothing(t *testing.T) {
+	f := rosewoodLog(t)
+
+	body := f.swap(t, activityPath, logBodyID, eventRowPrefix+uuid.New().String())
+
+	if strings.Contains(body, "hx-swap-oob=\"innerHTML:#status\"") {
+		t.Errorf("the swap announces something after a deleted row's window closed:\n%s", body)
+	}
+}
+
 func TestActivity_ASwapAimedAtTheFiltersAndTheLogGetsBothAndNotTheWholePage(t *testing.T) {
 	f := rosewoodLog(t)
 	ctx := context.WithValue(t.Context(), principalKey, f.principal)

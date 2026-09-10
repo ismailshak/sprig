@@ -237,7 +237,30 @@ func (h *activity) show(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, q.latest().href(), http.StatusSeeOther)
 		return
 	}
-	h.templates.render(w, r, view{page: "activity", fragment: logFragment(r)}, page)
+	h.templates.render(w, r, view{page: "activity", fragment: logFragment(r), announce: logAnnouncement(r, page)}, page)
+}
+
+// logAnnouncement is the sentence a swap of the log puts in the live region.
+// Apply and Clear say what the log is filtered to. The pager says which way
+// the page moved. A row that removes itself when its undo window closes
+// announces nothing, because the delete was announced when it was made.
+func logAnnouncement(r *http.Request, page activityPage) string {
+	switch r.Header.Get("HX-Target") {
+	case logID:
+		if page.Filters.Summary == "" {
+			return "Filters cleared."
+		}
+		return "Filtered to " + page.Filters.Summary + "."
+	case logBodyID:
+		if strings.HasPrefix(r.Header.Get("HX-Trigger"), eventRowPrefix) {
+			return ""
+		}
+		if r.URL.Query().Has("before") {
+			return "Older activity."
+		}
+		return "Latest activity."
+	}
+	return ""
 }
 
 // logBodyID is the HTML id of the list, the pager and the empty state together.

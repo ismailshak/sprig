@@ -52,6 +52,10 @@
 <span class="combo__mark" aria-hidden="true"></span>
 <datalist id="rooms">{{range .Rooms}}<option value="{{.}}">{{end}}</datalist>
 <ul class="combo__list" id="room-list" role="listbox" aria-label="Rooms" hidden></ul>
+{{/* The script writes how many rooms the listbox is showing into this line
+     after each keystroke, because a screen reader is not told when the list
+     changes. It is empty without JavaScript. */}}
+<p class="visually-hidden" id="room-count" role="status"></p>
 </div>
 </div>
 {{/* Schedules are on the add form but not on the edit form. A new plant can be

@@ -171,6 +171,24 @@ func TestNotifications_AnAccountWithNoSubscriptionSaysNothingIsBeingDelivered(t 
 	}
 }
 
+func TestNotifications_ASaveShowsTheHourJustSavedWithoutReloadingThePage(t *testing.T) {
+	f := moreGarden(t)
+	form := url.Values{"digest": {"on"}, "hour": {"19"}}
+
+	rec := f.swap(t, f.handler.saveNotifications, notificationsPath, notificationsID, "", "", form)
+
+	body := fragment(t, rec, notificationsID)
+	if !strings.Contains(body, `<option value="19" selected>`) {
+		t.Errorf("the swap shows an hour other than the one just saved:\n%s", text(body))
+	}
+	if !strings.Contains(text(withoutAnnouncement(body)), "Saved") {
+		t.Errorf("the swap has no Saved line:\n%s", text(body))
+	}
+	if !strings.Contains(body, announced(savedAnnouncement)) {
+		t.Errorf("the swap does not announce the save:\n%s", body)
+	}
+}
+
 func TestNotifications_SavingWritesBothTypesAndTheHour(t *testing.T) {
 	f := moreGarden(t)
 

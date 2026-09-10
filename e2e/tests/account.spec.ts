@@ -6,7 +6,7 @@ test.beforeEach(async ({ page }) => {
   await signIn(page, people.ellie.handle);
 });
 
-test('a new display name and timezone are saved', async ({ account, more }) => {
+test('a new display name and timezone are saved @swap', async ({ account, more }) => {
   await more.open();
   await more.row('Account').click();
 
@@ -18,13 +18,23 @@ test('a new display name and timezone are saved', async ({ account, more }) => {
   await expect(account.timezone()).toHaveValue('Asia/Tokyo');
 });
 
+test('a save keeps the page and says Saved under the button @js', async ({ account, page }) => {
+  await account.open();
+
+  await account.name().fill('Eleanor');
+  await account.save().click();
+
+  await expect(page.getByText('Saved', { exact: true })).toBeVisible();
+  await expect(page).toHaveURL('/more/account');
+});
+
 test('an empty display name is refused and the page says what is missing', async ({ account, page }) => {
   await account.open();
 
   await account.name().fill('');
   await account.save().click();
 
-  await expect(page.getByText('Enter a display name')).toBeVisible();
+  await expect(page.getByRole('main').getByText('Enter a display name')).toBeVisible();
   await expect(account.name()).toHaveValue('');
 });
 
@@ -43,7 +53,7 @@ test('a handle another account holds is refused and the page names it', async ({
   await account.handle().fill(people.sam.handle);
   await account.save().click();
 
-  await expect(page.getByText(`${people.sam.handle} is already taken`)).toBeVisible();
+  await expect(page.getByRole('main').getByText(`${people.sam.handle} is already taken`)).toBeVisible();
   await expect(account.handle()).toHaveValue(people.sam.handle);
 
   await account.open();

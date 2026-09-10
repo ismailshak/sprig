@@ -6,13 +6,13 @@ test.beforeEach(async ({ page }) => {
   await signIn(page, people.ellie.handle);
 });
 
-test("the garden's name is saved and Today is headed with it", async ({ garden, today, page }) => {
+test("the garden's name is saved and Today is headed with it @swap", async ({ garden, today, page }) => {
   await garden.open();
 
   await garden.name().fill('The Roof');
   await garden.saveName().click();
 
-  await expect(garden.name()).toHaveValue('The Roof');
+  await expect(page.getByText('Saved', { exact: true })).toBeVisible();
   await today.open();
   await expect(page.getByRole('heading', { name: 'The Roof', level: 1 })).toBeVisible();
 });
@@ -89,7 +89,7 @@ test('a name another care type already has is refused and the page says which @s
   await garden.typeName().fill('water');
   await garden.save().click();
 
-  await expect(page.getByText('There is already a care type called Water.')).toBeVisible();
+  await expect(page.getByRole('main').getByText('There is already a care type called Water.')).toBeVisible();
   await expect(garden.row(careTypes.water)).toHaveCount(1);
 });
 
@@ -100,7 +100,7 @@ test('a care type left without a name is refused @swap', async ({ garden, page }
   await garden.typeName().fill('');
   await garden.save().click();
 
-  await expect(page.getByText('Enter a name.')).toBeVisible();
+  await expect(page.getByRole('main').getByText('Enter a name.')).toBeVisible();
   await garden.cancel().click();
   await expect(garden.row(careTypes.feed)).toBeVisible();
 });

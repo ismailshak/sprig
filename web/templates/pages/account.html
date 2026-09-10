@@ -4,11 +4,18 @@
      password to change, because sprig has neither.
 
      novalidate turns the browser's own validation off, so an empty field is
-     reported by the server as the message under that field. */}}
+     reported by the server as the message under that field.
+
+     With JavaScript, Save changes swaps the page under the top bar with the
+     Saved line on it. Without JavaScript the post redirects to this page with
+     Saved in the query string. */}}
 {{define "main"}}
 {{template "more-topbar" .Bar}}
-<div class="app__body app__body--sub">
-<form method="post" action="/more/account" novalidate>
+{{template "account" .}}
+{{end}}
+
+{{define "account"}}<div class="app__body app__body--sub" id="account">
+<form method="post" action="{{.Action}}" novalidate hx-post="{{.Action}}" hx-target="#account" hx-swap="outerHTML settle:0ms">
 <div class="field">
 <label class="field__label" for="name">Display name <span class="field__hint">shown on what you log</span></label>
 <input class="input" id="name" name="name" type="text" value="{{.Name}}">
@@ -21,14 +28,14 @@
 </div>
 <p class="note">Your handle identifies your account. It’s shown on People when two members have the same display name.</p>
 {{template "timezone-field" .Zone}}
-<button class="wide-action" type="submit">Save changes</button>
+{{/* The button has an id so htmx puts focus back on it after the swap. */}}
+<button class="wide-action" type="submit" id="save">Save changes</button>
 {{if .Saved}}{{template "saved"}}{{end}}
 </form>
 <ul class="list">{{template "link-row" .Codes}}</ul>
 {{/* The link is not styled as a warning, because rose means overdue in this
      app. Closing is confirmed on the page it opens. */}}
 <a class="foot-link" href="{{.Close}}">Close account{{template "icon-chevron"}}</a>
-</div>
-{{end}}
+</div>{{end}}
 
 {{define "nav"}}{{template "tabs" "Under More"}}{{end}}

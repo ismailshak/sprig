@@ -1,0 +1,11 @@
+{{/* The live region a swap's announcement is written into. It is in the
+     layout on every page and visually hidden. A screen reader only reads a
+     change to a region that was already on the page, so the element is
+     rendered once and each swap replaces the text inside it. The layout's
+     script also writes a failed swap into it and shows it at the top of the
+     window, because a failed swap otherwise leaves the page unchanged. */}}
+{{define "status"}}<p class="status visually-hidden" id="status" aria-live="polite" aria-atomic="true"></p>{{end}}
+
+{{/* The element appended to a swap's response. htmx puts the sentence inside
+     #status, where the screen reader reads it. */}}
+{{define "announce"}}<span hx-swap-oob="innerHTML:#status">{{.}}</span>{{end}}

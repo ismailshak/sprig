@@ -184,6 +184,16 @@ test('typing in Room lists the rooms that match and offers the text as a new roo
   await expect(plantForm.roomOptions()).toHaveText([rooms.bathroom, rooms.bedroom, 'Add “b” as a new room']);
 });
 
+test('the Room field says how many rooms match what was typed @js', async ({ page, plantForm }) => {
+  await plantForm.openNew();
+
+  await plantForm.field('Room').fill('b');
+  await expect(page.getByRole('status')).toHaveText('2 rooms, or add “b” as a new room');
+
+  await plantForm.field('Room').fill('Potting shed');
+  await expect(page.getByRole('status')).toHaveText('No room called “Potting shed”. Choose the option to add it.');
+});
+
 // The datalist is the list a browser running no script shows. Left on the
 // field, it would open the browser's own dropdown over the listbox.
 test("the browser's own room list is gone once the listbox opens @js", async ({ plantForm }) => {
@@ -208,6 +218,23 @@ test('a room picked with the arrow keys is the room the plant is added to @js', 
 
   await plants.open();
   await expect(plants.room(rooms.bedroom).getByRole('link', { name: 'Ada' })).toBeVisible();
+});
+
+// Bathroom, Bedroom and the option that adds b as a new room, in that order.
+// ArrowUp with nothing highlighted goes to the end of the list, so the plant
+// is added to a room called b and not to Bedroom.
+test('ArrowUp with no option highlighted takes the last one @js', async ({ page, plantForm, plants }) => {
+  await plantForm.openNew();
+  await plantForm.field('Nickname').fill('Ada');
+  await plantForm.field('Room').fill('b');
+
+  await plantForm.field('Room').press('ArrowUp');
+  await plantForm.field('Room').press('Enter');
+  await plantForm.submit('Add plant');
+
+  await plants.open();
+  const newRoom = page.getByRole('region', { name: 'b', exact: true });
+  await expect(newRoom.getByRole('link', { name: 'Ada' })).toBeVisible();
 });
 
 test('a plant is added to a new room by choosing the option that names it @js', async ({ plantForm, plants }) => {

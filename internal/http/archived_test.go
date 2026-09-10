@@ -20,7 +20,7 @@ var (
 	archivedRowEl  = regexp.MustCompile(`(?s)<a class="row row--link" href="([^"]+)">(.*?)</a>`)
 	rowMeta        = regexp.MustCompile(`(?s)<span class="row__meta">(.*?)</span>\s*</span>`)
 	backLink       = regexp.MustCompile(`<a class="backlink" href="([^"]+)">(?:<svg.*?</svg>)?([^<]+)</a>`)
-	restoreForm    = regexp.MustCompile(`<form method="post" action="([^"]+)"><button class="care care--outline">Restore</button></form>`)
+	restoreForm    = regexp.MustCompile(`<form method="post" action="([^"]+)"[^>]*><button class="care care--outline"[^>]*>Restore</button></form>`)
 )
 
 // archiveTwo archives Doris and Nigel on the Plants fixture's garden, Nigel
@@ -206,5 +206,29 @@ func TestPlant_RestoringAnotherGardensArchivedPlantIs404AndLeavesItArchived(t *t
 	}
 	if !archived {
 		t.Error("another garden's plant was restored")
+	}
+}
+
+func TestPlant_RestoreSwapsThePageUnderTheTopBarAndOffersArchiveInstead(t *testing.T) {
+	f := rosewoodPlant(t)
+	f.exec(t, "UPDATE plant SET archived_at = now() WHERE id = $1", bigFellaID)
+
+	ctx := context.WithValue(t.Context(), principalKey, f.principal)
+	req := httptest.NewRequestWithContext(ctx, http.MethodPost, restorePlantPath(bigFellaID), nil)
+	req.SetPathValue("plant", bigFellaID.String())
+	req.Header.Set("HX-Request", "true")
+	req.Header.Set("HX-Target", plantBodyID)
+	rec := httptest.NewRecorder()
+	f.handler.restore(rec, req)
+
+	body := fragment(t, rec, plantBodyID)
+	if restoreForm.MatchString(body) {
+		t.Errorf("the swap still offers Restore:\n%s", text(body))
+	}
+	if !strings.Contains(body, archivePlantPath(bigFellaID)) {
+		t.Errorf("the swap has no Archive button, so the plant does not read as restored:\n%s", text(body))
+	}
+	if want := announced("Big Fella restored. It’s back on Plants."); !strings.Contains(body, want) {
+		t.Errorf("the swap does not announce the restore:\n%s", body)
 	}
 }

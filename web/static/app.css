@@ -469,40 +469,59 @@ a.empty__action { display: inline-flex; align-items: center; }
 
 @keyframes grace-drain { to { transform: scaleX(0) } }
 
+/* The bar pauses while Undo has a focus ring, because the row is not removed
+   until focus leaves it. A bar that ran out would say the window had closed.
+   A mouse click on Log focuses Undo without a ring, so the bar keeps running
+   there. */
+.row--done:has(:focus-visible)::after { animation-play-state: paused; }
+
 /* ---------------------------------------------------------------------- sheet */
 
 .sheet { position: fixed; inset: 0; z-index: 20; display: flex; flex-direction: column; justify-content: flex-end; }
 .sheet__scrim { position: absolute; inset: 0; background: rgba(8, 12, 11, .5); animation: fade .18s var(--ease); }
 
+/* overscroll-behavior: contain keeps a scroll that reaches the panel's end
+   from carrying on into the page behind it. */
 .sheet__panel {
   position: relative;
   background: var(--surface);
   border-top-left-radius: 18px;
   border-top-right-radius: 18px;
-  padding: 8px 20px calc(20px + env(safe-area-inset-bottom));
+  padding: 0 20px calc(20px + env(safe-area-inset-bottom));
   max-height: 92%;
   overflow-y: auto;
+  overscroll-behavior: contain;
   animation: rise .26s var(--ease);
 }
+
+/* The document does not bounce on iOS while a sheet is open. Containment on
+   the panel does nothing when the panel has nothing to scroll, and the page
+   behind it would rubber-band instead. */
+body:has(dialog[open]) { overscroll-behavior: none; }
 
 @keyframes fade { from { opacity: 0 } }
 @keyframes rise { from { transform: translateY(14px); opacity: 0 } }
 
-/* The grip can be dragged down to close the sheet, so its hit area is made
-   larger than the bar by the pseudo-element. touch-action: none stops the
-   panel scrolling while the grip is dragged. */
+/* The grip and the plant heading can be dragged down to close the sheet. The
+   grip is a box the height of a finger with the bar drawn inside it, because
+   iOS applies touch-action only to an element's own box. A touch on a
+   pseudo-element reaching outside that box scrolled the panel instead of
+   starting the drag. touch-action: none on both stops the panel scrolling
+   while they are dragged. */
 .sheet__grip {
   position: relative;
-  width: 36px; height: 4px; border-radius: 999px;
-  background: var(--line); margin: 0 auto 12px;
+  width: 156px;
+  padding: 16px 0 12px;
+  margin: 0 auto;
   touch-action: none;
   cursor: grab;
 }
 
 .sheet__grip::before {
   content: "";
-  position: absolute;
-  inset: -16px -60px -12px;
+  display: block;
+  width: 36px; height: 4px; border-radius: 999px;
+  background: var(--line); margin: 0 auto;
 }
 
 /* The plant heading is a link to the plant's page. It is one target with one
@@ -512,6 +531,7 @@ a.empty__action { display: inline-flex; align-items: center; }
   display: flex; align-items: center; gap: 13px; width: 100%;
   padding: 8px 8px 14px; margin: 0 -8px; text-align: left;
   border-bottom: var(--row-divider);
+  touch-action: none;
 }
 
 .sheet__chevron { color: var(--ink-3); flex: none; display: grid; }
@@ -648,6 +668,12 @@ dialog.sheet {
 }
 .sheet:not([open]) { display: none; }
 button.sheet__scrim { cursor: default; }
+/* The sheet's script opens the dialog as a modal. A modal gets a backdrop
+   from the browser, and the scrim is that layer here, so the browser's is
+   cleared. The script focuses the dialog itself, and a focus ring around the
+   whole screen says nothing, so none is drawn. */
+dialog.sheet::backdrop { background: none; }
+dialog.sheet:focus { outline: none; }
 
 /* The radio fills its chip, so the whole chip is the tap target and gets the
    focus ring. */
@@ -777,6 +803,7 @@ legend.field__label + * { clear: both; }
 @media (min-width: 900px) {
   .sheet { justify-content: center; align-items: center; }
   .sheet__grip { display: none; }
+  .sheet__plant { touch-action: auto; }
   .sheet__panel {
     width: 420px;
     max-height: 84%;
@@ -1068,9 +1095,8 @@ a.foot-link { text-decoration: none; color: var(--ink-2); }
 .sched__field > .input { flex: none; }
 
 /* The explanation under the When select. It is the only running text in the
-   editor, so it uses --ink-2 rather than the --ink-3 hints use. A contrast of
-   3.37 is enough for "optional" beside a heading but not for a sentence
-   somebody has to read to make a choice. */
+   editor, so it uses --ink-2 rather than the --ink-3 of the short hints beside
+   a field. A sentence somebody reads to make a choice needs the darker ink. */
 .sched__hint {
   margin-top: 5px;
   font-size: 12px;
@@ -2467,8 +2493,10 @@ a.wide-action {
 
 /* ------------------------------------------------------------------ offline */
 
-/* The line at the top of a page served from the service worker's cache. */
-.offline {
+/* The line at the top of a page served from the service worker's cache, and
+   the live region when it is shown after a failed swap. */
+.offline,
+.status--shown {
   margin: 0;
   padding: 8px 20px;
   background: var(--surface-2);
@@ -2476,6 +2504,32 @@ a.wide-action {
   font-size: 13px;
   line-height: 1.5;
   text-align: center;
+}
+
+/* The app fills the window and the live region is the last element in the
+   body, so a shown line in the normal flow would be below the fold. It is
+   fixed to the top of the window instead, above the sheet's z-index of 20,
+   because a swap sent from inside the sheet can fail too. */
+.status--shown {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 30;
+}
+
+/* Text for screen readers alone. The box is kept at one pixel rather than
+   hidden, because a hidden element is left out of the accessibility tree and
+   a live region in it is never read. */
+.visually-hidden:not(.status--shown) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 /* ------------------------------------------------------------ the photo pages */

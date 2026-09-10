@@ -271,6 +271,28 @@ type scheduleField struct {
 	Error string
 }
 
+// nowShows is the sentence announced when the When select or the Seasonal
+// checkbox replaces the row. It lists the fields the row now has, because
+// which fields exist is the whole of what those two controls change.
+func (f scheduleField) nowShows() string {
+	if !f.Open {
+		return f.Care + " is not scheduled."
+	}
+	fields := []string{"When"}
+	if f.Repeats {
+		fields = append(fields, "Every")
+	}
+	if f.Dated {
+		fields = append(fields, "Next due")
+	} else {
+		fields = append(fields, "Seasonal")
+	}
+	if f.Seasonal {
+		fields = append(fields, "the months it runs in")
+	}
+	return f.Care + " now has " + andList(fields) + "."
+}
+
 func newScheduleField(f scheduleDraft, path string, now time.Time) scheduleField {
 	field := scheduleField{
 		ID:       scheduleRowID(f.care),

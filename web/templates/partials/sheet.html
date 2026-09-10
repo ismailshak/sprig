@@ -1,8 +1,18 @@
 {{/* The open sheet and the empty placeholder share the id sheet, so a swap in
      either direction replaces the other. Cancel and the scrim close the dialog
-     through method="dialog", so they work without JavaScript. */}}
-{{define "sheet"}}{{with .Sheet}}{{$s := .}}<dialog open class="sheet" id="sheet" aria-label="{{.Label}}">
-<form method="dialog"><button class="sheet__scrim" aria-label="Close"></button></form>
+     through method="dialog", so they work without JavaScript.
+
+     The open attribute makes a non-modal dialog, so the page behind it stays
+     in the tab order. The sheet's script reopens it with showModal. A modal
+     keeps Tab inside the sheet, closes on Escape and returns focus to the row
+     that opened it. tabindex -1 makes the dialog focusable without making it
+     a Tab stop, and the script focuses it once it is modal, so a screen
+     reader reads the sheet's label before the plant. Chrome would otherwise
+     focus the scrim, the first control in the dialog. The scrim is a pointer
+     target only, out of the tab order and hidden from screen readers, because
+     Cancel and Escape close the sheet for everyone else. */}}
+{{define "sheet"}}{{with .Sheet}}{{$s := .}}<dialog open class="sheet" id="sheet" aria-label="{{.Label}}" tabindex="-1">
+<form method="dialog"><button class="sheet__scrim" tabindex="-1" aria-hidden="true"></button></form>
 <div class="sheet__panel">
 <div class="sheet__grip"></div>
 {{/* The heading links to the plant's page. On that page itself it is a plain
@@ -24,7 +34,11 @@
      usual interval on the reminder chip depends on the selected care type and
      only the server knows it. The form has its own id because swapping the
      whole dialog would replay its entrance animation and reset the panel's
-     scroll. The post uses settle:0ms because it replaces a care row. */}}
+     scroll. The post uses settle:0ms because it replaces a care row.
+
+     Each chip under Care has an id, because htmx puts focus back on the
+     element with the focused element's id after a swap. Without one the chip
+     that was pressed loses focus when the form is replaced. */}}
 {{define "sheet-form"}}{{with .Sheet}}{{$s := .}}<form class="sheet__form" id="sheet-form" method="post" action="{{.Path}}"{{with .Target}} hx-post="{{$s.Path}}" hx-target="#{{.}}" hx-swap="outerHTML settle:0ms"{{end}}>
 {{/* Enter in the note field submits through the form's first submit button.
      Without this hidden one, that would be a chip under Care. */}}
@@ -34,7 +48,7 @@
 {{range .Query}}<input type="hidden" name="{{.Name}}" value="{{.Value}}">{{end}}
 {{if gt (len .Cares) 1}}<fieldset class="field">
 <legend class="field__label">Care</legend>
-<div class="chips">{{range .Cares}}<button class="chip" name="care" value="{{.Value}}" formmethod="get" formaction="{{$s.Path}}" aria-pressed="{{.On}}" hx-get="{{$s.Path}}" hx-include="closest form" hx-target="#sheet-form" hx-swap="outerHTML">{{.Label}}</button>{{end}}</div>
+<div class="chips">{{range .Cares}}<button class="chip" id="care-chip-{{.Value}}" name="care" value="{{.Value}}" formmethod="get" formaction="{{$s.Path}}" aria-pressed="{{.On}}" hx-get="{{$s.Path}}" hx-include="closest form" hx-target="#sheet-form" hx-swap="outerHTML">{{.Label}}</button>{{end}}</div>
 </fieldset>{{end}}
 <fieldset class="field">
 <legend class="field__label">Outcome</legend>

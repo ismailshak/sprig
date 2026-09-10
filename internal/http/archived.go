@@ -62,7 +62,10 @@ func archivedLink(count int64) *link {
 
 // restore handles POST /plants/{plant}/restore. It puts an archived plant back
 // on the Plants list. There is no confirmation step, because archiving the
-// plant again undoes it.
+// plant again undoes it. With htmx it renders the page under the top bar,
+// because restoring changes the back link, the care buttons, the schedule
+// rows, Add photo and the buttons at the bottom. A plain post redirects to
+// the plant's page.
 func (h *plants) restore(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	plantID, err := uuid.Parse(r.PathValue("plant"))
@@ -78,5 +81,21 @@ func (h *plants) restore(w http.ResponseWriter, r *http.Request) {
 		h.templates.serverError(h.logger, w, r, "restore the plant", err)
 		return
 	}
-	http.Redirect(w, r, plantPath(plantID), http.StatusSeeOther)
+	if !isHTMX(r) {
+		http.Redirect(w, r, plantPath(plantID), http.StatusSeeOther)
+		return
+	}
+	detail, err := loadPlant(r.Context(), h.queries, principal, plantID, h.now())
+	if err != nil {
+		h.templates.serverError(h.logger, w, r, "load the plant", err)
+		return
+	}
+	page := newPlantPage(principal, detail)
+	fragment, ok := plantSwap(r, &page)
+	if !ok {
+		h.templates.notFound(w, r)
+		return
+	}
+	announce := detail.plant.DisplayName() + " restored. It’s back on Plants."
+	h.templates.render(w, r, view{page: "plant", fragment: fragment, announce: announce}, page)
 }

@@ -4,18 +4,24 @@
      renamed, turned off or deleted from its own row: the row is a link to its
      own URL, and that URL renders this page with the row as a form. With
      JavaScript the link, the form and its buttons swap the Care types section
-     instead of loading the page. */}}
+     instead of loading the page. The Save button under Name swaps the page
+     under the top bar with the Saved line on it. Without JavaScript the post
+     redirects to this page with Saved in the query string. */}}
 {{define "main"}}
 {{template "more-topbar" .Bar}}
-<div class="app__body app__body--sub">
+{{template "garden" .}}
+{{end}}
+
+{{define "garden"}}<div class="app__body app__body--sub" id="garden">
 {{if .EditName}}
-<form method="post" action="{{.Action}}" novalidate>
+<form method="post" action="{{.Action}}" novalidate hx-post="{{.Action}}" hx-target="#garden" hx-swap="outerHTML settle:0ms">
 <div class="field">
 <label class="field__label" for="name">Name</label>
 <input class="input" id="name" name="name" type="text" value="{{.Name}}">
 {{with .NameError}}<p class="field__error">{{.}}</p>{{end}}
 </div>
-<button class="wide-action" type="submit">Save</button>
+{{/* The button has an id so htmx puts focus back on it after the swap. */}}
+<button class="wide-action" type="submit" id="save">Save</button>
 {{if .Saved}}{{template "saved"}}{{end}}
 </form>
 {{end}}
@@ -29,8 +35,7 @@
 {{/* The link is not styled as a warning, because rose means overdue in this
      app. Deleting is confirmed on the page it opens. */}}
 {{with .Delete}}<a class="foot-link" href="{{.}}">Delete garden{{template "icon-chevron"}}</a>{{end}}
-</div>
-{{end}}
+</div>{{end}}
 
 {{/* The Care types section. Every link and button in it swaps the whole
      section, because opening a row closes any other and a save changes the

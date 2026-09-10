@@ -86,7 +86,7 @@ var (
 	logLine     = regexp.MustCompile(`<li class="logline[^"]*">(.*?)</li>`)
 	logCare     = regexp.MustCompile(`<a [^>]*>Log care</a>`)
 	sheetForm   = regexp.MustCompile(`(?s)<form class="sheet__form".*?>`)
-	sheetChips  = regexp.MustCompile(`<button class="chip" name="care" value="([^"]+)"`)
+	sheetChips  = regexp.MustCompile(`<button class="chip" id="care-chip-[^"]+" name="care" value="([^"]+)"`)
 	sheetPlantH = regexp.MustCompile(`<(a|div) class="sheet__plant"`)
 )
 

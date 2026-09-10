@@ -116,11 +116,20 @@ func parsePages(fsys fs.FS, funcs template.FuncMap) (map[string]*template.Templa
 // view is what a route renders: the page for a navigation and the fragment
 // for an htmx request. With no fragment, both get the page. A status of zero
 // means 200.
+//
+// announce is the sentence the swap puts in the page's live region, such as
+// "Saved." It is appended to the fragment as an out-of-band element. A whole
+// page render leaves it out.
 type view struct {
 	page     string
 	fragment string
 	status   int
+	announce string
 }
+
+// announceTemplate renders the out-of-band element that puts view.announce
+// into the live region.
+const announceTemplate = "announce"
 
 // render writes v to w. It executes into a buffer first, because a template
 // that fails halfway has already written the top of the page, and that much
@@ -140,14 +149,15 @@ func (t *Templates) render(w http.ResponseWriter, r *http.Request, v view, data 
 	_, _ = w.Write(buf.Bytes())
 }
 
-// execute renders into buf the page v names, or its fragment for an htmx
-// request.
-func (t *Templates) execute(buf *bytes.Buffer, r *http.Request, v view, data any) error {
+// set returns the template set for one page. With a directory to read from,
+// the tree is parsed again first, so an edit during development needs no
+// restart.
+func (t *Templates) set(page string) (*template.Template, error) {
 	pages := t.pages
 	if t.dir != "" {
 		reloaded, err := parsePages(t.fs(), t.funcs)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		pages = reloaded
 	}
@@ -156,9 +166,35 @@ func (t *Templates) execute(buf *bytes.Buffer, r *http.Request, v view, data any
 	// typo, and it surfaces on the first request for that route rather than
 	// at startup. If routes ever declare their view the way they declare
 	// their capability, New can check every page name against the set instead.
-	set, ok := pages[v.page]
+	set, ok := pages[page]
 	if !ok {
-		return fmt.Errorf("no page named %q", v.page)
+		return nil, fmt.Errorf("no page named %q", page)
+	}
+	return set, nil
+}
+
+// sentence renders one template into a string, for a swap's announcement. The
+// page and the announcement render the same template, so their words cannot
+// drift apart. A template that will not execute is a mistake in the code
+// rather than in the request, so it is logged here and the swap says nothing.
+func (t *Templates) sentence(page, name string, data any) string {
+	set, err := t.set(page)
+	if err == nil {
+		var buf bytes.Buffer
+		if err = set.ExecuteTemplate(&buf, name, data); err == nil {
+			return buf.String()
+		}
+	}
+	t.logger.Error("render an announcement", slog.String("template", name), slog.Any("error", err))
+	return ""
+}
+
+// execute renders into buf the page v names, or its fragment for an htmx
+// request.
+func (t *Templates) execute(buf *bytes.Buffer, r *http.Request, v view, data any) error {
+	set, err := t.set(v.page)
+	if err != nil {
+		return err
 	}
 
 	name := layoutTemplate
@@ -168,6 +204,11 @@ func (t *Templates) execute(buf *bytes.Buffer, r *http.Request, v view, data any
 
 	if err := set.ExecuteTemplate(buf, name, data); err != nil {
 		return fmt.Errorf("executing %s in %s: %w", name, v.page, err)
+	}
+	if name != layoutTemplate && v.announce != "" {
+		if err := set.ExecuteTemplate(buf, announceTemplate, v.announce); err != nil {
+			return fmt.Errorf("executing %s in %s: %w", announceTemplate, v.page, err)
+		}
 	}
 	return nil
 }

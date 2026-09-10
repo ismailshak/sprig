@@ -84,10 +84,12 @@ type passkeyRow struct {
 }
 
 func (h *more) passkeys(w http.ResponseWriter, r *http.Request) {
-	h.renderPasskeys(w, r)
+	h.renderPasskeys(w, r, "")
 }
 
-func (h *more) renderPasskeys(w http.ResponseWriter, r *http.Request) {
+// renderPasskeys writes the page, or the list alone for a swap of it.
+// announce is the sentence the swap puts in the live region.
+func (h *more) renderPasskeys(w http.ResponseWriter, r *http.Request, announce string) {
 	principal := PrincipalFrom(r)
 	keys, err := h.queries.ListPasskeys(r.Context(), principal.User.ID)
 	if err != nil {
@@ -95,7 +97,7 @@ func (h *more) renderPasskeys(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	page := newPasskeysPage(keys, h.now().In(locationFor(principal.User)))
-	v := view{page: "passkeys"}
+	v := view{page: "passkeys", announce: announce}
 	if r.Header.Get("HX-Target") == passkeysListID {
 		v.fragment = passkeysListID
 	}
@@ -147,7 +149,7 @@ func (h *more) removePasskey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if isHTMX(r) {
-		h.renderPasskeys(w, r)
+		h.renderPasskeys(w, r, "Passkey removed.")
 		return
 	}
 	http.Redirect(w, r, passkeysPath, http.StatusSeeOther)

@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -197,6 +198,47 @@ func TestParseTemplates_ADirectoryOnDiskIsRereadPerRender(t *testing.T) {
 
 	if body := renderTo(t, templates, false, view{page: "today"}, nil).Body.String(); !strings.Contains(body, "second") {
 		t.Errorf("the second render did not pick up the edit:\n%s", body)
+	}
+}
+
+// announced is the element a swap's response ends with when the view has an
+// announcement: what htmx puts into the layout's live region.
+func announced(sentence string) string {
+	return `<span hx-swap-oob="innerHTML:#status">` + sentence + `</span>`
+}
+
+// withoutAnnouncement is a swap's response with the announcement removed, so a
+// test of what the page says does not match the sentence read out instead.
+func withoutAnnouncement(body string) string {
+	return announcedElement.ReplaceAllString(body, "")
+}
+
+var announcedElement = regexp.MustCompile(`(?s)<span hx-swap-oob="innerHTML:#status">.*?</span>`)
+
+func TestRender_AFragmentEndsWithItsAnnouncementAndAPageHasNone(t *testing.T) {
+	templates := testTemplates()
+	v := view{page: "today", fragment: "care-settled", announce: "All done for today."}
+	data := careSettled{Head: todayHead{Clear: true}}
+
+	fragment := renderTo(t, templates, true, v, data).Body.String()
+	page := renderTo(t, templates, false, v, todayPage{}).Body.String()
+
+	if !strings.HasSuffix(strings.TrimSpace(fragment), announced("All done for today.")) {
+		t.Errorf("the fragment does not end with the announcement:\n%s", fragment)
+	}
+	if strings.Contains(page, "hx-swap-oob") {
+		t.Errorf("the whole page carries an out-of-band element:\n%s", page)
+	}
+}
+
+func TestRender_AnAnnouncementIsEscaped(t *testing.T) {
+	templates := testTemplates()
+	v := view{page: "today", fragment: "care-settled", announce: "<b>Nigel</b>"}
+
+	fragment := renderTo(t, templates, true, v, careSettled{Head: todayHead{Clear: true}}).Body.String()
+
+	if !strings.Contains(fragment, announced("&lt;b&gt;Nigel&lt;/b&gt;")) {
+		t.Errorf("the announcement was not escaped:\n%s", fragment)
 	}
 }
 

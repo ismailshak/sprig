@@ -291,6 +291,16 @@ type sheet struct {
 	// careTypeID is the id of the care type Care names, so the post does not
 	// look it up again.
 	careTypeID uuid.UUID
+	// usual is the interval in days of the chip marked "(usual)" under Remind
+	// me in.
+	usual int32
+}
+
+// careChosen is the sentence a chip under Care announces when it replaces the
+// form. It names the care and the reminder marked usual, because that chip is
+// the part of the form that changes with the care type.
+func (s *sheet) careChosen() string {
+	return capitalise(s.Noun) + ". The usual reminder is " + daysWord(int(s.usual)) + "."
 }
 
 type sheetPlant struct {
@@ -340,6 +350,10 @@ func newSheet(plant store.Plant, offers []offer, care offer, d draft, now time.T
 	}
 	if s.At == "" {
 		s.At = now.Format(atLayout)
+	}
+	s.usual = usualDays(care.Schedule)
+	if s.usual == 0 {
+		s.usual = fallbackReminderDays
 	}
 	s.Reminders = reminderChips(usualDays(care.Schedule), d.Again)
 	return s
@@ -447,6 +461,10 @@ func usualDays(s store.CareSchedule) int32 {
 	return 0
 }
 
+// fallbackReminderDays is the usual reminder for a schedule with no interval
+// in days, such as a one-off repot.
+const fallbackReminderDays = 7
+
 // reminderChips builds the Remind me in chips: one, two and three days, plus
 // the plant's usual interval, or seven days when the schedule has no interval
 // in days. The usual chip is marked "(usual)", since nothing else on the sheet
@@ -455,7 +473,7 @@ func reminderChips(usual, selected int32) []chip {
 	days := []int32{1, 2, 3}
 	fourth := usual
 	if fourth == 0 {
-		fourth = 7
+		fourth = fallbackReminderDays
 	}
 	// A usual of one, two or three days is relabelled below rather than added
 	// twice.
@@ -517,7 +535,8 @@ func (h *today) sheet(w http.ResponseWriter, r *http.Request) {
 
 	page := newTodayPage(principal, g)
 	page.Sheet = newSheet(lines[0].Plant, offersOf(lines), offerOf(care), d, g.now)
-	h.templates.render(w, r, view{page: "today", fragment: sheetFragment(r)}, page)
+	v := view{page: "today", fragment: sheetFragment(r), announce: sheetAnnouncement(r, page.Sheet)}
+	h.templates.render(w, r, v, page)
 }
 
 // plantSheet renders the same sheet on a plant's own page. It offers every care
@@ -547,7 +566,8 @@ func (h *today) plantSheet(w http.ResponseWriter, r *http.Request, principal aut
 	page := newPlantPage(principal, detail)
 	page.Sheet = newSheet(detail.plant, detail.offers(), care, d, detail.now)
 	page.Sheet.forPlant()
-	h.templates.render(w, r, view{page: "plant", fragment: sheetFragment(r)}, page)
+	v := view{page: "plant", fragment: sheetFragment(r), announce: sheetAnnouncement(r, page.Sheet)}
+	h.templates.render(w, r, v, page)
 }
 
 // chosenCare picks the care type the sheet on a plant's page opens on. With
@@ -575,6 +595,16 @@ func sheetFragment(r *http.Request) string {
 		return "sheet-form"
 	}
 	return "sheet"
+}
+
+// sheetAnnouncement is what a swap of the sheet announces. Only a chip under
+// Care announces anything. The sheet opening moves focus into the dialog and a
+// screen reader reads it from there.
+func sheetAnnouncement(r *http.Request, s *sheet) string {
+	if r.Header.Get("HX-Target") != sheetFormID {
+		return ""
+	}
+	return s.careChosen()
 }
 
 // log handles POST /plants/{plant}/log and logs the care the draft describes.
@@ -635,7 +665,7 @@ func (h *today) log(w http.ResponseWriter, r *http.Request) {
 		// at the sheet so the message is shown.
 		w.Header().Set("HX-Retarget", "#sheet")
 		w.Header().Set("HX-Reswap", "outerHTML")
-		h.templates.render(w, r, view{page: "today", fragment: "sheet", status: http.StatusUnprocessableEntity}, page)
+		h.templates.render(w, r, view{page: "today", fragment: "sheet", status: http.StatusUnprocessableEntity, announce: s.WhenError}, page)
 		return
 	case err != nil:
 		h.templates.badRequest(w, r)
@@ -666,7 +696,8 @@ func (h *today) log(w http.ResponseWriter, r *http.Request) {
 		Head: swapHead(principal, after),
 		Feed: swapFeed(principal, after),
 	}
-	h.templates.render(w, r, view{page: "today", fragment: "care-logged"}, swap)
+	v := view{page: "today", fragment: "care-logged", announce: h.loggedAnnouncement(principal, plant, care.CareType, logged, swap.Head)}
+	h.templates.render(w, r, v, swap)
 }
 
 // logOnPlant logs the care posted from the sheet on a plant's page and
@@ -832,7 +863,8 @@ func (h *today) undo(w http.ResponseWriter, r *http.Request) {
 	}
 	row := newCareRow(schedule.Row{Plant: line.Plant, Care: line, Lines: lines}, g.now)
 	swap := careSwap{Row: row, Head: swapHead(principal, g), Feed: swapFeed(principal, g)}
-	h.templates.render(w, r, view{page: "today", fragment: "care-undone"}, swap)
+	v := view{page: "today", fragment: "care-undone", announce: "Undone. " + h.daySentence(swap.Head)}
+	h.templates.render(w, r, v, swap)
 }
 
 func lineFor(lines []schedule.Line, slug string) (schedule.Line, bool) {

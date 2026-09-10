@@ -115,7 +115,7 @@ func (h *plants) saveSchedule(w http.ResponseWriter, r *http.Request) {
 		h.templates.serverError(h.logger, w, r, "save the schedule", err)
 		return
 	}
-	h.settledRow(w, r, principal, detail.plant.ID, care.Slug)
+	h.settledRow(w, r, principal, detail.plant.ID, care.Slug, false)
 }
 
 // removeSchedule handles POST /plants/{plant}/schedule/{care}/remove. The
@@ -140,7 +140,7 @@ func (h *plants) removeSchedule(w http.ResponseWriter, r *http.Request) {
 		h.templates.serverError(h.logger, w, r, "remove the schedule", err)
 		return
 	}
-	h.settledRow(w, r, principal, detail.plant.ID, care.Slug)
+	h.settledRow(w, r, principal, detail.plant.ID, care.Slug, true)
 }
 
 // plantAndCare resolves the plant and care type from the URL for every editor
@@ -176,20 +176,30 @@ func (h *plants) plantAndCare(w http.ResponseWriter, r *http.Request, principal 
 }
 
 // renderRow renders the one row for an htmx request and the whole page
-// otherwise. A status of zero means 200.
+// otherwise. A status of zero means 200. A swap announces a refused save's
+// message and the remove confirmation's question. An editor opening is not
+// announced, because focus moves into its first field and that is read out.
 func (h *plants) renderRow(w http.ResponseWriter, r *http.Request, page plantPage, row scheduleRow, status int) {
 	v := view{page: "plant", status: status}
 	if isHTMX(r) {
 		page.Schedule = []scheduleRow{row}
 		v.fragment = scheduleRowsFragment
+		switch {
+		case row.Edit != nil && row.Edit.Error != "":
+			v.announce = row.Edit.Error
+		case row.Edit != nil && row.Edit.Asking:
+			v.announce = "Remove this schedule? Cancel or Remove."
+		}
 	}
 	h.templates.render(w, r, v, page)
 }
 
 // settledRow renders a row after a save or remove. It re-reads the row from
 // the database so the due date shown is the server's, not the browser's.
-// Without JavaScript it redirects to the plant's page instead.
-func (h *plants) settledRow(w http.ResponseWriter, r *http.Request, principal auth.Principal, plantID uuid.UUID, slug string) {
+// Without JavaScript it redirects to the plant's page instead. removed is
+// true when the schedule was removed rather than saved. It picks the sentence
+// the swap announces.
+func (h *plants) settledRow(w http.ResponseWriter, r *http.Request, principal auth.Principal, plantID uuid.UUID, slug string, removed bool) {
 	if !isHTMX(r) {
 		http.Redirect(w, r, plantPath(plantID), http.StatusSeeOther)
 		return
@@ -205,7 +215,13 @@ func (h *plants) settledRow(w http.ResponseWriter, r *http.Request, principal au
 		h.templates.notFound(w, r)
 		return
 	}
-	h.renderRow(w, r, page, *row, 0)
+	page.Schedule = []scheduleRow{*row}
+	announce := row.Care + " schedule saved. " + row.When + "."
+	if removed {
+		announce = row.Care + " schedule removed."
+	}
+	v := view{page: "plant", fragment: scheduleRowsFragment, announce: announce}
+	h.templates.render(w, r, v, page)
 }
 
 // newScheduleEditor builds the row's editor. Remove is set only when there is

@@ -15,6 +15,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/ismailshak/sprig/internal/auth"
 	"github.com/ismailshak/sprig/internal/push"
 	"github.com/ismailshak/sprig/internal/store"
 )
@@ -140,13 +141,30 @@ type browserRow struct {
 const devicesID = "devices"
 
 func (h *more) notifications(w http.ResponseWriter, r *http.Request) {
-	h.renderNotifications(w, r, testResultLines[r.URL.Query().Get(testResultParam)])
+	principal := PrincipalFrom(r)
+	h.renderNotifications(w, r, principal, principal.Membership.DigestHour, notificationsState{
+		testResult: testResultLines[r.URL.Query().Get(testResultParam)],
+		saved:      saved(r),
+	})
 }
 
-// renderNotifications writes the page, with testResult under the Send test
-// notification button.
-func (h *more) renderNotifications(w http.ResponseWriter, r *http.Request, testResult string) {
-	principal := PrincipalFrom(r)
+// notificationsID is both the HTML id of the page under the top bar and the
+// name of the template that renders it. Save changes swaps it.
+const notificationsID = "notifications"
+
+// notificationsState is what one response adds to the saved settings: the
+// line under Send test notification, whether Saved is shown under Save
+// changes, and the sentence a swap puts in the live region.
+type notificationsState struct {
+	testResult string
+	saved      bool
+	announce   string
+}
+
+// renderNotifications writes the page. hour is the digest hour to show. It is
+// passed in rather than read from the principal because after a save the
+// principal on the request still holds the hour from before it.
+func (h *more) renderNotifications(w http.ResponseWriter, r *http.Request, principal auth.Principal, hour int16, state notificationsState) {
 	preferences, err := h.queries.ListNotificationPreferences(r.Context(), principal.Membership.ID)
 	if err != nil {
 		h.templates.serverError(h.logger, w, r, "read the notification preferences", err)
@@ -160,13 +178,16 @@ func (h *more) renderNotifications(w http.ResponseWriter, r *http.Request, testR
 
 	now := h.now().In(locationFor(principal.User))
 	page := newNotificationsPage(principal.User.Timezone, notificationOn(preferences, digestKind),
-		notificationOn(preferences, activityKind), principal.Membership.DigestHour, subscriptions, now)
+		notificationOn(preferences, activityKind), hour, subscriptions, now)
 	page.Key = h.pushKey
-	page.TestResult = testResult
-	page.Saved = saved(r)
-	v := view{page: "notifications"}
-	if r.Header.Get("HX-Target") == devicesID {
+	page.TestResult = state.testResult
+	page.Saved = state.saved
+	v := view{page: "notifications", announce: state.announce}
+	switch r.Header.Get("HX-Target") {
+	case devicesID:
 		v.fragment = devicesID
+	case notificationsID:
+		v.fragment = notificationsID
 	}
 	h.templates.render(w, r, v, page)
 }
@@ -206,7 +227,8 @@ func (h *more) sendTestNotification(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if isHTMX(r) {
-		h.renderNotifications(w, r, testResultLines[result])
+		state := notificationsState{testResult: testResultLines[result], announce: testResultLines[result]}
+		h.renderNotifications(w, r, principal, principal.Membership.DigestHour, state)
 		return
 	}
 	http.Redirect(w, r, notificationsPath+"?"+testResultParam+"="+result, http.StatusSeeOther)
@@ -329,6 +351,13 @@ func (h *more) saveNotifications(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.wake.call()
+	// With htmx the response is the page under the top bar with the Saved
+	// line on it. A plain post redirects to the page with Saved in the query
+	// string.
+	if isHTMX(r) {
+		h.renderNotifications(w, r, principal, hour, notificationsState{saved: true, announce: savedAnnouncement})
+		return
+	}
 	http.Redirect(w, r, savedURL(notificationsPath), http.StatusSeeOther)
 }
 
@@ -353,7 +382,7 @@ func (h *more) removeBrowser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if isHTMX(r) {
-		h.renderNotifications(w, r, "")
+		h.renderNotifications(w, r, principal, principal.Membership.DigestHour, notificationsState{announce: "Device removed."})
 		return
 	}
 	http.Redirect(w, r, notificationsPath, http.StatusSeeOther)

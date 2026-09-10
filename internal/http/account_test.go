@@ -359,6 +359,40 @@ func TestAccount_TheRecoveryCodesRowSaysNoneLeftWhenEveryCodeHasBeenUsed(t *test
 	}
 }
 
+func TestAccount_ASaveShowsSavedUnderTheButtonWithoutReloadingThePage(t *testing.T) {
+	f := moreGarden(t)
+	form := url.Values{"name": {"Eleanor"}, "handle": {"eleanor"}, "timezone": {"Asia/Tokyo"}}
+
+	rec := f.swap(t, f.handler.saveAccount, accountPath, accountID, "", "", form)
+
+	body := fragment(t, rec, accountID)
+	page := withoutAnnouncement(body)
+	if !strings.Contains(page, `value="Eleanor"`) || !strings.Contains(text(page), "Saved") {
+		t.Errorf("the swap does not show the saved name with Saved under the button:\n%s", text(page))
+	}
+	if !strings.Contains(body, announced(savedAnnouncement)) {
+		t.Errorf("the swap does not announce the save:\n%s", body)
+	}
+}
+
+func TestAccount_ASaveWithNoDisplayNameKeepsThePageAndReadsOutTheMessage(t *testing.T) {
+	f := moreGarden(t)
+	form := url.Values{"name": {""}, "handle": {"ellie"}, "timezone": {"Europe/London"}}
+
+	rec := f.swap(t, f.handler.saveAccount, accountPath, accountID, "", "", form)
+
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusUnprocessableEntity, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if strings.HasPrefix(body, "<!doctype html>") || !strings.Contains(body, `id="`+accountID+`"`) {
+		t.Fatalf("the refusal is not a swap of the page under the top bar:\n%.200s", body)
+	}
+	if !strings.Contains(body, announced(nameMissing)) {
+		t.Errorf("the refusal does not announce the message:\n%s", body)
+	}
+}
+
 func TestAccount_AMemberIsNotToldTheyHaveNoRecoveryCodes(t *testing.T) {
 	f := moreGarden(t)
 	f.principal.Capabilities = auth.Capabilities{auth.TokenManage: true}

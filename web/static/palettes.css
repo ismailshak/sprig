@@ -11,8 +11,14 @@
    mode. Rose means overdue and is a different hue from both.
 
    Every value has been checked for contrast against its own mode's background:
-   4.5 for body text, 3.0 for large text and non-text marks. The lowest in the
-   set is --ink-3 at 3.37 in light. */
+   4.5 for body text, 3.0 for large text and non-text marks. --ink-3 is the
+   muted text on hints, notes and meta lines. All of those are body size, so
+   --ink-3 is held to 4.5 against the page and the card. It is the lowest in
+   the set, at 4.5 in light on the page.
+
+   The one place under 4.5 is a row's meta line under the pointer, where the
+   background is --surface-2 and --ink-3 reads 3.98 in light and 4.29 in dark.
+   It is back at 4.5 as soon as the pointer leaves. */
 
 :root {
   --light-bg: #f8f5ee;
@@ -21,7 +27,7 @@
   --light-accent-soft: #e4eeea;
   --light-ink: #1f2b28;
   --light-ink-2: #576460;
-  --light-ink-3: #7d8884;
+  --light-ink-3: #68736f;
   --light-line: #e2dccd;
   --light-line-strong: #1f2b28;
   --light-accent: #2a6a5f;
@@ -32,8 +38,8 @@
      transparent, so a list was a run of hairlines with nothing to show where one
      section stopped and the next began, while dark had a visible box. The card
      is a shade lighter than the page, as it is in dark, a ratio of 1.05 either
-     way. Every ink value gains contrast against it, so --ink-3 reads 3.54 inside
-     a card where it reads 3.37 on the page, and the page is still the floor. */
+     way. Every ink value gains contrast against it, so --ink-3 reads 4.75 inside
+     a card where it reads 4.52 on the page, and the page is still the floor. */
   --light-card-bg: #fdfbf4;
   --light-card-border-color: #e2dccd;
   --light-shadow-color: rgba(31, 43, 40, .05);
@@ -50,7 +56,7 @@
   --dark-accent-soft: #172b27;
   --dark-ink: #eceee8;
   --dark-ink-2: #aab3ad;
-  --dark-ink-3: #818a85;
+  --dark-ink-3: #8a938e;
   --dark-line: #2f3733;
   --dark-line-strong: #4a5450;
   --dark-accent: #5cb8a3;

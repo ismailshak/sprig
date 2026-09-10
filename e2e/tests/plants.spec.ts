@@ -25,6 +25,17 @@ test("the Plants tab on a plant's page goes back to the list", async ({ page, pl
   await expect(page.getByRole('heading', { name: 'Plants' })).toBeVisible();
 });
 
+test('pressing the Plants tab on the Plants page scrolls it back to the top @js', async ({ page, plants }) => {
+  await plants.open();
+  await plants.archivedLink().scrollIntoViewIfNeeded();
+  await expect(plants.roomHeadings().first()).not.toBeInViewport();
+
+  await page.getByRole('navigation').getByRole('link', { name: 'Plants' }).click();
+
+  await expect(plants.roomHeadings().first()).toBeInViewport();
+  await expect(page).toHaveURL('/plants');
+});
+
 test('rooms are listed alphabetically with No room last', async ({ plants }) => {
   await plants.open();
 

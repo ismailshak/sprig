@@ -166,7 +166,7 @@ func TestSheet_OpensOnTheCareOfTheRowItWasOpenedFrom(t *testing.T) {
 		t.Fatalf("the page holds no dialog:\n%s", page)
 	}
 
-	if !strings.Contains(dialog, `<dialog open class="sheet" id="sheet" aria-label="Log care for Nigel">`) {
+	if !strings.Contains(dialog, `<dialog open class="sheet" id="sheet" aria-label="Log care for Nigel" tabindex="-1">`) {
 		t.Errorf("the dialog is not open under the sheet's id and named for Nigel:\n%s", dialog)
 	}
 	if !regexp.MustCompile(`<h1[^>]*>Rosewood</h1>`).MatchString(page) {
@@ -290,6 +290,9 @@ func TestSheet_AnHTMXRequestTargetingTheFormGetsTheFormAlone(t *testing.T) {
 	}
 	if strings.Contains(swap, "<dialog") {
 		t.Errorf("a swap naming the form carried the dialog, which would replay its animation:\n%.200s", swap)
+	}
+	if want := announced("Watering. The usual reminder is 4 days."); !strings.Contains(swap, want) {
+		t.Errorf("the swap does not announce the care chosen and its usual reminder:\nwant %s\n%s", want, swap)
 	}
 }
 
@@ -645,6 +648,41 @@ func TestLog_TheLoggedRowHasAnUndoButtonAndAGraceTimer(t *testing.T) {
 	}
 	if !strings.Contains(row, `hx-target="#`+rowID(dorisID)+`" hx-swap="outerHTML settle:0ms"`) {
 		t.Errorf("Undo does not swap the row it sits in:\n%s", row)
+	}
+}
+
+func TestLog_TheSwapSaysWhatWasLoggedWhatIsLeftAndWhereUndoIs(t *testing.T) {
+	f := rosewood(t)
+
+	rec := f.post(t, dorisID.String(), url.Values{"row": {"water"}, "care": {"water"}}, true)
+
+	body := rec.Body.String()
+	want := announced("You watered Doris. 2 plants due today, 1 of them overdue. Undo from the row now, or from Activity later.")
+	if !strings.Contains(body, want) {
+		t.Errorf("the swap does not announce the care, the count and where Undo is:\nwant %s\n%s", want, body)
+	}
+}
+
+func TestLog_ASkipIsAnnouncedAsSkipped(t *testing.T) {
+	f := rosewood(t)
+
+	rec := f.post(t, dorisID.String(), url.Values{"row": {"water"}, "care": {"water"}, "outcome": {"skipped"}, "again": {"2"}}, true)
+
+	want := announced("You skipped Doris. 2 plants due today, 1 of them overdue. Undo from the row now, or from Activity later.")
+	if !strings.Contains(rec.Body.String(), want) {
+		t.Errorf("the swap does not announce the skip:\nwant %s\n%s", want, rec.Body.String())
+	}
+}
+
+func TestUndo_TheSwapSaysUndoneAndWhatIsLeft(t *testing.T) {
+	f := rosewood(t)
+	f.post(t, dorisID.String(), url.Values{"row": {"water"}, "care": {"water"}}, true)
+	event := f.latest(t, dorisID)
+
+	rec := f.undo(t, dorisID, event.ID, "water", true)
+
+	if want := announced("Undone. 3 plants due today, 1 of them overdue."); !strings.Contains(rec.Body.String(), want) {
+		t.Errorf("the swap does not announce the undo:\nwant %s\n%s", want, rec.Body.String())
 	}
 }
 

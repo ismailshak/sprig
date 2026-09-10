@@ -147,11 +147,17 @@ type careTypeEdit struct {
 }
 
 func (h *more) garden(w http.ResponseWriter, r *http.Request) {
-	h.renderGarden(w, r, gardenPage{Name: PrincipalFrom(r).Garden.Name, Saved: saved(r)}, careTypeEdit{}, 0)
+	h.renderGarden(w, r, gardenPage{Name: PrincipalFrom(r).Garden.Name, Saved: saved(r)}, careTypeEdit{}, 0, "")
 }
 
+// gardenID is both the HTML id of the page under the top bar and the name of
+// the template that renders it. Save under the garden's name swaps it.
+const gardenID = "garden"
+
 // saveGardenName writes the garden's name. An empty name renders the page
-// again with the message under the field.
+// again with the message under the field. With htmx the response is the page
+// under the top bar with the Saved line on it. A plain post redirects to the
+// page with Saved in the query string.
 func (h *more) saveGardenName(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	if err := r.ParseForm(); err != nil {
@@ -160,11 +166,15 @@ func (h *more) saveGardenName(w http.ResponseWriter, r *http.Request) {
 	}
 	name := strings.TrimSpace(r.PostForm.Get("name"))
 	if name == "" {
-		h.renderGarden(w, r, gardenPage{NameError: gardenNameMissing}, careTypeEdit{}, http.StatusUnprocessableEntity)
+		h.renderGarden(w, r, gardenPage{NameError: gardenNameMissing}, careTypeEdit{}, http.StatusUnprocessableEntity, gardenNameMissing)
 		return
 	}
 	if err := h.queries.RenameGarden(r.Context(), name, principal.Garden.ID); err != nil {
 		h.templates.serverError(h.logger, w, r, "rename the garden", err)
+		return
+	}
+	if isHTMX(r) {
+		h.renderGarden(w, r, gardenPage{Name: name, Saved: true}, careTypeEdit{}, 0, savedAnnouncement)
 		return
 	}
 	http.Redirect(w, r, savedURL(gardenPath), http.StatusSeeOther)
@@ -173,7 +183,7 @@ func (h *more) saveGardenName(w http.ResponseWriter, r *http.Request) {
 // newCareType handles GET /more/garden/types. It renders the page with an
 // empty row at the end of the list.
 func (h *more) newCareType(w http.ResponseWriter, r *http.Request) {
-	h.renderGarden(w, r, gardenPage{Name: PrincipalFrom(r).Garden.Name}, careTypeEdit{adding: true}, 0)
+	h.renderGarden(w, r, gardenPage{Name: PrincipalFrom(r).Garden.Name}, careTypeEdit{adding: true}, 0, "")
 }
 
 // createCareType handles POST /more/garden/types. The slug is generated from
@@ -219,7 +229,7 @@ func (h *more) editCareType(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	h.renderGarden(w, r, gardenPage{Name: principal.Garden.Name}, careTypeEdit{slug: care.Slug, name: care.Name}, 0)
+	h.renderGarden(w, r, gardenPage{Name: principal.Garden.Name}, careTypeEdit{slug: care.Slug, name: care.Name}, 0, "")
 }
 
 // renameCareType handles POST /more/garden/types/{care}. Only the name is
@@ -327,7 +337,7 @@ func (h *more) afterCareTypeChange(w http.ResponseWriter, r *http.Request, what 
 // page.
 func (h *more) careTypesSaved(w http.ResponseWriter, r *http.Request) {
 	if isHTMX(r) {
-		h.renderGarden(w, r, gardenPage{Name: PrincipalFrom(r).Garden.Name}, careTypeEdit{}, 0)
+		h.renderGarden(w, r, gardenPage{Name: PrincipalFrom(r).Garden.Name}, careTypeEdit{}, 0, "Care types saved.")
 		return
 	}
 	http.Redirect(w, r, gardenPath, http.StatusSeeOther)
@@ -362,7 +372,7 @@ func (h *more) postedName(w http.ResponseWriter, r *http.Request) (string, bool)
 // still in the field and the reason under it.
 func (h *more) refuseCareType(w http.ResponseWriter, r *http.Request, edit careTypeEdit) {
 	page := gardenPage{Name: PrincipalFrom(r).Garden.Name}
-	h.renderGarden(w, r, page, edit, http.StatusUnprocessableEntity)
+	h.renderGarden(w, r, page, edit, http.StatusUnprocessableEntity, edit.message)
 }
 
 // careTypeWithSlug returns the name of the care type holding slug, and the
@@ -381,8 +391,9 @@ func (h *more) careTypeWithSlug(ctx context.Context, gardenID uuid.UUID, slug st
 }
 
 // renderGarden fills in the page's care types and writes it. A status of zero
-// means 200.
-func (h *more) renderGarden(w http.ResponseWriter, r *http.Request, page gardenPage, edit careTypeEdit, status int) {
+// means 200. announce is the sentence a swap puts in the live region, empty
+// for a swap that announces nothing, such as a row opening.
+func (h *more) renderGarden(w http.ResponseWriter, r *http.Request, page gardenPage, edit careTypeEdit, status int, announce string) {
 	principal := PrincipalFrom(r)
 	page.Bar = moreBar("Garden")
 	page.Action = gardenPath
@@ -406,9 +417,12 @@ func (h *more) renderGarden(w http.ResponseWriter, r *http.Request, page gardenP
 		return
 	}
 	page.Storage = storageLine(usage)
-	v := view{page: "garden", status: status}
-	if r.Header.Get("HX-Target") == careTypesID {
+	v := view{page: "garden", status: status, announce: announce}
+	switch r.Header.Get("HX-Target") {
+	case careTypesID:
 		v.fragment = careTypesID
+	case gardenID:
+		v.fragment = gardenID
 	}
 	h.templates.render(w, r, v, page)
 }

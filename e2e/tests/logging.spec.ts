@@ -80,6 +80,75 @@ test('a time later than now is refused @swap', async ({ today, sheet }) => {
   await expect(sheet.chip('Earlier today')).toBeChecked();
 });
 
+test('the sheet takes focus when it opens and Escape puts it back on the row @js', async ({ page, today, sheet }) => {
+  await today.rowLink(plants.nigel, 'water').focus();
+  await page.keyboard.press('Enter');
+
+  await expect(sheet.dialog()).toBeFocused();
+
+  await page.keyboard.press('Escape');
+
+  await expect(sheet.dialog()).toBeHidden();
+  await expect(today.rowLink(plants.nigel, 'water')).toBeFocused();
+});
+
+// Chrome wraps Tab from the last control to the first. WebKit leaves the
+// document for one press and comes back in at the sheet itself on the next.
+// Neither reaches the page behind the sheet.
+test('Tab from the last control in the sheet never reaches the page behind it @js', async ({ page, today, sheet }) => {
+  await today.rowLink(plants.nigel, 'water').focus();
+  await page.keyboard.press('Enter');
+  await sheet.dialog().getByRole('button', { name: 'Cancel' }).focus();
+
+  await page.keyboard.press('Tab');
+  await expect(page.getByRole('main').locator(':focus')).toHaveCount(0);
+
+  await page.keyboard.press('Tab');
+  await expect(page.locator('dialog:focus, dialog :focus')).toHaveCount(1);
+});
+
+test('logging from the sheet is announced with what is left and where Undo is @js', async ({ today, sheet }) => {
+  await today.openSheet(plants.doris, 'water');
+  await sheet.submit('Log watering');
+
+  await expect(today.announcement()).toContainText('You watered Doris.');
+  await expect(today.announcement()).toContainText('Undo from the row now, or from Activity later.');
+});
+
+// The wait is the 4s window plus the 320ms collapse after it, rounded up. A
+// row still on the page afterwards was held by the focus.
+test('the undo window stays open while Undo has keyboard focus and closes when focus leaves @js', async ({
+  page,
+  today,
+}) => {
+  await today.careButton(plants.doris, 'water').focus();
+  await page.keyboard.press('Enter');
+  await expect(today.undoButton(plants.doris, 'water')).toBeFocused();
+
+  await page.waitForTimeout(5000);
+  await expect(today.undoButton(plants.doris, 'water')).toBeVisible();
+
+  await page.keyboard.press('Tab');
+
+  await expect(today.careRow(plants.doris, 'water')).toHaveCount(0);
+});
+
+test('above 900px the sheet still traps focus and gives it back on Escape @wide', async ({ page, today, sheet }) => {
+  await today.rowLink(plants.nigel, 'water').focus();
+  await page.keyboard.press('Enter');
+
+  await expect(sheet.dialog()).toBeFocused();
+
+  await sheet.dialog().getByRole('button', { name: 'Cancel' }).focus();
+  await page.keyboard.press('Tab');
+  await expect(page.getByRole('main').locator(':focus')).toHaveCount(0);
+
+  await page.keyboard.press('Escape');
+
+  await expect(sheet.dialog()).toBeHidden();
+  await expect(today.rowLink(plants.nigel, 'water')).toBeFocused();
+});
+
 test('cancelling the sheet leaves the row unchanged', async ({ today, sheet }) => {
   await today.openSheet(plants.doris, 'water');
   await sheet.cancel();

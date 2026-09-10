@@ -34,6 +34,8 @@
 <script src="{{asset "vendor/htmx.min.js"}}" defer></script>
 <script src="{{asset "offline.js"}}" defer></script>
 <script src="{{asset "reload.js"}}" defer></script>
+<script src="{{asset "swap.js"}}" defer></script>
+<script src="{{asset "tabs.js"}}" defer></script>
 {{/* htmx does not swap a 4xx response by default. A 422 is a form re-rendered
      with an error message, so it has to swap.
 
@@ -50,16 +52,16 @@
 {{/* A page with no tab bar overrides this block to add a modifier class that
      centres its column. Sign in is the only one so far. */}}
 <div class="{{block "app-class" .}}app{{end}}">
-{{/* The column that scrolls. The Activity page's script keeps its position
-     across Back and Forward. */}}
-<div class="app__main" id="main">
+{{/* The column that scrolls, and the page's main landmark. The Activity
+     page's script keeps its position across Back and Forward. */}}
+<main class="app__main" id="main">
 {{/* offline.js unhides this line when the service worker serves the page from
      its cache, and fills the time in from the copy's Date header. */}}
 <p class="offline" id="offline" role="status" hidden>You’re offline. This page was last loaded <time></time>.</p>
 {{/* Each page renders its own topbar and app__body, because their max width
      above 900px differs by page and is set by a modifier class on them. */}}
 {{block "main" .}}{{end}}
-</div>
+</main>
 {{/* A block rather than a direct call to the tabs partial, so sign in, invite
      and setup can leave it undefined and render no tab bar. */}}
 {{block "nav" .}}{{end}}
@@ -67,6 +69,9 @@
 {{/* The log-care sheet is outside .app so it is not laid out inside one of
      the app's columns. */}}
 {{block "overlay" .}}{{end}}
+{{/* The live region is outside the main landmark, because every sentence in
+     it repeats something the page already says. */}}
+{{template "status"}}
 {{/* A page with a script of its own defines this block. A page that leaves it
      undefined loads htmx alone. */}}
 {{block "script" .}}{{end}}

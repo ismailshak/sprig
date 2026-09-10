@@ -7,7 +7,11 @@
   const input = document.getElementById('room');
   const list = document.getElementById('room-list');
   const datalist = document.getElementById('rooms');
-  if (!input || !list || !datalist) return;
+  // count is the live region under the field. It says how many rooms the
+  // listbox is showing, because a screen reader is not told when the list
+  // changes.
+  const count = document.getElementById('room-count');
+  if (!input || !list || !datalist || !count) return;
 
   const rooms = Array.from(datalist.options, (option) => option.value);
 
@@ -31,7 +35,20 @@
   const close = () => {
     list.hidden = true;
     input.setAttribute('aria-expanded', 'false');
+    input.removeAttribute('aria-activedescendant');
+    count.textContent = '';
     active = -1;
+  };
+
+  // counted is the sentence for the options shown: how many of the garden's
+  // rooms match, and whether the last option offers to add a new one.
+  const counted = () => {
+    const matches = options.filter((option) => !option.fresh).length;
+    const rooms = matches === 1 ? '1 room' : matches + ' rooms';
+    const fresh = options.find((option) => option.fresh);
+    if (!fresh) return rooms;
+    if (matches === 0) return 'No room called “' + fresh.room + '”. Choose the option to add it.';
+    return rooms + ', or add “' + fresh.room + '” as a new room';
   };
 
   // showOptions fills the listbox with the rooms containing what has been
@@ -59,7 +76,12 @@
     );
     list.hidden = false;
     input.setAttribute('aria-expanded', 'true');
-    input.setAttribute('aria-activedescendant', active < 0 ? '' : `room-opt-${active}`);
+    if (active < 0) {
+      input.removeAttribute('aria-activedescendant');
+    } else {
+      input.setAttribute('aria-activedescendant', `room-opt-${active}`);
+    }
+    count.textContent = counted();
   };
 
   const choose = (i) => {
@@ -84,12 +106,24 @@
     close();
   });
 
+  // Escape closes the list and leaves the text typed. Enter with an option
+  // highlighted takes it. Home and End go to the first and last option.
   input.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape') return close();
+    if (event.key === 'Escape') {
+      if (!list.hidden) event.preventDefault();
+      return close();
+    }
+    if ((event.key === 'Home' || event.key === 'End') && !list.hidden) {
+      event.preventDefault();
+      active = event.key === 'Home' ? 0 : options.length - 1;
+      return showOptions();
+    }
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault();
       if (list.hidden) return showOptions();
-      active = (active + (event.key === 'ArrowDown' ? 1 : options.length - 1)) % options.length;
+      // With no option highlighted, Down takes the first and Up the last.
+      if (active < 0) active = event.key === 'ArrowDown' ? 0 : options.length - 1;
+      else active = (active + (event.key === 'ArrowDown' ? 1 : options.length - 1)) % options.length;
       return showOptions();
     }
     // Enter still submits the form when no option is highlighted, because that
