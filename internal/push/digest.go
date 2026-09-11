@@ -14,9 +14,17 @@ import (
 	"github.com/ismailshak/sprig/internal/store"
 )
 
-// digestKind is the value of the kind column on the digest's notification_send
-// rows.
-const digestKind = "digest"
+// The kind column of the digest job's ledger rows: the daily digest, and the
+// digest sent again at a time the member chose on Today.
+const (
+	digestKind      = "digest"
+	digestAgainKind = "digest_again"
+)
+
+// againKey is the layout of a resend's send key: the instant the member chose,
+// in UTC. The resend has a kind of its own because the daily digest's latest
+// key is read as a date.
+const againKey = time.RFC3339
 
 // Digest is the job that sends each member what is due in their garden, once a
 // day at the hour they chose in their timezone.
@@ -29,8 +37,10 @@ type Digest struct {
 	queries *store.Queries
 	sender  *Sender
 	// todayURL is the URL the notification opens when it is tapped: the Today
-	// page.
+	// page, with the query string that shows the Remind me again banner.
 	todayURL string
+	// again is the form the notification's Remind me again buttons post.
+	again *RemindAgain
 	// now supplies the current time, so a test can fix the day.
 	now func() time.Time
 	// wake is the channel Wake sends on.
@@ -41,14 +51,17 @@ type Digest struct {
 	skipped map[uuid.UUID]time.Time
 }
 
-// NewDigest returns a Digest that sends through sender and links the Today
-// page under baseURL. Run starts it.
-func NewDigest(logger *slog.Logger, queries *store.Queries, sender *Sender, baseURL string) *Digest {
+// NewDigest returns a Digest that sends through sender. todayPath is the path
+// the notification opens and remindAgainPath the one its buttons post to, both
+// made absolute under baseURL. Run starts it.
+func NewDigest(logger *slog.Logger, queries *store.Queries, sender *Sender, baseURL, todayPath, remindAgainPath string) *Digest {
+	base := strings.TrimSuffix(baseURL, "/")
 	return &Digest{
 		logger:   logger,
 		queries:  queries,
 		sender:   sender,
-		todayURL: strings.TrimSuffix(baseURL, "/") + "/",
+		todayURL: absolute(base, todayPath),
+		again:    &RemindAgain{URL: absolute(base, remindAgainPath), Field: DelayField, Delays: Delays},
 		now:      time.Now,
 		wake:     make(chan struct{}, 1),
 		skipped:  map[uuid.UUID]time.Time{},
@@ -56,8 +69,9 @@ func NewDigest(logger *slog.Logger, queries *store.Queries, sender *Sender, base
 }
 
 // Wake has the job work out its next send again. A handler calls it after
-// committing a change to who gets a digest and when. It never blocks. A second
-// call before the job looks again does nothing.
+// committing a change to who gets a digest and when, or a Remind me again
+// time. It never blocks. A second call before the job looks again does
+// nothing.
 func (d *Digest) Wake() {
 	wakeJob(d.wake)
 }
@@ -68,8 +82,9 @@ func (d *Digest) Run(ctx context.Context) {
 	runJob(ctx, d.logger, "digest", d.now, d.wake, d.sendDue)
 }
 
-// sendDue sends every digest whose hour has come and returns the instant of
-// the next one, or the zero time when nobody is waiting for a digest.
+// sendDue sends every digest whose hour has come and every resend whose
+// chosen time has come. It returns the instant of the next of either, or the
+// zero time when none is waiting.
 func (d *Digest) sendDue(ctx context.Context) (time.Time, error) {
 	now := d.now()
 	members, err := d.queries.ListDigestMembers(ctx, now)
@@ -85,6 +100,21 @@ func (d *Digest) sendDue(ctx context.Context) (time.Time, error) {
 	}
 	for _, member := range members {
 		loc := locationOf(d.logger, member.Handle, member.Timezone)
+		if again := member.RemindAgainAt; again != nil {
+			switch {
+			case again.After(now):
+				soonest(*again)
+			default:
+				err := d.sendAgain(ctx, member, loc, *again, now)
+				if err != nil {
+					if ctx.Err() != nil {
+						return time.Time{}, err
+					}
+					d.logger.Error("digest not sent again", "user", member.Handle, "garden", member.GardenName, "at", again.UTC().Format(againKey), "err", err)
+					soonest(now.Add(retryAfter))
+				}
+			}
+		}
 		at, key, skipped := nextDigest(int(member.DigestHour), loc, member.SentThrough, now)
 		if !skipped.IsZero() && !d.skipped[member.MembershipID].Equal(skipped) {
 			d.skipped[member.MembershipID] = skipped
@@ -131,15 +161,10 @@ func (d *Digest) send(ctx context.Context, member store.ListDigestMembersRow, lo
 			return nil
 		}
 
-		schedules, err := q.ListCareSchedules(ctx, member.GardenID)
+		notification, items, err := d.build(ctx, q, member, loc, now)
 		if err != nil {
-			return fmt.Errorf("listing the schedules: %w", err)
+			return err
 		}
-		latest, err := q.ListLatestCareEvents(ctx, member.GardenID)
-		if err != nil {
-			return fmt.Errorf("listing the latest care: %w", err)
-		}
-		notification, items := digestOf(member.GardenName, schedule.Resolve(schedules, latest, now.In(loc)), d.todayURL)
 		// The ledger row stays written on a day with nothing due, so the job
 		// does not look at that day again.
 		if items == 0 {
@@ -147,17 +172,92 @@ func (d *Digest) send(ctx context.Context, member store.ListDigestMembersRow, lo
 			return nil
 		}
 
-		subscriptions, err := q.ListPushSubscriptions(ctx, member.UserID)
-		if err != nil {
-			return fmt.Errorf("listing the browsers: %w", err)
-		}
-		sent, err := deliver(ctx, d.logger, q, d.sender, member.Handle, subscriptions, notification, now)
+		sent, err := d.deliver(ctx, q, member, notification, now)
 		if err != nil {
 			return err
 		}
 		d.logger.Info("digest sent", "user", member.Handle, "garden", member.GardenName, "date", key, "items", items, "browsers", sent)
 		return nil
 	})
+}
+
+// sendAgain sends the member the digest again at the instant they chose. The
+// same transaction clears that instant and claims the ledger row for it, so a
+// restart cannot send it twice. The digest is built fresh, so care logged
+// since the morning is left out and nothing is sent when nothing is left due.
+// A resend more than maxLate late is cleared and not sent.
+func (d *Digest) sendAgain(ctx context.Context, member store.ListDigestMembersRow, loc *time.Location, again, now time.Time) error {
+	at := again.UTC().Format(againKey)
+	return d.queries.InTx(ctx, func(q *store.Queries) error {
+		err := q.ClearRemindAgain(ctx, store.ClearRemindAgainParams{
+			GardenID:      member.GardenID,
+			MembershipID:  member.MembershipID,
+			RemindAgainAt: &again,
+		})
+		if err != nil {
+			return fmt.Errorf("clearing the time: %w", err)
+		}
+		claimed, err := q.ClaimNotificationSend(ctx, store.ClaimNotificationSendParams{
+			MembershipID: member.MembershipID,
+			Kind:         digestAgainKind,
+			SendKey:      at,
+		})
+		if err != nil {
+			return fmt.Errorf("claiming the send: %w", err)
+		}
+		if claimed == 0 {
+			return nil
+		}
+		if now.Sub(again) >= maxLate {
+			d.logger.Warn("digest again skipped", "user", member.Handle, "garden", member.GardenName, "at", at, "late", now.Sub(again).Truncate(time.Second))
+			return nil
+		}
+
+		notification, items, err := d.build(ctx, q, member, loc, now)
+		if err != nil {
+			return err
+		}
+		if items == 0 {
+			d.logger.Info("digest again empty", "user", member.Handle, "garden", member.GardenName, "at", at)
+			return nil
+		}
+
+		sent, err := d.deliver(ctx, q, member, notification, now)
+		if err != nil {
+			return err
+		}
+		d.logger.Info("digest sent again", "user", member.Handle, "garden", member.GardenName, "at", at, "items", items, "browsers", sent)
+		return nil
+	})
+}
+
+// build reads the garden's schedules and latest care and returns the digest
+// as of now, with how many cares it lists. The tag is per garden, so a resend
+// replaces the morning's notification on the device and a second garden's
+// digest stacks beside it.
+func (d *Digest) build(ctx context.Context, q *store.Queries, member store.ListDigestMembersRow, loc *time.Location, now time.Time) (Notification, int, error) {
+	schedules, err := q.ListCareSchedules(ctx, member.GardenID)
+	if err != nil {
+		return Notification{}, 0, fmt.Errorf("listing the schedules: %w", err)
+	}
+	latest, err := q.ListLatestCareEvents(ctx, member.GardenID)
+	if err != nil {
+		return Notification{}, 0, fmt.Errorf("listing the latest care: %w", err)
+	}
+	notification, items := digestOf(member.GardenName, schedule.Resolve(schedules, latest, now.In(loc)), d.todayURL)
+	notification.Tag = digestKind + "-" + member.GardenID.String()
+	notification.Again = d.again
+	return notification, items, nil
+}
+
+// deliver sends the notification to each of the member's browsers and returns
+// how many were sent.
+func (d *Digest) deliver(ctx context.Context, q *store.Queries, member store.ListDigestMembersRow, notification Notification, now time.Time) (int, error) {
+	subscriptions, err := q.ListPushSubscriptions(ctx, member.UserID)
+	if err != nil {
+		return 0, fmt.Errorf("listing the browsers: %w", err)
+	}
+	return deliver(ctx, d.logger, q, d.sender, member.Handle, subscriptions, notification, now)
 }
 
 // digestOf builds the notification for a garden: every care overdue or due

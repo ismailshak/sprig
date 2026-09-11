@@ -23,6 +23,19 @@ ORDER BY membership.garden_id = app_user.last_garden_id DESC NULLS LAST, members
 UPDATE membership SET digest_hour = @digest_hour
 WHERE garden_id = @garden_id AND user_id = @user_id;
 
+-- The instant the Remind me again banner on Today asked for the digest to be
+-- sent again. It replaces any earlier one still waiting.
+-- name: SetRemindAgain :exec
+UPDATE membership SET remind_again_at = @remind_again_at
+WHERE garden_id = @garden_id AND user_id = @user_id;
+
+-- Clears the resend the digest job is sending, in the transaction that sends
+-- it. The instant is matched so a later one the member set while the job was
+-- sending is kept.
+-- name: ClearRemindAgain :exec
+UPDATE membership SET remind_again_at = NULL
+WHERE garden_id = @garden_id AND id = @membership_id AND remind_again_at = @remind_again_at;
+
 -- The People page lists everybody in the garden, oldest membership first, so
 -- the person who created it is at the top.
 -- name: ListMembers :many

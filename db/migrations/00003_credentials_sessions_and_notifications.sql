@@ -183,6 +183,12 @@ CREATE TABLE notification_kind (
 INSERT INTO notification_kind (name) VALUES
     -- What is due today, sent once a day at the membership's digest_hour.
     ('digest'),
+    -- The digest sent again at the time the member chose on Today. A kind of
+    -- its own rather than a second digest row for the day, because the digest
+    -- job reads its latest digest send key as a date. It has no
+    -- notification_preference row of its own; the digest switch above governs
+    -- it.
+    ('digest_again'),
     -- Sent when someone else in the garden logs care.
     ('activity'),
     -- The kinds below have no notification_preference row. Each is sent to

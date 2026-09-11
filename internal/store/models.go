@@ -93,14 +93,15 @@ type Invite struct {
 }
 
 type Membership struct {
-	ID         uuid.UUID
-	GardenID   uuid.UUID
-	UserID     uuid.UUID
-	Role       string
-	InvitedBy  *uuid.UUID
-	CreatedAt  time.Time
-	ExpiresAt  *time.Time
-	DigestHour int16
+	ID            uuid.UUID
+	GardenID      uuid.UUID
+	UserID        uuid.UUID
+	Role          string
+	InvitedBy     *uuid.UUID
+	CreatedAt     time.Time
+	ExpiresAt     *time.Time
+	DigestHour    int16
+	RemindAgainAt *time.Time
 }
 
 type NotificationKind struct {

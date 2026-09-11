@@ -27,6 +27,52 @@ type Notification struct {
 	// Icon is the URL of the image shown beside the title. When it is empty
 	// the service worker shows the app's icon.
 	Icon string `json:"icon,omitempty"`
+	// Tag groups notifications on the device. A notification with the same
+	// tag as one already showing replaces it rather than adding a second.
+	Tag string `json:"tag,omitempty"`
+	// Again is the Remind me again form the notification's action buttons
+	// post. It is nil on a notification with no buttons.
+	Again *RemindAgain `json:"again,omitempty"`
+}
+
+// RemindAgain is the form a digest notification's action buttons post: the
+// URL, the field name, and one button per delay. The service worker posts
+// Field=Value for the button pressed. The banner on Today posts the same form.
+type RemindAgain struct {
+	URL    string  `json:"url"`
+	Field  string  `json:"field"`
+	Delays []Delay `json:"delays"`
+}
+
+// Delay is one fixed delay the digest can be sent again after. Value is what
+// the form posts, Label is the banner button's text and Action is the
+// notification button's text.
+type Delay struct {
+	Value    string        `json:"value"`
+	Label    string        `json:"label"`
+	Action   string        `json:"action"`
+	Duration time.Duration `json:"-"`
+}
+
+// DelayField is the field name of the delay a Remind me again form posts.
+const DelayField = "delay"
+
+// Delays is every fixed delay the Remind me again form offers, in the order
+// the buttons appear.
+var Delays = []Delay{
+	{Value: "1h", Label: "In 1 hour", Action: "Remind me again in 1 hour", Duration: time.Hour},
+	{Value: "2h", Label: "In 2 hours", Action: "Remind me again in 2 hours", Duration: 2 * time.Hour},
+}
+
+// DelayFor returns the delay whose Value is value, and false when the form
+// does not offer it.
+func DelayFor(value string) (Delay, bool) {
+	for _, delay := range Delays {
+		if delay.Value == value {
+			return delay, true
+		}
+	}
+	return Delay{}, false
 }
 
 // ErrGone is returned by Send when the push service responds 404 or 410,

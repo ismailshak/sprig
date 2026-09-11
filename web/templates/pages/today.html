@@ -18,6 +18,7 @@
 </div>
 </header>
 {{template "reminders-banner" .Reminders}}
+{{template "remind-again" .RemindAgain}}
 {{template "day-body" .}}
 {{end}}
 
@@ -35,17 +36,55 @@
 <p class="banner__line">Get a daily notification of what’s due.</p>
 <p class="field__error" id="reminders-error" role="alert"></p>
 <div class="banner__actions">
-<button class="banner__on" type="button" id="reminders-on">Turn on notifications</button>
-<button class="banner__skip" type="button" id="reminders-skip">Not now</button>
+<button class="banner__primary" type="button" id="reminders-on">Turn on notifications</button>
+<button class="banner__plain" type="button" id="reminders-skip">Not now</button>
 </div>
 </div>
 </div>{{end}}{{end}}
+
+{{/* The banner offering to send today's notification again later, shown
+     when Today is opened from that notification. It shows two delay buttons,
+     a time input and Remind me while no resend is waiting, and the time
+     already set once one is. The delay buttons and Remind me submit one
+     form: a delay button posts its delay, Remind me posts the time input
+     alone. With JavaScript the form swaps this element. Without it the post
+     redirects back to Today.
+
+     The page's script reads data-param and data-dismiss. It removes that
+     query parameter from the URL, and hides the banner when Dismiss is
+     clicked. */}}
+{{define "remind-again"}}{{with .}}<div class="app__body banner" id="{{.ID}}" data-param="{{.Param}}">
+<div class="banner__card">
+{{if .Set}}<p class="banner__line">{{template "remind-again-words" .Set}}</p>
+<div class="banner__actions">
+<a class="banner__plain" href="{{.Dismiss}}" data-dismiss>Dismiss</a>
+</div>
+{{else}}<form method="post" action="{{.Action}}" novalidate hx-post="{{.Action}}" hx-target="#{{.ID}}" hx-swap="outerHTML settle:0ms">
+<p class="banner__line">Get this notification again later.</p>
+<div class="banner__actions">
+{{range .Delays}}<button class="banner__primary" name="{{$.Field}}" value="{{.Value}}">{{.Label}}</button>
+{{end}}<a class="banner__plain" href="{{.Dismiss}}" data-dismiss>Dismiss</a>
+</div>
+<div class="banner__actions">
+<label class="visually-hidden" for="remind-again-at">Time</label>
+<input class="input banner__time" id="remind-again-at" name="{{.At}}" type="time" value="{{.Now}}" required>
+<button class="banner__secondary" type="submit">Remind me</button>
+</div>
+{{with .Error}}<p class="field__error">{{.}}</p>{{end}}
+</form>
+{{end}}</div>
+</div>{{end}}{{end}}
+
+{{/* The banner's line once a time is set. The swap's announcement renders
+     it too. */}}
+{{define "remind-again-words"}}You’ll get this notification again at {{.}}.{{end}}
 
 {{define "nav"}}{{template "tabs" "Today"}}{{end}}
 
 {{define "script"}}<script src="{{asset "sheet.js"}}" defer></script>
 {{if .Reminders}}<script src="{{asset "push.js"}}" defer></script>
-<script src="{{asset "reminders.js"}}" defer></script>{{end}}{{end}}
+<script src="{{asset "reminders.js"}}" defer></script>{{end}}
+{{if .RemindAgain}}<script src="{{asset "remind-again.js"}}" defer></script>{{end}}{{end}}
 
 {{define "overlay"}}{{if .GardenSheet}}{{template "garden-sheet" .}}{{else}}{{template "sheet" .}}{{end}}{{end}}
 

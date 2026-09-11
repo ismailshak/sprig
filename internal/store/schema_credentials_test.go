@@ -170,7 +170,7 @@ func TestSchema_TheNotificationKindTableHoldsEveryKindTheAppSends(t *testing.T) 
 	if err != nil {
 		t.Fatalf("reading notification_kind: %v", err)
 	}
-	want := []string{"activity", "digest", "invite_accepted", "membership_removed", "role_changed", "sitting_ended", "storage_nearly_full", "token_expired", "token_expiring"}
+	want := []string{"activity", "digest", "digest_again", "invite_accepted", "membership_removed", "role_changed", "sitting_ended", "storage_nearly_full", "token_expired", "token_expiring"}
 	if !slices.Equal(got, want) {
 		t.Errorf("notification_kind holds %v, want %v", got, want)
 	}

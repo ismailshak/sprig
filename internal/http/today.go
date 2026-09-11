@@ -24,9 +24,12 @@ type today struct {
 	// now supplies the current time, so a test can fix the day.
 	now    func() time.Time
 	notify notifyActivity
+	// wake has the digest job work out its next send again. remindAgain
+	// calls it after setting the time.
+	wake wakeJobs
 	// pushKey is the VAPID public key the reminders banner gives the browser
-	// to subscribe with. It is empty when push is off, and the banner is not
-	// rendered then.
+	// to subscribe with. It is empty when push is off, and neither the
+	// reminders banner nor the Remind me again banner is rendered then.
 	pushKey string
 }
 
@@ -41,7 +44,9 @@ func (h *today) show(w http.ResponseWriter, r *http.Request) {
 		h.templates.render(w, r, view{page: "today", fragment: "care-settled"}, newCareSettled(principal, g))
 		return
 	}
-	h.templates.render(w, r, view{page: "today"}, newTodayPage(principal, g))
+	page := newTodayPage(principal, g)
+	page.RemindAgain = h.remindAgainFor(r, g)
+	h.templates.render(w, r, view{page: "today"}, page)
 }
 
 // todayBar holds the parts of Today's top bar that come from the account's
@@ -112,6 +117,9 @@ type gardenDay struct {
 	// notification type off, because subscribing a browser then sends it
 	// nothing.
 	reminders *remindersOffer
+	// digestOn is true when the reader has the daily digest switched on. It
+	// is false with push off.
+	digestOn bool
 }
 
 func (h *today) load(ctx context.Context, principal auth.Principal) (gardenDay, error) {
@@ -148,6 +156,7 @@ func (h *today) load(ctx context.Context, principal auth.Principal) (gardenDay, 
 		if anyNotificationOn(preferences) {
 			g.reminders = &remindersOffer{Key: h.pushKey, Subscribe: subscribePath}
 		}
+		g.digestOn = notificationOn(preferences, digestKind)
 	}
 
 	g.lines = schedule.Resolve(schedules, g.latest, g.now)
@@ -199,9 +208,12 @@ type todayPage struct {
 	// Reminders is the banner offering to turn on reminders in this browser.
 	// It is nil when the page does not offer it.
 	Reminders *remindersOffer
-	Head      todayHead
-	Sections  []todaySection
-	Feed      todayFeed
+	// RemindAgain is the banner offering to send today's notification again
+	// later. It is nil when the page does not show it.
+	RemindAgain *remindAgainBanner
+	Head        todayHead
+	Sections    []todaySection
+	Feed        todayFeed
 	// OOB is true when the body is rendered as an out-of-band swap, so a
 	// response to one row can also replace the rest of the page.
 	OOB bool

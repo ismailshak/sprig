@@ -48,3 +48,34 @@ test('a plant due more than a week away is not listed', async ({ today }) => {
 
   await expect(today.careRow(plants.motherInLaw, 'water')).toHaveCount(0);
 });
+
+test('the Remind me again banner confirms a chosen delay and hides on Dismiss @swap', async ({ today }) => {
+  await today.openFromNotification();
+  await expect(today.remindIn('In 1 hour')).toBeVisible();
+
+  await today.remindIn('In 1 hour').click();
+
+  await expect(today.remindAgain()).toContainText('You’ll get this notification again at');
+  await expect(today.remindIn('In 1 hour')).toHaveCount(0);
+
+  await today.dismissRemindAgain().click();
+
+  await expect(today.remindAgain()).toBeHidden();
+});
+
+test('a time already passed is refused and the banner still offers the delays @swap', async ({ today }) => {
+  await today.openFromNotification();
+
+  // Midnight is never later than now on the same day.
+  await today.remindAt().fill('00:00');
+  await today.remindMe().click();
+
+  await expect(today.remindAgain()).toContainText('That time has already passed.');
+  await expect(today.remindIn('In 2 hours')).toBeVisible();
+});
+
+test('a plain visit to Today shows no Remind me again banner', async ({ today }) => {
+  await today.open();
+
+  await expect(today.remindAgain()).toHaveCount(0);
+});
