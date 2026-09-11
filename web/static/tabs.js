@@ -32,7 +32,7 @@
     const step = (now) => {
       const t = Math.min(1, (now - start) / duration);
       // easeOutCubic, so it slows as it arrives.
-      main.scrollTop = from * (1 - (1 - t) ** 3);
+      main.scrollTop = from * (1 - t) ** 3;
       if (t < 1) requestAnimationFrame(step);
     };
     requestAnimationFrame(step);

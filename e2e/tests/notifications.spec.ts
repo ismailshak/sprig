@@ -31,7 +31,7 @@ test('a saved digest hour is shown when the page is opened again @push', async (
 });
 
 // The same flow with JavaScript off, where Save changes is a plain form post
-// rather than a post the page's script sends after subscribing.
+// and a redirect.
 test('a digest hour saved with no JavaScript is shown when the page is opened again @nojs', async ({
   notifications,
 }) => {
@@ -55,15 +55,22 @@ test('a subscribed browser can be removed @push', async ({ page, notifications }
   await expect(notifications.digest()).toBeChecked();
 });
 
-test('turning a type on in a browser that refuses permission says nothing will arrive here @push', async ({
+test('adding this device in a browser that refuses permission says notifications are blocked @push', async ({
   notifications,
 }) => {
   await notifications.open();
 
-  await notifications.activity().check();
+  await notifications.addDevice().click();
 
   await expect(notifications.refusal()).toContainText('Notifications are blocked on this device');
-  await expect(notifications.activity()).toBeChecked();
+});
+
+// Only the push API can make a subscription, so the button needs JavaScript.
+test('Add this device is not offered with no JavaScript @nojs', async ({ notifications }) => {
+  await notifications.open();
+
+  await expect(notifications.sendTest()).toBeVisible();
+  await expect(notifications.addDevice()).toBeHidden();
 });
 
 // Only the phone project runs this test, because its WebKit has no push API.
@@ -75,6 +82,7 @@ test('an iPhone that has not installed sprig is offered Install sprig instead of
 
   await expect(notifications.install()).toBeVisible();
   await expect(notifications.digest()).toBeHidden();
+  await expect(notifications.addDevice()).toBeHidden();
   await expect(page.getByRole('listitem').filter({ hasText: browsers.phone })).toBeVisible();
 
   await notifications.install().click();

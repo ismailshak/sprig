@@ -23,8 +23,8 @@
 {{/* The script writes the browser's refusal into this line when the press
      gets no permission. */}}
 <p class="field__error" id="reminders-error" role="alert"></p>
-{{/* A link rather than a button, because without JavaScript the press opens
-     the Notifications page, where Save changes subscribes the browser. */}}
+{{/* A link rather than a button, so without JavaScript the press opens the
+     Notifications page. */}}
 <a class="wide-action" href="{{.Notifications}}" id="reminders-on">Turn on notifications</a>
 <a class="bare__skip" href="{{.Today}}" id="reminders-skip">Not now</a>
 </div>

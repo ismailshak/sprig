@@ -1,51 +1,48 @@
-/* The Notifications page's script. It asks for notification permission and
-   subscribes this browser to push, neither of which a form can do. The
-   checkboxes and the hour are saved by an ordinary form post.
+/* The Notifications page's script. Add this device subscribes this browser to
+   push. The checkboxes and the hour are saved by an ordinary form post.
 
-   The form has data-key, the VAPID public key to subscribe with, and
-   data-subscribe, the URL the subscription is posted to. Each checkbox under
-   What to send has data-notify. Each Remove form has data-endpoint, the push
-   service URL of its row.
+   The Add this device form has data-key, the VAPID public key to subscribe
+   with, and hidden fields for the subscription. Each Remove form has
+   data-endpoint, the push service URL of its row.
 
-   Save changes, Remove and Send test notification are htmx swaps. The push
-   API work each needs first is done in htmx's confirm event. That event holds
-   the request until issueRequest is called. Save swaps the page under the top
-   bar, so the listeners are on the document and cover the form the swap
-   brings in. */
+   Add this device, Remove and Send test notification swap the Subscribed
+   devices section with htmx. Each calls the push API before its request is
+   sent, so the script cancels htmx's confirm event and calls issueRequest when
+   the push API has returned. The listeners are on the document so they cover
+   the forms a swap adds. */
 (function () {
   const form = document.getElementById('push-form');
   if (!form || !window.sprigPush) return;
   const push = window.sprigPush;
 
   // On an iPhone the push API only exists once sprig is on the Home Screen.
-  // Without it the form is hidden and the Install sprig block is shown.
+  // Without it the form is hidden and the Install sprig block is shown. Add
+  // this device stays hidden.
   if (!push.supported) {
     form.hidden = true;
     document.getElementById('push-unavailable').hidden = false;
     return;
   }
 
-  // Checking a box asks for permission, because a browser only opens the
-  // prompt during a click. A refusal is written into the alert line under the
-  // checkboxes.
-  document.addEventListener('change', async (event) => {
-    const box = event.target;
-    if (!(box instanceof HTMLInputElement) || box.dataset.notify === undefined || !box.checked) return;
-    const message = document.getElementById('push-error');
-    message.textContent = '';
-    const permission = await Notification.requestPermission();
-    if (permission !== 'granted') {
-      message.textContent =
-        'Notifications are blocked on this device. Allow them in your browser’s settings, then try again.';
-    }
+  // endpoint is this browser's push subscription URL, null when it has none
+  // and undefined until the push API returns. It is read once and kept,
+  // because reading it again after each swap would paint a frame with Add this
+  // device hidden.
+  let endpoint;
+  push.current().then((subscription) => {
+    endpoint = subscription ? subscription.endpoint : null;
+    showAdd();
   });
+  document.addEventListener('htmx:afterSwap', showAdd);
 
   document.addEventListener('htmx:confirm', (event) => {
     const form = event.detail.elt;
     if (!(form instanceof HTMLFormElement)) return;
-    if (form.id === 'push-form') {
+    if (form.id === 'push-add') {
       event.preventDefault();
-      subscribe(form).finally(() => event.detail.issueRequest(true));
+      fillSubscription(form).then((filled) => {
+        if (filled) event.detail.issueRequest(true);
+      });
     } else if (form.dataset.endpoint !== undefined) {
       event.preventDefault();
       unsubscribe(form).finally(() => event.detail.issueRequest(true));
@@ -55,20 +52,40 @@
     }
   });
 
-  // subscribe puts this browser on the push service before the settings are
-  // saved. Subscribing on save, rather than when a box is checked, also
-  // covers a browser whose boxes were already checked on another device. The
-  // save goes ahead whether or not the subscribe worked, because the
-  // checkboxes and the hour belong to the account and not to this browser.
-  async function subscribe(settings) {
-    if (!settings.querySelector('input[data-notify]:checked')) return;
+  // showAdd shows Add this device unless this browser's push subscription is
+  // one of the rows under Subscribed devices.
+  function showAdd() {
+    const add = document.getElementById('push-add');
+    if (!add || endpoint === undefined) return;
+    const rows = Array.from(document.querySelectorAll('#devices form[data-endpoint]'));
+    add.hidden = rows.some((row) => row.dataset.endpoint === endpoint);
+  }
+
+  // fillSubscription subscribes this browser and writes the subscription into
+  // the Add this device form's hidden fields. When permission is refused or the
+  // push service does not respond, it writes the reason into the alert line
+  // and returns false.
+  async function fillSubscription(add) {
+    const message = document.getElementById('push-error');
+    message.textContent = '';
+    let subscription;
     try {
-      await push.subscribe(settings.dataset.key, settings.dataset.subscribe);
+      subscription = await push.subscription(add.dataset.key);
     } catch {
-      // Nothing is shown, because the swap replaces the page under the top
-      // bar and the Subscribed devices list says whether this browser is in
-      // it.
+      message.textContent = 'This device couldn’t be added. Try again in a minute.';
+      return false;
     }
+    if (!subscription) {
+      message.textContent =
+        'Notifications are blocked on this device. Allow them in your browser’s settings, then try again.';
+      return false;
+    }
+    const { keys } = subscription.toJSON();
+    endpoint = subscription.endpoint;
+    add.elements.endpoint.value = endpoint;
+    add.elements.p256dh.value = keys.p256dh;
+    add.elements.auth.value = keys.auth;
+    return true;
   }
 
   // unsubscribe takes this browser off the push service when the Remove form
@@ -79,6 +96,7 @@
       // A failed unsubscribe is ignored. The row is deleted either way, so
       // nothing will be sent to the subscription again.
       await subscription.unsubscribe().catch(() => {});
+      endpoint = null;
     }
   }
 

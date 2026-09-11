@@ -669,13 +669,73 @@ func TestGarden_NearlyFullThePhotosLineSaysToDeletePhotosToMakeRoom(t *testing.T
 	}
 }
 
+var storageBarWidth = regexp.MustCompile(`<div class="storage__used" style="width:([^"]*)">`)
+
+func TestGarden_ThePhotoStorageBarFillsToTheShareOfTheQuotaUsed(t *testing.T) {
+	f := careTypeGarden(t)
+	f.photoQuota(t, 4<<20)
+	f.insertPhoto(t, moreGardenID, morePlantID, 1<<20, nil)
+
+	got := storageBarWidth.FindStringSubmatch(f.page(t, f.handler.garden, gardenPath))
+
+	if got == nil || got[1] != "25%" {
+		t.Errorf("the bar is filled to %v, want 25%%", got)
+	}
+}
+
+func TestGarden_OverTheQuotaThePhotoStorageBarIsFullAndNoWider(t *testing.T) {
+	f := careTypeGarden(t)
+	f.photoQuota(t, 1<<20)
+	f.insertPhoto(t, moreGardenID, morePlantID, 3<<20, nil)
+
+	got := storageBarWidth.FindStringSubmatch(f.page(t, f.handler.garden, gardenPath))
+
+	if got == nil || got[1] != "100%" {
+		t.Errorf("the bar is filled to %v, want 100%%", got)
+	}
+}
+
+func TestGarden_OneByteOfPhotosShowsAFillInThePhotoStorageBar(t *testing.T) {
+	f := careTypeGarden(t)
+	f.photoQuota(t, 1_000_000_000)
+	f.insertPhoto(t, moreGardenID, morePlantID, 1, nil)
+
+	got := storageBarWidth.FindStringSubmatch(f.page(t, f.handler.garden, gardenPath))
+
+	if got == nil || got[1] != "0.1%" {
+		t.Errorf("the bar is filled to %v, want 0.1%%", got)
+	}
+}
+
+func TestGarden_WithNoPhotosThePhotoStorageBarHasNoFill(t *testing.T) {
+	f := careTypeGarden(t)
+
+	if got := storageBarWidth.FindStringSubmatch(f.page(t, f.handler.garden, gardenPath)); got != nil {
+		t.Errorf("a garden with no photos has a fill of %v", got)
+	}
+}
+
+func TestStorageLine_PhotosThatRoundTo0MBReadUnder1MB(t *testing.T) {
+	for _, c := range []struct {
+		used int64
+		want string
+	}{
+		{1, "Under 1 MB of 1 GB of photo storage used."},
+		{499_999, "Under 1 MB of 1 GB of photo storage used."},
+		{500_000, "1 MB of 1 GB of photo storage used."},
+	} {
+		if got := storageLine(photo.Usage{Used: c.used, Quota: 1_000_000_000}); got != c.want {
+			t.Errorf("storageLine(%d of 1 GB) = %q, want %q", c.used, got, c.want)
+		}
+	}
+}
+
 func TestStorageLine_AFigureUnderAGigabyteReadsAsWholeMegabytes(t *testing.T) {
 	for _, c := range []struct {
 		used, quota int64
 		want        string
 	}{
 		{0, 1_000_000_000, "0 MB of 1 GB of photo storage used."},
-		{200_000, 1_000_000_000, "0 MB of 1 GB of photo storage used."},
 		{312_000_000, 1_000_000_000, "312 MB of 1 GB of photo storage used."},
 		{999_499_999, 2_000_000_000, "999 MB of 2 GB of photo storage used."},
 	} {

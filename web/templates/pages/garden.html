@@ -26,11 +26,13 @@
 </form>
 {{end}}
 {{if .ManageTypes}}{{template "care-types" .}}{{end}}
-{{/* A sentence rather than a meter, because there is nothing to do about the
-     figure until the garden is nearly full. */}}
+{{/* The bar is hidden from screen readers, because the sentence above it
+     gives the same figure. The fill is left out when no photo is stored,
+     because the stylesheet gives it a minimum width. */}}
 <div class="section">
 <div class="section__head"><h2 class="section__title">Photos</h2></div>
 <p class="note">{{.Storage}}</p>
+<div class="storage" aria-hidden="true">{{if .StorageUsed}}<div class="storage__used" style="width:{{.StorageUsed}}%"></div>{{end}}</div>
 </div>
 {{/* The link is not styled as a warning, because rose means overdue in this
      app. Deleting is confirmed on the page it opens. */}}

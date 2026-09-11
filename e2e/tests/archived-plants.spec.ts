@@ -49,6 +49,7 @@ test('an archived plant is restored from its page and listed on Plants again @sw
 
   await expect(page).toHaveURL(`/plants/${archived.barry.id}`);
   await expect(page.getByRole('link', { name: 'Log care' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Archived plants' })).toHaveCount(0);
   await plants.open();
   await expect(plants.room(archived.barry.room).getByRole('link', { name: archived.barry.name })).toBeVisible();
   await expect(plants.archivedLink()).toHaveText('2 archived');
