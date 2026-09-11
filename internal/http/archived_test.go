@@ -209,19 +209,36 @@ func TestPlant_RestoringAnotherGardensArchivedPlantIs404AndLeavesItArchived(t *t
 	}
 }
 
-func TestPlant_RestoreSwapsThePageUnderTheTopBarAndOffersArchiveInstead(t *testing.T) {
-	f := rosewoodPlant(t)
-	f.exec(t, "UPDATE plant SET archived_at = now() WHERE id = $1", bigFellaID)
+// restoreSwap posts Restore for plantID the way htmx sends it.
+func (f *plantFixture) restoreSwap(t *testing.T, plantID uuid.UUID) *httptest.ResponseRecorder {
+	t.Helper()
 
 	ctx := context.WithValue(t.Context(), principalKey, f.principal)
-	req := httptest.NewRequestWithContext(ctx, http.MethodPost, restorePlantPath(bigFellaID), nil)
-	req.SetPathValue("plant", bigFellaID.String())
+	req := httptest.NewRequestWithContext(ctx, http.MethodPost, restorePlantPath(plantID), nil)
+	req.SetPathValue("plant", plantID.String())
 	req.Header.Set("HX-Request", "true")
 	req.Header.Set("HX-Target", plantBodyID)
 	rec := httptest.NewRecorder()
 	f.handler.restore(rec, req)
+	return rec
+}
 
-	body := fragment(t, rec, plantBodyID)
+func TestPlant_RestoreSwapsTheBackLinkToPlants(t *testing.T) {
+	f := rosewoodPlant(t)
+	f.exec(t, "UPDATE plant SET archived_at = now() WHERE id = $1", bigFellaID)
+
+	body := fragment(t, f.restoreSwap(t, bigFellaID), plantBodyID)
+
+	if m := backLink.FindStringSubmatch(body); m == nil || m[1] != plantsPath || m[2] != "Plants" {
+		t.Errorf("the swap's back link is %v, want Plants at %s", m, plantsPath)
+	}
+}
+
+func TestPlant_RestoreSwapsThePageUnderTheTopBarAndOffersArchiveInstead(t *testing.T) {
+	f := rosewoodPlant(t)
+	f.exec(t, "UPDATE plant SET archived_at = now() WHERE id = $1", bigFellaID)
+
+	body := fragment(t, f.restoreSwap(t, bigFellaID), plantBodyID)
 	if restoreForm.MatchString(body) {
 		t.Errorf("the swap still offers Restore:\n%s", text(body))
 	}

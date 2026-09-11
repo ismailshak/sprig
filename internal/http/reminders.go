@@ -24,8 +24,7 @@ type remindersPage struct {
 	Digest string
 	// Notifications is the URL the Turn on notifications link points at. With
 	// JavaScript the press subscribes this browser and opens Today. Without
-	// it the link opens the Notifications page under More, where Save
-	// changes subscribes the browser.
+	// it the link opens the Notifications page under More.
 	Notifications string
 	// Today is the URL the Not now and Continue links point at.
 	Today string

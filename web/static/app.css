@@ -1210,6 +1210,28 @@ a.foot-link { text-decoration: none; color: var(--ink-2); }
    broken. */
 .wide-action:disabled { opacity: .5; }
 
+/* The column holding Add this device and Send test notification under
+   Subscribed devices. It has the margins a wide action has on More's pages. */
+.devices__buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 20px 0 26px;
+}
+
+/* Hidden when no form in it is visible, because an empty column still takes
+   its margins. */
+.devices__buttons:not(:has(> form:not([hidden]))) { display: none; }
+
+/* The buttons are blocks, because as inline-blocks they leave space under them
+   inside their forms. The .app__body--sub prefix lets margin: 0 override
+   .app__body--sub .wide-action. */
+.app__body--sub .devices__buttons .wide-action { display: block; margin: 0; }
+
+/* The error line under Add this device takes no space until the script writes
+   a reason into it. */
+.devices__buttons .field__error:empty { margin: 0; }
+
 /* "Saved", under a Save button on the page a save redirected to. The wide
    action's bottom margin is pulled back so the word lands under the button. */
 .saved {
@@ -1726,8 +1748,7 @@ a.plant__keep { text-decoration: none; }
 
 /* The care type and date range form above the log, in a details element that
    renders closed so the log opens on its rows. The summary line names what is
-   set, with Clear beside it. The controls wrap onto as many lines as the width
-   needs, with Apply at the end of the last one. */
+   set, with Clear beside it. */
 .filters {
   display: flex;
   align-items: flex-start;
@@ -1767,12 +1788,24 @@ a.plant__keep { text-decoration: none; }
 
 .filters__details[open] > .filters__toggle svg { transform: rotate(90deg); }
 
+/* The fields are indented with a rule on their left to show they belong to the
+   Filter toggle above them. On a phone they stack at full width, because a
+   wrapping row left one or two fields alone on a second line. */
 .filters__form {
   display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: 8px 12px;
-  padding-top: 4px;
+  flex-direction: column;
+  gap: 10px;
+  margin: 4px 0 8px 7px;
+  padding-left: 15px;
+  border-left: 1px solid var(--line);
+}
+
+.filters__form .input--unit { width: 100%; }
+
+/* From this width the three fields and Apply fit on one line. */
+@media (min-width: 600px) {
+  .filters__form { flex-direction: row; flex-wrap: wrap; align-items: flex-end; gap: 8px 12px; }
+  .filters__form .input--unit { width: auto; }
 }
 
 .filters__field {
@@ -2128,6 +2161,20 @@ a.wide-action {
 }
 
 .note a { color: var(--ink-2); }
+
+/* The bar under the photo storage sentence on Garden. The inner element's
+   width is the share of the quota used, set in its style attribute. */
+.storage {
+  height: 6px;
+  margin: 10px 2px 0;
+  border-radius: var(--radius-pill);
+  background: var(--line);
+  overflow: hidden;
+}
+
+/* min-width is the bar's height, so a small share of the quota still shows a
+   fill. */
+.storage__used { height: 100%; min-width: 6px; background: var(--accent); }
 
 /* A two-line row with its only control at the right-hand end. Every list on
    these pages is one: a device, a browser, a token, a person, an invite. It

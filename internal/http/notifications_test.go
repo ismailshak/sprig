@@ -327,32 +327,18 @@ func TestBrowserName_NamesTheDeviceAndTheBrowserTheSubscriptionCameFrom(t *testi
 	}
 }
 
-// The form's two data attributes: the VAPID public key the script gives the
-// push API, and the URL it posts the subscription to.
-var (
-	pushKeyAttribute       = regexp.MustCompile(`<form method="post" action="/more/notifications"[^>]* data-key="([^"]*)"`)
-	pushSubscribeAttribute = regexp.MustCompile(`<form method="post" action="/more/notifications"[^>]* data-subscribe="([^"]*)"`)
-)
+// pushKeyAttribute captures the data-key of the form that posts to the
+// subscribe URL. The action is in the pattern because a subscription posted to
+// the page's own action would be saved as settings with both types off.
+var pushKeyAttribute = regexp.MustCompile(`<form method="post" action="` + subscribePath + `"[^>]* data-key="([^"]*)"`)
 
-func TestNotifications_ThePageHandsTheBrowserThePublicKeyToSubscribeUnder(t *testing.T) {
+func TestNotifications_AddThisDevicePostsToTheSubscribeURLWithThePublicKey(t *testing.T) {
 	f := moreGarden(t)
 
 	page := f.page(t, f.handler.notifications, notificationsPath)
 
 	if got := pushKeyAttribute.FindStringSubmatch(page); got == nil || got[1] != testPushKey {
-		t.Errorf("the form's data-key is %v, want the configured public key", got)
-	}
-}
-
-// An empty data-subscribe would post the subscription to the page's own
-// action. That saves the form and turns both types off.
-func TestNotifications_ThePageGivesTheScriptTheURLToPostTheSubscriptionTo(t *testing.T) {
-	f := moreGarden(t)
-
-	page := f.page(t, f.handler.notifications, notificationsPath)
-
-	if got := pushSubscribeAttribute.FindStringSubmatch(page); got == nil || got[1] != subscribePath {
-		t.Errorf("the form's data-subscribe is %v, want %s", got, subscribePath)
+		t.Errorf("the data-key of a form posting to %s is %v, want the configured public key", subscribePath, got)
 	}
 }
 
@@ -697,5 +683,40 @@ func TestNotifications_ARemoveSentAsASwapGetsTheDevicesWithoutThatRow(t *testing
 	body := fragment(t, rec, devicesID)
 	if strings.Contains(body, removeBrowserPath(phonePushID)) {
 		t.Errorf("the removed browser is still listed:\n%s", text(body))
+	}
+}
+
+// addDevice posts a new subscription the way Add this device sends it.
+func (f *moreFixture) addDevice(t *testing.T) *httptest.ResponseRecorder {
+	t.Helper()
+
+	p256dh, auth := browserKeys(t)
+	form := url.Values{"endpoint": {"https://push.example.com/this-device"}, "p256dh": {p256dh}, "auth": {auth}}
+	return f.swap(t, f.handler.subscribeBrowser, subscribePath, devicesID, "", "", form)
+}
+
+func TestSubscribe_AddThisDeviceGetsTheDevicesWithTheNewRow(t *testing.T) {
+	f := moreGarden(t)
+
+	body := fragment(t, f.addDevice(t), devicesID)
+
+	if rows := stackedRowsOf(body); len(rows) != 3 {
+		t.Errorf("the devices after adding one are %v, want the two already subscribed and the new one", rows)
+	}
+	if want := announced("Device added."); !strings.Contains(body, want) {
+		t.Errorf("the swap does not announce the new device:\n%s", body)
+	}
+}
+
+var sendTestAutofocus = regexp.MustCompile(`<button[^>]*\bautofocus\b[^>]*>Send test notification</button>`)
+
+func TestNotifications_SendTestNotificationIsMarkedAutofocusOnlyInTheResponseToAddThisDevice(t *testing.T) {
+	f := moreGarden(t)
+
+	if !sendTestAutofocus.MatchString(fragment(t, f.addDevice(t), devicesID)) {
+		t.Error("the response to Add this device does not put focus on Send test notification")
+	}
+	if sendTestAutofocus.MatchString(f.page(t, f.handler.notifications, notificationsPath)) {
+		t.Error("the page opened on its own puts focus on Send test notification")
 	}
 }

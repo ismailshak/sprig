@@ -83,6 +83,9 @@ type gardenPage struct {
 	// Storage is the sentence under the Photos heading, saying how much of the
 	// garden's photo storage is used.
 	Storage string
+	// StorageUsed is the percentage of the quota used, from 0 to 100. The bar
+	// under the sentence is filled to it.
+	StorageUsed float64
 	// Delete is the URL of the Delete garden page, linked at the bottom. Empty
 	// for a reader who may not delete the garden.
 	Delete string
@@ -417,6 +420,7 @@ func (h *more) renderGarden(w http.ResponseWriter, r *http.Request, page gardenP
 		return
 	}
 	page.Storage = storageLine(usage)
+	page.StorageUsed = storageUsed(usage)
 	v := view{page: "garden", status: status, announce: announce}
 	switch r.Header.Get("HX-Target") {
 	case careTypesID:
@@ -428,14 +432,30 @@ func (h *more) renderGarden(w http.ResponseWriter, r *http.Request, page gardenP
 }
 
 // storageLine is the sentence under Photos on the Garden page, such as "312 MB
-// of 1 GB of photo storage used." From nearlyFull of the quota up it adds
-// that deleting photos makes room.
+// of 1 GB of photo storage used." Photos that round to 0 MB read "Under 1 MB",
+// because 0 MB reads as nothing stored. From nearlyFull of the quota up it
+// adds that deleting photos makes room.
 func storageLine(usage photo.Usage) string {
-	line := storageFigure(usage.Used) + " of " + storageFigure(usage.Quota) + " of photo storage used."
+	used := storageFigure(usage.Used)
+	if usage.Used > 0 && used == "0 MB" {
+		used = "Under 1 MB"
+	}
+	line := used + " of " + storageFigure(usage.Quota) + " of photo storage used."
 	if !nearlyFullReached(usage) {
 		return line
 	}
 	return line + " When it’s full, delete photos to make room."
+}
+
+// storageUsed is the percentage of the quota used by the garden's photos,
+// rounded to one decimal place. It is capped at 100 because the quota can be
+// lowered below what is already stored. It is at least 0.1 when any photo is
+// stored, because the template leaves out the fill when the value is 0.
+func storageUsed(usage photo.Usage) float64 {
+	if usage.Used == 0 {
+		return 0
+	}
+	return max(0.1, min(100, math.Round(float64(usage.Used)/float64(usage.Quota)*1000)/10))
 }
 
 // storageFigure formats a byte count as whole megabytes, or as gigabytes from

@@ -12,17 +12,24 @@
   // modals is the dialogs already reopened as modals. Reopening one a second
   // time would close it.
   const modals = new WeakSet();
-  // opener is the element that had focus when the sheet was requested, the
-  // row's link or the Log care button. It is null when nothing had focus, and
-  // focus goes back to it when the sheet closes. The browser records an opener
-  // of its own at showModal, but WebKit has focused the dialog by then, so the
-  // browser's record is the dialog.
+  // shown is the sheet most recently reopened as a modal. A swap that removes
+  // it and adds no other sheet is the response to a save or a delete.
+  let shown = null;
+  // opener is the element that had focus when the sheet was requested, such as
+  // a row's link or Log care. Focus goes back to it when the sheet closes.
+  // When nothing had focus it is the element that sent the request, because
+  // Safari does not focus a link or button on a click or a tap. The browser's
+  // own record of the opener is not used, because WebKit has already focused
+  // the dialog when showModal records it.
   let opener = null;
 
   document.addEventListener('htmx:beforeSwap', (event) => {
     if (event.detail.target.id !== 'sheet') return;
     const active = document.activeElement;
-    opener = active && active !== document.body ? active : null;
+    // A refused time swaps the open sheet for another while focus is inside
+    // it. The opener stays the element that opened the first one.
+    if (active && active.closest('#sheet')) return;
+    opener = active && active !== document.body ? active : event.detail.requestConfig.elt;
   });
 
   // modal reopens an open dialog as a modal. The open attribute has to come
@@ -32,6 +39,7 @@
   const modal = (dialog) => {
     if (!dialog.open || modals.has(dialog)) return;
     modals.add(dialog);
+    shown = dialog;
     dialog.removeAttribute('open');
     dialog.showModal();
     dialog.focus();
@@ -41,15 +49,42 @@
     });
   };
 
+  // refocus puts focus back on the opener, without scrolling, after a save or
+  // delete removed the sheet. When the swap replaced the opener, focus goes to
+  // the first link or button in the element that now has the id of the
+  // opener's nearest ancestor with an id. When a correction moved the event
+  // off the log being shown, it goes to the first link or button in the
+  // element with swappedID. Without this,
+  // focus goes to the top row of the log and the page scrolls up to it.
+  const refocus = (swappedID) => {
+    if (!opener) return;
+    let target = opener;
+    if (!opener.isConnected) {
+      const row = opener.closest('[id]');
+      const replaced = (row && document.getElementById(row.id)) || document.getElementById(swappedID);
+      target = replaced && replaced.querySelector('a[href], button');
+    }
+    opener = null;
+    if (target) target.focus({ preventScroll: true });
+  };
+
   // A sheet rendered with the page is made modal at once. One swapped in
   // later is found after the swap, because htmx:load reports the element it
   // added and an outerHTML swap of #sheet can report the parent instead.
   const sheetOnPage = () => document.querySelector('dialog.sheet[open]');
   const open = sheetOnPage();
   if (open) modal(open);
-  document.addEventListener('htmx:afterSwap', () => {
+  // htmx fires afterSwap on each element a swap adds, once all of them are in
+  // place. detail.target is the element the request targeted. An outerHTML
+  // swap has already removed it, so refocus looks its id up again.
+  document.addEventListener('htmx:afterSwap', (event) => {
     const dialog = sheetOnPage();
-    if (dialog) modal(dialog);
+    if (dialog) {
+      modal(dialog);
+    } else if (shown && !shown.isConnected) {
+      shown = null;
+      refocus(event.detail.target.id);
+    }
   });
 
   // closeAfter is how many pixels the panel has to be dragged down for the

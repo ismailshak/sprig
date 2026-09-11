@@ -17,10 +17,10 @@
 
      Restore changes the hero line, the back link, the care buttons, the
      schedule rows, Add photo and these buttons, so with JavaScript it swaps
-     the page under the top bar. Restore and the Archive button that takes its
-     place share the id plant-action, because htmx puts focus on the element
-     holding the focused element's id after a swap. Only one of the two is
-     ever on the page. */}}
+     the page under the top bar and the back link above it. Restore and the
+     Archive button that takes its place share the id plant-action, because
+     htmx puts focus on the element holding the focused element's id after a
+     swap. Only one of the two is ever on the page. */}}
 {{define "plant-foot"}}{{with .Foot}}<div class="plant__foot{{if .Asking}} plant__foot--asking{{end}}" id="plant-foot">
 {{if .Restore}}
 <form method="post" action="{{.Restore}}" hx-post="{{.Restore}}" hx-target="#plant" hx-swap="outerHTML settle:0ms"><button class="care care--outline" id="plant-action">Restore</button></form>

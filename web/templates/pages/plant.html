@@ -3,11 +3,19 @@
 {{/* The top bar holds only the back link. The heading below it already names
      the plant. */}}
 {{define "main"}}
-<header class="topbar topbar--back">
-<a class="backlink" href="{{.Back.Href}}">{{template "icon-back"}}{{.Back.Label}}</a>
+<header class="topbar topbar--back" id="plant-bar">
+{{template "plant-back-link" .Back}}
 </header>
 {{template "plant" .}}
 {{end}}
+
+{{define "plant-back-link"}}<a class="backlink" href="{{.Href}}">{{template "icon-back"}}{{.Label}}</a>{{end}}
+
+{{/* The response to Restore with htmx. It renders the page under the top bar
+     and replaces the back link out of band, because an archived plant's back
+     link goes to Archived plants. */}}
+{{define "plant-restored"}}{{template "plant" .}}
+<span hx-swap-oob="innerHTML:#plant-bar">{{template "plant-back-link" .Back}}</span>{{end}}
 
 {{/* Everything under the top bar, and the fragment Restore swaps. Sections
      are in phone order. Above 900px the stylesheet's grid areas move the

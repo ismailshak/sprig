@@ -128,6 +128,25 @@ test('an event logged as the wrong care is corrected to the right one @swap', as
   await expect(activity.rows().first()).toContainText('Fed');
 });
 
+test('saving a correction leaves focus on the corrected row without scrolling @js', async ({
+  page,
+  activity,
+  sheet,
+}) => {
+  await activity.open();
+  const row = activity.rows().nth(12);
+  const id = await row.getAttribute('id');
+  await row.scrollIntoViewIfNeeded();
+
+  await activity.openSheet(row);
+  await sheet.submit('Save changes');
+  await expect(sheet.dialog()).toHaveCount(0);
+
+  const corrected = page.locator(`#${id}`).getByRole('link');
+  await expect(corrected).toBeFocused();
+  await expect(corrected).toBeInViewport();
+});
+
 test('a deleted event is not on the log @swap', async ({ page, activity, sheet }) => {
   await activity.open();
   const row = activity.rows().first();

@@ -34,7 +34,13 @@ export class NotificationsScreen {
     await this.page.getByText('Saved', { exact: true }).waitFor();
   }
 
-  // The line the page's script writes the browser's refusal into.
+  // The button under Subscribed devices that subscribes this browser. The
+  // server renders it hidden and the page's script shows it.
+  addDevice(): Locator {
+    return this.page.getByRole('button', { name: 'Add this device' });
+  }
+
+  // The line the page's script writes into when Add this device is refused.
   refusal(): Locator {
     return this.page.getByRole('alert');
   }

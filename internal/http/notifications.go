@@ -52,9 +52,7 @@ func (f notifyUser) call(ctx context.Context, user store.AppUser, n push.Notific
 	}
 }
 
-// subscribePath is the URL the page's script posts a new push subscription
-// to. There is no form for it, because only the browser's push API can make a
-// subscription.
+// subscribePath is the URL a new push subscription is posted to.
 const subscribePath = notificationsPath + "/browsers"
 
 const sendTestPath = notificationsPath + "/test"
@@ -79,7 +77,7 @@ const (
 // notification button.
 var testResultLines = map[string]string{
 	testSent:   "Test sent. If it didn’t arrive, check this device’s notification settings.",
-	testGone:   "This device’s subscription had expired and has been removed. Turn on a notification and save to subscribe again.",
+	testGone:   "This device’s subscription had expired and has been removed. Add this device to subscribe it again.",
 	testFailed: "The test couldn’t be sent. Try again in a minute.",
 	testNone:   "This device isn’t subscribed.",
 }
@@ -103,7 +101,7 @@ type notificationsPage struct {
 	// empty the page is one line saying notifications are not enabled, with no
 	// checkboxes and no device list.
 	Key string
-	// Subscribe is the URL the script posts the browser's subscription to.
+	// Subscribe is the URL Add this device posts to.
 	Subscribe string
 	// Install is the URL of the Install sprig link. The script shows the link
 	// in place of the form on an iPhone that has not put sprig on its Home
@@ -132,11 +130,14 @@ type notificationsPage struct {
 	// Saved is true on the page a save redirects to. "Saved" is shown beside
 	// the button.
 	Saved bool
+	// FocusSendTest is true on the response to Add this device. Send test
+	// notification is marked autofocus.
+	FocusSendTest bool
 }
 
 // browserRow is one push subscription, shown as a row under Subscribed
 // devices. A subscription belongs to a browser rather than to an account, so
-// one person has a row for each browser they turned notifications on in.
+// one person has a row for each browser they subscribed.
 type browserRow struct {
 	Name string
 	Used string
@@ -149,8 +150,8 @@ type browserRow struct {
 }
 
 // devicesID is both the HTML id of the Subscribed devices section and the
-// name of the template that renders it. Remove and Send test notification
-// swap it.
+// name of the template that renders it. Add this device, Remove and Send test
+// notification swap it.
 const devicesID = "devices"
 
 func (h *more) notifications(w http.ResponseWriter, r *http.Request) {
@@ -167,11 +168,13 @@ const notificationsID = "notifications"
 
 // notificationsState is what one response adds to the saved settings: the
 // line under Send test notification, whether Saved is shown under Save
-// changes, and the sentence a swap puts in the live region.
+// changes, whether Send test notification takes focus, and the sentence a
+// swap puts in the live region.
 type notificationsState struct {
-	testResult string
-	saved      bool
-	announce   string
+	testResult    string
+	saved         bool
+	focusSendTest bool
+	announce      string
 }
 
 // renderNotifications writes the page. hour is the digest hour to show. It is
@@ -195,6 +198,7 @@ func (h *more) renderNotifications(w http.ResponseWriter, r *http.Request, princ
 	page.Key = h.pushKey
 	page.TestResult = state.testResult
 	page.Saved = state.saved
+	page.FocusSendTest = state.focusSendTest
 	v := view{page: "notifications", announce: state.announce}
 	switch r.Header.Get("HX-Target") {
 	case devicesID:
@@ -249,7 +253,10 @@ func (h *more) sendTestNotification(w http.ResponseWriter, r *http.Request) {
 
 // subscribeBrowser stores the endpoint and two keys the browser's push API
 // produced. The row belongs to the signed-in account, so a browser another
-// account subscribed in moves to this one and its dates start over.
+// account subscribed in moves to this one and its dates start over. Add this
+// device posts as a swap and gets the Subscribed devices section with the new
+// row. The Reminders page and the banner on Today post with fetch and get an
+// empty 204.
 func (h *more) subscribeBrowser(w http.ResponseWriter, r *http.Request) {
 	// With push off no browser can have a subscription to post, so the route
 	// is a 404.
@@ -284,6 +291,11 @@ func (h *more) subscribeBrowser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.wake.call()
+	if isHTMX(r) {
+		state := notificationsState{focusSendTest: true, announce: "Device added."}
+		h.renderNotifications(w, r, principal, principal.Membership.DigestHour, state)
+		return
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
