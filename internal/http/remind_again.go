@@ -11,7 +11,7 @@ import (
 
 const (
 	// RemindAgainPath is the URL the Remind me again banner on Today and the
-	// digest notification's In 1 hour and In 2 hours buttons post to.
+	// digest notification's Remind me again buttons post to.
 	RemindAgainPath = "/remind-again"
 
 	// digestParam is the query parameter the digest notification's URL adds

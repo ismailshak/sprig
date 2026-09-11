@@ -883,12 +883,16 @@ func TestBuild_TheDigestHasTheGardensTagAndTheTwoDelayButtons(t *testing.T) {
 	if want := "https://sprig.example.com/remind-again"; got.Again.URL != want {
 		t.Errorf("the form posts to %q, want %q", got.Again.URL, want)
 	}
-	var labels []string
+	var labels, actions []string
 	for _, delay := range got.Again.Delays {
 		labels = append(labels, delay.Label)
+		actions = append(actions, delay.Action)
 	}
 	if want := []string{"In 1 hour", "In 2 hours"}; !slices.Equal(labels, want) {
-		t.Errorf("the form offers %q, want %q", labels, want)
+		t.Errorf("the banner offers %q, want %q", labels, want)
+	}
+	if want := []string{"Remind me again in 1 hour", "Remind me again in 2 hours"}; !slices.Equal(actions, want) {
+		t.Errorf("the notification offers %q, want %q", actions, want)
 	}
 }
 

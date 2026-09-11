@@ -113,8 +113,8 @@ async function postFetchedAt(clientId, fetchedAt) {
 // and a tag. The icon is the plant's picture when the notification is about
 // one plant, and empty otherwise. A notification with the same tag as one
 // already showing replaces it. The daily digest also has an again object:
-// the URL its In 1 hour and In 2 hours buttons post to, the field name they
-// post, and one delay per button.
+// the URL its Remind me again buttons post to, the field name they post, and
+// one delay per button with the button's text.
 self.addEventListener('push', (event) => {
   const notification = event.data ? event.data.json() : {};
   const options = {
@@ -124,7 +124,7 @@ self.addEventListener('push', (event) => {
     data: { url: notification.url, again: notification.again },
   };
   if (notification.again) {
-    options.actions = notification.again.delays.map((delay) => ({ action: delay.value, title: delay.label }));
+    options.actions = notification.again.delays.map((delay) => ({ action: delay.value, title: delay.action }));
   }
   event.waitUntil(self.registration.showNotification(notification.title || 'sprig', options));
 });

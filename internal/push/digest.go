@@ -39,8 +39,7 @@ type Digest struct {
 	// todayURL is the URL the notification opens when it is tapped: the Today
 	// page, with the query string that shows the Remind me again banner.
 	todayURL string
-	// again is the form the notification's In 1 hour and In 2 hours buttons
-	// post.
+	// again is the form the notification's Remind me again buttons post.
 	again *RemindAgain
 	// now supplies the current time, so a test can fix the day.
 	now func() time.Time

@@ -45,10 +45,12 @@ type RemindAgain struct {
 }
 
 // Delay is one fixed delay the digest can be sent again after. Value is what
-// the form posts and Label is the button's text.
+// the form posts, Label is the banner button's text and Action is the
+// notification button's text.
 type Delay struct {
 	Value    string        `json:"value"`
 	Label    string        `json:"label"`
+	Action   string        `json:"action"`
 	Duration time.Duration `json:"-"`
 }
 
@@ -58,8 +60,8 @@ const DelayField = "delay"
 // Delays is every fixed delay the Remind me again form offers, in the order
 // the buttons appear.
 var Delays = []Delay{
-	{Value: "1h", Label: "In 1 hour", Duration: time.Hour},
-	{Value: "2h", Label: "In 2 hours", Duration: 2 * time.Hour},
+	{Value: "1h", Label: "In 1 hour", Action: "Remind me again in 1 hour", Duration: time.Hour},
+	{Value: "2h", Label: "In 2 hours", Action: "Remind me again in 2 hours", Duration: 2 * time.Hour},
 }
 
 // DelayFor returns the delay whose Value is value, and false when the form
