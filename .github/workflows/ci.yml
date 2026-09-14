@@ -1,6 +1,6 @@
 name: CI
-# A push to main runs the same four jobs as a pull request and then publishes
-# the :main image, so the tip ships only from a commit that passed them. The
+# A push to main runs the same jobs as a pull request and then publishes the
+# :main image. The tip ships only from a commit that passed them. The
 # push run also writes the caches pull requests read, because a cache written
 # on a pull request branch is only readable from that branch. A version tag
 # runs the Release workflow instead.
@@ -52,9 +52,41 @@ jobs:
       - name: Set up Go
         uses: ./.github/actions/setup-go
       - name: Run tests
-        run: mise run test
+        run: mise run test --race
+
+  # changes sets needed to false for a pull request that changes only files e2e
+  # does not depend on.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      # The step runs only on a pull request. Its output is empty on any other run.
+      needed: ${{ steps.e2e.outputs.needed || 'true' }}
+    steps:
+      - name: Check out code
+        if: github.event_name == 'pull_request'
+        uses: actions/checkout@v7
+        with:
+          # The task diffs the pull request against its base branch. That needs the history of both.
+          fetch-depth: 0
+      - name: Install mise
+        if: github.event_name == 'pull_request'
+        uses: jdx/mise-action@v4
+        with:
+          version: 2026.9.7
+          install: false
+      - name: Decide whether the pull request needs e2e
+        id: e2e
+        if: github.event_name == 'pull_request'
+        env:
+          # The task runs bash and git alone. Without this, mise run installs the whole toolchain first.
+          MISE_TASK_RUN_AUTO_INSTALL: "false"
+        run: |
+          needed=$(mise run --quiet ci:e2e-needed "origin/$GITHUB_BASE_REF")
+          echo "needed=$needed" >> "$GITHUB_OUTPUT"
 
   e2e:
+    needs: changes
+    if: needs.changes.outputs.needed == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Check out code
@@ -76,10 +108,8 @@ jobs:
         env:
           # One stack per worker, on a four-core runner
           SPRIG_E2E_WORKERS: 4
-      # A test that fails and then passes on the retry leaves the job green. The trace
-      # of the failed attempt is only kept if this step runs on a green run too.
       - name: Keep the traces and container logs
-        if: always()
+        if: failure()
         uses: actions/upload-artifact@v7
         with:
           name: playwright-traces
@@ -91,10 +121,21 @@ jobs:
     steps:
       - name: Check out code
         uses: actions/checkout@v7
+        with:
+          # go build reads the version from the nearest tag. A shallow clone does not fetch tags.
+          fetch-depth: 0
       - name: Set up the toolchain
         uses: ./.github/actions/setup-go
       - name: Compile the binaries
         run: mise run build:image
+      # publish builds the :main image from these binaries instead of compiling them again
+      - name: Keep the binaries for publish
+        if: github.event_name == 'push'
+        uses: actions/upload-artifact@v7
+        with:
+          name: dist
+          path: dist
+          retention-days: 1
       - name: Set up Buildx
         uses: docker/setup-buildx-action@v4
       - name: Build the image
@@ -114,13 +155,14 @@ jobs:
     steps:
       - name: Check out code
         uses: actions/checkout@v7
+      - name: Download the binaries the image job compiled
+        uses: actions/download-artifact@v8
         with:
-          # go build reads the version from the nearest tag. A shallow clone does not fetch tags.
-          fetch-depth: 0
-      - name: Set up the toolchain
-        uses: ./.github/actions/setup-go
-      - name: Compile the binaries
-        run: mise run build:image
+          name: dist
+          path: dist
+      # An artifact does not keep file modes. The image copies the binary with the mode it has here.
+      - name: Make the binaries executable
+        run: chmod +x dist/linux/*/sprig
       - name: Work out the tags
         id: meta
         uses: docker/metadata-action@v6
