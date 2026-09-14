@@ -119,13 +119,13 @@ Every setting is an environment variable, read once at startup. A missing or inv
 | `SPRIG_VAPID_SUBJECT`     | when push is on |                         | A `mailto:` address or an https URL push services can contact you at.                                                                                                                                  |
 | `SPRIG_TEMPLATE_DIR`      | no              |                         | A directory of templates to re-read on every request, for development. Unset means the templates built into the binary.                                                                                |
 | `SPRIG_LOG_LEVEL`         | no              | `info`                  | One of `debug`, `info`, `warn`, `error`.                                                                                                                                                               |
-| `SPRIG_LOG_FORMAT`        | no              | `json`                  | `json` or `text`.                                                                                                                                                                                      |
+| `SPRIG_LOG_FORMAT`        | no              | `text`                  | `text` or `json`.                                                                                                                                                                                      |
 
 A passkey is bound to the relying party id. Changing the id loses every passkey, so set `SPRIG_RP_ID` before anyone registers one. Set it to the registrable domain, `example.com` rather than `sprig.example.com`, and the app can move to another name under that domain and keep every passkey. The value must be the base URL's host or a parent domain of it.
 
 ## Operating it
 
-`GET /healthz` returns the version and revision as JSON. It needs no sign-in. The image's `HEALTHCHECK` runs `sprig health`. That GETs the route on `SPRIG_ADDR` and exits non-zero unless it gets a 200. Compose can override the interval.
+`GET /healthz` returns the version and revision as JSON. It needs no sign-in. The image's `HEALTHCHECK` runs `sprig health`. That GETs the route on `SPRIG_ADDR` and exits non-zero unless it gets a 200. The check runs every five minutes. For the first 30 seconds after the container starts, it runs every second until it passes. Compose can override the interval. The server logs a request to `/healthz` at debug level.
 
 Once a day the server deletes rows no page shows: sessions past `SPRIG_SESSION_TTL`, redeemed invites and expired sign-in links older than 30 days, and recovery codes a newer batch replaced. It logs what it deleted. Rows a page shows, such as an expired token on Tokens or an ended membership on People, are deleted from that page.
 

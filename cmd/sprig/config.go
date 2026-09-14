@@ -86,7 +86,7 @@ func loadConfig(getenv func(string) string) (config, error) {
 		trustedIPHeader: strings.TrimSpace(getenv("SPRIG_TRUSTED_IP_HEADER")),
 		templateDir:     strings.TrimSpace(getenv("SPRIG_TEMPLATE_DIR")),
 		photoDir:        withDefault(strings.TrimSpace(getenv("SPRIG_PHOTO_DIR")), "./photos"),
-		logFormat:       withDefault(getenv("SPRIG_LOG_FORMAT"), "json"),
+		logFormat:       withDefault(getenv("SPRIG_LOG_FORMAT"), "text"),
 	}
 
 	if cfg.logFormat != "json" && cfg.logFormat != "text" {
