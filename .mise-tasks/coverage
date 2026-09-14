@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+#MISE description="Run the Go tests, write the coverage profile to coverage.out and print the coverage of each function and of the whole module"
+#USAGE flag "--html" help="Show the source in the browser with its covered lines marked instead"
+set -euo pipefail
+
+cd "${MISE_PROJECT_ROOT:?}"
+
+mise run test --coverprofile coverage.out
+
+if [ "${usage_html:-false}" = "true" ]; then
+  go tool cover -html coverage.out
+else
+  go tool cover -func coverage.out
+fi

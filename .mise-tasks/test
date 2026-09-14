@@ -2,6 +2,8 @@
 #MISE description="Run the Go tests against a throwaway Postgres"
 #USAGE arg "[packages]..." var=#true help="Packages to test, ./... when omitted"
 #USAGE flag "--run <regexp>" help="Only tests whose names match the regexp"
+#USAGE flag "--race" help="Build the tests with the race detector. The run takes about a minute longer"
+#USAGE flag "--coverprofile <file>" help="Write a coverage profile of every package in the module to the file"
 set -euo pipefail
 
 cd "${MISE_PROJECT_ROOT:?}"
@@ -31,6 +33,14 @@ export SPRIG_DATABASE_URL="postgres://sprig:sprig@127.0.0.1:${port##*:}/sprig?ss
 args=()
 if [ -n "${usage_run-}" ]; then
   args+=(-run "$usage_run")
+fi
+if [ "${usage_race:-false}" = "true" ]; then
+  args+=(-race)
+fi
+if [ -n "${usage_coverprofile-}" ]; then
+  # Without -coverpkg, each package counts only the statements its own tests run.
+  # A store query that only the handler tests run is reported as uncovered.
+  args+=(-coverprofile "$usage_coverprofile" -coverpkg ./...)
 fi
 # usage hands the packages over as one shell-escaped string
 eval "packages=(${usage_packages-})"
