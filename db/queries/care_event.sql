@@ -67,6 +67,20 @@ WHERE care_event.garden_id = @garden_id
 ORDER BY care_event.performed_at DESC, care_event.id DESC
 LIMIT @count;
 
+-- ListCareEventsBetween reads the care performed from since up to until, oldest
+-- first, for the days of one month on the calendar. It has no limit because
+-- the range is a month.
+-- name: ListCareEventsBetween :many
+SELECT sqlc.embed(care_event), sqlc.embed(plant), sqlc.embed(care_type), app_user.display_name AS performed_by_name
+FROM care_event
+JOIN plant ON plant.id = care_event.plant_id AND plant.garden_id = care_event.garden_id
+JOIN care_type ON care_type.id = care_event.care_type_id AND care_type.garden_id = care_event.garden_id
+JOIN app_user ON app_user.id = care_event.performed_by
+WHERE care_event.garden_id = @garden_id
+  AND care_event.performed_at >= @since
+  AND care_event.performed_at < @until
+ORDER BY care_event.performed_at, care_event.id;
+
 -- Ordered by performed_at because a plant's Recent section is a history of the
 -- plant, not of data entry. No plant join, because the caller already has the
 -- plant.

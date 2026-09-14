@@ -286,6 +286,90 @@ func (q *Queries) ListCareEventLog(ctx context.Context, arg ListCareEventLogPara
 	return items, nil
 }
 
+const listCareEventsBetween = `-- name: ListCareEventsBetween :many
+SELECT care_event.id, care_event.garden_id, care_event.plant_id, care_event.care_type_id, care_event.performed_by, care_event.performed_at, care_event.recorded_at, care_event.done, care_event.note, care_event.override_interval_days, plant.id, plant.garden_id, plant.nickname, plant.common_name, plant.botanical_name, plant.location, plant.sun, plant.water_needs, plant.feed_needs, plant.soil, plant.climate, plant.pot, plant.notes, plant.acquired_year, plant.acquired_month, plant.created_at, plant.archived_at, plant.profile_photo_id, care_type.id, care_type.garden_id, care_type.name, care_type.slug, care_type.created_at, care_type.archived_at, app_user.display_name AS performed_by_name
+FROM care_event
+JOIN plant ON plant.id = care_event.plant_id AND plant.garden_id = care_event.garden_id
+JOIN care_type ON care_type.id = care_event.care_type_id AND care_type.garden_id = care_event.garden_id
+JOIN app_user ON app_user.id = care_event.performed_by
+WHERE care_event.garden_id = $1
+  AND care_event.performed_at >= $2
+  AND care_event.performed_at < $3
+ORDER BY care_event.performed_at, care_event.id
+`
+
+type ListCareEventsBetweenParams struct {
+	GardenID uuid.UUID
+	Since    time.Time
+	Until    time.Time
+}
+
+type ListCareEventsBetweenRow struct {
+	CareEvent       CareEvent
+	Plant           Plant
+	CareType        CareType
+	PerformedByName string
+}
+
+// ListCareEventsBetween reads the care performed from since up to until, oldest
+// first, for the days of one month on the calendar. It has no limit because
+// the range is a month.
+func (q *Queries) ListCareEventsBetween(ctx context.Context, arg ListCareEventsBetweenParams) ([]ListCareEventsBetweenRow, error) {
+	rows, err := q.db.Query(ctx, listCareEventsBetween, arg.GardenID, arg.Since, arg.Until)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListCareEventsBetweenRow
+	for rows.Next() {
+		var i ListCareEventsBetweenRow
+		if err := rows.Scan(
+			&i.CareEvent.ID,
+			&i.CareEvent.GardenID,
+			&i.CareEvent.PlantID,
+			&i.CareEvent.CareTypeID,
+			&i.CareEvent.PerformedBy,
+			&i.CareEvent.PerformedAt,
+			&i.CareEvent.RecordedAt,
+			&i.CareEvent.Done,
+			&i.CareEvent.Note,
+			&i.CareEvent.OverrideIntervalDays,
+			&i.Plant.ID,
+			&i.Plant.GardenID,
+			&i.Plant.Nickname,
+			&i.Plant.CommonName,
+			&i.Plant.BotanicalName,
+			&i.Plant.Location,
+			&i.Plant.Sun,
+			&i.Plant.WaterNeeds,
+			&i.Plant.FeedNeeds,
+			&i.Plant.Soil,
+			&i.Plant.Climate,
+			&i.Plant.Pot,
+			&i.Plant.Notes,
+			&i.Plant.AcquiredYear,
+			&i.Plant.AcquiredMonth,
+			&i.Plant.CreatedAt,
+			&i.Plant.ArchivedAt,
+			&i.Plant.ProfilePhotoID,
+			&i.CareType.ID,
+			&i.CareType.GardenID,
+			&i.CareType.Name,
+			&i.CareType.Slug,
+			&i.CareType.CreatedAt,
+			&i.CareType.ArchivedAt,
+			&i.PerformedByName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listLatestCareEvents = `-- name: ListLatestCareEvents :many
 SELECT DISTINCT ON (plant_id, care_type_id) id, garden_id, plant_id, care_type_id, performed_by, performed_at, recorded_at, done, note, override_interval_days
 FROM care_event
