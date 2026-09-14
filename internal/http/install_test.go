@@ -1,15 +1,9 @@
 package http
 
 import (
-	"regexp"
 	"slices"
 	"strings"
 	"testing"
-)
-
-var (
-	platformChipElement = regexp.MustCompile(`<button class="chip" name="platform" value="([^"]+)" aria-pressed="(true|false)">([^<]+)</button>`)
-	installStep         = regexp.MustCompile(`<li>([^<]+)</li>`)
 )
 
 type platformChip struct {
@@ -18,10 +12,11 @@ type platformChip struct {
 	on    bool
 }
 
+// chipsOf returns the platform chips on the Install page, in page order.
 func chipsOf(page string) []platformChip {
 	var out []platformChip
-	for _, m := range platformChipElement.FindAllStringSubmatch(page, -1) {
-		out = append(out, platformChip{value: m[1], label: text(m[3]), on: m[2] == "true"})
+	for _, button := range readHTML(page).all(isTag("button"), attrIs("name", "platform")) {
+		out = append(out, platformChip{value: button.attr("value"), label: button.text(), on: button.attr("aria-pressed") == "true"})
 	}
 	return out
 }
@@ -66,8 +61,11 @@ func TestInstall_ThePlatformInTheQueryStringIsTheOneShown(t *testing.T) {
 	if got := pressedChip(t, page); got.value != "android" {
 		t.Errorf("the platform pressed is %q, want android", got.value)
 	}
-	steps := installStep.FindAllStringSubmatch(page, -1)
-	if len(steps) != 3 || !strings.Contains(text(steps[0][1]), "Chrome") {
+	var steps []string
+	for _, step := range readHTML(page).first(isTag("ol")).all(isTag("li")) {
+		steps = append(steps, step.text())
+	}
+	if len(steps) != 3 || !strings.Contains(steps[0], "Chrome") {
 		t.Errorf("the steps shown are %v, want Android's three", steps)
 	}
 }
@@ -87,7 +85,7 @@ func TestInstall_HasTheTabBar(t *testing.T) {
 
 	page := f.page(t, f.handler.install, installPath)
 
-	if !strings.Contains(page, "nav__item") {
+	if readHTML(page).first(isTag("nav")) == nil {
 		t.Error("the page has no tab bar, and it is reached from More")
 	}
 }

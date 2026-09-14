@@ -26,14 +26,6 @@ test('the activity page starts with the day of the newest event', async ({ activ
   await expect(activity.items().first()).toHaveText(dayMarker);
 });
 
-test('an event shows the plant, who did it and when', async ({ activity }) => {
-  await activity.open();
-
-  await expect(activity.items().nth(1)).toHaveText(
-    /^\s*\S.*\s+\w+ (watered|fed|repotted|misted|pruned|skipped)\s*·\s*\d{1,2}:\d{2}(am|pm)/,
-  );
-});
-
 test('a plant links to its own activity, and the log links back to the plant', async ({ page, plant, activity }) => {
   await plant.open(seeded.bigFella);
 

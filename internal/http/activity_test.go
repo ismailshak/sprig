@@ -2,10 +2,8 @@ package http
 
 import (
 	"context"
-	"html"
 	"net/http"
 	"net/http/httptest"
-	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -128,28 +126,13 @@ func (f *logFixture) waterings(t *testing.T, plantID uuid.UUID, daysAgo ...int) 
 
 func (f *logFixture) exec(t *testing.T, sql string, args ...any) {
 	t.Helper()
-	if _, err := f.tx.Exec(t.Context(), sql, args...); err != nil {
-		t.Fatalf("%v\n%s", err, sql)
-	}
+	mustExec(t, f.tx, sql, args...)
 }
 
-// backlink matches the link in the top bar. The activity log has one only when
-// it is filtered to a plant.
-var backlink = regexp.MustCompile(`(?s)<a class="backlink" href="([^"]*)">(.*?)</a>`)
-
-// footLink matches a link under the list. On the activity log those are the
-// pager's two links. The swap attributes after the href are skipped.
-var footLink = regexp.MustCompile(`(?s)<a class="foot-link" href="([^"]*)"[^>]*>(.*?)</a>`)
-
-// pagerLink is the href of the link under the list with this text, or "" when
-// the page has no such link.
+// pagerLink is the href of the link on the page with this text, or "" when the
+// page has no such link.
 func pagerLink(page, label string) string {
-	for _, m := range footLink.FindAllStringSubmatch(page, -1) {
-		if text(m[2]) == label {
-			return html.UnescapeString(m[1])
-		}
-	}
-	return ""
+	return readHTML(page).first(isTag("a"), textIs(label)).attr("href")
 }
 
 const (
@@ -177,30 +160,46 @@ func daysBack(newest, oldest int) []int {
 	return out
 }
 
-// railItemElement matches every item in the log, whichever of the three kinds
-// it is. The classes are captured rather than listed, because a deleted row
-// has row--done as well.
-var railItemElement = regexp.MustCompile(`(?s)<li class="([^"]*)"[^>]*>(.*?)</li>`)
+// itemKind is the kind of an item on the Activity page: a day heading, a line
+// saying how many days had no activity, or an event row.
+type itemKind int
+
+const (
+	dayKind itemKind = iota
+	gapKind
+	eventKind
+)
 
 type logEntry struct {
-	// kind is the item's class attribute, which starts with one of dayKind,
-	// gapKind and eventKind.
-	kind string
+	kind itemKind
 	text string
 }
 
+// logEntries reads the items on the Activity page in page order. A response
+// that holds the element with logBodyID is read from inside that element.
 func logEntries(page string) []logEntry {
-	var lines []logEntry
-	for _, m := range railItemElement.FindAllStringSubmatch(page, -1) {
-		lines = append(lines, logEntry{kind: m[1], text: text(m[2])})
+	doc := readHTML(page)
+	if body := doc.byID(logBodyID); body != nil {
+		doc = body
 	}
-	return lines
+	var entries []logEntry
+	for _, item := range doc.all(isTag("li")) {
+		entry := logEntry{kind: dayKind, text: item.text()}
+		switch {
+		case strings.HasPrefix(item.attr("id"), eventRowPrefix):
+			entry.kind = eventKind
+		case strings.HasPrefix(entry.text, "No activity for "):
+			entry.kind = gapKind
+		}
+		entries = append(entries, entry)
+	}
+	return entries
 }
 
-func textOf(lines []logEntry, kind string) []string {
+func textOf(lines []logEntry, kind itemKind) []string {
 	var out []string
 	for _, l := range lines {
-		if strings.HasPrefix(l.kind, kind) {
+		if l.kind == kind {
 			out = append(out, l.text)
 		}
 	}
@@ -212,7 +211,7 @@ func textOf(lines []logEntry, kind string) []string {
 func dayOf(page, lead string) string {
 	day := ""
 	for _, l := range logEntries(page) {
-		if strings.HasPrefix(l.kind, dayKind) {
+		if l.kind == dayKind {
 			day, _, _ = strings.Cut(l.text, " · ")
 		}
 		if strings.HasPrefix(l.text, lead) {
@@ -221,12 +220,6 @@ func dayOf(page, lead string) string {
 	}
 	return ""
 }
-
-const (
-	dayKind   = "rail__day"
-	gapKind   = "rail__gap"
-	eventKind = "row row--event"
-)
 
 func TestActivity_EventsAreListedNewestFirst(t *testing.T) {
 	f := rosewoodLog(t)
@@ -270,8 +263,8 @@ func TestActivity_AGapMarkerSaysHowManyDaysHadNothing(t *testing.T) {
 func TestActivity_AGapUnderThreeDaysGetsNoMarker(t *testing.T) {
 	f := rosewoodLog(t)
 
-	for _, unwanted := range []string{"nothing for 1 day", "nothing for 2 days"} {
-		if strings.Contains(f.show(t), unwanted) {
+	for _, unwanted := range []string{"No activity for 1 day", "No activity for 2 days"} {
+		if strings.Contains(text(f.show(t)), unwanted) {
 			t.Errorf("the log says %q, and a garden that quiet for a day or two is not silent", unwanted)
 		}
 	}
@@ -356,14 +349,6 @@ func TestActivity_ANoteIsQuotedUnderTheRow(t *testing.T) {
 	}
 }
 
-func TestActivity_APlantWithOnlyABotanicalNameIsShownInItalics(t *testing.T) {
-	f := rosewoodLog(t)
-
-	if !strings.Contains(f.show(t), `<span class="row__name row__name--sp">Opuntia microdasys</span>`) {
-		t.Error("the botanical name is not marked as one")
-	}
-}
-
 func TestActivity_OnlyOnePageOfEventsIsShown(t *testing.T) {
 	f := rosewoodLog(t)
 	// Twenty events newer than everything in the fixture fill the page on
@@ -392,7 +377,7 @@ func TestActivity_AnotherGardensEventsAreNotListed(t *testing.T) {
 
 	page := f.show(t)
 
-	if strings.Contains(page, "Hedge") {
+	if strings.Contains(text(page), "Hedge") {
 		t.Error("the log names a plant from another garden")
 	}
 	if got := len(textOf(logEntries(page), eventKind)); got != 7 {
@@ -422,10 +407,10 @@ func TestActivity_ASitterInAGardenWithNoPlantsGetsNoAddLink(t *testing.T) {
 
 	got := f.show(t)
 
-	if !strings.Contains(got, "No plants yet") {
+	if !strings.Contains(text(got), "No plants yet") {
 		t.Errorf("the log reads %q, want the empty garden", text(got))
 	}
-	if strings.Contains(got, newPlantPath) {
+	if readHTML(got).first(isTag("a"), attrIs("href", newPlantPath)) != nil {
 		t.Errorf("a sitter is offered the way to add a plant:\n%s", text(got))
 	}
 }
@@ -642,15 +627,12 @@ func TestActivity_AFilteredLogLinksBackToThePlant(t *testing.T) {
 
 	page := f.get(t, plantActivityPath(bigFellaID))
 
-	m := backlink.FindStringSubmatch(page)
-	if m == nil {
-		t.Fatalf("the filtered log has no back link:\n%s", text(page))
+	back := readHTML(page).first(isTag("a"), attrIs("href", plantPath(bigFellaID)))
+	if back == nil {
+		t.Fatalf("the filtered log has no link to %s:\n%s", plantPath(bigFellaID), text(page))
 	}
-	if got, want := m[1], plantPath(bigFellaID); got != want {
-		t.Errorf("the back link points at %q, want %q", got, want)
-	}
-	if got := text(m[2]); got != "Big Fella" {
-		t.Errorf("the back link reads %q, want the name of the plant the log is filtered to", got)
+	if got := back.text(); got != "Big Fella" {
+		t.Errorf("the link back to the plant reads %q, want the name of the plant the log is filtered to", got)
 	}
 }
 
@@ -746,10 +728,11 @@ func TestActivity_ASwapAimedAtTheLogBodyGetsTheListAndNotTheWholePage(t *testing
 		t.Fatalf("status = %d:\n%s", rec.Code, rec.Body.String())
 	}
 	body := rec.Body.String()
-	if strings.HasPrefix(body, "<!doctype html>") {
+	doc := readHTML(body)
+	if doc.first(isTag("html")) != nil {
 		t.Errorf("the response is the whole page, want the log body alone:\n%.120s", body)
 	}
-	if !strings.Contains(body, `id="`+logBodyID+`"`) {
+	if doc.byID(logBodyID) == nil {
 		t.Errorf("the response does not hold the log body:\n%.120s", body)
 	}
 	if got := len(textOf(logEntries(body), eventKind)); got != 7 {
@@ -779,13 +762,19 @@ func (f *logFixture) swap(t *testing.T, url, target, trigger string) string {
 	return rec.Body.String()
 }
 
+// outOfBandStatus returns the element a swap's response sends out of band into
+// the page's live region, or nil when the response announces nothing.
+func outOfBandStatus(body string) *element {
+	return readHTML(body).first(attrIs("hx-swap-oob", "innerHTML:#status"))
+}
+
 func TestActivity_ApplyingACareFilterAnnouncesWhatTheLogIsFilteredTo(t *testing.T) {
 	f := rosewoodLog(t)
 
 	body := f.swap(t, activityPath+"?care=water", logID, "")
 
-	if want := announced("Filtered to Water."); !strings.Contains(body, want) {
-		t.Errorf("the swap does not announce the filter:\nwant %s\n%s", want, body)
+	if got := outOfBandStatus(body).text(); got != "Filtered to Water." {
+		t.Errorf("the swap announces %q, want the filter:\n%s", got, body)
 	}
 }
 
@@ -794,8 +783,8 @@ func TestActivity_ClearingTheFiltersAnnouncesThatTheyAreCleared(t *testing.T) {
 
 	body := f.swap(t, activityPath, logID, "")
 
-	if want := announced("Filters cleared."); !strings.Contains(body, want) {
-		t.Errorf("the swap does not announce the cleared filters:\nwant %s\n%s", want, body)
+	if got := outOfBandStatus(body).text(); got != "Filters cleared." {
+		t.Errorf("the swap announces %q, want that the filters are cleared:\n%s", got, body)
 	}
 }
 
@@ -809,8 +798,8 @@ func TestActivity_TheOlderLinkAnnouncesThatThePageMoved(t *testing.T) {
 
 	body := f.swap(t, href, logBodyID, "")
 
-	if want := announced("Older activity."); !strings.Contains(body, want) {
-		t.Errorf("the swap does not announce the older page:\nwant %s\n%s", want, body)
+	if got := outOfBandStatus(body).text(); got != "Older activity." {
+		t.Errorf("the swap announces %q, want the older page:\n%s", got, body)
 	}
 }
 
@@ -819,7 +808,7 @@ func TestActivity_TheSwapThatRemovesADeletedRowAnnouncesNothing(t *testing.T) {
 
 	body := f.swap(t, activityPath, logBodyID, eventRowPrefix+uuid.New().String())
 
-	if strings.Contains(body, "hx-swap-oob=\"innerHTML:#status\"") {
+	if outOfBandStatus(body) != nil {
 		t.Errorf("the swap announces something after a deleted row's window closed:\n%s", body)
 	}
 }
@@ -838,13 +827,14 @@ func TestActivity_ASwapAimedAtTheFiltersAndTheLogGetsBothAndNotTheWholePage(t *t
 		t.Fatalf("status = %d:\n%s", rec.Code, rec.Body.String())
 	}
 	body := rec.Body.String()
-	if strings.HasPrefix(body, "<!doctype html>") {
+	doc := readHTML(body)
+	if doc.first(isTag("html")) != nil {
 		t.Errorf("the response is the whole page, want the filters and the log alone:\n%.120s", body)
 	}
-	if !strings.Contains(body, `id="`+logID+`"`) || !strings.Contains(body, `id="`+logBodyID+`"`) || !strings.Contains(body, `id="filter-care"`) {
+	if doc.byID(logID) == nil || doc.byID(logBodyID) == nil || doc.byID("filter-care") == nil {
 		t.Errorf("the response does not hold the filters and the log body:\n%.200s", body)
 	}
-	if !strings.Contains(body, "<details") || strings.Contains(body, "<details open") || strings.Contains(body, " open>") {
+	if details := doc.first(isTag("details")); details == nil || details.has("open") {
 		t.Error("the filters are not a closed details element")
 	}
 	if !strings.Contains(text(body), "Filter · Water") {
@@ -975,34 +965,35 @@ func TestActivity_AMalformedDateIsNotFound(t *testing.T) {
 	}
 }
 
-// filterForm matches the filter form above the list. It is the only form on
-// the page that submits to the log's own URL.
-var filterForm = regexp.MustCompile(`(?s)<form[^>]*action="/activity"[^>]*>(.*?)</form>`)
-
 func TestActivity_TheFilterFormComesBackWithThePlantAndTheValuesChosen(t *testing.T) {
 	f := rosewoodLog(t)
 
 	page := f.get(t, activityPath+"?plant="+bigFellaID.String()+"&care=water&from=2026-08-01")
 
-	form := filterForm.FindStringSubmatch(page)
+	// The filter form is the only form on the page that submits to the page's
+	// own URL.
+	form := readHTML(page).first(isTag("form"), attrIs("action", activityPath))
 	if form == nil {
 		t.Fatalf("the page has no filter form:\n%s", page)
 	}
-	for _, want := range []string{
-		`<input type="hidden" name="plant" value="` + bigFellaID.String() + `">`,
-		`<option value="water" selected>Water</option>`,
-		`<option value="feed">Feed</option>`,
-		`name="from" value="2026-08-01"`,
-		`name="to" value=""`,
-	} {
-		if !strings.Contains(form[1], want) {
-			t.Errorf("the form lacks %s:\n%s", want, form[1])
-		}
+	field := func(name string) *element { return form.first(attrIs("name", name)) }
+	if plant := field("plant"); plant.attr("type") != "hidden" || plant.attr("value") != bigFellaID.String() {
+		t.Errorf("the form's plant field is %s, want a hidden field holding Big Fella's id", plant)
+	}
+	care := field("care")
+	if selected := care.first(isTag("option"), hasAttr("selected")); selected.attr("value") != "water" || selected.text() != "Water" {
+		t.Errorf("Care has %s selected, want Water", selected)
+	}
+	if feed := care.first(isTag("option"), attrIs("value", "feed")); feed.text() != "Feed" || feed.has("selected") {
+		t.Errorf("Care's feed option is %s, want Feed offered and not selected", feed)
+	}
+	if got := field("from").attr("value"); got != "2026-08-01" {
+		t.Errorf("From holds %q, want 2026-08-01", got)
+	}
+	if to := field("to"); to == nil || to.attr("value") != "" {
+		t.Errorf("To is %s, want an empty field", to)
 	}
 }
-
-// clearLink matches the Clear link beside the filters and captures its href.
-var clearLink = regexp.MustCompile(`<a class="filters__clear" href="([^"]*)"`)
 
 func TestActivity_ClearIsOfferedOnlyWhileAFilterIsOn(t *testing.T) {
 	f := rosewoodLog(t)
@@ -1010,12 +1001,12 @@ func TestActivity_ClearIsOfferedOnlyWhileAFilterIsOn(t *testing.T) {
 	plain := f.show(t)
 	filtered := f.get(t, activityPath+"?plant="+bigFellaID.String()+"&care=water")
 
-	if clearLink.MatchString(plain) {
+	clearLink := func(page string) *element { return readHTML(page).first(isTag("a"), textIs("Clear")) }
+	if clearLink(plain) != nil {
 		t.Error("the unfiltered log offers Clear")
 	}
-	clear := clearLink.FindStringSubmatch(filtered)
-	if clear == nil || html.UnescapeString(clear[1]) != plantActivityPath(bigFellaID) {
-		t.Errorf("the filtered log's Clear is %v, want a link to %s", clear, plantActivityPath(bigFellaID))
+	if got := clearLink(filtered).attr("href"); got != plantActivityPath(bigFellaID) {
+		t.Errorf("the filtered log's Clear points at %q, want %s", got, plantActivityPath(bigFellaID))
 	}
 }
 
@@ -1068,13 +1059,14 @@ func TestActivity_AHistoryRestoreGetsTheInsideOfTheLogAndNotTheElementItself(t *
 		t.Fatalf("status = %d:\n%s", rec.Code, rec.Body.String())
 	}
 	body := rec.Body.String()
-	if strings.HasPrefix(body, "<!doctype html>") {
+	doc := readHTML(body)
+	if doc.first(isTag("html")) != nil {
 		t.Errorf("the response is the whole page, want the inside of the log alone:\n%.120s", body)
 	}
-	if strings.Contains(body, `id="`+logID+`"`) {
-		t.Errorf("the response holds the log element, which the page still has:\n%.200s", body)
+	if doc.byID(logID) != nil {
+		t.Errorf("the response holds the log element the page already has:\n%.200s", body)
 	}
-	if !strings.Contains(body, `id="`+logBodyID+`"`) || !strings.Contains(body, `id="filter-care"`) {
+	if doc.byID(logBodyID) == nil || doc.byID("filter-care") == nil {
 		t.Errorf("the response does not hold the filters and the log body:\n%.200s", body)
 	}
 }

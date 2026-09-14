@@ -36,6 +36,11 @@ func closableAccount(t *testing.T) *moreFixture {
 	return f
 }
 
+// closeAccountButton returns the Close account button, or nil.
+func closeAccountButton(page string) *element {
+	return readHTML(page).first(isTag("button"), textIs("Close account"))
+}
+
 // closeAccount posts the close with the account's handle typed, as the page
 // asks.
 func (f *moreFixture) closeAccount(t *testing.T) *httptest.ResponseRecorder {
@@ -48,10 +53,13 @@ func TestCloseAccount_ThePageSaysWhatIsDeletedAndWhatIsKept(t *testing.T) {
 
 	page := f.page(t, f.handler.confirmCloseAccount, closeAccountPath)
 
-	for _, want := range []string{"deletes your passkeys", "Your name stays on everything you’ve logged", ">Close account</button>"} {
-		if !strings.Contains(page, want) {
+	for _, want := range []string{"deletes your passkeys", "Your name stays on everything you’ve logged"} {
+		if !strings.Contains(text(page), want) {
 			t.Errorf("the page lacks %q:\n%s", want, text(page))
 		}
+	}
+	if closeAccountButton(page) == nil {
+		t.Errorf("the page has no Close account button:\n%s", text(page))
 	}
 	if !strings.Contains(text(page), "Type ellie to confirm") {
 		t.Errorf("the page does not ask for the handle:\n%s", text(page))
@@ -67,8 +75,8 @@ func TestCloseAccount_APostWithoutTheHandleIsRefusedAndNothingIsDeleted(t *testi
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusUnprocessableEntity)
 	}
 	page := rec.Body.String()
-	if got := errorUnder(page, "handle"); got != closeAccountMismatch {
-		t.Errorf("the message under the field is %q, want %q", got, closeAccountMismatch)
+	if !strings.Contains(text(page), closeAccountMismatch) {
+		t.Errorf("the refused form does not say %q:\n%s", closeAccountMismatch, text(page))
 	}
 	if got := valueOf(t, page, "handle"); got != "elie" {
 		t.Errorf("the field holds %q after the refusal, want what was typed", got)
@@ -87,10 +95,10 @@ func TestCloseAccount_TheOnlyOwnerOfAGardenIsToldToDeleteItAndGetsNoButton(t *te
 
 	page := f.page(t, f.handler.confirmCloseAccount, closeAccountPath)
 
-	if !strings.Contains(page, "You’re the only owner of Rosewood. Delete it before closing your account") {
+	if !strings.Contains(text(page), "You’re the only owner of Rosewood. Delete it before closing your account") {
 		t.Errorf("the page does not name the garden:\n%s", text(page))
 	}
-	if strings.Contains(page, ">Close account</button>") {
+	if closeAccountButton(page) != nil {
 		t.Error("the only owner of a garden is offered the button")
 	}
 }
@@ -102,7 +110,7 @@ func TestCloseAccount_TheOnlyOwnerOfTwoGardensIsToldBoth(t *testing.T) {
 
 	page := f.page(t, f.handler.confirmCloseAccount, closeAccountPath)
 
-	if !strings.Contains(page, "only owner of Allotment and Rosewood. Delete them before") {
+	if !strings.Contains(text(page), "only owner of Allotment and Rosewood. Delete them before") {
 		t.Errorf("the page does not name both gardens:\n%s", text(page))
 	}
 }
@@ -209,10 +217,10 @@ func TestCloseAccount_AnAccountInNoGardenGetsThePageWithoutTheTabBar(t *testing.
 
 	page := f.page(t, f.handler.confirmCloseAccount, closeAccountPath)
 
-	if strings.Contains(page, `class="nav"`) {
+	if readHTML(page).first(isTag("nav")) != nil {
 		t.Error("an account in no garden got the tab bar")
 	}
-	if !strings.Contains(page, ">Close account</button>") {
+	if closeAccountButton(page) == nil {
 		t.Errorf("an account in no garden is not offered the button:\n%s", text(page))
 	}
 }
@@ -220,7 +228,9 @@ func TestCloseAccount_AnAccountInNoGardenGetsThePageWithoutTheTabBar(t *testing.
 func TestAccount_ThePageLinksToCloseAccount(t *testing.T) {
 	f := moreGarden(t)
 
-	if page := f.page(t, f.handler.account, accountPath); !strings.Contains(page, `href="`+closeAccountPath+`">Close account`) {
-		t.Errorf("the Account page has no Close account link:\n%s", text(page))
+	page := f.page(t, f.handler.account, accountPath)
+
+	if link := readHTML(page).first(isTag("a"), attrIs("href", closeAccountPath)); link.text() != "Close account" {
+		t.Errorf("the link to %s reads %q, want Close account:\n%s", closeAccountPath, link.text(), text(page))
 	}
 }

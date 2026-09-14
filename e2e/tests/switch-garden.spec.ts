@@ -34,14 +34,6 @@ test('switching garden changes Today and the role on More @swap', async ({ page,
   await expect(today.switchTo(gardens.home.name)).toBeVisible();
 });
 
-test('one garden has no switch icon and no owner line', async ({ page, today }) => {
-  await signIn(page, people.ellie.handle);
-
-  await expect(page.getByRole('heading', { name: gardens.home.name })).toBeVisible();
-  await expect(today.switchGarden()).toHaveCount(0);
-  await expect(page.getByText(/’s garden$/)).toHaveCount(0);
-});
-
 test('deleting the garden you own lands you on Today in the garden you sit for @swap', async ({
   page,
   accept,

@@ -37,27 +37,27 @@ var (
 func devStack(t *testing.T) (http.Handler, *auth.Resolver) {
 	t.Helper()
 
-	ctx := t.Context()
 	tx := pgtest.Tx(t, migrateSchema)
+	ownedGarden{
+		id:    homeID,
+		name:  "Home",
+		owner: store.AppUser{ID: ellieID, DisplayName: "Ellie", Handle: "ellie", Timezone: "Europe/London"},
+	}.insert(t, tx)
 	seed := []struct {
 		sql  string
 		args []any
 	}{
-		{"INSERT INTO garden (id, name) VALUES ($1, 'Home'), ($2, 'Upstairs')", []any{homeID, upstairsID}},
-		{"INSERT INTO app_user (id, display_name, handle, timezone, created_at) VALUES ($1, 'Ellie', 'ellie', 'Europe/London', now() - interval '3 days')", []any{ellieID}},
+		{"INSERT INTO garden (id, name) VALUES ($1, 'Upstairs')", []any{upstairsID}},
 		{"INSERT INTO app_user (id, display_name, handle, timezone, created_at) VALUES ($1, 'Sam', 'sam', 'Europe/London', now() - interval '2 days')", []any{samID}},
 		{"INSERT INTO app_user (id, display_name, handle, timezone, created_at) VALUES ($1, 'Robin', 'robin', 'Europe/Lisbon', now() - interval '1 day')", []any{robinID}},
 		// Clare's account is closed. The page does not list her.
 		{"INSERT INTO app_user (display_name, handle, timezone, closed_at) VALUES ('Clare', 'clare', 'Europe/London', now())", nil},
-		{"INSERT INTO membership (garden_id, user_id, role, created_at, digest_hour) VALUES ($1, $2, 'owner', now() - interval '3 days', 8)", []any{homeID, ellieID}},
 		{"INSERT INTO membership (garden_id, user_id, role, created_at, digest_hour) VALUES ($1, $2, 'member', now() - interval '2 days', 8)", []any{homeID, samID}},
 		{"INSERT INTO membership (garden_id, user_id, role, created_at, expires_at, digest_hour) VALUES ($1, $2, 'sitter', now() - interval '1 day', now() - interval '1 hour', 8)", []any{upstairsID, samID}},
 		{"INSERT INTO membership (garden_id, user_id, role, created_at, expires_at, digest_hour) VALUES ($1, $2, 'sitter', now() - interval '1 day', now() - interval '7 days', 8)", []any{upstairsID, robinID}},
 	}
 	for _, row := range seed {
-		if _, err := tx.Exec(ctx, row.sql, row.args...); err != nil {
-			t.Fatalf("seeding: %v\n%s", err, row.sql)
-		}
+		mustExec(t, tx, row.sql, row.args...)
 	}
 
 	queries := store.New(tx)
@@ -92,12 +92,13 @@ func TestDevSignIn_ThePageListsEveryUser(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
 	}
+	page := readHTML(rec.Body.String())
 	for _, handle := range []string{"ellie", "sam", "robin"} {
-		if !strings.Contains(rec.Body.String(), `value="`+handle+`"`) {
+		if page.first(isTag("button"), attrIs("name", "handle"), attrIs("value", handle)) == nil {
 			t.Errorf("the page has no button for %s", handle)
 		}
 	}
-	if strings.Contains(rec.Body.String(), `value="clare"`) {
+	if page.first(isTag("button"), attrIs("value", "clare")) != nil {
 		t.Error("the page has a button for a closed account")
 	}
 }

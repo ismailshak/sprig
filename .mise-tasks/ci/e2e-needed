@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+#MISE description="Print true when a file changed since a base ref can change what the e2e suite runs against, and false otherwise"
+#USAGE arg "<base>" help="The ref HEAD is compared with, such as origin/main"
+set -euo pipefail
+
+cd "${MISE_PROJECT_ROOT:?}"
+
+# Files that are not in the image and that the e2e suite does not read. A * in
+# these patterns matches a slash, so *.md is every markdown file in the tree.
+skipped=(
+  '*.md'
+  '*_test.go'
+  '.github/*.svg'
+  '.github/workflows/release.yml'
+  '.github/workflows/vendor-htmx.yml'
+  '.github/workflows/vulncheck.yml'
+  '.githooks/*'
+  '.gitignore'
+  '.golangci.yml'
+  'renovate.json5'
+  'sqlc.yaml'
+)
+
+# Assigned first, because a git failure inside the loop's input would not stop
+# the script and would read as no changed files. --no-renames lists a moved
+# file under its old path as well as its new one. A file moved from the image
+# to a skipped path would otherwise be listed under the skipped path alone.
+changed=$(git diff --name-only --no-renames "${usage_base:?}...HEAD")
+
+needed=false
+while IFS= read -r file; do
+  if [ -z "$file" ]; then
+    continue
+  fi
+  covered=false
+  for pattern in "${skipped[@]}"; do
+    # The pattern is unquoted so that [[ ]] matches it as a glob
+    # shellcheck disable=SC2053
+    if [[ $file == $pattern ]]; then
+      covered=true
+      break
+    fi
+  done
+  if [ "$covered" = false ]; then
+    needed=true
+    break
+  fi
+done <<<"$changed"
+
+echo "$needed"

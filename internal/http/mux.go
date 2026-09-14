@@ -62,7 +62,7 @@ func routes(logger *slog.Logger, sessions *auth.Sessions, passkeys *auth.Passkey
 	handleHandler := &handleSuggestions{queries: queries, templates: templates, logger: logger}
 	recoverLimit := newRecoverLimits(trustedIPHeader)
 	base := []route{
-		{pattern: "GET /healthz", handler: http.HandlerFunc(handleHealthz)},
+		{pattern: healthzPattern, handler: http.HandlerFunc(handleHealthz)},
 		{pattern: assetPattern, handler: assets.handler()},
 		{pattern: "GET " + serviceWorkerPath, handler: http.HandlerFunc(newServiceWorker(assets, templates).serve)},
 		{pattern: "GET " + offlinePath, handler: offline(templates)},
@@ -219,7 +219,7 @@ func handleLimits(trustedIPHeader string) []middleware {
 // publicRoutes is every route served without a session. Authenticate covers
 // the rest, so a route in routes is protected until it is listed here.
 var publicRoutes = map[string]bool{
-	"GET /healthz": true,
+	healthzPattern: true,
 	assetPattern:   true,
 	// The sign-in page registers the worker too, so it is fetched with no
 	// session. The worker caches the offline page as it installs.

@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -16,21 +15,20 @@ import (
 // on one garden is set on that garden alone.
 var otherMembershipID = uuid.MustParse("00000000-0000-7000-8000-000000000107")
 
-var (
-	remindAgainElement = regexp.MustCompile(`(?s)<div[^>]*id="remind-again"[^>]*>.*?</div>\s*</div>`)
-	remindAgainInput   = regexp.MustCompile(`<input[^>]*id="remind-again-at"[^>]*>`)
-	remindAgainDismiss = regexp.MustCompile(`<a[^>]*href="([^"]*)"[^>]*>Dismiss</a>`)
-)
+// remindAgainIn returns the Remind me again banner in a response body, or
+// nil when the body has none.
+func remindAgainIn(body string) *element {
+	return readHTML(body).byID("remind-again")
+}
 
 // startsAt returns the time the banner's input starts at, as "15:04".
-func startsAt(t *testing.T, banner string) string {
+func startsAt(t *testing.T, banner *element) string {
 	t.Helper()
-	input := remindAgainInput.FindString(banner)
-	value := fieldInputValue.FindStringSubmatch(input)
-	if value == nil {
-		t.Fatalf("the time input has no value:\n%s", input)
+	input := banner.byID("remind-again-at")
+	if !input.has("value") {
+		t.Fatalf("the time input has no value:\n%s", banner)
 	}
-	return value[1]
+	return input.attr("value")
 }
 
 // showFrom requests Today at path, which may carry a query string.
@@ -101,14 +99,14 @@ func TestToday_TheRemindMeAgainBannerIsShownOnlyWhenOpenedFromTheNotificationWit
 
 			page := f.showFrom(t, c.path)
 
-			banner := remindAgainElement.FindString(page)
-			if (banner != "") != c.shown {
-				t.Fatalf("the banner is shown = %v, want %v:\n%s", banner != "", c.shown, page)
+			banner := remindAgainIn(page)
+			if (banner != nil) != c.shown {
+				t.Fatalf("the banner is shown = %v, want %v:\n%s", banner != nil, c.shown, page)
 			}
 			if !c.shown {
 				return
 			}
-			words := text(banner)
+			words := banner.text()
 			for _, want := range []string{"In 1 hour", "In 2 hours", "Remind me"} {
 				if !strings.Contains(words, want) {
 					t.Errorf("the banner does not offer %q:\n%s", want, words)
@@ -139,8 +137,7 @@ func TestToday_TheTimeSetIsShownFromTheNotificationOnlyWhileAResendIsWaiting(t *
 
 			page := f.showFrom(t, c.path)
 
-			banner := remindAgainElement.FindString(page)
-			if got := text(banner); got != c.want {
+			if got := remindAgainIn(page).text(); got != c.want {
 				t.Errorf("the banner says %q, want %q", got, c.want)
 			}
 		})
@@ -155,7 +152,7 @@ func TestToday_TheTimeInputStartsFiveMinutesFromNowInTheReadersTimezone(t *testi
 	page := f.showFrom(t, DigestPath)
 
 	// 08:00 UTC is 09:00 in London.
-	if got := startsAt(t, remindAgainElement.FindString(page)); got != "09:05" {
+	if got := startsAt(t, remindAgainIn(page)); got != "09:05" {
 		t.Errorf("the time input starts at %q, want %q", got, "09:05")
 	}
 }
@@ -167,13 +164,13 @@ func TestToday_DismissOnTheBannerLinksToTodayWithoutTheQueryString(t *testing.T)
 
 	page := f.showFrom(t, DigestPath)
 
-	banner := remindAgainElement.FindString(page)
-	link := remindAgainDismiss.FindStringSubmatch(banner)
+	banner := remindAgainIn(page)
+	link := banner.first(isTag("a"), textIs("Dismiss"))
 	if link == nil {
 		t.Fatalf("the banner has no Dismiss link:\n%s", banner)
 	}
-	if link[1] != todayPath {
-		t.Errorf("Dismiss points at %q, want %q", link[1], todayPath)
+	if got := link.attr("href"); got != todayPath {
+		t.Errorf("Dismiss points at %q, want %q", got, todayPath)
 	}
 }
 
@@ -196,12 +193,11 @@ func TestRemindAgain_ADelaySetsTheTimeThatFarFromNowAndWakesTheJob(t *testing.T)
 		t.Errorf("the job was woken %d times, want once", calls)
 	}
 	// 08:00 UTC is 09:00 in London, so two hours on is 11:00am.
-	banner := remindAgainElement.FindString(rec.Body.String())
-	if got, want := text(banner), "You’ll get this notification again at 11:00am. Dismiss"; got != want {
+	if got, want := remindAgainIn(rec.Body.String()).text(), "You’ll get this notification again at 11:00am. Dismiss"; got != want {
 		t.Errorf("the swapped banner says %q, want %q", got, want)
 	}
-	if !strings.Contains(rec.Body.String(), `hx-swap-oob="innerHTML:#status">You’ll get this notification again at 11:00am.`) {
-		t.Errorf("the swap does not announce the time set:\n%s", rec.Body.String())
+	if got, want := announcement(rec.Body.String()), "You’ll get this notification again at 11:00am."; got != want {
+		t.Errorf("the swap announces %q, want %q", got, want)
 	}
 }
 
@@ -219,7 +215,7 @@ func TestRemindAgain_ATimeIsReadOnTheClockInTheReadersTimezone(t *testing.T) {
 	if got, want := f.storedRemindAgain(t, rosewoodMembershipID), thursday.Add(5*time.Hour+30*time.Minute); !got.Equal(want) {
 		t.Errorf("the time set is %s, want %s", got.UTC(), want)
 	}
-	if got, want := text(remindAgainElement.FindString(rec.Body.String())), "You’ll get this notification again at 2:30pm. Dismiss"; got != want {
+	if got, want := remindAgainIn(rec.Body.String()).text(), "You’ll get this notification again at 2:30pm. Dismiss"; got != want {
 		t.Errorf("the swapped banner says %q, want %q", got, want)
 	}
 }
@@ -246,7 +242,7 @@ func TestRemindAgain_ATimeAlreadyPassedOrMissingIsRefusedAndNothingIsSet(t *test
 			if rec.Code != http.StatusUnprocessableEntity {
 				t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusUnprocessableEntity, rec.Body.String())
 			}
-			banner := text(remindAgainElement.FindString(rec.Body.String()))
+			banner := remindAgainIn(rec.Body.String()).text()
 			if !strings.Contains(banner, c.want) {
 				t.Errorf("the banner says %q, want %q in it", banner, c.want)
 			}
@@ -269,7 +265,7 @@ func TestRemindAgain_TheTimeTheInputStartsAtIsAccepted(t *testing.T) {
 	f.dailyDigest(t, true)
 	page := f.showFrom(t, DigestPath)
 
-	rec := f.remindAgain(t, url.Values{"at": {startsAt(t, remindAgainElement.FindString(page))}}, true)
+	rec := f.remindAgain(t, url.Values{"at": {startsAt(t, remindAgainIn(page))}}, true)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusOK, rec.Body.String())
@@ -289,7 +285,7 @@ func TestRemindAgain_ARefusedTimeKeepsTheTimeThatWasTyped(t *testing.T) {
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusUnprocessableEntity, rec.Body.String())
 	}
-	if got := startsAt(t, remindAgainElement.FindString(rec.Body.String())); got != "08:30" {
+	if got := startsAt(t, remindAgainIn(rec.Body.String())); got != "08:30" {
 		t.Errorf("the time input reads %q, want the %q that was typed", got, "08:30")
 	}
 }
@@ -305,10 +301,10 @@ func TestRemindAgain_ARefusedTimeWithoutJavaScriptRendersTodayWithTheMessage(t *
 		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusUnprocessableEntity, rec.Body.String())
 	}
 	page := rec.Body.String()
-	if !strings.Contains(text(remindAgainElement.FindString(page)), "That time has already passed.") {
+	if !strings.Contains(remindAgainIn(page).text(), "That time has already passed.") {
 		t.Errorf("the banner does not say the time has passed:\n%s", page)
 	}
-	if _, order := sections(page); len(order) == 0 {
+	if _, order := sectionsOf(page); len(order) == 0 {
 		t.Errorf("the day's sections are not on the page:\n%s", page)
 	}
 }
@@ -350,7 +346,7 @@ func TestToday_TheRemindMeAgainBannerIsNotShownWithTheDailyDigestSwitchedOff(t *
 
 	page := f.showFrom(t, DigestPath)
 
-	if banner := remindAgainElement.FindString(page); banner != "" {
+	if banner := remindAgainIn(page); banner != nil {
 		t.Errorf("the banner is shown with no digest to send again:\n%s", banner)
 	}
 }

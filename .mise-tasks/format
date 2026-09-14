@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+#MISE description="Format the e2e suite, the app's scripts and the root markdown with prettier"
+#USAGE flag "--check" help="List the files prettier would change and write nothing"
+set -euo pipefail
+
+cd "${MISE_PROJECT_ROOT:?}/e2e"
+
+pnpm install --frozen-lockfile
+
+mode=--write
+if [ "${usage_check:-false}" = "true" ]; then
+  mode=--check
+fi
+
+# prettier is installed here and reads this directory's config and ignore file
+pnpm exec prettier "$mode" .
+
+# The app's scripts and the root markdown are outside e2e. They are named here
+# and take its config. Only files git tracks are formatted, because a clone can
+# hold markdown of its own at the root that is never committed. The script glob
+# stops at web/static and does not reach the vendored htmx below it.
+git ls-files -z ':(top,glob)*.md' ':(top,glob)web/static/*.js' | xargs -0 pnpm exec prettier "$mode" --config .prettierrc.json

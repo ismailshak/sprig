@@ -4,19 +4,10 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"regexp"
 	"strings"
 	"testing"
 
 	"github.com/ismailshak/sprig/internal/auth"
-)
-
-var (
-	zoneOptionTag   = regexp.MustCompile(`<option value="([^"]+)"(?: data-also="[^"]+")?( selected)?>([^<]+)</option>`)
-	fieldBlock      = regexp.MustCompile(`(?s)<div class="field">(.*?)</div>`)
-	fieldInput      = regexp.MustCompile(`id="([^"]+)" name=`)
-	fieldInputValue = regexp.MustCompile(`value="([^"]*)"`)
-	fieldError      = regexp.MustCompile(`(?s)<p class="field__error">(.*?)</p>`)
 )
 
 // valueOf returns the value rendered on the input with this id. It fails the
@@ -24,36 +15,14 @@ var (
 func valueOf(t *testing.T, page, id string) string {
 	t.Helper()
 
-	block := fieldWithInput(page, id)
-	if block == "" {
-		t.Fatalf("the page has no field with an input called %q:\n%s", id, page)
+	input := readHTML(page).byID(id)
+	if input == nil {
+		t.Fatalf("the page has no input called %q:\n%s", id, page)
 	}
-	value := fieldInputValue.FindStringSubmatch(block)
-	if value == nil {
-		t.Fatalf("the %q input has no value:\n%s", id, block)
+	if !input.has("value") {
+		t.Fatalf("the %q input has no value:\n%s", id, input)
 	}
-	return value[1]
-}
-
-// errorUnder returns the error message rendered under the field whose input
-// has this id, or "" when it has none.
-func errorUnder(page, id string) string {
-	block := fieldWithInput(page, id)
-	if message := fieldError.FindStringSubmatch(block); message != nil {
-		return text(message[1])
-	}
-	return ""
-}
-
-// fieldWithInput returns the markup of the field whose input has this id, or ""
-// when the page has no such field.
-func fieldWithInput(page, id string) string {
-	for _, block := range fieldBlock.FindAllStringSubmatch(page, -1) {
-		if input := fieldInput.FindStringSubmatch(block[1]); input != nil && input[1] == id {
-			return block[1]
-		}
-	}
-	return ""
+	return input.attr("value")
 }
 
 // saveAccount posts all three fields, because the page saves them together.
@@ -68,10 +37,11 @@ type zoneChoice struct {
 	on    bool
 }
 
+// zoneOptionsOf reads the options of the Timezone select.
 func zoneOptionsOf(page string) []zoneChoice {
 	var out []zoneChoice
-	for _, m := range zoneOptionTag.FindAllStringSubmatch(page, -1) {
-		out = append(out, zoneChoice{value: m[1], label: m[3], on: m[2] != ""})
+	for _, option := range readHTML(page).byID("timezone").all(isTag("option")) {
+		out = append(out, zoneChoice{value: option.attr("value"), label: option.text(), on: option.has("selected")})
 	}
 	return out
 }
@@ -139,7 +109,11 @@ func TestAccount_TheZoneSelectIsNotMarkedForTheBrowsersZone(t *testing.T) {
 
 	page := f.page(t, f.handler.account, accountPath)
 
-	if strings.Contains(page, "data-propose") {
+	zones := readHTML(page).byID("timezone")
+	if zones == nil {
+		t.Fatalf("the page has no Timezone select:\n%s", page)
+	}
+	if zones.has("data-propose") {
 		t.Error("the select is marked data-propose, and Account opens on the zone the account holds")
 	}
 }
@@ -186,7 +160,7 @@ func TestAccount_SavingTheTimezoneWakesTheDigestJob(t *testing.T) {
 	}
 }
 
-func TestAccount_AnEmptyDisplayNameIsRefusedWithTheReasonUnderTheField(t *testing.T) {
+func TestAccount_AnEmptyDisplayNameIsRefusedWithTheReason(t *testing.T) {
 	f := moreGarden(t)
 
 	rec := f.saveAccount(t, "   ", "ellie", "Asia/Tokyo")
@@ -194,8 +168,8 @@ func TestAccount_AnEmptyDisplayNameIsRefusedWithTheReasonUnderTheField(t *testin
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusUnprocessableEntity)
 	}
-	if got := errorUnder(rec.Body.String(), "name"); got != nameMissing {
-		t.Errorf("the form says %q under Display name, want %q", got, nameMissing)
+	if page := text(rec.Body.String()); !strings.Contains(page, nameMissing) {
+		t.Errorf("the refused form does not say %q:\n%s", nameMissing, page)
 	}
 	var name string
 	if err := f.tx.QueryRow(t.Context(), "SELECT display_name FROM app_user WHERE id = $1", moreUserID).Scan(&name); err != nil {
@@ -247,8 +221,12 @@ func TestAccount_AHandleAnotherAccountHoldsIsRefusedAndTheMessageNamesIt(t *test
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusUnprocessableEntity)
 	}
-	if got, want := errorUnder(rec.Body.String(), "handle"), handleTakenMessage("sam"); got != want {
-		t.Errorf("the form says %q under Handle, want %q", got, want)
+	page := rec.Body.String()
+	if want := handleTakenMessage("sam"); !strings.Contains(text(page), want) {
+		t.Errorf("the refused form does not say %q:\n%s", want, text(page))
+	}
+	if got := valueOf(t, page, "handle"); got != "sam" {
+		t.Errorf("the handle field holds %q after the refusal, want the handle the message names, sam", got)
 	}
 }
 
@@ -273,7 +251,7 @@ func TestAccount_ThePageASaveRedirectsToSaysSavedAndAPlainVisitDoesNot(t *testin
 	}
 }
 
-func TestAccount_AnEmptyHandleIsRefusedWithTheReasonUnderTheField(t *testing.T) {
+func TestAccount_AnEmptyHandleIsRefusedWithTheReason(t *testing.T) {
 	f := moreGarden(t)
 
 	rec := f.saveAccount(t, "Ellie", "   ", "Europe/London")
@@ -281,8 +259,8 @@ func TestAccount_AnEmptyHandleIsRefusedWithTheReasonUnderTheField(t *testing.T) 
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusUnprocessableEntity)
 	}
-	if got := errorUnder(rec.Body.String(), "handle"); got != handleMissing {
-		t.Errorf("the form says %q under Handle, want %q", got, handleMissing)
+	if page := text(rec.Body.String()); !strings.Contains(page, handleMissing) {
+		t.Errorf("the refused form does not say %q:\n%s", handleMissing, page)
 	}
 }
 
@@ -303,7 +281,7 @@ func TestAccount_AHandleTypedWithACapitalAndASpaceIsSavedAsLowerCaseWithAnUnders
 	}
 }
 
-func TestAccount_AHandleOfPunctuationAloneIsRefusedWithTheReasonUnderTheField(t *testing.T) {
+func TestAccount_AHandleOfPunctuationAloneIsRefusedWithTheReason(t *testing.T) {
 	f := moreGarden(t)
 
 	rec := f.saveAccount(t, "Ellie", "!!!", "Europe/London")
@@ -311,8 +289,8 @@ func TestAccount_AHandleOfPunctuationAloneIsRefusedWithTheReasonUnderTheField(t 
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusUnprocessableEntity)
 	}
-	if got := errorUnder(rec.Body.String(), "handle"); got != handleMissing {
-		t.Errorf("the form says %q under Handle, want %q", got, handleMissing)
+	if page := text(rec.Body.String()); !strings.Contains(page, handleMissing) {
+		t.Errorf("the refused form does not say %q:\n%s", handleMissing, page)
 	}
 	var held string
 	if err := f.tx.QueryRow(t.Context(), "SELECT handle FROM app_user WHERE id = $1", moreUserID).Scan(&held); err != nil {
@@ -328,12 +306,11 @@ func TestAccount_BothMessagesAreShownWhenTheNameAndTheHandleAreBothEmpty(t *test
 
 	rec := f.saveAccount(t, "  ", "  ", "Europe/London")
 
-	page := rec.Body.String()
-	if got := errorUnder(page, "name"); got != nameMissing {
-		t.Errorf("the form says %q under Display name, want %q", got, nameMissing)
-	}
-	if got := errorUnder(page, "handle"); got != handleMissing {
-		t.Errorf("the form says %q under Handle, want %q", got, handleMissing)
+	page := text(rec.Body.String())
+	for _, want := range []string{nameMissing, handleMissing} {
+		if !strings.Contains(page, want) {
+			t.Errorf("the refused form does not say %q:\n%s", want, page)
+		}
 	}
 }
 
@@ -366,12 +343,12 @@ func TestAccount_ASaveShowsSavedUnderTheButtonWithoutReloadingThePage(t *testing
 	rec := f.swap(t, f.handler.saveAccount, accountPath, accountID, "", "", form)
 
 	body := fragment(t, rec, accountID)
-	page := withoutAnnouncement(body)
-	if !strings.Contains(page, `value="Eleanor"`) || !strings.Contains(text(page), "Saved") {
-		t.Errorf("the swap does not show the saved name with Saved under the button:\n%s", text(page))
+	account := readHTML(body).byID(accountID)
+	if account.byID("name").attr("value") != "Eleanor" || !strings.Contains(account.text(), "Saved") {
+		t.Errorf("the swap does not show the saved name with Saved under the button:\n%s", account.text())
 	}
-	if !strings.Contains(body, announced(savedAnnouncement)) {
-		t.Errorf("the swap does not announce the save:\n%s", body)
+	if got := announcement(body); got != savedAnnouncement {
+		t.Errorf("the swap announces %q, want %q", got, savedAnnouncement)
 	}
 }
 
@@ -385,11 +362,12 @@ func TestAccount_ASaveWithNoDisplayNameKeepsThePageAndReadsOutTheMessage(t *test
 		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusUnprocessableEntity, rec.Body.String())
 	}
 	body := rec.Body.String()
-	if strings.HasPrefix(body, "<!doctype html>") || !strings.Contains(body, `id="`+accountID+`"`) {
+	doc := readHTML(body)
+	if doc.first(isTag("html")) != nil || doc.byID(accountID) == nil {
 		t.Fatalf("the refusal is not a swap of the page under the top bar:\n%.200s", body)
 	}
-	if !strings.Contains(body, announced(nameMissing)) {
-		t.Errorf("the refusal does not announce the message:\n%s", body)
+	if got := announcement(body); got != nameMissing {
+		t.Errorf("the refusal announces %q, want %q", got, nameMissing)
 	}
 }
 

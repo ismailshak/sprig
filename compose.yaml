@@ -32,7 +32,6 @@ services:
         DIST: dist/dev
     environment:
       SPRIG_DATABASE_URL: postgres://sprig:sprig@db:5432/sprig?sslmode=disable
-      SPRIG_LOG_FORMAT: text
       # The origin a passkey ceremony is checked against. It has to be the URL
       # the browser reaches the app at, port included, so the e2e task fixes the
       # host port per stack and passes it in here.

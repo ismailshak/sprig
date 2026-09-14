@@ -71,22 +71,32 @@ func TestSetupSignedIn_ThePageNamesTheAccountAndAsksForTheGardenNameAlone(t *tes
 		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusOK, rec.Body.String())
 	}
 	page := rec.Body.String()
-	for _, want := range []string{
-		"Set up a garden as Robin",
-		`<form method="post" action="` + setupSignedInPath + `"`,
-		"Garden name",
-		`id="garden" name="garden"`,
-		"Not Robin? <a href=\"" + signInToSetUpPath + "\">Sign in as someone else</a>.",
-	} {
-		if !strings.Contains(page, want) {
-			t.Errorf("the page lacks %s:\n%s", want, page)
+	for _, want := range []string{"Set up a garden as Robin", "Garden name", "Not Robin?"} {
+		if !strings.Contains(text(page), want) {
+			t.Errorf("the page lacks %s:\n%s", want, text(page))
 		}
 	}
+	if form := formTo(page, setupSignedInPath); form.attr("method") != "post" {
+		t.Errorf("the page has no form posting to %s:\n%s", setupSignedInPath, page)
+	}
+	doc := readHTML(page)
+	if got := doc.byID("garden").attr("name"); got != "garden" {
+		t.Errorf("the garden name field posts as %q, want garden:\n%s", got, page)
+	}
+	if !linkTo(page, signInToSetUpPath, "Sign in as someone else") {
+		t.Errorf("the page has no Sign in as someone else link to %s:\n%s", signInToSetUpPath, page)
+	}
 	buttonNamed(t, page, createLabel)
-	for _, absent := range []string{`name="name"`, `name="timezone"`, "data-passkey", "nav__item"} {
-		if strings.Contains(page, absent) {
-			t.Errorf("the page has %s on it, and the account already has a name, a timezone and a passkey:\n%s", absent, page)
+	for _, field := range []string{"name", "timezone"} {
+		if doc.first(attrIs("name", field)) != nil {
+			t.Errorf("the page has a %s field, and the account already has one:\n%s", field, page)
 		}
+	}
+	if doc.first(hasAttr("data-passkey")) != nil {
+		t.Errorf("the page creates a passkey, and the account already has one:\n%s", page)
+	}
+	if hasTabBar(page) {
+		t.Error("the page renders the tab bar, and it is about a garden the session is not on yet")
 	}
 }
 
@@ -193,7 +203,7 @@ func TestSetupSignedIn_AnAccountInNoGardenCreatesAGardenAndTheSessionIsOnTheNewG
 		t.Fatalf("starting the session: %v", err)
 	}
 	principal := auth.Principal{Session: session, User: robin.User}
-	if page := f.asAccount(t, f.handler.showSignedIn, principal, nil).Body.String(); !strings.Contains(page, "Set up a garden as Robin") {
+	if page := f.asAccount(t, f.handler.showSignedIn, principal, nil).Body.String(); !strings.Contains(text(page), "Set up a garden as Robin") {
 		t.Errorf("the page does not offer the form to an account in no garden:\n%s", text(page))
 	}
 
@@ -218,7 +228,7 @@ func TestSetupSignedIn_AnEmptyGardenNameIsRefusedUnderTheFieldAndTheSessionIsSti
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusUnprocessableEntity, text(rec.Body.String()))
 	}
-	if !strings.Contains(rec.Body.String(), setupGardenMissing) {
+	if !strings.Contains(text(rec.Body.String()), setupGardenMissing) {
 		t.Errorf("the page does not say the garden needs a name:\n%s", text(rec.Body.String()))
 	}
 	if after := f.counts(t); after["garden"] != before["garden"] || after["membership"] != before["membership"] || after["care_type"] != before["care_type"] {
@@ -271,7 +281,7 @@ func TestSetup_WithSignUpOffTheFirstRunPageHasNoSignInLink(t *testing.T) {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
 	}
 	page := rec.Body.String()
-	if linkTo(page, signInToSetUpPath, "Sign in") || strings.Contains(page, "Already have a sprig account?") {
+	if linkTo(page, signInToSetUpPath, "Sign in") || strings.Contains(text(page), "Already have a sprig account?") {
 		t.Errorf("the page offers sign in, and with sign-up off it is served on an install with no account:\n%s", page)
 	}
 }

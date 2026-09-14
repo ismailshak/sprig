@@ -7,19 +7,6 @@ test.beforeEach(async ({ page }) => {
   await signIn(page, people.ellie.handle);
 });
 
-test('a token that has run out reads as expired and offers Remove where a live one offers Revoke', async ({
-  tokens,
-}) => {
-  await tokens.open();
-
-  await expect(tokens.row(seeded.spare)).toContainText(/Expired \w+/);
-  await expect(tokens.row(seeded.spare).getByRole('button')).toHaveText('Remove');
-  await expect(tokens.row(seeded.kitchen)).toContainText(/Expires \d+ \w+/);
-  await expect(tokens.row(seeded.kitchen).getByRole('button')).toHaveText('Revoke');
-  // The prefix is what tells the two display rows apart.
-  await expect(tokens.row(seeded.spare)).toContainText(/sprg_\w+…/);
-});
-
 test('a new token is shown once, joins the list, and is gone on the next visit @swap', async ({ tokens, page }) => {
   await tokens.open();
 

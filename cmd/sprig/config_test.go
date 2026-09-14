@@ -54,8 +54,8 @@ func TestLoadConfig_Defaults(t *testing.T) {
 	if cfg.addr != ":8080" {
 		t.Errorf("addr = %q, want %q", cfg.addr, ":8080")
 	}
-	if cfg.logFormat != "json" {
-		t.Errorf("logFormat = %q, want %q", cfg.logFormat, "json")
+	if cfg.logFormat != "text" {
+		t.Errorf("logFormat = %q, want %q", cfg.logFormat, "text")
 	}
 	if cfg.logLevel != slog.LevelInfo {
 		t.Errorf("logLevel = %v, want %v", cfg.logLevel, slog.LevelInfo)
@@ -155,12 +155,12 @@ func TestLoadConfig_RejectsACookieABrowserWouldDrop(t *testing.T) {
 	}
 }
 
-func TestLoadConfig_OverridesAndTextFormat(t *testing.T) {
+func TestLoadConfig_EachVariableSetOverridesItsDefault(t *testing.T) {
 	env := map[string]string{
 		"SPRIG_DATABASE_URL":      "postgres://example/db",
 		"SPRIG_BASE_URL":          "https://sprig.example.com",
 		"SPRIG_ADDR":              ":9090",
-		"SPRIG_LOG_FORMAT":        "text",
+		"SPRIG_LOG_FORMAT":        "json",
 		"SPRIG_LOG_LEVEL":         "debug",
 		"SPRIG_TRUSTED_IP_HEADER": "CF-Connecting-IP",
 		"SPRIG_PHOTO_DIR":         "/srv/photos",
@@ -181,8 +181,8 @@ func TestLoadConfig_OverridesAndTextFormat(t *testing.T) {
 	if cfg.photoQuota != 5<<30 {
 		t.Errorf("photoQuota = %d, want 5 GiB", cfg.photoQuota)
 	}
-	if cfg.logFormat != "text" {
-		t.Errorf("logFormat = %q, want %q", cfg.logFormat, "text")
+	if cfg.logFormat != "json" {
+		t.Errorf("logFormat = %q, want %q", cfg.logFormat, "json")
 	}
 	if cfg.logLevel != slog.LevelDebug {
 		t.Errorf("logLevel = %v, want %v", cfg.logLevel, slog.LevelDebug)

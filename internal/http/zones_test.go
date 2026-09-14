@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"html/template"
 	"slices"
-	"strings"
 	"testing"
 	"time"
 
@@ -110,23 +109,24 @@ func renderTimezoneField(t *testing.T, field timezoneField) string {
 func TestTimezoneField_TheSelectOnAFormNobodyHasAnsweredIsMarkedDataPropose(t *testing.T) {
 	markup := renderTimezoneField(t, timezoneField{Zones: zoneOptions(""), Propose: true})
 
-	if want := `<select class="input" id="timezone" name="timezone" data-propose>`; !strings.Contains(markup, want) {
-		t.Errorf("the select does not read %s, and the script proposes a zone on no other select", want)
+	if zone := readHTML(markup).first(isTag("select"), attrIs("name", "timezone")); !zone.has("data-propose") {
+		t.Error("the timezone select is not marked data-propose, and the script proposes a zone on no other select")
 	}
 }
 
 func TestTimezoneField_TheSelectOnAFormNobodyHasAnsweredOpensOnAnEmptyOptionLabelledTimezone(t *testing.T) {
 	markup := renderTimezoneField(t, timezoneField{Zones: zoneOptions(""), Propose: true})
 
-	if want := `<option value="" selected>Timezone</option>`; !strings.Contains(markup, want) {
-		t.Errorf("the select does not open on %s, so a form with no script posts the first zone in the list", want)
+	selected := readHTML(markup).first(isTag("select"), attrIs("name", "timezone")).first(isTag("option"), hasAttr("selected"))
+	if !selected.has("value") || selected.attr("value") != "" || selected.text() != "Timezone" {
+		t.Errorf("the select opens on %s, want an empty option labelled Timezone, so a form with no script posts no zone", selected)
 	}
 }
 
 func TestTimezoneField_AZoneICUNamesDifferentlyRendersThatNameInDataAlso(t *testing.T) {
 	markup := renderTimezoneField(t, timezoneField{Zones: zoneOptions("")})
 
-	if want := `<option value="Asia/Kolkata" data-also="Asia/Calcutta">`; !strings.Contains(markup, want) {
-		t.Errorf("no option reads %s, and Chrome and Safari report Asia/Calcutta", want)
+	if got := readHTML(markup).first(isTag("option"), attrIs("value", "Asia/Kolkata")).attr("data-also"); got != "Asia/Calcutta" {
+		t.Errorf("the Asia/Kolkata option has data-also %q, want Asia/Calcutta, because Chrome and Safari report that name", got)
 	}
 }

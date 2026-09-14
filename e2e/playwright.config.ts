@@ -16,15 +16,12 @@ export default defineConfig({
   // eight containers share a four-core runner. The setup alone has run past 15s
   // there.
   timeout: process.env.CI ? 30_000 : 15_000,
-  // Only CI retries because WebKit aborts a navigation with an internal error
-  // on the Linux runners.
-  retries: process.env.CI ? 2 : 0,
+  // A test that passes on a second run has a bug in the test or the app. A
+  // retry would report it as passing.
+  retries: 0,
   forbidOnly: !!process.env.CI,
   reporter: process.env.CI ? [['github'], ['list']] : 'list',
   use: {
-    // on-first-retry records the retry. A test that fails and then passes on
-    // the retry leaves a trace of the attempt that passed and none of the one
-    // that failed.
     trace: 'retain-on-failure',
     // reducedMotion turns off the sheet's entrance animation, because the
     // stylesheet disables it under prefers-reduced-motion. Otherwise the

@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -43,6 +42,22 @@ const (
 	strangerEndpoint = "https://push.invalid/stranger"
 )
 
+// moreRosewood is Ellie's garden on the pages under More, and moreFairview is
+// Sam's.
+var (
+	moreRosewood = ownedGarden{
+		id:           moreGardenID,
+		name:         "Rosewood",
+		owner:        store.AppUser{ID: moreUserID, DisplayName: "Ellie", Handle: "ellie", Timezone: "Europe/London"},
+		membershipID: moreMembershipID,
+	}
+	moreFairview = ownedGarden{
+		id:    otherGardenID,
+		name:  "Fairview",
+		owner: store.AppUser{ID: otherUserID, DisplayName: "Sam", Handle: "sam", Timezone: "Europe/London"},
+	}
+)
+
 type moreFixture struct {
 	handler *more
 	// todayHandler serves POST /gardens. The switch tests use this fixture
@@ -62,32 +77,20 @@ type moreFixture struct {
 func moreGarden(t *testing.T) *moreFixture {
 	t.Helper()
 
-	ctx := t.Context()
 	tx := pgtest.Tx(t, migrateSchema)
-	exec := func(sql string, args ...any) {
-		t.Helper()
-		if _, err := tx.Exec(ctx, sql, args...); err != nil {
-			t.Fatalf("seeding: %v\n%s", err, sql)
-		}
-	}
-
-	exec("INSERT INTO garden (id, name) VALUES ($1, 'Rosewood'), ($2, 'Fairview')", moreGardenID, otherGardenID)
-	exec(`INSERT INTO app_user (id, display_name, handle, timezone)
-		VALUES ($1, 'Ellie', 'ellie', 'Europe/London'), ($2, 'Sam', 'sam', 'Europe/London')`, moreUserID, otherUserID)
-	exec("INSERT INTO membership (id, garden_id, user_id, role, digest_hour) VALUES ($1, $2, $3, 'owner', 8)",
-		moreMembershipID, moreGardenID, moreUserID)
-	exec("INSERT INTO membership (garden_id, user_id, role, digest_hour) VALUES ($1, $2, 'owner', 8)", otherGardenID, otherUserID)
-	exec(`INSERT INTO notification_preference (membership_id, kind, enabled)
+	moreRosewood.insert(t, tx)
+	moreFairview.insert(t, tx)
+	mustExec(t, tx, `INSERT INTO notification_preference (membership_id, kind, enabled)
 		VALUES ($1, 'digest', true), ($1, 'activity', false)`, moreMembershipID)
 
 	// The laptop's last_used_at is null, so its row says "Never used" in place
 	// of a date.
-	exec(`INSERT INTO passkey_credential (id, user_id, credential_id, name, public_key, last_used_at)
+	mustExec(t, tx, `INSERT INTO passkey_credential (id, user_id, credential_id, name, public_key, last_used_at)
 		VALUES ($1, $2, 'phone', 'iPhone', '\x00', $3),
 		       ($4, $2, 'laptop', 'MacBook Air', '\x00', NULL),
 		       ($5, $6, 'stranger', 'iPhone', '\x00', NULL)`,
 		phoneKeyID, moreUserID, thursday, laptopKeyID, strangerKeyID, otherUserID)
-	exec(`INSERT INTO push_subscription (id, user_id, endpoint, p256dh_key, auth_key, user_agent, last_sent_at)
+	mustExec(t, tx, `INSERT INTO push_subscription (id, user_id, endpoint, p256dh_key, auth_key, user_agent, last_sent_at)
 		VALUES ($1, $2, $9, 'p', 'a', $3, $4),
 		       ($5, $2, $10, 'p', 'a', $6, NULL),
 		       ($7, $8, $11, 'p', 'a', $3, NULL)`,
@@ -96,7 +99,7 @@ func moreGarden(t *testing.T) *moreFixture {
 
 	// One pending invite, beside three that are not: one that has run out, one
 	// that has been redeemed, and one in the other garden.
-	exec(`INSERT INTO invite (garden_id, token_hash, role, created_by, expires_at, redeemed_at)
+	mustExec(t, tx, `INSERT INTO invite (garden_id, token_hash, role, created_by, expires_at, redeemed_at)
 		VALUES ($1, 'pending', 'sitter', $2, $3, NULL),
 		       ($1, 'expired', 'sitter', $2, $4, NULL),
 		       ($1, 'redeemed', 'sitter', $2, $3, $4),
@@ -119,21 +122,10 @@ func moreGarden(t *testing.T) *moreFixture {
 			templates: testTemplates(),
 			now:       func() time.Time { return thursday },
 		},
-		tx:        tx,
-		principal: ownerOf(moreGardenID),
-	}
-}
-
-// ownerOf is the principal the pages are rendered for: Ellie, on her own
-// garden, holding the three capabilities that decide which rows the index has.
-func ownerOf(gardenID uuid.UUID) auth.Principal {
-	return auth.Principal{
-		User:       store.AppUser{ID: moreUserID, DisplayName: "Ellie", Handle: "ellie", Timezone: "Europe/London"},
-		Garden:     store.Garden{ID: gardenID, Name: "Rosewood"},
-		Membership: store.Membership{ID: moreMembershipID, GardenID: gardenID, UserID: moreUserID, Role: "owner", DigestHour: 8},
-		Capabilities: auth.Capabilities{
-			auth.GardenEdit: true, auth.MemberManage: true, auth.MemberInvite: true, auth.TokenManage: true,
-		},
+		tx: tx,
+		// Ellie signed in to Rosewood. A test that needs another capability
+		// adds it.
+		principal: moreRosewood.principal(auth.GardenEdit, auth.MemberManage, auth.MemberInvite, auth.TokenManage),
 	}
 }
 
@@ -204,10 +196,11 @@ func fragment(t *testing.T, rec *httptest.ResponseRecorder, id string) string {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusOK, body)
 	}
-	if strings.HasPrefix(body, "<!doctype html>") {
+	doc := readHTML(body)
+	if doc.first(isTag("html")) != nil {
 		t.Fatalf("the response is the whole page, want the %s element alone:\n%.120s", id, body)
 	}
-	if !strings.Contains(body, `id="`+id+`"`) {
+	if doc.byID(id) == nil {
 		t.Fatalf("the response does not hold the %s element:\n%.200s", id, body)
 	}
 	return body
@@ -226,18 +219,11 @@ func (f *moreFixture) page(t *testing.T, handler http.HandlerFunc, path string) 
 
 func (f *moreFixture) exec(t *testing.T, sql string, args ...any) {
 	t.Helper()
-	if _, err := f.tx.Exec(t.Context(), sql, args...); err != nil {
-		t.Fatalf("%v\n%s", err, sql)
-	}
+	mustExec(t, f.tx, sql, args...)
 }
 
-var (
-	linkRowElement = regexp.MustCompile(`(?s)<a class="row row--link row--setting" href="([^"]+)">(.*?)</a>`)
-	linkRowLabel   = regexp.MustCompile(`(?s)<span class="row__label">(.*?)</span>`)
-	linkRowNote    = regexp.MustCompile(`(?s)<span class="row__note">(.*?)</span>`)
-	buildLine      = regexp.MustCompile(`(?s)<p class="more__build">(.*?)</p>`)
-)
-
+// renderedLinkRow is a list item that is a link: the URL it points at, the
+// label, and the note after the label, empty when the row has none.
 type renderedLinkRow struct {
 	href  string
 	label string
@@ -246,18 +232,57 @@ type renderedLinkRow struct {
 
 // linkRowsOf reads the page's link rows in page order.
 func linkRowsOf(page string) []renderedLinkRow {
+	return linkRowsIn(readHTML(page))
+}
+
+// linkRowsIn reads the link rows below scope in page order. A link row is a
+// list item that holds a link and no form. A list item holding a form is a row
+// open for editing.
+func linkRowsIn(scope *element) []renderedLinkRow {
 	var out []renderedLinkRow
-	for _, m := range linkRowElement.FindAllStringSubmatch(page, -1) {
-		row := renderedLinkRow{href: m[1]}
-		if label := linkRowLabel.FindStringSubmatch(m[2]); label != nil {
-			row.label = text(label[1])
+	for _, item := range scope.all(isTag("li")) {
+		link := item.first(isTag("a"))
+		if link == nil || item.first(isTag("form")) != nil {
+			continue
 		}
-		if note := linkRowNote.FindStringSubmatch(m[2]); note != nil {
-			row.note = text(note[1])
+		row := renderedLinkRow{href: link.attr("href")}
+		runs := textRuns(link)
+		if len(runs) > 0 {
+			row.label = runs[0]
+		}
+		if len(runs) > 1 {
+			row.note = runs[1]
 		}
 		out = append(out, row)
 	}
 	return out
+}
+
+// textRuns returns the text below e as a person reads it, one string for each
+// run of text between elements that holds more than whitespace. A row's label
+// and the note beside it are two runs.
+func textRuns(e *element) []string {
+	if e == nil {
+		return nil
+	}
+	var runs []string
+	for _, c := range e.children {
+		switch c := c.(type) {
+		case string:
+			if run := (&element{children: []any{c}}).text(); run != "" {
+				runs = append(runs, run)
+			}
+		case *element:
+			runs = append(runs, textRuns(c)...)
+		}
+	}
+	return runs
+}
+
+// buildLineOf returns the line at the bottom of More that names the running
+// version.
+func buildLineOf(page string) string {
+	return readHTML(page).first(isTag("p"), func(e *element) bool { return strings.HasPrefix(e.text(), "sprig ") }).text()
 }
 
 func labelsOf(rows []renderedLinkRow) []string {
@@ -421,7 +446,7 @@ func TestMore_TheAccountRowStillSaysNoRecoveryCodesWhenAnotherAccountHoldsABatch
 func TestMore_TheBuildLineShowsTheVersionAndTheShortRevision(t *testing.T) {
 	f := moreGarden(t)
 
-	got := text(buildLine.FindStringSubmatch(f.page(t, f.handler.show, morePath))[1])
+	got := buildLineOf(f.page(t, f.handler.show, morePath))
 
 	if want := "sprig 0.1.0 · 8f2c1a4"; got != want {
 		t.Errorf("the build line is %q, want %q", got, want)
@@ -432,7 +457,7 @@ func TestMore_TheBuildLineShowsTheVersionAloneWhenTheBinaryHasNoRevision(t *test
 	f := moreGarden(t)
 	f.handler.build = build.Info{Version: "(devel)"}
 
-	got := text(buildLine.FindStringSubmatch(f.page(t, f.handler.show, morePath))[1])
+	got := buildLineOf(f.page(t, f.handler.show, morePath))
 
 	if want := "sprig (devel)"; got != want {
 		t.Errorf("the build line is %q, want %q", got, want)
@@ -467,20 +492,20 @@ func TestMore_SigningOutDeletesTheSessionAndClearsTheCookie(t *testing.T) {
 	}
 }
 
-// appearanceRadio matches one of the Appearance page's radio buttons and
-// captures its value and whether it is checked.
-var appearanceRadio = regexp.MustCompile(`<input type="radio" id="mode-\w+" name="mode" value="(\w+)"( checked)? disabled>`)
-
 func TestMore_TheAppearancePageOffersLightDarkAndSystemWithSystemChecked(t *testing.T) {
 	f := moreGarden(t)
 
 	page := f.page(t, f.handler.appearance, appearancePath)
 
 	var values, checked []string
-	for _, m := range appearanceRadio.FindAllStringSubmatch(page, -1) {
-		values = append(values, m[1])
-		if m[2] != "" {
-			checked = append(checked, m[1])
+	for _, radio := range readHTML(page).all(isTag("input"), attrIs("name", "mode")) {
+		values = append(values, radio.attr("value"))
+		if radio.has("checked") {
+			checked = append(checked, radio.attr("value"))
+		}
+		// The page's script enables the radios. Without it they stay disabled.
+		if !radio.has("disabled") {
+			t.Errorf("the %s radio is rendered enabled, want disabled", radio.attr("value"))
 		}
 	}
 	if want := []string{"light", "dark", "system"}; !slices.Equal(values, want) {

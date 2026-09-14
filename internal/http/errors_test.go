@@ -24,12 +24,23 @@ func TestNotFound_ABrowserOnAnUnknownPathGetsThePageNotFoundPage(t *testing.T) {
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusNotFound)
 	}
-	body := rec.Body.String()
-	for _, want := range []string{"<title>" + notFoundTitle + " · sprig</title>", notFoundTitle, notFoundLine, `href="` + todayPath + `">Back to Today`} {
-		if !strings.Contains(body, want) {
-			t.Errorf("the page lacks %q:\n%s", want, body)
+	page := readHTML(rec.Body.String())
+	if got, want := page.first(isTag("title")).text(), notFoundTitle+" · sprig"; got != want {
+		t.Errorf("the title is %q, want %q", got, want)
+	}
+	for _, want := range []string{notFoundTitle, notFoundLine} {
+		if !strings.Contains(page.first(isTag("body")).text(), want) {
+			t.Errorf("the page lacks %q:\n%s", want, page.text())
 		}
 	}
+	if page.first(isTag("a"), attrIs("href", todayPath), textIs("Back to Today")) == nil {
+		t.Errorf("the page has no Back to Today link to %s:\n%s", todayPath, rec.Body.String())
+	}
+}
+
+// errorPageText is the text of the page body, without the title in the head.
+func errorPageText(body string) string {
+	return readHTML(body).first(isTag("body")).text()
 }
 
 func TestNotFound_ARequestThatIsNotABrowserNavigationReadsOneLineOfText(t *testing.T) {
@@ -71,7 +82,7 @@ func TestBadRequest_ABrowserPostingAFormThatCannotBeParsedReadsTheErrorPage(t *t
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusBadRequest, rec.Body.String())
 	}
-	body := rec.Body.String()
+	body := errorPageText(rec.Body.String())
 	for _, want := range []string{badRequestTitle, badRequestLine, "Back to Today"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("the page lacks %q:\n%s", want, body)
@@ -90,9 +101,12 @@ func TestServerError_ABrowserReadsTheSomethingWentWrongPageAndTheErrorIsLoggedOn
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusInternalServerError)
 	}
 	body := rec.Body.String()
-	for _, want := range []string{"<title>" + serverErrorTitle + " · sprig</title>", serverErrorLine, "Back to Today"} {
-		if !strings.Contains(body, want) {
-			t.Errorf("the page lacks %q:\n%s", want, body)
+	if got, want := readHTML(body).first(isTag("title")).text(), serverErrorTitle+" · sprig"; got != want {
+		t.Errorf("the title is %q, want %q", got, want)
+	}
+	for _, want := range []string{serverErrorLine, "Back to Today"} {
+		if !strings.Contains(errorPageText(body), want) {
+			t.Errorf("the page lacks %q:\n%s", want, errorPageText(body))
 		}
 	}
 	if strings.Contains(body, http.ErrHandlerTimeout.Error()) {

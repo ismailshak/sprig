@@ -3,6 +3,9 @@
 /seed
 /dist/
 
+# Go test coverage profile
+/coverage.out
+
 # SPRIG_PHOTO_DIR's default. The deployment mounts its own directory here
 /photos/
 

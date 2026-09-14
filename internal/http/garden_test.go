@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -67,15 +66,6 @@ func (f *moreFixture) careType(t *testing.T, handler http.HandlerFunc, slug, pat
 	return rec
 }
 
-var (
-	careTypeLink   = regexp.MustCompile(`(?s)<a class="row row--link row--setting[^"]*" href="([^"]+)"[^>]*>(.*?)</a>`)
-	careTypeForm   = regexp.MustCompile(`(?s)<form class="[^"]*row--editing[^"]*" method="post" action="([^"]+)"[^>]*>(.*?)</form>`)
-	careTypeField  = regexp.MustCompile(`<input class="input" type="text" name="name" value="([^"]*)"`)
-	careTypeWhyRow = regexp.MustCompile(`(?s)<p class="row__why">(.*?)</p>`)
-	careTypeDrop   = regexp.MustCompile(`(?s)<button class="row__drop" type="submit" formaction="([^"]+)"[^>]*>(.*?)</button>`)
-	gardenNameRow  = regexp.MustCompile(`<input class="input" id="name" name="name" type="text" value="([^"]*)">`)
-)
-
 type listedType struct {
 	name string
 	// note is what the row says at its right-hand end, "Off" for a care type
@@ -87,15 +77,8 @@ type listedType struct {
 // listedTypesOf reads the closed rows of the Care types list, in page order.
 func listedTypesOf(page string) []listedType {
 	var out []listedType
-	for _, m := range careTypeLink.FindAllStringSubmatch(page, -1) {
-		row := listedType{edit: m[1]}
-		if label := linkRowLabel.FindStringSubmatch(m[2]); label != nil {
-			row.name = text(label[1])
-		}
-		if note := linkRowNote.FindStringSubmatch(m[2]); note != nil {
-			row.note = text(note[1])
-		}
-		out = append(out, row)
+	for _, row := range linkRowsIn(readHTML(page).byID(careTypesID)) {
+		out = append(out, listedType{name: row.label, note: row.note, edit: row.href})
 	}
 	return out
 }
@@ -114,34 +97,32 @@ type editor struct {
 	action string
 	// name is what the field holds.
 	name string
-	// why is the sentence under the field, and message the error under it.
-	why     string
-	message string
+	// says holds the text of each paragraph in the row, such as an error or the
+	// line saying how the care type is used.
+	says []string
 	// drop is the word on the button beside Save, and dropTo where it posts.
 	drop   string
 	dropTo string
 }
 
 // editorOn returns the open row, and fails when no row on the page is open.
+// The open row is the form in the Care types section.
 func editorOn(t *testing.T, page string) editor {
 	t.Helper()
 
-	m := careTypeForm.FindStringSubmatch(page)
-	if m == nil {
+	form := readHTML(page).byID(careTypesID).first(isTag("form"))
+	if form == nil {
 		t.Fatalf("no row is open:\n%s", page)
 	}
-	open := editor{action: m[1]}
-	if field := careTypeField.FindStringSubmatch(m[2]); field != nil {
-		open.name = field[1]
+	open := editor{
+		action: form.attr("action"),
+		name:   form.first(isTag("input"), attrIs("name", "name")).attr("value"),
 	}
-	if why := careTypeWhyRow.FindStringSubmatch(m[2]); why != nil {
-		open.why = text(why[1])
+	for _, sentence := range form.all(isTag("p")) {
+		open.says = append(open.says, sentence.text())
 	}
-	if message := fieldError.FindStringSubmatch(m[2]); message != nil {
-		open.message = text(message[1])
-	}
-	if drop := careTypeDrop.FindStringSubmatch(m[2]); drop != nil {
-		open.dropTo, open.drop = drop[1], text(drop[2])
+	if drop := form.first(isTag("button"), hasAttr("formaction")); drop != nil {
+		open.dropTo, open.drop = drop.attr("formaction"), drop.text()
 	}
 	return open
 }
@@ -175,15 +156,15 @@ func TestGarden_ASaveOfTheNameShowsSavedUnderTheButtonWithoutReloadingThePage(t 
 	rec := f.swap(t, f.handler.saveGardenName, gardenPath, gardenID, "", "", url.Values{"name": {"The Roof"}})
 
 	body := fragment(t, rec, gardenID)
-	page := withoutAnnouncement(body)
-	if !strings.Contains(page, `value="The Roof"`) || !strings.Contains(text(page), "Saved") {
-		t.Errorf("the swap does not show the saved name with Saved under the button:\n%s", text(page))
+	garden := readHTML(body).byID(gardenID)
+	if garden.byID("name").attr("value") != "The Roof" || !strings.Contains(garden.text(), "Saved") {
+		t.Errorf("the swap does not show the saved name with Saved under the button:\n%s", garden.text())
 	}
-	if !strings.Contains(body, `id="`+careTypesID+`"`) {
+	if garden.byID(careTypesID) == nil {
 		t.Errorf("the swap lost the Care types section:\n%s", text(body))
 	}
-	if !strings.Contains(body, announced(savedAnnouncement)) {
-		t.Errorf("the swap does not announce the save:\n%s", body)
+	if got := announcement(body); got != savedAnnouncement {
+		t.Errorf("the swap announces %q, want %q", got, savedAnnouncement)
 	}
 }
 
@@ -204,7 +185,7 @@ func TestGarden_SavingWritesTheGardensName(t *testing.T) {
 	}
 }
 
-func TestGarden_AnEmptyGardenNameIsRefusedWithTheReasonUnderTheField(t *testing.T) {
+func TestGarden_AnEmptyGardenNameIsRefusedWithTheReason(t *testing.T) {
 	f := careTypeGarden(t)
 
 	rec := f.do(t, f.handler.saveGardenName, gardenPath, url.Values{"name": {"   "}})
@@ -212,8 +193,8 @@ func TestGarden_AnEmptyGardenNameIsRefusedWithTheReasonUnderTheField(t *testing.
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusUnprocessableEntity)
 	}
-	if got := fieldError.FindStringSubmatch(rec.Body.String()); got == nil || text(got[1]) != gardenNameMissing {
-		t.Errorf("the form says %v, want %q", got, gardenNameMissing)
+	if page := text(rec.Body.String()); !strings.Contains(page, gardenNameMissing) {
+		t.Errorf("the refused form does not say %q:\n%s", gardenNameMissing, page)
 	}
 	var name string
 	if err := f.tx.QueryRow(t.Context(), "SELECT name FROM garden WHERE id = $1", moreGardenID).Scan(&name); err != nil {
@@ -229,8 +210,8 @@ func TestGarden_TheNameFieldHoldsTheGardensName(t *testing.T) {
 
 	page := f.page(t, f.handler.garden, gardenPath)
 
-	if got := gardenNameRow.FindStringSubmatch(page); got == nil || got[1] != "Rosewood" {
-		t.Errorf("the name field holds %v, want Rosewood", got)
+	if got := valueOf(t, page, "name"); got != "Rosewood" {
+		t.Errorf("the name field holds %q, want Rosewood", got)
 	}
 }
 
@@ -268,11 +249,12 @@ func TestGarden_TheNameFormIsLeftOffForAReaderWhoCannotRenameTheGarden(t *testin
 
 	page := f.page(t, f.handler.newCareType, careTypesPath)
 
-	if gardenNameRow.MatchString(page) {
+	doc := readHTML(page)
+	if doc.byID("name") != nil {
 		t.Error("the page still has the name field")
 	}
-	if strings.Contains(page, "Save the name") {
-		t.Error("the page still has the Save the name button")
+	if doc.byID("save") != nil {
+		t.Error("the page still has the Save button under the name")
 	}
 }
 
@@ -285,7 +267,7 @@ func TestGarden_TheCareTypesAreLeftOffForAReaderWhoCannotManageThem(t *testing.T
 	if got := listedTypesOf(page); len(got) > 0 {
 		t.Errorf("the page lists %v, and this reader cannot change a care type", listedNames(got))
 	}
-	if strings.Contains(page, "Care types") {
+	if strings.Contains(text(page), "Care types") {
 		t.Error("the page still has the Care types heading")
 	}
 }
@@ -302,8 +284,11 @@ func TestGarden_ARowWithEventsBehindItOffersTurningItOffAndSaysHowManyTimesItWas
 	if open.drop != "Turn off" || open.dropTo != offCareTypePath("water") {
 		t.Errorf("the button says %q and posts to %q, want %q to %s", open.drop, open.dropTo, "Turn off", offCareTypePath("water"))
 	}
-	if !strings.HasPrefix(open.why, "Used 2 times, so it can be renamed or turned off but not deleted") {
-		t.Errorf("the row says %q, want it to open on the two events logged", open.why)
+	usedTwice := func(s string) bool {
+		return strings.HasPrefix(s, "Used 2 times, so it can be renamed or turned off but not deleted")
+	}
+	if !slices.ContainsFunc(open.says, usedTwice) {
+		t.Errorf("the row says %q, want a line opening on the two events logged", open.says)
 	}
 }
 
@@ -316,8 +301,8 @@ func TestGarden_ARowWithNothingLoggedAgainstItOffersDeleting(t *testing.T) {
 	if open.drop != "Delete" || open.dropTo != deleteCareTypePath("feed") {
 		t.Errorf("the button says %q and posts to %q, want %q to %s", open.drop, open.dropTo, "Delete", deleteCareTypePath("feed"))
 	}
-	if open.why != "Not used yet, so it can be deleted." {
-		t.Errorf("the row says %q, want it to say the care type is not used yet", open.why)
+	if !slices.Contains(open.says, "Not used yet, so it can be deleted.") {
+		t.Errorf("the row says %q, want it to say the care type is not used yet", open.says)
 	}
 }
 
@@ -338,7 +323,7 @@ func TestGarden_ARowThatIsOffSaysItIsHiddenFromSchedulesAndLogCare(t *testing.T)
 	rec := f.careType(t, f.handler.editCareType, "mist", careTypePath("mist"), nil)
 
 	want := "Turned off. It’s hidden from schedules and Log care until turned on again."
-	if got := editorOn(t, rec.Body.String()).why; got != want {
+	if got := editorOn(t, rec.Body.String()).says; !slices.Contains(got, want) {
 		t.Errorf("the row says %q, want %q", got, want)
 	}
 }
@@ -385,7 +370,7 @@ func TestGarden_ARenameToAnEmptyNameIsRefusedWithTheReasonUnderTheField(t *testi
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusUnprocessableEntity)
 	}
-	if got := editorOn(t, rec.Body.String()).message; got != careTypeNameMissing {
+	if got := editorOn(t, rec.Body.String()).says; !slices.Contains(got, careTypeNameMissing) {
 		t.Errorf("the row says %q, want %q", got, careTypeNameMissing)
 	}
 	if name, _ := f.careTypeRow(t, "feed"); name != "Feed" {
@@ -401,7 +386,7 @@ func TestGarden_ARenameToANameAnotherCareTypeHasIsRefusedAndTheMessageNamesThatT
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusUnprocessableEntity)
 	}
-	if got := editorOn(t, rec.Body.String()).message; got != careTypeNameTaken("Water") {
+	if got := editorOn(t, rec.Body.String()).says; !slices.Contains(got, careTypeNameTaken("Water")) {
 		t.Errorf("the row says %q, want %q", got, careTypeNameTaken("Water"))
 	}
 	if name, _ := f.careTypeRow(t, "feed"); name != "Feed" {
@@ -443,7 +428,7 @@ func TestGarden_ANameACareTypeAlreadyHasIsRefusedRatherThanCreatingASecond(t *te
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusUnprocessableEntity)
 	}
-	if got := editorOn(t, rec.Body.String()).message; got != careTypeNameTaken("Water") {
+	if got := editorOn(t, rec.Body.String()).says; !slices.Contains(got, careTypeNameTaken("Water")) {
 		t.Errorf("the form says %q, want %q", got, careTypeNameTaken("Water"))
 	}
 	if got := f.careTypeCount(t, "water"); got != 1 {
@@ -459,7 +444,7 @@ func TestGarden_ANameACareTypeThatIsOffAlreadyHasIsRefused(t *testing.T) {
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusUnprocessableEntity)
 	}
-	if got := editorOn(t, rec.Body.String()).message; got != careTypeNameTaken("Mist") {
+	if got := editorOn(t, rec.Body.String()).says; !slices.Contains(got, careTypeNameTaken("Mist")) {
 		t.Errorf("the form says %q, want %q", got, careTypeNameTaken("Mist"))
 	}
 }
@@ -473,8 +458,8 @@ func TestGarden_ANameWithNoLetterOrNumberInItIsRefused(t *testing.T) {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusUnprocessableEntity)
 	}
 	open := editorOn(t, rec.Body.String())
-	if open.message != careTypeNameUnusable {
-		t.Errorf("the form says %q, want %q", open.message, careTypeNameUnusable)
+	if !slices.Contains(open.says, careTypeNameUnusable) {
+		t.Errorf("the form says %q, want %q", open.says, careTypeNameUnusable)
 	}
 	if open.name != "!!!" {
 		t.Errorf("the field holds %q, want what was typed", open.name)
@@ -496,7 +481,7 @@ func TestGarden_AnEmptyNewCareTypeIsRefusedWithTheReasonUnderTheField(t *testing
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusUnprocessableEntity)
 	}
-	if got := editorOn(t, rec.Body.String()).message; got != careTypeNameMissing {
+	if got := editorOn(t, rec.Body.String()).says; !slices.Contains(got, careTypeNameMissing) {
 		t.Errorf("the form says %q, want %q", got, careTypeNameMissing)
 	}
 }
@@ -616,9 +601,24 @@ func TestGarden_AddingACareTypeOpensAnEmptyRowAtTheEndOfTheList(t *testing.T) {
 	}
 }
 
-// storageLineOn captures the text of the sentence under Photos from the
-// rendered page.
-var storageLineOn = regexp.MustCompile(`>([^<]*of photo storage used\.[^<]*)<`)
+// storageLineOf returns the sentence under Photos on the Garden page, or ""
+// when the page has none.
+func storageLineOf(page string) string {
+	line := readHTML(page).first(isTag("p"), func(e *element) bool {
+		return strings.Contains(e.text(), "of photo storage used.")
+	})
+	return line.text()
+}
+
+// storageFillOf returns the width the photo storage bar is filled to, taken
+// from the fill's style attribute. It returns false when the bar has no fill.
+func storageFillOf(page string) (string, bool) {
+	fill := readHTML(page).byID("photo-storage-used")
+	if fill == nil {
+		return "", false
+	}
+	return strings.TrimPrefix(fill.attr("style"), "width:"), true
+}
 
 // photoQuota gives the Garden page a photo store with the given quota.
 func (f *moreFixture) photoQuota(t *testing.T, quota int64) {
@@ -649,10 +649,10 @@ func TestGarden_ThePhotosLineSaysHowMuchOfTheGardensStorageIsUsed(t *testing.T) 
 	f.exec(t, `INSERT INTO photo (garden_id, plant_id, uploaded_by, kind, path, width, height, bytes)
 		VALUES ($1, $2, $3, 'image/jpeg', 'y', 1, 1, $4)`, otherGardenID, otherPlantID, otherUserID, int64(1<<20))
 
-	got := storageLineOn.FindStringSubmatch(f.page(t, f.handler.garden, gardenPath))
+	got := storageLineOf(f.page(t, f.handler.garden, gardenPath))
 
-	if got == nil || got[1] != "2 MB of 4 MB of photo storage used." {
-		t.Errorf("the Photos line reads %v, want the garden's own 2 MB of 4 MB", got)
+	if got != "2 MB of 4 MB of photo storage used." {
+		t.Errorf("the Photos line reads %q, want the garden's own 2 MB of 4 MB", got)
 	}
 }
 
@@ -661,25 +661,21 @@ func TestGarden_NearlyFullThePhotosLineSaysToDeletePhotosToMakeRoom(t *testing.T
 	f.photoQuota(t, 4<<20)
 	f.insertPhoto(t, moreGardenID, morePlantID, 3700<<10, nil)
 
-	got := storageLineOn.FindStringSubmatch(f.page(t, f.handler.garden, gardenPath))
+	got := storageLineOf(f.page(t, f.handler.garden, gardenPath))
 
 	want := "4 MB of 4 MB of photo storage used. When it’s full, delete photos to make room."
-	if got == nil || got[1] != want {
-		t.Errorf("the Photos line reads %v, want %q", got, want)
+	if got != want {
+		t.Errorf("the Photos line reads %q, want %q", got, want)
 	}
 }
-
-var storageBarWidth = regexp.MustCompile(`<div class="storage__used" style="width:([^"]*)">`)
 
 func TestGarden_ThePhotoStorageBarFillsToTheShareOfTheQuotaUsed(t *testing.T) {
 	f := careTypeGarden(t)
 	f.photoQuota(t, 4<<20)
 	f.insertPhoto(t, moreGardenID, morePlantID, 1<<20, nil)
 
-	got := storageBarWidth.FindStringSubmatch(f.page(t, f.handler.garden, gardenPath))
-
-	if got == nil || got[1] != "25%" {
-		t.Errorf("the bar is filled to %v, want 25%%", got)
+	if got, _ := storageFillOf(f.page(t, f.handler.garden, gardenPath)); got != "25%" {
+		t.Errorf("the bar is filled to %q, want 25%%", got)
 	}
 }
 
@@ -688,10 +684,8 @@ func TestGarden_OverTheQuotaThePhotoStorageBarIsFullAndNoWider(t *testing.T) {
 	f.photoQuota(t, 1<<20)
 	f.insertPhoto(t, moreGardenID, morePlantID, 3<<20, nil)
 
-	got := storageBarWidth.FindStringSubmatch(f.page(t, f.handler.garden, gardenPath))
-
-	if got == nil || got[1] != "100%" {
-		t.Errorf("the bar is filled to %v, want 100%%", got)
+	if got, _ := storageFillOf(f.page(t, f.handler.garden, gardenPath)); got != "100%" {
+		t.Errorf("the bar is filled to %q, want 100%%", got)
 	}
 }
 
@@ -700,18 +694,16 @@ func TestGarden_OneByteOfPhotosShowsAFillInThePhotoStorageBar(t *testing.T) {
 	f.photoQuota(t, 1_000_000_000)
 	f.insertPhoto(t, moreGardenID, morePlantID, 1, nil)
 
-	got := storageBarWidth.FindStringSubmatch(f.page(t, f.handler.garden, gardenPath))
-
-	if got == nil || got[1] != "0.1%" {
-		t.Errorf("the bar is filled to %v, want 0.1%%", got)
+	if got, _ := storageFillOf(f.page(t, f.handler.garden, gardenPath)); got != "0.1%" {
+		t.Errorf("the bar is filled to %q, want 0.1%%", got)
 	}
 }
 
 func TestGarden_WithNoPhotosThePhotoStorageBarHasNoFill(t *testing.T) {
 	f := careTypeGarden(t)
 
-	if got := storageBarWidth.FindStringSubmatch(f.page(t, f.handler.garden, gardenPath)); got != nil {
-		t.Errorf("a garden with no photos has a fill of %v", got)
+	if got, filled := storageFillOf(f.page(t, f.handler.garden, gardenPath)); filled {
+		t.Errorf("a garden with no photos has a fill of %q", got)
 	}
 }
 
@@ -784,7 +776,7 @@ func TestGarden_ARenameSentAsASwapGetsTheCareTypesWithEveryRowClosedAndNotTheWho
 	rec := f.swap(t, f.handler.renameCareType, careTypePath("feed"), careTypesID, "care", "feed", url.Values{"name": {"Fertilise"}})
 
 	body := fragment(t, rec, careTypesID)
-	if strings.Contains(body, "row--editing") {
+	if readHTML(body).byID(careTypesID).first(isTag("form")) != nil {
 		t.Errorf("a row is still open after the save:\n%s", body)
 	}
 	if names := listedNames(listedTypesOf(body)); !slices.Contains(names, "Fertilise") {

@@ -35,7 +35,9 @@ func patternFrom(r *http.Request) string {
 
 // Logging logs one line per request with the method, the route pattern, the
 // status and the duration. The request id comes from the logger's handler
-// rather than from an explicit attribute here.
+// rather than from an explicit attribute here. A request to the health check
+// is logged at debug level, because the container's health check sends one
+// every few minutes and those lines would otherwise fill the log.
 func Logging(logger *slog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -43,9 +45,14 @@ func Logging(logger *slog.Logger) func(http.Handler) http.Handler {
 			start := time.Now()
 			next.ServeHTTP(rec, r)
 
-			logger.LogAttrs(r.Context(), slog.LevelInfo, "request",
+			pattern := patternFrom(r)
+			level := slog.LevelInfo
+			if pattern == healthzPattern {
+				level = slog.LevelDebug
+			}
+			logger.LogAttrs(r.Context(), level, "request",
 				slog.String("method", r.Method),
-				slog.String("pattern", patternFrom(r)),
+				slog.String("pattern", pattern),
 				slog.Int("status", rec.status),
 				slog.Duration("duration", time.Since(start)),
 			)

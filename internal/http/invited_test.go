@@ -218,10 +218,10 @@ func unusable(t *testing.T, rec *httptest.ResponseRecorder) string {
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("status = %d, want %d", rec.Code, http.StatusNotFound)
 	}
-	if !strings.Contains(page, "This invite link can’t be used") {
+	if !strings.Contains(text(page), "This invite link can’t be used") {
 		t.Errorf("the page does not say the link cannot be used:\n%s", text(page))
 	}
-	if strings.Contains(page, "<form") {
+	if readHTML(page).first(isTag("form")) != nil {
 		t.Errorf("the page has a form on it, and there is nothing to post:\n%s", text(page))
 	}
 	return page
@@ -238,24 +238,28 @@ func TestInvited_AJoinLinkRendersTheFormWithTheGardenTheInviterAndTheRoleAndNoTa
 	page := rec.Body.String()
 	for _, want := range []string{
 		"Ellie invited you to Rosewood",
-		`action="` + InvitedPath(sitterLink) + `"`,
-		`data-passkey="create"`,
-		`data-challenge="` + invitedChallengePath(sitterLink) + `"`,
-		`id="name" name="name"`,
-		`name="timezone" data-propose`,
-		`<option value="Europe/London" selected>`,
-		`<input type="hidden" name="` + credentialField + `">`,
 		"Requires JavaScript and a browser with passkey support.",
 		"You’ll join as a sitter. Sitters can log care and view everything, but not add plants or photos. Your access ends on 18 Sep.",
 	} {
-		if !strings.Contains(page, want) {
-			t.Errorf("the page lacks %s:\n%s", want, page)
+		if !strings.Contains(text(page), want) {
+			t.Errorf("the page lacks %s:\n%s", want, text(page))
 		}
+	}
+	form := passkeyForm(t, page, InvitedPath(sitterLink), invitedChallengePath(sitterLink))
+	if got := form.byID("name").attr("name"); got != "name" {
+		t.Errorf("the display name field posts as %q, want name:\n%s", got, form)
+	}
+	zone := form.byID("timezone")
+	if zone.attr("name") != "timezone" || !zone.has("data-propose") {
+		t.Errorf("the timezone select is not marked for the script to propose the browser's zone:\n%s", zone)
+	}
+	if got := selectedValue(zone); got != "Europe/London" {
+		t.Errorf("the timezone select opens on %q, want Europe/London", got)
 	}
 	if !buttonIsDisabled(t, page, "Join Rosewood") {
 		t.Errorf("Join Rosewood is not disabled:\n%s", page)
 	}
-	if strings.Contains(page, "nav__item") {
+	if hasTabBar(page) {
 		t.Error("the page renders the tab bar, and there is no garden to tab to")
 	}
 }
@@ -285,14 +289,17 @@ func TestInvited_AReenrolmentLinkAsksForNothingAndNamesTheAccountsGarden(t *test
 	for _, want := range []string{
 		"Add this device to your account",
 		"Ellie sent this link so you can sign in to Rosewood from this device.",
-		`data-passkey="create"`,
 		"Requires JavaScript and a browser with passkey support.",
 	} {
-		if !strings.Contains(page, want) {
-			t.Errorf("the page lacks %s:\n%s", want, page)
+		if !strings.Contains(text(page), want) {
+			t.Errorf("the page lacks %s:\n%s", want, text(page))
 		}
 	}
-	if strings.Contains(page, `name="name"`) || strings.Contains(page, `name="timezone"`) {
+	doc := readHTML(page)
+	if doc.first(isTag("form"), attrIs("data-passkey", "create")) == nil {
+		t.Errorf("the page has no form for the script to create a passkey with:\n%s", page)
+	}
+	if doc.first(attrIs("name", "name")) != nil || doc.first(attrIs("name", "timezone")) != nil {
 		t.Error("the page asks for a name or a timezone, and the account already has both")
 	}
 	if !buttonIsDisabled(t, page, addDeviceLabel) {
@@ -313,7 +320,7 @@ func TestInvited_AnExpiredAUsedAndANeverIssuedLinkGetOnePage(t *testing.T) {
 			t.Errorf("the page for %s differs from the page for a link that was never issued, so the two can be told apart", token)
 		}
 	}
-	if !strings.Contains(pages[noSuchLink], `<a href="`+signInPath+`">sign in</a>`) {
+	if !linkTo(pages[noSuchLink], signInPath, "sign in") {
 		t.Error("the page has no link to sign in, for somebody who already used theirs")
 	}
 }
@@ -358,7 +365,7 @@ func TestInvited_AReenrolmentLinkForSomebodyWhoseAccessEndedOrWasRemovedCannotBe
 	unusable(t, f.show(t, samsLink))
 }
 
-func TestInvited_AnEmptyFieldIsRefusedOnTheChallengeAndTheMessageIsUnderItOnThePost(t *testing.T) {
+func TestInvited_AnEmptyFieldIsRefusedOnTheChallengeAndItsMessageIsShownOnThePost(t *testing.T) {
 	cases := []struct {
 		field   string
 		posted  string
@@ -386,15 +393,15 @@ func TestInvited_AnEmptyFieldIsRefusedOnTheChallengeAndTheMessageIsUnderItOnTheP
 				t.Fatalf("the post: status = %d, want %d:\n%s", rec.Code, http.StatusUnprocessableEntity, text(rec.Body.String()))
 			}
 			page := rec.Body.String()
-			if got := errorUnder(page, c.field); got != c.message {
-				t.Errorf("under %s: %q, want %q", c.field, got, c.message)
+			if !strings.Contains(text(page), c.message) {
+				t.Errorf("the refused form does not say %q:\n%s", c.message, text(page))
 			}
 			for _, other := range cases {
-				if other.field != c.field && errorUnder(page, other.field) != "" {
-					t.Errorf("a message under %s, and that field was filled in", other.field)
+				if other.field != c.field && strings.Contains(text(page), other.message) {
+					t.Errorf("the refused form says %q, and the %s field was filled in", other.message, other.field)
 				}
 			}
-			if strings.Contains(page, "data-propose") {
+			if readHTML(page).byID("timezone").has("data-propose") {
 				t.Error("the select is marked for the script to change, and the zone posted is the person's own choice")
 			}
 			if at := f.redeemedAt(t, sitterLink); at != nil {
@@ -558,7 +565,7 @@ func TestInvited_ALinkFromSprigAdminInviteAddsAPasskeyToTheSameAccountAndChanges
 	}
 
 	page := f.show(t, made.Token).Body.String()
-	if !strings.Contains(page, "This link signs you in to") || strings.Contains(page, "Sam sent this link") {
+	if !strings.Contains(text(page), "This link signs you in to") || strings.Contains(text(page), "Sam sent this link") {
 		t.Errorf("the page names a sender, and the operator made the link:\n%s", text(page))
 	}
 	rec := f.redeem(t, made.Token, nil, device)
@@ -591,10 +598,10 @@ func TestInvited_ADeviceThatDidNotCheckWhoWasUsingItIsRefusedAndNothingIsWritten
 		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusUnprocessableEntity, text(rec.Body.String()))
 	}
 	page := rec.Body.String()
-	if !strings.Contains(page, "This device didn’t verify you.") {
+	if !strings.Contains(text(page), "This device didn’t verify you.") {
 		t.Errorf("the page does not say the device did not verify:\n%s", text(page))
 	}
-	if !strings.Contains(page, `value="Robin"`) || !strings.Contains(page, `<option value="Asia/Tokyo" selected>`) {
+	if doc := readHTML(page); doc.byID("name").attr("value") != "Robin" || selectedValue(doc.byID("timezone")) != "Asia/Tokyo" {
 		t.Errorf("the form lost what was typed:\n%s", page)
 	}
 	if cookieNamed(t, rec, "__Host-sprig_session") != nil {
@@ -692,13 +699,13 @@ func TestInvited_TheSeventhPostInAMinuteFromOneAddressIsRefusedWithTheSentenceAb
 	if !strings.Contains(text(page), tooManyInviteAttempts) {
 		t.Errorf("the page does not show the rate-limit sentence:\n%s", text(page))
 	}
-	if !strings.Contains(page, "Ellie invited you to Rosewood") || !strings.Contains(page, "<form") {
+	if !strings.Contains(text(page), "Ellie invited you to Rosewood") || readHTML(page).first(isTag("form")) == nil {
 		t.Errorf("the page is not the join form, and it is still worth another press:\n%s", text(page))
 	}
-	if !strings.Contains(page, `value="Robin"`) || !strings.Contains(page, `<option value="Asia/Tokyo" selected>`) {
+	if doc := readHTML(page); doc.byID("name").attr("value") != "Robin" || selectedValue(doc.byID("timezone")) != "Asia/Tokyo" {
 		t.Errorf("the form lost what was typed:\n%s", page)
 	}
-	if strings.Contains(page, "data-propose") {
+	if readHTML(page).byID("timezone").has("data-propose") {
 		t.Error("the select is marked for the script to change, and the zone posted is the person's own choice")
 	}
 	if rec := postFrom(t, handler, InvitedPath(sitterLink), "203.0.113.2", aJoinForm()); rec.Code != http.StatusUnprocessableEntity {
@@ -759,8 +766,8 @@ func TestInvited_AHandleAnotherAccountHoldsIsRefusedOnTheChallengeAndNamedOnTheP
 		t.Fatalf("the post: status = %d, want %d:\n%s", rec.Code, http.StatusUnprocessableEntity, text(rec.Body.String()))
 	}
 	page := rec.Body.String()
-	if got := errorUnder(page, "handle"); got != "ellie is already taken." {
-		t.Errorf("under Handle: %q, want the taken message", got)
+	if !strings.Contains(text(page), "ellie is already taken.") {
+		t.Errorf("the refused form does not say ellie is already taken.:\n%s", text(page))
 	}
 	if got := valueOf(t, page, "handle"); got != "ellie" {
 		t.Errorf("Handle came back as %q, want ellie", got)

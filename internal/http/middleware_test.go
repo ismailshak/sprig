@@ -82,6 +82,26 @@ func TestLogging_OneLineWithPatternAndStatus(t *testing.T) {
 	}
 }
 
+func TestLogging_AHealthCheckRequestIsLoggedAtDebugLevel(t *testing.T) {
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+
+	mux := http.NewServeMux()
+	mux.HandleFunc(healthzPattern, handleHealthz)
+
+	handler := MatchPattern(mux)(Logging(logger)(mux))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/healthz", nil)
+	handler.ServeHTTP(httptest.NewRecorder(), req)
+
+	var entry map[string]any
+	if err := json.Unmarshal(buf.Bytes(), &entry); err != nil {
+		t.Fatalf("log line was not JSON: %v", err)
+	}
+	if entry["level"] != "DEBUG" {
+		t.Errorf("level = %v, want DEBUG", entry["level"])
+	}
+}
+
 func TestRecover_ConvertsPanicToInternalServerError(t *testing.T) {
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&buf, nil))
@@ -96,7 +116,7 @@ func TestRecover_ConvertsPanicToInternalServerError(t *testing.T) {
 	if rec.Code != http.StatusInternalServerError {
 		t.Errorf("status = %d, want %d", rec.Code, http.StatusInternalServerError)
 	}
-	if !strings.Contains(rec.Body.String(), serverErrorTitle) {
+	if !strings.Contains(text(rec.Body.String()), serverErrorTitle) {
 		t.Errorf("the browser read %q, want the %q page", rec.Body.String(), serverErrorTitle)
 	}
 

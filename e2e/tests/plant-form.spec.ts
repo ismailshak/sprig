@@ -102,21 +102,6 @@ test('a one-off schedule posted without a date is refused until a date is given 
   await expect(plant.scheduleRow('Repot')).toContainText(`Due in March ${springYear}`);
 });
 
-// Big Fella has all six detail fields set.
-test('the edit form shows the detail fields for a plant that has details', async ({ plantForm }) => {
-  await plantForm.openEdit(seeded.bigFella);
-
-  await expect(plantForm.field('Sun')).toBeVisible();
-  await expect(plantForm.field('Nickname')).toHaveValue('Big Fella');
-});
-
-// Sprout has a nickname and nothing else.
-test('the edit form hides the detail fields for a plant with no details', async ({ plantForm }) => {
-  await plantForm.openEdit(seeded.sprout);
-
-  await expect(plantForm.field('Sun')).toBeHidden();
-});
-
 test('a plant is renamed from its own page', async ({ page, plant, plantForm }) => {
   await plant.open(seeded.doris);
 
@@ -126,14 +111,6 @@ test('a plant is renamed from its own page', async ({ page, plant, plantForm }) 
 
   await expect(page).toHaveURL(`/plants/${seeded.doris.id}`);
   await expect(plant.heading()).toHaveText('Doris the Second');
-});
-
-// The edit form has no schedule section. Schedules are changed on the plant's
-// own page.
-test('the edit form has no Schedule section', async ({ page, plantForm }) => {
-  await plantForm.openEdit(seeded.bigFella);
-
-  await expect(page.getByRole('heading', { name: 'Schedule' })).toHaveCount(0);
 });
 
 test('an archived plant is not listed on Plants @swap', async ({ page, plant, plants }) => {

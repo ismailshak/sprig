@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -110,49 +109,46 @@ func (f *todayFixture) latest(t *testing.T, plantID uuid.UUID) store.CareEvent {
 	return events[1]
 }
 
-var (
-	dialogElement   = regexp.MustCompile(`(?s)<dialog[^>]*>.*?</dialog>`)
-	fieldsetElement = regexp.MustCompile(`(?s)<fieldset[^>]*>\s*<legend[^>]*>([^<]+)</legend>.*?</fieldset>`)
-	chipElement     = regexp.MustCompile(`(?s)<(?:label|button)[^>]*class="chip"[^>]*>(.*?)</(?:label|button)>`)
-	checkedInput    = regexp.MustCompile(`<input[^>]*\bchecked\b[^>]*>`)
-	pressedButton   = regexp.MustCompile(`aria-pressed="true"[^>]*>([^<]+)<`)
-)
+// sheetIn returns the element with the id sheet in a response body. That is
+// the open dialog, or the empty element that closes it.
+func sheetIn(body string) *element {
+	return readHTML(body).byID("sheet")
+}
 
-func fields(markup string) map[string]string {
-	byLegend := map[string]string{}
-	for _, m := range fieldsetElement.FindAllStringSubmatch(markup, -1) {
-		byLegend[strings.TrimSpace(m[1])] = m[0]
+// sheetFields returns each fieldset in the sheet by the text of its legend.
+func sheetFields(sheet *element) map[string]*element {
+	byLegend := map[string]*element{}
+	for _, fieldset := range sheet.all(isTag("fieldset")) {
+		byLegend[fieldset.first(isTag("legend")).text()] = fieldset
 	}
 	return byLegend
 }
 
-func chips(fieldset string) []string {
+// chipLabels returns the text of each label in a fieldset, in page order.
+func chipLabels(fieldset *element) []string {
 	var out []string
-	for _, m := range chipElement.FindAllStringSubmatch(fieldset, -1) {
-		out = append(out, text(m[1]))
+	for _, label := range fieldset.all(isTag("label")) {
+		out = append(out, label.text())
 	}
 	return out
 }
 
-func checked(fieldset string) string {
-	for _, m := range chipElement.FindAllStringSubmatch(fieldset, -1) {
-		if checkedInput.MatchString(m[0]) {
-			return text(m[1])
-		}
-	}
-	return ""
+// checkedValue returns the value of the checked input in a fieldset, or ""
+// when none is checked.
+func checkedValue(fieldset *element) string {
+	return fieldset.first(isTag("input"), hasAttr("checked")).attr("value")
 }
 
-// remindersFor returns the Remind me in fieldset for one care type. The form
+// remindMeIn returns the Remind me in fieldset for one care type. The form
 // holds one for every care type it offers and the stylesheet shows the chosen
 // type's.
-func remindersFor(markup, care string) string {
-	for _, fieldset := range fieldsetElement.FindAllString(markup, -1) {
-		if strings.Contains(fieldset, `name="`+againField(care)+`"`) {
+func remindMeIn(sheet *element, care string) *element {
+	for _, fieldset := range sheet.all(isTag("fieldset")) {
+		if fieldset.first(attrIs("name", againField(care))) != nil {
 			return fieldset
 		}
 	}
-	return ""
+	return nil
 }
 
 func TestSheet_OpensOnTheCareOfTheRowItWasOpenedFrom(t *testing.T) {
@@ -161,82 +157,81 @@ func TestSheet_OpensOnTheCareOfTheRowItWasOpenedFrom(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d:\n%s", rec.Code, rec.Body.String())
 	}
-	page := rec.Body.String()
-	dialog := dialogElement.FindString(page)
-	if dialog == "" {
-		t.Fatalf("the page holds no dialog:\n%s", page)
+	page := readHTML(rec.Body.String())
+	sheet := page.byID("sheet")
+	if sheet == nil || sheet.tag != "dialog" {
+		t.Fatalf("the page holds no dialog under the sheet's id:\n%s", rec.Body.String())
 	}
 
-	if !strings.Contains(dialog, `<dialog open class="sheet" id="sheet" aria-label="Log care for Nigel" tabindex="-1">`) {
-		t.Errorf("the dialog is not open under the sheet's id and named for Nigel:\n%s", dialog)
+	if !sheet.has("open") || sheet.attr("aria-label") != "Log care for Nigel" {
+		t.Errorf("the dialog is not open and named for Nigel:\n%s", sheet)
 	}
-	if !regexp.MustCompile(`<h1[^>]*>Rosewood</h1>`).MatchString(page) {
-		t.Error("the sheet is not drawn over Today")
+	if got := page.first(isTag("h1")).text(); got != "Rosewood" {
+		t.Errorf("the page's heading is %q, want the sheet over Today, headed Rosewood", got)
 	}
-	heading := regexp.MustCompile(`(?s)<a class="sheet__plant" href="/plants/` + nigelID.String() + `">.*?</a>`).FindString(dialog)
-	if got := text(heading); got != "Nigel Boston fern · Bathroom" {
+	if got := sheet.first(isTag("a"), attrIs("href", plantPath(nigelID))).text(); got != "Nigel Boston fern · Bathroom" {
 		t.Errorf("the heading says %q, want the name, the species and the room, linked to the plant", got)
 	}
 
-	by := fields(dialog)
-	if got := chips(by["Care"]); strings.Join(got, "|") != "Water|Feed" {
+	by := sheetFields(sheet)
+	if got := chipLabels(by["Care"]); strings.Join(got, "|") != "Water|Feed" {
 		t.Errorf("Care offers %v, want the two cares Nigel is scheduled for", got)
 	}
-	if got := checked(by["Care"]); got != "Water" {
-		t.Errorf("Care starts on %q, want Water", got)
+	if got := checkedValue(by["Care"]); got != "water" {
+		t.Errorf("Care starts on %q, want water", got)
 	}
-	if got := checked(by["Outcome"]); got != "Done" {
-		t.Errorf("Outcome starts on %q, want Done", got)
+	if got := checkedValue(by["Outcome"]); got != "done" {
+		t.Errorf("Outcome starts on %q, want done", got)
 	}
-	if got := chips(by["When"]); strings.Join(got, "|") != "Just now|Earlier today|Yesterday|Another day" {
+	if got := chipLabels(by["When"]); strings.Join(got, "|") != "Just now|Earlier today|Yesterday|Another day" {
 		t.Errorf("When offers %v", got)
 	}
-	if got := checked(by["When"]); got != "Just now" {
-		t.Errorf("When starts on %q, want Just now", got)
+	if got := checkedValue(by["When"]); got != "now" {
+		t.Errorf("When starts on %q, want now", got)
 	}
-	if got := chips(remindersFor(dialog, "water")); strings.Join(got, "|") != "1 day|2 days|3 days|4 days (usual)" {
+	if got := chipLabels(remindMeIn(sheet, "water")); strings.Join(got, "|") != "1 day|2 days|3 days|4 days (usual)" {
 		t.Errorf("Remind me in offers %v, want three short re-checks and Nigel's own four days", got)
 	}
-	if got := checked(remindersFor(dialog, "water")); got != "2 days" {
-		t.Errorf("Remind me in starts on %q, want 2 days", got)
+	if got := checkedValue(remindMeIn(sheet, "water")); got != "2" {
+		t.Errorf("Remind me in starts on %q days, want 2", got)
 	}
-	if !strings.Contains(dialog, `<button class="sheet__go sheet__for">Log watering</button>`) {
-		t.Error("the primary button is not Log watering")
+	if sheet.first(isTag("button"), textIs("Log watering")) == nil {
+		t.Error("the sheet has no Log watering button")
 	}
-	if !strings.Contains(dialog, `hx-target="#`+rowID(nigelID)+`"`) {
-		t.Error("the post does not aim at the row the sheet was opened from")
+	if got := sheet.first(isTag("form"), hasAttr("hx-post")).attr("hx-target"); got != "#"+rowID(nigelID) {
+		t.Errorf("the post targets %q, want the row the sheet was opened from", got)
 	}
 	// 08:00 UTC on the fixture's Thursday is 09:00 in London.
-	if !strings.Contains(dialog, `name="time" value="09:00"`) || !strings.Contains(dialog, `name="at" value="2026-09-03T09:00"`) {
-		t.Errorf("the pickers do not start at now in London:\n%s", by["When"])
+	if clock, at := sheet.first(attrIs("name", "time")).attr("value"), sheet.first(attrIs("name", "at")).attr("value"); clock != "09:00" || at != "2026-09-03T09:00" {
+		t.Errorf("the pickers start at %q and %q, want now in London", clock, at)
 	}
 }
 
 func TestSheet_APlantWithOneCareHasNoCareTypeChoice(t *testing.T) {
 	f := rosewood(t)
-	dialog := dialogElement.FindString(f.sheet(t, sheetPath(dorisID, "water"), false).Body.String())
-	if _, ok := fields(dialog)["Care"]; ok {
+	sheet := sheetIn(f.sheet(t, sheetPath(dorisID, "water"), false).Body.String())
+	if _, ok := sheetFields(sheet)["Care"]; ok {
 		t.Error("Doris is only watered, and the sheet asks Care")
 	}
-	if !strings.Contains(dialog, ">Log watering</button>") {
-		t.Error("the primary button is not Log watering")
+	if sheet.first(isTag("button"), textIs("Log watering")) == nil {
+		t.Error("the sheet has no Log watering button")
 	}
 }
 
 func TestSheet_HoldsEveryCareTypesReminderChipsAndLogButton(t *testing.T) {
 	f := rosewood(t)
-	dialog := dialogElement.FindString(f.sheet(t, sheetPath(nigelID, "water"), false).Body.String())
+	sheet := sheetIn(f.sheet(t, sheetPath(nigelID, "water"), false).Body.String())
 
-	if got := chips(remindersFor(dialog, "feed")); strings.Join(got, "|") != "1 day|2 days|3 days|21 days (usual)" {
+	if got := chipLabels(remindMeIn(sheet, "feed")); strings.Join(got, "|") != "1 day|2 days|3 days|21 days (usual)" {
 		t.Errorf("Remind me in for feeding offers %v, want its three weeks as the usual", got)
 	}
-	if got := checked(remindersFor(dialog, "feed")); got != "2 days" {
-		t.Errorf("Remind me in for feeding starts on %q, want 2 days", got)
+	if got := checkedValue(remindMeIn(sheet, "feed")); got != "2" {
+		t.Errorf("Remind me in for feeding starts on %q days, want 2", got)
 	}
-	if !strings.Contains(dialog, `<button class="sheet__go sheet__for">Log feeding</button>`) {
+	if sheet.first(isTag("button"), textIs("Log feeding")) == nil {
 		t.Error("there is no Log feeding button for the stylesheet to show")
 	}
-	if !strings.Contains(dialog, `<button class="sheet__go sheet__skipped">Log skip</button>`) {
+	if sheet.first(isTag("button"), textIs("Log skip")) == nil {
 		t.Error("there is no Log skip button")
 	}
 }
@@ -244,14 +239,14 @@ func TestSheet_HoldsEveryCareTypesReminderChipsAndLogButton(t *testing.T) {
 func TestSheet_ACareWithNoIntervalInDaysOffersSevenDays(t *testing.T) {
 	f := rosewood(t)
 	f.exec(t, "UPDATE care_schedule SET interval_count = 1, interval_unit = 'month' WHERE plant_id = $1", spikeID)
-	dialog := dialogElement.FindString(f.sheet(t, sheetPath(spikeID, "water"), false).Body.String())
-	if got := chips(remindersFor(dialog, "water")); strings.Join(got, "|") != "1 day|2 days|3 days|7 days" {
+	sheet := sheetIn(f.sheet(t, sheetPath(spikeID, "water"), false).Body.String())
+	if got := chipLabels(remindMeIn(sheet, "water")); strings.Join(got, "|") != "1 day|2 days|3 days|7 days" {
 		t.Errorf("Remind me in offers %v, want a plain week where a month is not a number of days", got)
 	}
 
 	f.exec(t, "UPDATE care_schedule SET interval_count = 2, interval_unit = 'day' WHERE plant_id = $1", spikeID)
-	dialog = dialogElement.FindString(f.sheet(t, sheetPath(spikeID, "water"), false).Body.String())
-	if got := chips(remindersFor(dialog, "water")); strings.Join(got, "|") != "1 day|2 days (usual)|3 days" {
+	sheet = sheetIn(f.sheet(t, sheetPath(spikeID, "water"), false).Body.String())
+	if got := chipLabels(remindMeIn(sheet, "water")); strings.Join(got, "|") != "1 day|2 days (usual)|3 days" {
 		t.Errorf("Remind me in offers %v, want the usual to take the short chip's place", got)
 	}
 }
@@ -260,11 +255,11 @@ func TestSheet_AnHTMXRequestGetsTheSheetAloneAndANavigationTheWholePage(t *testi
 	f := rosewood(t)
 
 	swap := f.sheet(t, sheetPath(dorisID, "water"), true).Body.String()
-	if !strings.HasPrefix(swap, "<dialog") || strings.Contains(swap, "<html") {
+	if top := readHTML(swap).first(); top == nil || top.tag != "dialog" || readHTML(swap).first(isTag("html")) != nil {
 		t.Errorf("a swap did not get the dialog alone:\n%.200s", swap)
 	}
 	page := f.sheet(t, sheetPath(dorisID, "water"), false).Body.String()
-	if !strings.HasPrefix(page, "<!doctype html>") || !strings.Contains(page, "<dialog") {
+	if readHTML(page).first(isTag("html")) == nil || readHTML(page).first(isTag("dialog")) == nil {
 		t.Errorf("a navigation did not get the page with the dialog in it:\n%.200s", page)
 	}
 }
@@ -298,6 +293,11 @@ func TestSheet_AValueTheSheetDoesNotOfferIs400(t *testing.T) {
 	})
 }
 
+// careRowIn returns the watering row for the plant in a response body, or nil.
+func careRowIn(body string, plantID uuid.UUID) *element {
+	return readHTML(body).byID(rowID(plantID))
+}
+
 func TestLog_JustNowRecordsPerformedAtAndRecordedAtAsNow(t *testing.T) {
 	f := rosewood(t)
 	rec := f.post(t, dorisID.String(), url.Values{"row": {"water"}, "care": {"water"}, "when": {"now"}}, true)
@@ -314,18 +314,18 @@ func TestLog_JustNowRecordsPerformedAtAndRecordedAtAsNow(t *testing.T) {
 	}
 
 	body := rec.Body.String()
-	row := rowElement.FindString(body)
-	if !strings.Contains(row, `id="`+rowID(dorisID)+`"`) || !strings.Contains(row, "row--done") {
-		t.Errorf("the swap is not Doris's row in its logged state:\n%s", body)
+	row := careRowIn(body, dorisID)
+	if row == nil {
+		t.Fatalf("the swap has no row for Doris:\n%s", body)
 	}
-	if got := text(row); got != "Doris Watered just now Undo" {
+	if got := row.text(); got != "Doris Watered just now Undo" {
 		t.Errorf("the row says %q, want what was recorded and the button that reverses it", got)
 	}
-	if strings.Contains(row, "<a ") || strings.Contains(row, "<form") {
+	if row.first(isTag("a")) != nil || row.first(isTag("form")) != nil {
 		t.Error("a logged row still offers the sheet or its care button")
 	}
-	if !strings.Contains(body, `<div id="sheet" hx-swap-oob="true"></div>`) {
-		t.Error("the swap does not close the sheet")
+	if sheet := sheetIn(body); sheet == nil || sheet.attr("hx-swap-oob") != "true" || len(sheet.children) != 0 {
+		t.Errorf("the swap does not close the sheet: %s", sheet)
 	}
 }
 
@@ -335,7 +335,7 @@ func TestLog_JustNowIsShownWhateverThePrecisionOfTheStoredTime(t *testing.T) {
 	f := rosewood(t)
 	f.handler.now = func() time.Time { return thursday.Add(123456789 * time.Nanosecond) }
 	rec := f.post(t, dorisID.String(), url.Values{"row": {"water"}, "care": {"water"}, "when": {"now"}}, true)
-	if got := text(rowElement.FindString(rec.Body.String())); got != "Doris Watered just now Undo" {
+	if got := careRowIn(rec.Body.String(), dorisID).text(); got != "Doris Watered just now Undo" {
 		t.Errorf("the row says %q", got)
 	}
 }
@@ -418,7 +418,7 @@ func TestLog_ABackdatedTimeIsReadInTheReadersTimezone(t *testing.T) {
 			if !e.RecordedAt.Equal(thursday) {
 				t.Errorf("recorded at %v, want now", e.RecordedAt)
 			}
-			if got := text(rowElement.FindString(rec.Body.String())); got != "Doris "+c.said+" Undo" {
+			if got := careRowIn(rec.Body.String(), dorisID).text(); got != "Doris "+c.said+" Undo" {
 				t.Errorf("the row says %q, want %q", got, "Doris "+c.said+" Undo")
 			}
 		})
@@ -450,12 +450,12 @@ func TestLog_ATimeInTheFutureIsRefused(t *testing.T) {
 			if rec.Header().Get("HX-Retarget") != "#sheet" || rec.Header().Get("HX-Reswap") != "outerHTML" {
 				t.Error("the refusal is not aimed back at the sheet")
 			}
-			dialog := dialogElement.FindString(rec.Body.String())
-			if !strings.Contains(fields(dialog)["When"], `<p class="field__error">`+c.want+`</p>`) {
-				t.Errorf("the sheet does not say %q under When:\n%s", c.want, text(dialog))
+			when := sheetFields(sheetIn(rec.Body.String()))["When"]
+			if !strings.Contains(when.text(), c.want) {
+				t.Errorf("the sheet does not say %q under When:\n%s", c.want, text(rec.Body.String()))
 			}
-			if checked(fields(dialog)["When"]) != map[string]string{"today": "Earlier today", "yesterday": "Yesterday", "other": "Another day"}[c.form.Get("when")] {
-				t.Error("the sheet came back on a different day")
+			if got := checkedValue(when); got != c.form.Get("when") {
+				t.Errorf("the sheet came back on %q, want %q", got, c.form.Get("when"))
 			}
 			if n := len(f.events(t, dorisID)); n != 1 {
 				t.Errorf("the plant has %d events, want the refused post to have written none", n)
@@ -466,7 +466,7 @@ func TestLog_ATimeInTheFutureIsRefused(t *testing.T) {
 	t.Run("a form post gets the whole page", func(t *testing.T) {
 		f := rosewood(t)
 		rec := f.post(t, dorisID.String(), url.Values{"care": {"water"}, "when": {"today"}, "time": {"23:00"}}, false)
-		if rec.Code != http.StatusUnprocessableEntity || !strings.HasPrefix(rec.Body.String(), "<!doctype html>") {
+		if rec.Code != http.StatusUnprocessableEntity || readHTML(rec.Body.String()).first(isTag("html")) == nil {
 			t.Errorf("got %d and %.40q, want the page under the sheet", rec.Code, rec.Body.String())
 		}
 	})
@@ -486,7 +486,7 @@ func TestLog_ASkipStoresTheOverrideIntervalInDays(t *testing.T) {
 		if e.Note == nil || *e.Note != "Soil still damp" {
 			t.Errorf("the note is %v, want it trimmed", e.Note)
 		}
-		if got := text(rowElement.FindString(rec.Body.String())); got != "Nigel Skipped · reminder in 2 days Undo" {
+		if got := careRowIn(rec.Body.String(), nigelID).text(); got != "Nigel Skipped · reminder in 2 days Undo" {
 			t.Errorf("the row says %q", got)
 		}
 	})
@@ -540,11 +540,11 @@ func TestLog_ASheetOpenedFromOneRowCanLogADifferentCare(t *testing.T) {
 	if e := f.latest(t, nigelID); e.CareTypeID != feedID {
 		t.Error("the event is not a feed")
 	}
-	row := rowElement.FindString(rec.Body.String())
-	if !strings.Contains(row, `id="`+rowID(nigelID)+`"`) {
-		t.Errorf("the swap is not the watering row the sheet was over:\n%s", row)
+	row := careRowIn(rec.Body.String(), nigelID)
+	if row == nil {
+		t.Fatalf("the swap is not the watering row the sheet was over:\n%s", rec.Body.String())
 	}
-	if got := text(row); got != "Nigel Fed just now Undo" {
+	if got := row.text(); got != "Nigel Fed just now Undo" {
 		t.Errorf("the row says %q", got)
 	}
 }
@@ -579,22 +579,41 @@ func TestLog_AValueTheSheetDoesNotOfferIs400(t *testing.T) {
 
 func TestToday_ARowHasASheetLinkAndACareButtonThatSwapsTheRow(t *testing.T) {
 	page := rosewood(t).show(t)
-	byID, _ := sections(page)
-	row := rowElement.FindString(byID["due-today"][strings.Index(byID["due-today"], `id="`+rowID(dorisID)+`"`)-20:])
+	byID, _ := sectionsOf(page)
+	row := byID["due-today"].byID(rowID(dorisID))
+	if row == nil {
+		t.Fatalf("Due today has no row for Doris:\n%s", page)
+	}
 
-	if !strings.Contains(row, `<a class="row__open" href="`+sheetPath(dorisID, "water")+`" hx-get="`+sheetPath(dorisID, "water")+`" hx-target="#sheet" hx-swap="outerHTML">`) {
-		t.Errorf("the row does not open the sheet for its care:\n%s", row)
-	}
-	if !strings.Contains(row, `<form method="post" action="`+logPath(dorisID)+`" hx-post="`+logPath(dorisID)+`" hx-target="#`+rowID(dorisID)+`" hx-swap="outerHTML settle:0ms">`) {
-		t.Errorf("the care button does not post to the plant's log and swap the row:\n%s", row)
-	}
-	for _, want := range []string{`name="when" value="now"`, `name="row" value="water"`, `name="care" value="water"`} {
-		if !strings.Contains(row, want) {
-			t.Errorf("the care button's form lacks %s", want)
+	link := row.first(isTag("a"))
+	for _, want := range []struct{ name, value string }{
+		{"href", sheetPath(dorisID, "water")},
+		{"hx-get", sheetPath(dorisID, "water")},
+		{"hx-target", "#sheet"},
+		{"hx-swap", "outerHTML"},
+	} {
+		if got := link.attr(want.name); got != want.value {
+			t.Errorf("the link that opens the sheet has %s %q, want %q", want.name, got, want.value)
 		}
 	}
-	if !strings.Contains(page, `<div id="sheet"></div>`) {
-		t.Error("the page has no slot for the sheet to land in")
+	form := row.first(isTag("form"))
+	for _, want := range []struct{ name, value string }{
+		{"action", logPath(dorisID)},
+		{"hx-post", logPath(dorisID)},
+		{"hx-target", "#" + rowID(dorisID)},
+		{"hx-swap", "outerHTML settle:0ms"},
+	} {
+		if got := form.attr(want.name); got != want.value {
+			t.Errorf("the care button's form has %s %q, want %q", want.name, got, want.value)
+		}
+	}
+	for _, field := range []struct{ name, value string }{{"when", "now"}, {"row", "water"}, {"care", "water"}} {
+		if form.first(attrIs("name", field.name), attrIs("value", field.value)) == nil {
+			t.Errorf("the care button's form does not post %s=%s", field.name, field.value)
+		}
+	}
+	if sheet := sheetIn(page); sheet == nil || sheet.has("open") || len(sheet.children) != 0 {
+		t.Error("the page has no empty element for the sheet to be swapped into")
 	}
 }
 
@@ -604,22 +623,23 @@ func TestLog_TheLoggedRowHasAnUndoButtonAndAGraceTimer(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d:\n%s", rec.Code, rec.Body.String())
 	}
-	row := rowElement.FindString(rec.Body.String())
+	row := careRowIn(rec.Body.String(), dorisID)
 
-	for _, want := range []string{
-		`style="--grace:4000ms"`,
-		`hx-get="/"`,
-		`hx-trigger="load delay:4000ms"`,
-		`hx-swap="delete swap:320ms settle:0ms"`,
+	for _, want := range []struct{ name, value, part string }{
+		{"style", "--grace:4000ms", "bar"},
+		{"hx-get", "/", "end"},
+		{"hx-trigger", "load delay:4000ms", "end"},
+		{"hx-swap", "delete swap:320ms settle:0ms", "end"},
 	} {
-		if !strings.Contains(row, want) {
-			t.Errorf("the row lacks %s, so its window has no %s:\n%s", want, map[bool]string{true: "bar", false: "end"}[strings.Contains(want, "grace")], row)
+		if got := row.attr(want.name); got != want.value {
+			t.Errorf("the row's %s is %q, want %q. Its window has no %s.", want.name, got, want.value, want.part)
 		}
 	}
-	if want := `hx-delete="` + undoPath(dorisID, f.latest(t, dorisID).ID, "water") + `"`; !strings.Contains(row, want) {
-		t.Errorf("Undo does not delete the event that was just written:\n%s", row)
+	undo := row.first(isTag("button"), textIs("Undo"))
+	if got, want := undo.attr("hx-delete"), undoPath(dorisID, f.latest(t, dorisID).ID, "water"); got != want {
+		t.Errorf("Undo deletes %q, want the event that was just written at %q", got, want)
 	}
-	if !strings.Contains(row, `hx-target="#`+rowID(dorisID)+`" hx-swap="outerHTML settle:0ms"`) {
+	if undo.attr("hx-target") != "#"+rowID(dorisID) || undo.attr("hx-swap") != "outerHTML settle:0ms" {
 		t.Errorf("Undo does not swap the row it sits in:\n%s", row)
 	}
 }
@@ -629,10 +649,9 @@ func TestLog_TheSwapSaysWhatWasLoggedWhatIsLeftAndWhereUndoIs(t *testing.T) {
 
 	rec := f.post(t, dorisID.String(), url.Values{"row": {"water"}, "care": {"water"}}, true)
 
-	body := rec.Body.String()
-	want := announced("You watered Doris. 2 plants due today, 1 of them overdue. Undo from the row now, or from Activity later.")
-	if !strings.Contains(body, want) {
-		t.Errorf("the swap does not announce the care, the count and where Undo is:\nwant %s\n%s", want, body)
+	want := "You watered Doris. 2 plants due today, 1 of them overdue. Undo from the row now, or from Activity later."
+	if got := announcement(rec.Body.String()); got != want {
+		t.Errorf("the swap announces %q, want %q", got, want)
 	}
 }
 
@@ -641,9 +660,9 @@ func TestLog_ASkipIsAnnouncedAsSkipped(t *testing.T) {
 
 	rec := f.post(t, dorisID.String(), url.Values{"row": {"water"}, "care": {"water"}, "outcome": {"skipped"}, "again-water": {"2"}}, true)
 
-	want := announced("You skipped Doris. 2 plants due today, 1 of them overdue. Undo from the row now, or from Activity later.")
-	if !strings.Contains(rec.Body.String(), want) {
-		t.Errorf("the swap does not announce the skip:\nwant %s\n%s", want, rec.Body.String())
+	want := "You skipped Doris. 2 plants due today, 1 of them overdue. Undo from the row now, or from Activity later."
+	if got := announcement(rec.Body.String()); got != want {
+		t.Errorf("the swap announces %q, want %q", got, want)
 	}
 }
 
@@ -654,8 +673,8 @@ func TestUndo_TheSwapSaysUndoneAndWhatIsLeft(t *testing.T) {
 
 	rec := f.undo(t, dorisID, event.ID, "water", true)
 
-	if want := announced("Undone. 3 plants due today, 1 of them overdue."); !strings.Contains(rec.Body.String(), want) {
-		t.Errorf("the swap does not announce the undo:\nwant %s\n%s", want, rec.Body.String())
+	if got, want := announcement(rec.Body.String()), "Undone. 3 plants due today, 1 of them overdue."; got != want {
+		t.Errorf("the swap announces %q, want %q", got, want)
 	}
 }
 
@@ -672,11 +691,11 @@ func TestUndo_DeletesTheEventAndReturnsTheRowUnlogged(t *testing.T) {
 		t.Errorf("the plant has %d events, want the seeded one alone", n)
 	}
 
-	row := rowElement.FindString(rec.Body.String())
-	if got := text(row); got != "Doris Bedroom Water" {
+	row := careRowIn(rec.Body.String(), dorisID)
+	if got := row.text(); got != "Doris Bedroom Water" {
 		t.Errorf("the row says %q, want the row that was there before the event", got)
 	}
-	if strings.Contains(row, "row--done") || strings.Contains(row, "--grace") {
+	if strings.Contains(row.attr("style"), "--grace") || row.first(hasAttr("hx-delete")) != nil {
 		t.Errorf("the row came back still logged:\n%s", row)
 	}
 }
@@ -688,11 +707,11 @@ func TestUndo_ReturnsTheRowNamedInTheQuery(t *testing.T) {
 	f.post(t, nigelID.String(), url.Values{"row": {"water"}, "care": {"feed"}}, true)
 	event := f.latest(t, nigelID)
 
-	row := rowElement.FindString(f.undo(t, nigelID, event.ID, "water", true).Body.String())
-	if !strings.Contains(row, `id="`+rowID(nigelID)+`"`) {
-		t.Errorf("the swap is not the watering row:\n%s", row)
+	row := careRowIn(f.undo(t, nigelID, event.ID, "water", true).Body.String(), nigelID)
+	if row == nil {
+		t.Fatal("the swap is not the watering row")
 	}
-	if got := text(row); got != "Nigel Bathroom Water" {
+	if got := row.text(); got != "Nigel Bathroom Water" {
 		t.Errorf("the row says %q, want Nigel's watering as it was", got)
 	}
 }
@@ -762,14 +781,20 @@ func TestUndo_AFormPostRedirectsToToday(t *testing.T) {
 	}
 }
 
+// dayHeadIn returns the summary line at the top of Today in a response body,
+// or nil.
+func dayHeadIn(body string) *element {
+	return readHTML(body).byID("day-head")
+}
+
 func TestWindow_TheHeadingIsReturnedWithTheRow(t *testing.T) {
 	t.Run("a day with cares outstanding shows the count", func(t *testing.T) {
 		f := rosewood(t)
-		head := headElement.FindString(f.post(t, dorisID.String(), url.Values{"care": {"water"}}, true).Body.String())
-		if got := text(head); got != "2 plants due today, 1 of them overdue." {
+		head := dayHeadIn(f.post(t, dorisID.String(), url.Values{"care": {"water"}}, true).Body.String())
+		if got := head.text(); got != "2 plants due today, 1 of them overdue." {
 			t.Errorf("the head says %q, want the count without Doris", got)
 		}
-		if !strings.Contains(head, `hx-swap-oob="true"`) {
+		if head.attr("hx-swap-oob") != "true" {
 			t.Errorf("the head is not swapped out of band, so nothing but the row would move:\n%s", head)
 		}
 	})
@@ -778,12 +803,12 @@ func TestWindow_TheHeadingIsReturnedWithTheRow(t *testing.T) {
 		f := rosewood(t)
 		f.water(t, bigFellaID)
 		f.water(t, nigelID)
-		head := headElement.FindString(f.post(t, dorisID.String(), url.Values{"care": {"water"}}, true).Body.String())
-		if got := text(head); got != "All done for today." {
+		head := dayHeadIn(f.post(t, dorisID.String(), url.Values{"care": {"water"}}, true).Body.String())
+		if got := head.text(); got != "All done for today." {
 			t.Errorf("the head says %q, want the tick that waits for the windows to close", got)
 		}
-		if strings.Contains(head, "Nothing else is due.") {
-			t.Error("the empty screen was drawn over rows that are still on the page")
+		if strings.Contains(head.text(), "Nothing else is due.") {
+			t.Error("the empty screen was rendered over rows that are still on the page")
 		}
 	})
 
@@ -791,8 +816,8 @@ func TestWindow_TheHeadingIsReturnedWithTheRow(t *testing.T) {
 		f := rosewood(t)
 		f.post(t, dorisID.String(), url.Values{"row": {"water"}, "care": {"water"}}, true)
 		event := f.latest(t, dorisID)
-		head := headElement.FindString(f.undo(t, dorisID, event.ID, "water", true).Body.String())
-		if got := text(head); got != "3 plants due today, 1 of them overdue." {
+		head := dayHeadIn(f.undo(t, dorisID, event.ID, "water", true).Body.String())
+		if got := head.text(); got != "3 plants due today, 1 of them overdue." {
 			t.Errorf("the head says %q, want Doris counted again", got)
 		}
 	})
@@ -806,11 +831,11 @@ func TestWindow_AClosedGraceWindowRefreshesWhatTheRowsRemovalChanged(t *testing.
 		f.water(t, nigelID)
 
 		body := f.settled(t, rowID(dorisID)).Body.String()
-		if strings.Contains(body, `id="day"`) {
+		if readHTML(body).byID("day") != nil {
 			t.Errorf("the feed came back under rows that are still on the page:\n%s", body)
 		}
 		if got := text(body); got != "All done for today." {
-			t.Errorf("the answer says %q, want the tick", got)
+			t.Errorf("the response says %q, want the tick", got)
 		}
 	})
 
@@ -822,24 +847,25 @@ func TestWindow_AClosedGraceWindowRefreshesWhatTheRowsRemovalChanged(t *testing.
 		f.exec(t, "UPDATE care_event SET recorded_at = recorded_at - interval '1 minute'")
 
 		body := f.settled(t, rowID(dorisID)).Body.String()
-		if !strings.Contains(body, `<div class="app__body app__body--feed" id="day" hx-swap-oob="true">`) {
+		doc := readHTML(body)
+		if doc.byID("day").attr("hx-swap-oob") != "true" {
 			t.Errorf("the feed did not come back as an out-of-band swap:\n%.200s", body)
 		}
-		if !strings.Contains(body, "All done for today") || !strings.Contains(body, "Nothing else is due.") {
-			t.Errorf("the empty screen is not in the feed:\n%s", text(body))
+		if !strings.Contains(doc.text(), "All done for today") || !strings.Contains(doc.text(), "Nothing else is due.") {
+			t.Errorf("the empty screen is not in the feed:\n%s", doc.text())
 		}
 		// Watering Nigel moves his row to Coming up rather than off the page,
 		// because his watering is every four days.
 		for _, plant := range []uuid.UUID{bigFellaID, dorisID} {
-			if strings.Contains(body, rowID(plant)) {
+			if doc.byID(rowID(plant)) != nil {
 				t.Errorf("%s is still on the feed after its window closed", rowID(plant))
 			}
 		}
-		if strings.Contains(body, "row--done") {
-			t.Errorf("a row came back logged:\n%s", body)
+		if doc.first(hasAttr("hx-delete")) != nil {
+			t.Errorf("a row came back logged, with its Undo:\n%s", body)
 		}
-		if strings.HasPrefix(body, "<!doctype html>") {
-			t.Error("a row that has settled was answered with the whole page")
+		if doc.first(isTag("html")) != nil {
+			t.Error("a row that has settled got the whole page back")
 		}
 	})
 }
@@ -850,14 +876,20 @@ func TestWindow_APageLoadShowsNoRowInsideAGraceWindow(t *testing.T) {
 	f := rosewood(t)
 	f.post(t, dorisID.String(), url.Values{"care": {"water"}}, true)
 
-	page := f.show(t)
-	if strings.Contains(page, rowID(dorisID)) {
+	page := readHTML(f.show(t))
+	if page.byID(rowID(dorisID)) != nil {
 		t.Error("Doris is still on the page after being watered")
 	}
-	for _, unwanted := range []string{"--grace", "All done for today.", "row--done"} {
-		if strings.Contains(page, unwanted) {
-			t.Errorf("the page carries %s, which belongs to a row that was swapped in", unwanted)
+	if page.first(hasAttr("hx-delete")) != nil {
+		t.Error("the page has a logged row's Undo, and a logged row exists only in the page a swap rendered into")
+	}
+	for _, e := range page.all(hasAttr("style")) {
+		if strings.Contains(e.attr("style"), "--grace") {
+			t.Errorf("an element has the grace window's style %q", e.attr("style"))
 		}
+	}
+	if strings.Contains(page.text(), "All done for today.") {
+		t.Error("the page says All done for today., the heading shown only while a logged row is on the page")
 	}
 }
 
@@ -866,15 +898,15 @@ func TestLog_TheFeedShowsTheCareJustLogged(t *testing.T) {
 	f.principal.Capabilities[auth.CareDeleteOwn] = true
 
 	logged := f.post(t, dorisID.String(), url.Values{"row": {"water"}, "care": {"water"}}, true).Body.String()
-	if !strings.Contains(logged, `id="activity" hx-swap-oob="true"`) {
-		t.Fatalf("the log's answer carries no feed to swap in:\n%s", logged)
+	if readHTML(logged).byID("activity").attr("hx-swap-oob") != "true" {
+		t.Fatalf("the log's response has no feed to swap in:\n%s", logged)
 	}
 	line := feed(t, logged)[0]
-	if got := text(line); got != "You watered Doris · today, 9:00am Undo" {
+	if got := line.text(); got != "You watered Doris · today, 9:00am Undo" {
 		t.Errorf("the feed's newest line reads %q, want the watering just logged", got)
 	}
-	if want := undoFormPath(dorisID, f.latest(t, dorisID).ID); !strings.Contains(line, want) {
-		t.Errorf("the line's Undo does not post to %s:\n%s", want, line)
+	if got, want := line.first(isTag("form")).attr("action"), undoFormPath(dorisID, f.latest(t, dorisID).ID); got != want {
+		t.Errorf("the line's Undo posts to %q, want %q", got, want)
 	}
 }
 
@@ -885,8 +917,8 @@ func TestUndo_TheFeedNoLongerShowsTheDeletedCare(t *testing.T) {
 	event := f.latest(t, dorisID)
 
 	undone := f.undo(t, dorisID, event.ID, "water", true).Body.String()
-	if strings.Contains(undone, undoFormPath(dorisID, event.ID)) {
-		t.Errorf("the feed still carries the watering that was taken back:\n%s", undone)
+	if readHTML(undone).first(attrIs("action", undoFormPath(dorisID, event.ID))) != nil {
+		t.Errorf("the feed still has the watering that was taken back:\n%s", undone)
 	}
 }
 
@@ -894,9 +926,9 @@ func TestSheet_TheHeadingShowsThePlantsPictureAsItsSquare(t *testing.T) {
 	f := rosewood(t)
 	photoID := givePicture(t, f.tx, bigFellaID)
 
-	body := f.sheet(t, sheetPath(bigFellaID, "water"), true).Body.String()
+	body := readHTML(f.sheet(t, sheetPath(bigFellaID, "water"), true).Body.String())
 
-	if got, want := images(body), []string{photoSquarePath(bigFellaID, photoID)}; !slices.Equal(got, want) {
+	if got, want := imageSources(body), []string{photoSquarePath(bigFellaID, photoID)}; !slices.Equal(got, want) {
 		t.Errorf("the sheet's images are %v, want the square at %v", got, want)
 	}
 }
@@ -907,8 +939,8 @@ func TestLog_TheLoggedRowStillShowsThePlantsPicture(t *testing.T) {
 
 	rec := f.post(t, dorisID.String(), url.Values{"row": {"water"}, "care": {"water"}, "when": {"now"}}, true)
 
-	row := rowElement.FindString(rec.Body.String())
-	if got, want := images(row), []string{photoSquarePath(dorisID, photoID)}; !slices.Equal(got, want) {
+	row := careRowIn(rec.Body.String(), dorisID)
+	if got, want := imageSources(row), []string{photoSquarePath(dorisID, photoID)}; !slices.Equal(got, want) {
 		t.Errorf("the logged row's images are %v, want the square at %v", got, want)
 	}
 }

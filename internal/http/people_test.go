@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -71,14 +70,13 @@ func TestPeople_TheReadersOwnRowHasNoRoleSelectAndNoRemove(t *testing.T) {
 	if row.role != "" {
 		t.Errorf("your own row offers the role %q, and an owner demoting themselves leaves a garden nobody can administer", row.role)
 	}
-	if row.note != "Owner" {
-		t.Errorf("your own row says %q at its right-hand end, want %q", row.note, "Owner")
-	}
 	if len(row.acts) != 0 {
 		t.Errorf("your own row offers %v, and it should offer nothing", row.acts)
 	}
-	if row.meta != "" {
-		t.Errorf("your own row says %q under the name, and there is no choice for it to explain", row.meta)
+	// The row names the role and says nothing under the name, because there is
+	// no choice for it to explain.
+	if want := "Ellie You Owner"; row.says != want {
+		t.Errorf("your own row reads %q, want %q", row.says, want)
 	}
 }
 
@@ -93,8 +91,8 @@ func TestPeople_APermanentMemberHasBothRolesTheirOwnSelectedAndNoEndDate(t *test
 	if !slices.Equal(row.roles, []string{"member", "sitter"}) {
 		t.Errorf("the select offers %v, want member and sitter", row.roles)
 	}
-	if row.meta != roleWhat["member"] {
-		t.Errorf("the sentence under Sam reads %q, want %q", row.meta, roleWhat["member"])
+	if want := "Sam " + roleWhat["member"]; row.says != want {
+		t.Errorf("Sam's row reads %q, want %q", row.says, want)
 	}
 	if row.until != "" {
 		t.Errorf("a permanent membership offers the end date %q; a date arrives with the invite", row.until)
@@ -109,8 +107,8 @@ func TestPeople_ASitterWhoseAccessEndsShowsTheDayAndKeepsTheRoleSelect(t *testin
 
 	row := memberNamed(t, f.page(t, f.handler.people, PeoplePath), "Jo")
 
-	if want := "Sitter · until 11 Sep"; row.meta != want {
-		t.Errorf("Jo's second line reads %q, want %q", row.meta, want)
+	if want := "Jo Sitter · until 11 Sep"; row.says != want {
+		t.Errorf("Jo's row reads %q, want %q", row.says, want)
 	}
 	if row.until != "2026-09-11" {
 		t.Errorf("the end date field holds %q, want %q", row.until, "2026-09-11")
@@ -118,25 +116,19 @@ func TestPeople_ASitterWhoseAccessEndsShowsTheDayAndKeepsTheRoleSelect(t *testin
 	if row.role != "sitter" {
 		t.Errorf("a sitter whose access has not ended has %q selected, want %q", row.role, "sitter")
 	}
-	if row.off {
-		t.Error("Jo's access has not ended, and the row is greyed")
-	}
 }
 
-func TestPeople_AMembershipThatHasEndedIsGreyKeepsItsPlaceAndHasNoRoleSelect(t *testing.T) {
+func TestPeople_AMembershipThatHasEndedKeepsItsPlaceAndHasNoRoleSelect(t *testing.T) {
 	f := peopleGarden(t)
 	page := f.page(t, f.handler.people, PeoplePath)
 
 	row := memberNamed(t, page, "Clare")
 
-	if !row.off {
-		t.Error("a membership that has ended is not greyed")
-	}
 	if row.role != "" {
 		t.Errorf("a membership that has ended offers the role %q, and there is no role to choose for access that has ended", row.role)
 	}
-	if want := "Sitter · Access ended 22 Aug"; row.meta != want {
-		t.Errorf("Clare's second line reads %q, want %q", row.meta, want)
+	if want := "Clare Sitter · Access ended 22 Aug"; row.says != want {
+		t.Errorf("Clare's row reads %q, want %q", row.says, want)
 	}
 	if row.until != "2026-08-22" {
 		t.Errorf("the end date field holds %q, want %q; a lapsed sitter is re-dated from their own row", row.until, "2026-08-22")
@@ -148,17 +140,17 @@ func TestPeople_AMembershipThatHasEndedIsGreyKeepsItsPlaceAndHasNoRoleSelect(t *
 
 func TestPeople_AHandleIsShownOnlyWhereTwoMembersShareADisplayName(t *testing.T) {
 	f := peopleGarden(t)
-	if handle := memberNamed(t, f.page(t, f.handler.people, PeoplePath), "Sam").handle; handle != "" {
-		t.Fatalf("Sam's row shows the handle %q, and no other member is called Sam", handle)
+	if says := memberNamed(t, f.page(t, f.handler.people, PeoplePath), "Sam").says; says != "Sam "+roleWhat["member"] {
+		t.Fatalf("Sam's row reads %q, and no other member is called Sam, so it shows no handle", says)
 	}
 
 	f.exec(t, "INSERT INTO app_user (id, display_name, handle, timezone) VALUES ($1, 'Ellie', 'ellie2', 'Europe/London')", peopleSecondID)
 	f.exec(t, "INSERT INTO membership (garden_id, user_id, role, digest_hour) VALUES ($1, $2, 'sitter', 8)", moreGardenID, peopleSecondID)
 	page := f.page(t, f.handler.people, PeoplePath)
 
-	for _, want := range []string{"ellie", "ellie2"} {
-		if !strings.Contains(page, `<span class="row__handle">`+want+`</span>`) {
-			t.Errorf("no row shows the handle %q, and two members are called Ellie", want)
+	for _, handle := range []string{"ellie", "ellie2"} {
+		if !slices.ContainsFunc(membersShown(page), func(row shownMember) bool { return strings.HasPrefix(row.says, "Ellie "+handle+" ") }) {
+			t.Errorf("no row shows the handle %q after the name, and two members are called Ellie", handle)
 		}
 	}
 	if label := ariaLabels(page)["role.ellie2"]; label != "Ellie (ellie2)’s role" {
@@ -176,7 +168,7 @@ func TestPeople_PendingInvitesIsAbsentOnceEveryInviteIsGone(t *testing.T) {
 	f.exec(t, "DELETE FROM invite WHERE garden_id = $1", moreGardenID)
 	page := f.page(t, f.handler.people, PeoplePath)
 
-	if strings.Contains(page, "Pending invites") {
+	if strings.Contains(text(page), "Pending invites") {
 		t.Error("Pending invites is on the page with nothing in it")
 	}
 }
@@ -221,8 +213,8 @@ func TestPeople_ARoleSavedOnAMemberIsTheOneTheirRowShowsAfterwards(t *testing.T)
 	if row.role != "sitter" {
 		t.Errorf("Sam's row has %q selected after the save, want %q", row.role, "sitter")
 	}
-	if row.meta != roleWhat["sitter"] {
-		t.Errorf("the sentence under Sam reads %q, want %q", row.meta, roleWhat["sitter"])
+	if want := "Sam " + roleWhat["sitter"]; row.says != want {
+		t.Errorf("Sam's row reads %q, want %q", row.says, want)
 	}
 }
 
@@ -270,14 +262,11 @@ func TestPeople_ANewDateOnAMembershipThatEndedGivesTheRowItsRoleSelectBack(t *te
 	f.do(t, f.handler.saveMembers, PeoplePath, url.Values{"until.clare": {"2026-10-01"}})
 
 	row := memberNamed(t, f.page(t, f.handler.people, PeoplePath), "Clare")
-	if row.off {
-		t.Error("Clare's access runs to October and the row is still greyed")
-	}
 	if row.role != "sitter" {
 		t.Errorf("Clare's row has %q selected, want %q", row.role, "sitter")
 	}
-	if want := "Sitter · until 1 Oct"; row.meta != want {
-		t.Errorf("Clare's second line reads %q, want %q", row.meta, want)
+	if want := "Clare Sitter · until 1 Oct"; row.says != want {
+		t.Errorf("Clare's row reads %q, want %q", row.says, want)
 	}
 }
 
@@ -306,8 +295,8 @@ func TestPeople_AMembersEndDateIsShownAndSavedInTheirOwnZone(t *testing.T) {
 		VALUES ($1, $2, 'sitter', '2026-01-05T00:00:00Z', '2026-09-14T02:00:00Z', 8)`, moreGardenID, peopleFinnID)
 
 	row := memberNamed(t, f.page(t, f.handler.people, PeoplePath), "Finn")
-	if want := "Sitter · until 13 Sep"; row.meta != want {
-		t.Errorf("Finn's second line reads %q, want %q; the day is the one where they are", row.meta, want)
+	if want := "Finn Sitter · until 13 Sep"; row.says != want {
+		t.Errorf("Finn's row reads %q, want %q; the day is the one where they are", row.says, want)
 	}
 	if row.until != "2026-09-13" {
 		t.Errorf("the end date field holds %q, want %q", row.until, "2026-09-13")
@@ -332,11 +321,11 @@ func TestPeople_TheRemoveQuestionNamesThePersonAndWhatTheyKeep(t *testing.T) {
 	page := f.memberPage(t, http.MethodGet, f.handler.confirmRemoveMember, "sam", removeMemberPath("sam"))
 
 	row := memberAsking(t, page)
-	if row.ask != "Remove Sam?" {
-		t.Errorf("the row asks %q, want %q", row.ask, "Remove Sam?")
+	if !strings.HasPrefix(row.says, "Remove Sam? ") {
+		t.Errorf("the row reads %q, want it to ask %q", row.says, "Remove Sam?")
 	}
-	if !strings.Contains(row.why, "Their name stays on everything they’ve logged") {
-		t.Errorf("the question reads %q, and it has to say what removing them keeps", row.why)
+	if !strings.Contains(row.says, "Their name stays on everything they’ve logged") {
+		t.Errorf("the question reads %q, and it has to say what removing them keeps", row.says)
 	}
 }
 
@@ -529,86 +518,39 @@ func roleOf(t *testing.T, f *moreFixture, userID uuid.UUID) string {
 	return role
 }
 
-var (
-	// A member's row has one of two class combinations, one for the controls
-	// and one for "Remove Ellie?". An invite row has neither, so this pattern
-	// skips the Pending invites section.
-	memberRowElement = regexp.MustCompile(`(?s)<li class="row row--setting row--stack (row--people[^"]*|row--editing row--asking)">(.*?)</li>`)
-	memberName       = regexp.MustCompile(`(?s)<span class="row__name">(.*?)</span>`)
-	memberHandle     = regexp.MustCompile(`<span class="row__handle">([^<]*)</span>`)
-	memberPart       = regexp.MustCompile(`(?s)<span class="row__part[^"]*"[^>]*>(.*?)</span>`)
-	memberDate       = regexp.MustCompile(`<input class="input input--unit" type="date"[^>]*value="([^"]*)"`)
-	memberAct        = regexp.MustCompile(`(?s)<(?:button|a) class="row__drop"[^>]*>(.*?)</(?:button|a)>`)
-	memberAsk        = regexp.MustCompile(`(?s)<span class="row__ask">(.*?)</span>`)
-	memberWhy        = regexp.MustCompile(`(?s)<p class="row__why">(.*?)</p>`)
-	memberNote       = regexp.MustCompile(`(?s)<span class="row__note">(.*?)</span>`)
-	inviteRowElement = regexp.MustCompile(`(?s)<li class="row row--setting row--stack">(.*?)</li>`)
-	secretElement    = regexp.MustCompile(`(?s)<code class="secret__value">(.*?)</code>`)
-	ariaLabelled     = regexp.MustCompile(`name="([^"]+)" aria-label="([^"]+)"`)
-)
-
-// shownMember is one row of the Members list as the page renders it.
+// shownMember is one row of the Members list.
 type shownMember struct {
+	// name is the first text in the row. On a member's row that is their
+	// display name. On the row asking "Remove Sam?" it is the question.
 	name string
-	// handle is the handle shown beside the name, empty on a row that shows
-	// none.
-	handle string
-	// meta is the second line, its parts joined with the separator the page
-	// puts between them.
-	meta string
-	// note is what the row says at its right-hand end in place of controls.
-	note string
-	// off is true when the row is greyed.
-	off bool
+	// says is the row's text without its select, buttons and links: the name,
+	// any handle, and the role or the line under the name.
+	says string
 	// role is the option the select has chosen, and roles every option it
 	// offers. Both are empty on a row with no select.
 	role  string
 	roles []string
 	// until is what the end date field holds, empty on a row with no field.
 	until string
-	// acts is the words on the row's own controls, in page order.
+	// acts is the text of the row's buttons and links, in page order.
 	acts []string
-	// ask and why are the Remove question, empty on a row that is not asking.
-	ask string
-	why string
 }
 
-// membersShown reads the Members list in page order.
+// membersShown reads the Members list in page order. A row is a list item in
+// the form that saves the list.
 func membersShown(page string) []shownMember {
 	var out []shownMember
-	for _, m := range memberRowElement.FindAllStringSubmatch(page, -1) {
-		row := shownMember{off: strings.Contains(m[1], "row--off")}
-		if name := memberName.FindStringSubmatch(m[2]); name != nil {
-			row.name = text(strings.SplitN(name[1], "<span", 2)[0])
-			if handle := memberHandle.FindStringSubmatch(name[1]); handle != nil {
-				row.handle = handle[1]
+	for _, item := range formTo(page, PeoplePath).all(isTag("li")) {
+		row := shownMember{name: firstText(item), says: textOutside(item, "select", "button", "a")}
+		if roles := item.first(isTag("select")); roles != nil {
+			row.role = selectedValue(roles)
+			for _, option := range roles.all(isTag("option")) {
+				row.roles = append(row.roles, option.attr("value"))
 			}
 		}
-		var parts []string
-		for _, part := range memberPart.FindAllStringSubmatch(m[2], -1) {
-			parts = append(parts, text(part[1]))
-		}
-		row.meta = strings.Join(parts, " · ")
-		if note := memberNote.FindStringSubmatch(m[2]); note != nil {
-			row.note = text(note[1])
-		}
-		if selected := optionSelected.FindStringSubmatch(m[2]); selected != nil {
-			row.role = selected[1]
-		}
-		for _, option := range optionElement.FindAllStringSubmatch(m[2], -1) {
-			row.roles = append(row.roles, option[1])
-		}
-		if date := memberDate.FindStringSubmatch(m[2]); date != nil {
-			row.until = date[1]
-		}
-		for _, act := range memberAct.FindAllStringSubmatch(m[2], -1) {
-			row.acts = append(row.acts, text(act[1]))
-		}
-		if ask := memberAsk.FindStringSubmatch(m[2]); ask != nil {
-			row.ask = text(ask[1])
-		}
-		if why := memberWhy.FindStringSubmatch(m[2]); why != nil {
-			row.why = text(why[1])
+		row.until = item.first(isTag("input"), attrIs("type", "date")).attr("value")
+		for _, control := range item.all(func(e *element) bool { return e.tag == "button" || e.tag == "a" }) {
+			row.acts = append(row.acts, control.text())
 		}
 		out = append(out, row)
 	}
@@ -628,13 +570,13 @@ func memberNamed(t *testing.T, page, name string) shownMember {
 	return shownMember{}
 }
 
-// memberAsking returns the one row asking "Remove Ellie?". That row has no
-// name, because the question replaces it.
+// memberAsking returns the one row asking "Remove Ellie?". It is the row that
+// offers Cancel.
 func memberAsking(t *testing.T, page string) shownMember {
 	t.Helper()
 
 	for _, row := range membersShown(page) {
-		if row.ask != "" {
+		if slices.Contains(row.acts, "Cancel") {
 			return row
 		}
 	}
@@ -651,45 +593,85 @@ func memberNames(page string) []string {
 	return out
 }
 
-// invitesShown reads the Pending invites section, one string per row.
+// invitesShown reads the Pending invites list, one string per row. A row is a
+// list item holding a Revoke button, and the string is its text without the
+// button.
 func invitesShown(page string) []string {
-	invited := strings.SplitN(page, `<h2 class="section__title">Pending invites</h2>`, 2)
-	if len(invited) != 2 {
-		return nil
-	}
 	var out []string
-	for _, m := range inviteRowElement.FindAllStringSubmatch(invited[1], -1) {
-		row := ""
-		if name := memberName.FindStringSubmatch(m[1]); name != nil {
-			row = text(name[1])
+	for _, item := range readHTML(page).all(isTag("li")) {
+		if item.first(isTag("button"), textIs("Revoke")) != nil {
+			out = append(out, textOutside(item, "button"))
 		}
-		var parts []string
-		for _, part := range memberPart.FindAllStringSubmatch(m[1], -1) {
-			parts = append(parts, text(part[1]))
-		}
-		out = append(out, row+" "+strings.Join(parts, " · "))
 	}
 	return out
 }
 
+// secretValue returns the value a page shows once, such as a new token or an
+// invite link.
 func secretValue(t *testing.T, page string) string {
 	t.Helper()
 
-	m := secretElement.FindStringSubmatch(page)
-	if m == nil {
+	value := readHTML(page).byID("secret-value")
+	if value == nil {
 		t.Fatalf("no value in a secret box on:\n%s", page)
 	}
-	return text(m[1])
+	return value.text()
 }
 
 // ariaLabels returns the accessible name of every named control on the page,
 // keyed by the name it posts under.
 func ariaLabels(page string) map[string]string {
 	out := map[string]string{}
-	for _, m := range ariaLabelled.FindAllStringSubmatch(page, -1) {
-		out[m[1]] = m[2]
+	for _, control := range readHTML(page).all(hasAttr("name"), hasAttr("aria-label")) {
+		out[control.attr("name")] = control.attr("aria-label")
 	}
 	return out
+}
+
+// firstText returns the first run of text in e that is not only whitespace,
+// trimmed.
+func firstText(e *element) string {
+	if e == nil {
+		return ""
+	}
+	for _, c := range e.children {
+		switch c := c.(type) {
+		case string:
+			if s := strings.TrimSpace(c); s != "" {
+				return s
+			}
+		case *element:
+			if s := firstText(c); s != "" {
+				return s
+			}
+		}
+	}
+	return ""
+}
+
+// textOutside returns the text of e without the text of the elements below it
+// that have one of the tags given.
+func textOutside(e *element, tags ...string) string {
+	return withoutTags(e, tags).text()
+}
+
+// withoutTags returns a copy of e that leaves out every element below it with
+// one of the tags given.
+func withoutTags(e *element, tags []string) *element {
+	if e == nil {
+		return nil
+	}
+	kept := &element{tag: e.tag, attrs: e.attrs}
+	for _, c := range e.children {
+		child, ok := c.(*element)
+		switch {
+		case !ok:
+			kept.children = append(kept.children, c)
+		case !slices.Contains(tags, child.tag):
+			kept.children = append(kept.children, withoutTags(child, tags))
+		}
+	}
+	return kept
 }
 
 func TestPeople_ARemoveSentAsASwapGetsThePageUnderTheBarWithoutThatMember(t *testing.T) {
@@ -698,11 +680,11 @@ func TestPeople_ARemoveSentAsASwapGetsThePageUnderTheBarWithoutThatMember(t *tes
 	rec := f.swap(t, f.handler.removeMember, removeMemberPath("sam"), peopleID, "member", "sam", url.Values{})
 
 	body := fragment(t, rec, peopleID)
-	page := text(withoutAnnouncement(body))
+	page := textWithoutAnnouncement(body)
 	if strings.Contains(page, "Sam") {
 		t.Errorf("Sam is still on the page after the remove:\n%s", page)
 	}
-	if strings.Contains(body, removeMemberPath("sam")) {
+	if readHTML(body).first(isTag("a"), attrIs("href", removeMemberPath("sam"))) != nil {
 		t.Errorf("Sam's Remove is still on the page after the remove:\n%s", text(body))
 	}
 }
@@ -713,10 +695,10 @@ func TestPeople_ARevokeSentAsASwapGetsThePageUnderTheBarWithoutThatInvite(t *tes
 	rec := f.swap(t, f.handler.revokeInvite, revokeInvitePath(pendingInviteID), peopleID, "invite", pendingInviteID.String(), url.Values{})
 
 	body := fragment(t, rec, peopleID)
-	if strings.Contains(body, revokeInvitePath(pendingInviteID)) {
+	if formTo(body, revokeInvitePath(pendingInviteID)) != nil {
 		t.Errorf("the revoked invite is still listed:\n%s", text(body))
 	}
-	if !strings.Contains(body, revokeInvitePath(peopleExpiredID)) {
+	if formTo(body, revokeInvitePath(peopleExpiredID)) == nil {
 		t.Errorf("the invite that ran out is no longer listed:\n%s", text(body))
 	}
 }

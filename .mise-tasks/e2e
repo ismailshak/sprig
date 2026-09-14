@@ -95,8 +95,6 @@ cd e2e
 
 pnpm install --frozen-lockfile
 
-pnpm check
-
 # Installs the pinned browser, and on Linux its system libraries, when they are missing
 pnpm run browsers
 

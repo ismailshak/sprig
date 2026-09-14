@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"regexp"
 	"strings"
 	"testing"
 	"uuid"
@@ -95,12 +94,6 @@ func (f *invitedFixture) sessionGarden(t *testing.T, tokenHash string) uuid.UUID
 	return id
 }
 
-// linkTo reports whether the page holds a link to href reading label.
-func linkTo(page, href, label string) bool {
-	anchor := `(?s)<a[^>]*href="` + regexp.QuoteMeta(href) + `"[^>]*>\s*` + regexp.QuoteMeta(label) + `\s*</a>`
-	return regexp.MustCompile(anchor).MatchString(page)
-}
-
 // cannotAccept fails the test unless rec is the page for a link that cannot be
 // accepted, and returns the page.
 func cannotAccept(t *testing.T, rec *httptest.ResponseRecorder) string {
@@ -110,10 +103,10 @@ func cannotAccept(t *testing.T, rec *httptest.ResponseRecorder) string {
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("status = %d, want %d", rec.Code, http.StatusNotFound)
 	}
-	if !strings.Contains(page, "This invite link can’t be used") {
+	if !strings.Contains(text(page), "This invite link can’t be used") {
 		t.Errorf("the page does not say the link cannot be used:\n%s", text(page))
 	}
-	if strings.Contains(page, "<form") {
+	if readHTML(page).first(isTag("form")) != nil {
 		t.Errorf("the page has a form on it, and there is nothing to post:\n%s", text(page))
 	}
 	if !linkTo(page, todayPath, "Back to Fairview") {
@@ -135,15 +128,20 @@ func TestAccept_ThePageOffersJoinWithTheEndDateInTheAccountsOwnZone(t *testing.T
 	for _, want := range []string{
 		"Join Rosewood as Sam?",
 		"Ellie invited you to Rosewood. You’ll join as a sitter. Sitters can log care and view everything, but not add plants or photos. Your access ends on 17 Sep.",
-		`<form method="post" action="` + acceptPath(sitterLink) + `">`,
-		"Not Sam? <a href=\"" + signInToAcceptPath(sitterLink) + "\">Sign in as someone else</a>.",
+		"Not Sam?",
 	} {
-		if !strings.Contains(page, want) {
-			t.Errorf("the page lacks %s:\n%s", want, page)
+		if !strings.Contains(text(page), want) {
+			t.Errorf("the page lacks %s:\n%s", want, text(page))
 		}
 	}
+	if form := formTo(page, acceptPath(sitterLink)); form.attr("method") != "post" {
+		t.Errorf("the page has no form posting to %s:\n%s", acceptPath(sitterLink), page)
+	}
+	if !linkTo(page, signInToAcceptPath(sitterLink), "Sign in as someone else") {
+		t.Errorf("the page has no Sign in as someone else link to %s:\n%s", signInToAcceptPath(sitterLink), page)
+	}
 	buttonNamed(t, page, "Join Rosewood")
-	if strings.Contains(page, "nav__item") {
+	if hasTabBar(page) {
 		t.Error("the page renders the tab bar, and it is about a garden the session is not on")
 	}
 	if at := f.redeemedAt(t, sitterLink); at != nil {
@@ -228,7 +226,7 @@ func TestAccept_AnEndedMembershipIsRenewedFromTheInviteRatherThanDuplicated(t *t
 	}, "clares-session")
 	memberships := f.count(t, "membership")
 
-	if rec := f.showAccept(t, memberLink, clare); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "Join Rosewood as Clare?") {
+	if rec := f.showAccept(t, memberLink, clare); rec.Code != http.StatusOK || !strings.Contains(text(rec.Body.String()), "Join Rosewood as Clare?") {
 		t.Fatalf("the page: status = %d:\n%s", rec.Code, text(rec.Body.String()))
 	}
 	rec := f.accept(t, memberLink, clare)
@@ -274,15 +272,20 @@ func TestAccept_AnAccountAlreadyInTheGardenIsToldSoAndTheLinkStaysUnused(t *test
 	for _, want := range []string{
 		"You’re already in Rosewood",
 		"This account is already a member. The link hasn’t been used.",
-		`<form method="post" action="` + gardensPath + `">`,
-		`<input type="hidden" name="` + gardenField + `" value="` + moreGardenID.String() + `">`,
 	} {
-		if !strings.Contains(page, want) {
-			t.Errorf("the page lacks %s:\n%s", want, page)
+		if !strings.Contains(text(page), want) {
+			t.Errorf("the page lacks %s:\n%s", want, text(page))
 		}
 	}
+	form := formTo(page, gardensPath)
+	if form.attr("method") != "post" {
+		t.Errorf("the page has no form posting to %s:\n%s", gardensPath, page)
+	}
+	if garden, _ := hiddenValue(form, gardenField); garden != moreGardenID.String() {
+		t.Errorf("the form posts the garden %q, want Rosewood's id %s", garden, moreGardenID)
+	}
 	buttonNamed(t, page, "Open Rosewood")
-	if strings.Contains(page, "Join Rosewood") {
+	if strings.Contains(text(page), "Join Rosewood") {
 		t.Errorf("the page offers Join, and the account is in the garden already:\n%s", text(page))
 	}
 
@@ -361,7 +364,7 @@ func TestInvited_AJoinLinkOffersSignInForSomebodyWithAnAccountAndAReenrolmentLin
 	f := invitedGarden(t)
 
 	page := f.show(t, sitterLink).Body.String()
-	if !strings.Contains(page, `Already have an account? <a href="`+signInToAcceptPath(sitterLink)+`">Sign in to join</a>.`) {
+	if !strings.Contains(text(page), "Already have an account?") || !linkTo(page, signInToAcceptPath(sitterLink), "Sign in to join") {
 		t.Errorf("the join page does not offer sign in for somebody with an account:\n%s", page)
 	}
 	if !strings.Contains(signInToAcceptPath(sitterLink), signInPath+"?"+nextField+"=") {
@@ -369,7 +372,7 @@ func TestInvited_AJoinLinkOffersSignInForSomebodyWithAnAccountAndAReenrolmentLin
 	}
 
 	page = f.show(t, samsLink).Body.String()
-	if strings.Contains(page, "Sign in to join as yourself") {
+	if strings.Contains(text(page), "Sign in to join as yourself") {
 		t.Errorf("the re-enrolment page offers sign in to join, and the account is in the garden already:\n%s", text(page))
 	}
 }
@@ -432,7 +435,7 @@ func TestAccept_AnAccountInNoGardenSeesJoinAndAcceptingPutsTheSessionOnTheGarden
 	users, passkeys := f.count(t, "app_user"), f.count(t, "passkey_credential")
 
 	rec := f.showAccept(t, sitterLink, sam)
-	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "Join Rosewood as Sam?") {
+	if rec.Code != http.StatusOK || !strings.Contains(text(rec.Body.String()), "Join Rosewood as Sam?") {
 		t.Fatalf("status = %d, want the Join page:\n%s", rec.Code, text(rec.Body.String()))
 	}
 
@@ -459,7 +462,7 @@ func TestAccept_ALinkThatCannotBeUsedOffersBackAndNamesNoGardenForASessionOnNone
 
 	page := f.showAccept(t, usedLink, sam).Body.String()
 
-	if !linkTo(page, todayPath, "Back") || strings.Contains(page, "Back to") {
+	if !linkTo(page, todayPath, "Back") || strings.Contains(text(page), "Back to") {
 		t.Errorf("the page for a link that cannot be used names a garden the session is not on:\n%s", text(page))
 	}
 }
@@ -500,7 +503,7 @@ func TestInvited_ASignedInBrowserOpeningAJoinLinkIsSentToAcceptItAsThatAccount(t
 	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != acceptPath(sitterLink) {
 		t.Errorf("status = %d, Location = %q, want %d to %s", rec.Code, rec.Header().Get("Location"), http.StatusSeeOther, acceptPath(sitterLink))
 	}
-	if rec := f.request(t, f.handler.show, samsLink, InvitedPath(samsLink), nil, cookie); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "Add this device to your account") {
+	if rec := f.request(t, f.handler.show, samsLink, InvitedPath(samsLink), nil, cookie); rec.Code != http.StatusOK || !strings.Contains(text(rec.Body.String()), "Add this device to your account") {
 		t.Errorf("a re-enrolment link: status = %d, want the form, because the link adds a device to the account it names:\n%s", rec.Code, text(rec.Body.String()))
 	}
 	unusable(t, f.request(t, f.handler.show, usedLink, InvitedPath(usedLink), nil, cookie))

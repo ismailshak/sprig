@@ -1,10 +1,8 @@
 package http
 
 import (
-	"html"
 	"net/http"
 	"net/url"
-	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -47,8 +45,8 @@ func TestTokens_ALiveRowOffersRevokeAndAnExpiredOneOffersRemove(t *testing.T) {
 	// The newest row is at the top. A date inside the last week is named by its
 	// day, and the spare ran out on the Friday.
 	want := []shownToken{
-		{name: "The kitchen display", prefix: "sprg_7c1f", used: "Last used today", life: "Expires 23 Oct", off: false, drop: "Revoke"},
-		{name: "The spare display", prefix: "sprg_2ea8", used: "Never used", life: "Expired Friday", off: true, drop: "Remove"},
+		{says: "The kitchen display sprg_7c1f… · Last used today Expires 23 Oct", drop: "Revoke"},
+		{says: "The spare display sprg_2ea8… · Never used Expired Friday", drop: "Remove"},
 	}
 	if !slices.Equal(rows, want) {
 		t.Errorf("the list reads\n%+v\nwant\n%+v", rows, want)
@@ -59,14 +57,14 @@ func TestTokens_TheNoteUnderTheListSaysWhatHasHappenedOnceARowHasRunOut(t *testi
 	f := tokenGarden(t)
 
 	page := f.page(t, f.handler.tokens, TokensPath)
-	if !strings.Contains(page, "An expired token no longer works") {
+	if !strings.Contains(text(page), "An expired token no longer works") {
 		t.Errorf("the note does not say a row has already run out:\n%s", page)
 	}
 
 	f.exec(t, "DELETE FROM api_token WHERE id = $1", spareTokenID)
 	page = f.page(t, f.handler.tokens, TokensPath)
 
-	if strings.Contains(page, "An expired token no longer works") {
+	if strings.Contains(text(page), "An expired token no longer works") {
 		t.Errorf("with every token working, the page still has the note about an expired one:\n%s", page)
 	}
 }
@@ -96,7 +94,7 @@ func TestTokens_ANewTokenIsShownOnceAndOnlyItsHashIsStored(t *testing.T) {
 	if want := thursday.AddDate(0, 0, 30); !expires.Equal(want) {
 		t.Errorf("the token stops working at %s, want %s", expires, want)
 	}
-	if !strings.Contains(page, "It expires on 3 Oct") {
+	if !strings.Contains(text(page), "It expires on 3 Oct") {
 		t.Errorf("the sentence under the token does not name the day it stops working:\n%s", page)
 	}
 	if strings.Contains(f.page(t, f.handler.tokens, TokensPath), token) {
@@ -104,22 +102,19 @@ func TestTokens_ANewTokenIsShownOnceAndOnlyItsHashIsStored(t *testing.T) {
 	}
 }
 
-// copyButton matches a Copy button and captures the value it puts on the
-// clipboard. The button is rendered hidden, so a browser running no script
-// shows no Copy.
-var copyButton = regexp.MustCompile(`<button[^>]*data-copy="([^"]*)"[^>]*hidden>`)
-
 func TestTokens_ANewTokensCopyButtonHoldsTheTokenShown(t *testing.T) {
 	f := tokenGarden(t)
 
 	rec := f.do(t, f.handler.createToken, TokensPath, url.Values{"name": {"The greenhouse pi"}, "expiry": {"30"}})
 
 	page := rec.Body.String()
-	m := copyButton.FindStringSubmatch(page)
-	if m == nil {
+	// Copy is rendered hidden. A browser running no script shows no Copy.
+	// data-copy is the value the script puts on the clipboard.
+	copyButton := readHTML(page).first(isTag("button"), hasAttr("data-copy"))
+	if !copyButton.has("hidden") {
 		t.Fatalf("the page has no hidden Copy button:\n%s", page)
 	}
-	if got, want := html.UnescapeString(m[1]), secretValue(t, page); got != want {
+	if got, want := copyButton.attr("data-copy"), secretValue(t, page); got != want {
 		t.Errorf("Copy puts %q on the clipboard, want the token shown, %q", got, want)
 	}
 }
@@ -146,7 +141,7 @@ func TestTokens_ATokenWithNoNameIsRefusedWithTheChosenExpiryStillSelected(t *tes
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusUnprocessableEntity)
 	}
 	page := rec.Body.String()
-	if !strings.Contains(page, tokenNameMissing) {
+	if !strings.Contains(text(page), tokenNameMissing) {
 		t.Errorf("the message under the name field is missing:\n%s", page)
 	}
 	if got := selectedOption(page); got != "90" {
@@ -179,7 +174,7 @@ func TestTokens_RevokingATokenTakesItOutOfTheListAndLeavesTheRest(t *testing.T) 
 	}
 
 	rows := tokensShown(f.page(t, f.handler.tokens, TokensPath))
-	if len(rows) != 1 || rows[0].name != "The spare display" {
+	if len(rows) != 1 || !strings.HasPrefix(rows[0].says, "The spare display ") {
 		t.Errorf("the list reads %+v after revoking the kitchen display", rows)
 	}
 }
@@ -206,49 +201,25 @@ func tokensInGarden(t *testing.T, f *moreFixture) int {
 	return count
 }
 
-var (
-	tokenRowElement = regexp.MustCompile(`(?s)<li class="row row--setting row--stack([^"]*)">(.*?)</li>`)
-	tokenLife       = regexp.MustCompile(`(?s)<span class="row__life">(.*?)</span>`)
-	tokenPrefix     = regexp.MustCompile(`<code>([^<]*)&hellip;</code>`)
-	optionElement   = regexp.MustCompile(`<option value="([^"]+)"`)
-	optionSelected  = regexp.MustCompile(`<option value="([^"]+)" selected>`)
-)
-
-// shownToken is one row of the Tokens list as the page renders it.
+// shownToken is one row of the Tokens list.
 type shownToken struct {
-	name   string
-	prefix string
-	// used reads "Last used today" or "Never used".
-	used string
-	// life is the line under those, "Expires 23 Oct" or "Expired 28 Aug".
-	life string
-	// off is true when the row is greyed.
-	off bool
-	// drop is the word on the row's one button.
+	// says is the row's text without its button: the name, the prefix, when it
+	// was last used and when it expires.
+	says string
+	// drop is the text of the row's one button.
 	drop string
 }
 
+// tokensShown reads the Tokens list in page order. A row is a list item holding
+// a button.
 func tokensShown(page string) []shownToken {
 	var out []shownToken
-	for _, m := range tokenRowElement.FindAllStringSubmatch(page, -1) {
-		row := shownToken{off: strings.Contains(m[1], "row--off")}
-		if name := memberName.FindStringSubmatch(m[2]); name != nil {
-			row.name = text(name[1])
+	for _, row := range readHTML(page).all(isTag("li")) {
+		button := row.first(isTag("button"))
+		if button == nil {
+			continue
 		}
-		if prefix := tokenPrefix.FindStringSubmatch(m[2]); prefix != nil {
-			row.prefix = prefix[1]
-		}
-		parts := memberPart.FindAllStringSubmatch(m[2], -1)
-		if len(parts) == 2 {
-			row.used = text(parts[1][1])
-		}
-		if life := tokenLife.FindStringSubmatch(m[2]); life != nil {
-			row.life = text(life[1])
-		}
-		if act := memberAct.FindStringSubmatch(m[2]); act != nil {
-			row.drop = text(act[1])
-		}
-		out = append(out, row)
+		out = append(out, shownToken{says: textOutside(row, "button"), drop: button.text()})
 	}
 	return out
 }
@@ -256,17 +227,14 @@ func tokensShown(page string) []shownToken {
 // lifeOptionsShown reads the values the expiry select offers, in page order.
 func lifeOptionsShown(page string) []string {
 	var out []string
-	for _, m := range optionElement.FindAllStringSubmatch(page, -1) {
-		out = append(out, m[1])
+	for _, option := range readHTML(page).byID("expiry").all(isTag("option")) {
+		out = append(out, option.attr("value"))
 	}
 	return out
 }
 
 func selectedOption(page string) string {
-	if m := optionSelected.FindStringSubmatch(page); m != nil {
-		return m[1]
-	}
-	return ""
+	return selectedValue(readHTML(page).byID("expiry"))
 }
 
 func TestTokens_ARevokeSentAsASwapGetsThePageUnderTheBarWithoutThatRow(t *testing.T) {
@@ -275,7 +243,7 @@ func TestTokens_ARevokeSentAsASwapGetsThePageUnderTheBarWithoutThatRow(t *testin
 	rec := f.swap(t, f.handler.revokeToken, revokeTokenPath(kitchenTokenID), tokensID, "token", kitchenTokenID.String(), url.Values{})
 
 	rows := tokensShown(fragment(t, rec, tokensID))
-	if len(rows) != 1 || rows[0].name != "The spare display" {
+	if len(rows) != 1 || !strings.HasPrefix(rows[0].says, "The spare display ") {
 		t.Errorf("the list reads %+v after revoking the kitchen display", rows)
 	}
 }
@@ -286,7 +254,7 @@ func TestTokens_ACreateSentAsASwapGetsThePageUnderTheBarWithTheNewToken(t *testi
 	rec := f.swap(t, f.handler.createToken, TokensPath, tokensID, "", "", url.Values{"name": {"The greenhouse pi"}, "expiry": {"30"}})
 
 	body := fragment(t, rec, tokensID)
-	if !strings.Contains(body, "Your new token") {
+	if !strings.Contains(text(body), "Your new token") {
 		t.Errorf("the response does not show the new token:\n%s", text(body))
 	}
 }

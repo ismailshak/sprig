@@ -13,11 +13,13 @@ mise run dev       # Postgres in a container, the server on the host, rebuilt on
 mise run dev:stop  # stop the Postgres container that dev leaves running
 mise run dev:reset # delete the dev database and reseed it from empty
 mise run seed      # load the seed gardens into the dev database
-mise run test      # Go tests against a throwaway Postgres
+mise run test      # Go tests against a throwaway Postgres. --race adds the race detector
+mise run coverage  # Go tests with the profile written to coverage.out, then the coverage of each function and the total. --html shows the covered lines in the browser instead
 mise run e2e       # Playwright suite, with a throwaway app and Postgres stack per worker
+mise run ci:e2e-needed <base> # true when a file changed since <base> can change what e2e runs against
 mise run lint
 mise run vulncheck
-mise run format    # prettier over e2e and the app's scripts in web/static
+mise run format    # prettier over e2e, the app's scripts in web/static and the root markdown. --check writes nothing
 mise run hooks     # point git at .githooks, once per clone
 mise run migrate
 mise run migrate:new <name>
@@ -75,6 +77,11 @@ Three tiers. Each is the cheapest thing that can catch its own class of failure.
 - **Go unit tests** for anything decidable without a database or browser, written wherever a wrong answer would otherwise go unnoticed: due-date computation, the digest's next-send time, rate limiters and their keys, config parsing, photo quota arithmetic, authorisation decisions as functions, middleware through `httptest`.
 - **Integration tests against a real Postgres** for the query layer. Nothing is mocked. A mock encodes an assumption about what Postgres does, and that assumption is wrong exactly where the query is wrong.
 - **Playwright** for what only exists in a browser: sign-in, logging care, adding a plant, editing a schedule. Two projects, one normal and one with JavaScript disabled.
+
+Go handler tests:
+
+- A handler test asserts on the status, the redirect, the headers, the rows written and the text a person reads. Where a claim depends on markup, it asserts on the attribute that holds it: a field's name, value, `checked` or `selected`, a `details` element's `open`, a link's `href`, a form's `action`, `hx-target`, an inline `style` the server computes, or an id the server assigns.
+- It never names a class or depends on a wrapper element, and never matches markup with a regular expression or a substring. It reads the body with `readHTML`, a test helper over `encoding/xml`.
 
 Playwright rules:
 

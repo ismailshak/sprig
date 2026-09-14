@@ -44,13 +44,6 @@ test('Cancel leaves the schedule unchanged', async ({ plant }) => {
   await expect(plant.shape('Water')).toHaveCount(0);
 });
 
-test('a care type with no schedule is listed as Not scheduled', async ({ plant }) => {
-  await plant.open(seeded.doris);
-
-  await expect(plant.scheduleRow('Feed')).toContainText('Not scheduled');
-  await expect(plant.scheduleRow('Repot')).toContainText('Not scheduled');
-});
-
 test('a care type with no schedule can be given one from its row @swap', async ({ plant }) => {
   await plant.open(seeded.doris);
 

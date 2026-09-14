@@ -4,17 +4,11 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
-	"regexp"
 	"strings"
 	"testing"
 
 	"github.com/ismailshak/sprig/internal/auth"
 	"github.com/ismailshak/sprig/internal/store"
-)
-
-var (
-	turnOnReminders = regexp.MustCompile(`<a[^>]*href="([^"]*)"[^>]*>Turn on notifications</a>`)
-	notNow          = regexp.MustCompile(`<a[^>]*href="([^"]*)"[^>]*>Not now</a>`)
 )
 
 // reminders opens the Reminders page as an owner whose digest is sent at
@@ -43,20 +37,20 @@ func TestReminders_TurnOnLinksToTheNotificationsPageWithoutJavaScript(t *testing
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusOK, rec.Body.String())
 	}
-	page := rec.Body.String()
-	if !strings.Contains(text(page), "One notification a day at 7:00pm") {
-		t.Errorf("the page does not say when the digest arrives:\n%s", text(page))
+	page := readHTML(rec.Body.String())
+	if !strings.Contains(page.text(), "One notification a day at 7:00pm") {
+		t.Errorf("the page does not say when the digest arrives:\n%s", page.text())
 	}
-	if m := turnOnReminders.FindStringSubmatch(page); m == nil || m[1] != notificationsPath {
-		t.Errorf("Turn on notifications links to %v, want the Notifications page for a browser with no JavaScript:\n%s", m, page)
+	if got := page.first(isTag("a"), textIs("Turn on notifications")).attr("href"); got != notificationsPath {
+		t.Errorf("Turn on notifications links to %q, want the Notifications page for a browser with no JavaScript", got)
 	}
-	if m := notNow.FindStringSubmatch(page); m == nil || m[1] != todayPath {
-		t.Errorf("Not now links to %v, want Today:\n%s", m, page)
+	if got := page.first(isTag("a"), textIs("Not now")).attr("href"); got != todayPath {
+		t.Errorf("Not now links to %q, want Today", got)
 	}
-	if !strings.Contains(text(page), "Add to Home Screen") {
-		t.Errorf("the iPhone's install steps are not on the page for the script to show:\n%s", text(page))
+	if !strings.Contains(page.text(), "Add to Home Screen") {
+		t.Errorf("the iPhone's install steps are not on the page for the script to show:\n%s", page.text())
 	}
-	if strings.Contains(page, "nav__item") {
+	if page.first(isTag("nav")) != nil {
 		t.Error("the page renders the tab bar, and the person has not seen Today yet")
 	}
 }

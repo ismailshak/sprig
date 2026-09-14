@@ -2,11 +2,9 @@ package http
 
 import (
 	"context"
-	"html"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -72,52 +70,92 @@ var (
 	repotID = uuid.MustParse("00000000-0000-7000-8000-000000000106")
 )
 
-var (
-	heroName    = regexp.MustCompile(`<h1 class="hero__name([^"]*)">(.*?)</h1>`)
-	heroMeta    = regexp.MustCompile(`<p class="hero__meta">(.*?)</p>`)
-	heroWhere   = regexp.MustCompile(`<p class="hero__where">(.*?)</p>`)
-	schedRow    = regexp.MustCompile(`(?s)<li class="sched(?: sched--add)?" id="[^"]*">(.*?)</li>`)
-	schedType   = regexp.MustCompile(`<span class="sched__type">(.*?)</span>`)
-	schedEvery  = regexp.MustCompile(`<span class="sched__every">(.*?)</span>`)
-	schedWhen   = regexp.MustCompile(`<span class="sched__when([^"]*)">(.*?)</span>`)
-	factPair    = regexp.MustCompile(`<dt>(.*?)</dt><dd>(.*?)</dd>`)
-	panelNote   = regexp.MustCompile(`<p class="panel__note">(.*?)</p>`)
-	panelFact   = regexp.MustCompile(`<p class="panel__fact"><span>Acquired</span>(.*?)</p>`)
-	logLine     = regexp.MustCompile(`<li class="logline[^"]*">(.*?)</li>`)
-	logCare     = regexp.MustCompile(`<a [^>]*>Log care</a>`)
-	sheetForm   = regexp.MustCompile(`(?s)<form class="sheet__form".*?>`)
-	sheetChips  = regexp.MustCompile(`<input type="radio" name="care" value="([^"]+)"`)
-	sheetPlantH = regexp.MustCompile(`<(a|div) class="sheet__plant"`)
-)
+// plantHeading returns the text of the page's h1, the plant's name.
+func plantHeading(page string) string {
+	return readHTML(page).first(isTag("h1")).text()
+}
+
+// hero returns the text at the top of a plant's page, above the first
+// section's heading: the plant's name, its other names, its room and the day it
+// was archived.
+func hero(page string) string {
+	body := readHTML(page).byID(plantBodyID)
+	all := body.text()
+	heading := body.first(isTag("h2")).text()
+	if heading == "" {
+		return all
+	}
+	top, _, _ := strings.Cut(all, heading)
+	return strings.TrimSpace(top)
+}
+
+// pointsAt reports whether a link, a form or a button in doc goes to url, with
+// or without htmx.
+func pointsAt(doc *element, url string) bool {
+	for _, name := range []string{"href", "action", "formaction", "hx-get", "hx-post"} {
+		if doc.first(attrIs(name, url)) != nil {
+			return true
+		}
+	}
+	return false
+}
+
+// announcedIn returns the sentence in a swap's response that htmx puts into the
+// live region, or "" when the response has none.
+func announcedIn(body string) string {
+	return readHTML(body).first(attrIs("hx-swap-oob", "innerHTML:#status")).text()
+}
+
+// idStartsWith matches an element whose id starts with prefix.
+func idStartsWith(prefix string) func(*element) bool {
+	return func(e *element) bool { return strings.HasPrefix(e.attr("id"), prefix) }
+}
+
+// elementTexts returns the text each element below e holds directly, in
+// document order, with whitespace collapsed and empty runs left out. Text a
+// template puts in separate elements, such as a care type and its rule, is
+// returned as separate strings.
+func elementTexts(e *element) []string {
+	var runs []string
+	for _, below := range e.all() {
+		var b strings.Builder
+		for _, child := range below.children {
+			if s, ok := child.(string); ok {
+				b.WriteString(s)
+			}
+		}
+		if run := strings.Join(strings.Fields(b.String()), " "); run != "" {
+			runs = append(runs, run)
+		}
+	}
+	return runs
+}
 
 type testScheduleRow struct {
 	care string
 	rule string
 	when string
-	late bool
-	off  bool
 }
 
-// scheduleOf returns the closed rows of the Schedule section. A row open as
-// the editor has controls rather than a rule and due date, so it is left out.
+// scheduleOf returns the closed schedule rows, found by their id prefix. A row
+// open for editing holds a select and is left out.
 func scheduleOf(t *testing.T, page string) []testScheduleRow {
 	t.Helper()
 
 	var rows []testScheduleRow
-	for _, m := range schedRow.FindAllStringSubmatch(page, -1) {
-		care := schedType.FindStringSubmatch(m[1])
-		when := schedWhen.FindStringSubmatch(m[1])
-		if care == nil || when == nil {
-			t.Fatalf("a schedule row has no care or due date:\n%s", m[1])
+	for _, li := range readHTML(page).all(isTag("li"), idStartsWith(scheduleRowPrefix)) {
+		if li.first(isTag("select")) != nil {
+			continue
 		}
-		row := testScheduleRow{
-			care: text(care[1]),
-			when: text(when[2]),
-			late: strings.Contains(when[1], "sched__when--late"),
-			off:  strings.Contains(when[1], "sched__when--off"),
+		// A closed row reads the care type, the rule when there is one, and
+		// when the care is due.
+		runs := elementTexts(li)
+		if len(runs) != 2 && len(runs) != 3 {
+			t.Fatalf("a schedule row reads %q, want the care type, a rule and a due date", runs)
 		}
-		if every := schedEvery.FindStringSubmatch(m[1]); every != nil {
-			row.rule = text(every[1])
+		row := testScheduleRow{care: runs[0], when: runs[len(runs)-1]}
+		if len(runs) == 3 {
+			row.rule = runs[1]
 		}
 		rows = append(rows, row)
 	}
@@ -136,49 +174,40 @@ func rowFor(t *testing.T, page, care string) testScheduleRow {
 	return testScheduleRow{}
 }
 
+// recentOf returns the lines of the Recent activity section.
 func recentOf(page string) []string {
 	var lines []string
-	for _, m := range logLine.FindAllStringSubmatch(page, -1) {
-		lines = append(lines, text(m[1]))
+	for _, li := range readHTML(page).first(attrIs("aria-labelledby", "recent")).all(isTag("li")) {
+		lines = append(lines, li.text())
 	}
 	return lines
+}
+
+// details returns the Details section of a plant's page, or nil.
+func details(page string) *element {
+	return readHTML(page).first(attrIs("aria-labelledby", "details"))
 }
 
 func TestPlant_TheHeadingIsTheNicknameWithTheOtherNamesBelow(t *testing.T) {
 	page := rosewoodPlant(t).page(t, bigFellaID)
 
-	name := heroName.FindStringSubmatch(page)
-	if name == nil || text(name[2]) != "Big Fella" {
-		t.Fatalf("the heading is not Big Fella:\n%v", name)
+	if got := plantHeading(page); got != "Big Fella" {
+		t.Fatalf("the heading reads %q, want Big Fella", got)
 	}
-	if strings.Contains(name[1], "hero__name--sp") {
-		t.Error("a nickname was set in italic")
-	}
-	meta := heroMeta.FindStringSubmatch(page)
-	if meta == nil || text(meta[1]) != "Swiss cheese plant · Monstera deliciosa" {
-		t.Errorf("the other names read %v, want Swiss cheese plant · Monstera deliciosa", meta)
-	}
-	if !strings.Contains(meta[1], "<i>Monstera deliciosa</i>") {
-		t.Errorf("the botanical name is not italic:\n%s", meta[1])
-	}
-	if where := heroWhere.FindStringSubmatch(page); where == nil || text(where[1]) != "Living room" {
-		t.Errorf("the room reads %v, want Living room", where)
+	if got, want := hero(page), "Big Fella Swiss cheese plant · Monstera deliciosa Living room"; got != want {
+		t.Errorf("the top of the page reads %q, want %q", got, want)
 	}
 }
 
 // Opuntia microdasys has only a botanical name.
-func TestPlant_ABotanicalOnlyNameIsTheHeadingInItalics(t *testing.T) {
+func TestPlant_ABotanicalOnlyNameIsTheHeadingWithNoLineOfOtherNames(t *testing.T) {
 	page := rosewoodPlant(t).page(t, opuntiaID)
 
-	name := heroName.FindStringSubmatch(page)
-	if name == nil || text(name[2]) != "Opuntia microdasys" {
-		t.Fatalf("the heading is not Opuntia microdasys:\n%v", name)
+	if got := plantHeading(page); got != "Opuntia microdasys" {
+		t.Fatalf("the heading reads %q, want Opuntia microdasys", got)
 	}
-	if !strings.Contains(name[1], "hero__name--sp") {
-		t.Error("the botanical heading is not italic")
-	}
-	if heroMeta.MatchString(page) {
-		t.Error("a plant with one name drew a second line for the names it does not have")
+	if got, want := hero(page), "Opuntia microdasys Windowsill"; got != want {
+		t.Errorf("the top of the page reads %q, want %q, with no line for the names the plant does not have", got, want)
 	}
 }
 
@@ -187,17 +216,11 @@ func TestPlant_ABotanicalOnlyNameIsTheHeadingInItalics(t *testing.T) {
 func TestPlant_APlantWithOneNameAndNoDetailsHasNoEmptySections(t *testing.T) {
 	page := rosewoodPlant(t).page(t, sproutID)
 
-	if name := heroName.FindStringSubmatch(page); name == nil || text(name[2]) != "Sprout" {
-		t.Fatalf("the heading is not Sprout:\n%v", name)
+	if got := hero(page); got != "Sprout" {
+		t.Fatalf("the top of the page reads %q, want the name Sprout with no other names and no room", got)
 	}
-	if heroMeta.MatchString(page) {
-		t.Error("the page drew a line for the names Sprout does not have")
-	}
-	if heroWhere.MatchString(page) {
-		t.Error("the page drew a room for a plant that has none")
-	}
-	if strings.Contains(page, "Details") {
-		t.Errorf("a plant with nothing written down drew a Details section:\n%s", text(page))
+	if details(page) != nil {
+		t.Errorf("a plant with nothing written down has a Details section:\n%s", text(page))
 	}
 }
 
@@ -206,10 +229,12 @@ func TestPlant_DetailsShowsOnlySetFieldsInAFixedOrder(t *testing.T) {
 	f.exec(t, `UPDATE plant SET sun = 'Bright indirect.', feed_needs = 'Half strength.', pot = '30cm terracotta.',
 		notes = 'Wipe the leaves.', acquired_year = 2024, acquired_month = 3 WHERE id = $1`, bigFellaID)
 
-	page := f.page(t, bigFellaID)
+	section := details(f.page(t, bigFellaID))
+
 	var facts [][2]string
-	for _, m := range factPair.FindAllStringSubmatch(page, -1) {
-		facts = append(facts, [2]string{text(m[1]), text(m[2])})
+	terms, definitions := section.all(isTag("dt")), section.all(isTag("dd"))
+	for i := range min(len(terms), len(definitions)) {
+		facts = append(facts, [2]string{terms[i].text(), definitions[i].text()})
 	}
 	want := [][2]string{
 		{"Sun", "Bright indirect."},
@@ -219,11 +244,8 @@ func TestPlant_DetailsShowsOnlySetFieldsInAFixedOrder(t *testing.T) {
 	if !slices.Equal(facts, want) {
 		t.Errorf("the details read %v, want %v", facts, want)
 	}
-	if note := panelNote.FindStringSubmatch(page); note == nil || text(note[1]) != "Wipe the leaves." {
-		t.Errorf("the note reads %v, want Wipe the leaves.", note)
-	}
-	if acquired := panelFact.FindStringSubmatch(page); acquired == nil || text(acquired[1]) != "March 2024" {
-		t.Errorf("acquired reads %v, want March 2024", acquired)
+	if got, want := section.text(), "Details Sun Bright indirect. Feed Half strength. Pot 30cm terracotta. Wipe the leaves. Acquired March 2024"; got != want {
+		t.Errorf("the Details section reads %q, want %q", got, want)
 	}
 }
 
@@ -231,8 +253,8 @@ func TestPlant_AnAcquiredYearWithNoMonthShowsTheYearAlone(t *testing.T) {
 	f := rosewoodPlant(t)
 	f.exec(t, "UPDATE plant SET acquired_year = 2019 WHERE id = $1", bigFellaID)
 
-	if acquired := panelFact.FindStringSubmatch(f.page(t, bigFellaID)); acquired == nil || text(acquired[1]) != "2019" {
-		t.Errorf("acquired reads %v, want 2019", acquired)
+	if got := details(f.page(t, bigFellaID)).text(); got != "Details Acquired 2019" {
+		t.Errorf("the Details section reads %q, want Details Acquired 2019", got)
 	}
 }
 
@@ -249,7 +271,7 @@ func TestPlant_EachScheduleShapeShowsItsRuleAndDueDate(t *testing.T) {
 			name:   "an overdue interval schedule shows how many days late",
 			insert: "interval_count, interval_unit, set_at) VALUES ($1, $2, $3, 10, 'day', $4",
 			args:   []any{day(time.August, 14)},
-			want:   testScheduleRow{care: "Feed", rule: "Every 10 days", when: "10 days late", late: true},
+			want:   testScheduleRow{care: "Feed", rule: "Every 10 days", when: "10 days late"},
 		},
 		{
 			name:   "an in-season schedule shows its months and days until due",
@@ -261,7 +283,7 @@ func TestPlant_EachScheduleShapeShowsItsRuleAndDueDate(t *testing.T) {
 			name:   "an out-of-season schedule says so with no count",
 			insert: "interval_count, interval_unit, season_start_month, season_end_month, set_at) VALUES ($1, $2, $3, 3, 'week', 11, 2, $4",
 			args:   []any{day(time.August, 1)},
-			want:   testScheduleRow{care: "Feed", rule: "Every 3 weeks · Nov–Feb", when: "Out of season", off: true},
+			want:   testScheduleRow{care: "Feed", rule: "Every 3 weeks · Nov–Feb", when: "Out of season"},
 		},
 		{
 			name:   "a fixed date schedule shows its date rather than a count",
@@ -281,7 +303,7 @@ func TestPlant_EachScheduleShapeShowsItsRuleAndDueDate(t *testing.T) {
 			name:   "a passed month-only date reads overdue since that month",
 			insert: "anchor_date, anchor_precision, set_at) VALUES ($1, $2, $3, '2026-03-01', 'month', $4",
 			args:   []any{day(time.January, 5)},
-			want:   testScheduleRow{care: "Feed", rule: "Just once", when: "Overdue since March", late: true},
+			want:   testScheduleRow{care: "Feed", rule: "Just once", when: "Overdue since March"},
 		},
 		{
 			name:   "a cadence due on the reader's own day says so",
@@ -363,14 +385,11 @@ func TestPlant_RecentStopsAtFourEvents(t *testing.T) {
 	}
 }
 
-// allActivity is the text and href of the link under Recent, the only link of
-// its kind on a plant's page.
+// allActivity is the text and href of the link in the Recent activity section,
+// empty when the section has no link.
 func allActivity(page string) (label, href string) {
-	m := footLink.FindStringSubmatch(page)
-	if m == nil {
-		return "", ""
-	}
-	return text(m[2]), html.UnescapeString(m[1])
+	link := readHTML(page).first(attrIs("aria-labelledby", "recent")).first(isTag("a"))
+	return link.text(), link.attr("href")
 }
 
 func TestPlant_APlantWithCareEventsLinksToItsOwnActivityLog(t *testing.T) {
@@ -408,7 +427,7 @@ func TestPlant_AReaderWhoMayNotLogCareSeesNoLogButton(t *testing.T) {
 	f := rosewoodPlant(t)
 	f.principal.Capabilities = auth.Capabilities{}
 
-	if page := f.page(t, bigFellaID); strings.Contains(page, "Log care") {
+	if page := f.page(t, bigFellaID); strings.Contains(text(page), "Log care") {
 		t.Errorf("a reader without care.log was offered Log care:\n%s", text(page))
 	}
 }
@@ -416,17 +435,18 @@ func TestPlant_AReaderWhoMayNotLogCareSeesNoLogButton(t *testing.T) {
 func TestPlant_LogCareOpensTheSheetOnThePlantsPage(t *testing.T) {
 	page := rosewoodPlant(t).page(t, bigFellaID)
 
-	button := logCare.FindString(page)
-	if button == "" {
+	doc := readHTML(page)
+	button := doc.first(isTag("a"), textIs("Log care"))
+	if button == nil {
 		t.Fatalf("the page has no Log care:\n%s", text(page))
 	}
-	for _, attr := range []string{`href="` + plantSheetPath(bigFellaID) + `"`, `hx-get="` + plantSheetPath(bigFellaID) + `"`, `hx-target="#sheet"`} {
-		if !strings.Contains(button, attr) {
-			t.Errorf("Log care lacks %s:\n%s", attr, button)
+	for name, want := range map[string]string{"href": plantSheetPath(bigFellaID), "hx-get": plantSheetPath(bigFellaID), "hx-target": "#sheet"} {
+		if got := button.attr(name); got != want {
+			t.Errorf("Log care's %s is %q, want %q", name, got, want)
 		}
 	}
-	if !strings.Contains(page, `<div id="sheet"></div>`) {
-		t.Error("the page has no slot for the sheet to land in")
+	if slot := doc.byID("sheet"); slot == nil || slot.text() != "" {
+		t.Errorf("the page has no empty element with the id sheet for the sheet to replace, got %s", slot)
 	}
 }
 
@@ -437,13 +457,13 @@ func TestPlant_AnArchivedPlantHasAPageButNoLogButton(t *testing.T) {
 	f.exec(t, "UPDATE plant SET archived_at = now() WHERE id = $1", bigFellaID)
 
 	page := f.page(t, bigFellaID)
-	if name := heroName.FindStringSubmatch(page); name == nil || text(name[2]) != "Big Fella" {
-		t.Fatalf("the heading is not Big Fella:\n%v", name)
+	if got := plantHeading(page); got != "Big Fella" {
+		t.Fatalf("the heading reads %q, want Big Fella", got)
 	}
 	if got := recentOf(page); !slices.Equal(got, []string{"You watered · 22 Aug"}) {
 		t.Errorf("Recent reads %v, want the plant's history", got)
 	}
-	if logCare.MatchString(page) {
+	if readHTML(page).first(isTag("a"), textIs("Log care")) != nil {
 		t.Errorf("an archived plant was offered Log care:\n%s", text(page))
 	}
 }
@@ -480,8 +500,8 @@ func TestPlantSheet_OffersEveryCareTypeTheGardenHas(t *testing.T) {
 		t.Fatalf("status = %d:\n%s", rec.Code, rec.Body.String())
 	}
 	var chips []string
-	for _, m := range sheetChips.FindAllStringSubmatch(rec.Body.String(), -1) {
-		chips = append(chips, m[1])
+	for _, radio := range readHTML(rec.Body.String()).all(isTag("input"), attrIs("type", "radio"), attrIs("name", "care")) {
+		chips = append(chips, radio.attr("value"))
 	}
 	if want := []string{"water", "feed", "repot"}; !slices.Equal(chips, want) {
 		t.Errorf("the sheet offers %v, want %v", chips, want)
@@ -492,11 +512,13 @@ func TestPlantSheet_ThePlantHeadingIsNotALink(t *testing.T) {
 	f := rosewoodPlant(t)
 
 	body := f.sheet(t, plantSheetPath(bigFellaID), false).Body.String()
-	if head := sheetPlantH.FindStringSubmatch(body); head == nil || head[1] != "div" {
-		t.Errorf("the sheet's heading is %v, want a plain block", head)
+
+	sheet := readHTML(body).byID("sheet")
+	if !strings.Contains(sheet.text(), "Big Fella") {
+		t.Fatalf("the sheet does not name the plant:\n%s", body)
 	}
-	if strings.Contains(body, `<a class="sheet__plant"`) {
-		t.Error("the sheet's heading leads to the page it is on")
+	if sheet.first(isTag("a"), attrIs("href", plantPath(bigFellaID))) != nil {
+		t.Error("the sheet's heading links to the page it is on")
 	}
 }
 
@@ -505,15 +527,14 @@ func TestPlantSheet_ThePlantHeadingIsNotALink(t *testing.T) {
 func TestPlantSheet_TheFormPostsWithoutAnHTMXSwap(t *testing.T) {
 	f := rosewoodPlant(t)
 
-	form := sheetForm.FindString(f.sheet(t, plantSheetPath(bigFellaID), true).Body.String())
-	if form == "" {
-		t.Fatal("the sheet has no form")
+	body := f.sheet(t, plantSheetPath(bigFellaID), true).Body.String()
+
+	form := readHTML(body).first(isTag("form"), attrIs("action", logPath(bigFellaID)))
+	if form == nil {
+		t.Fatalf("the sheet has no form posting to the plant's log:\n%s", body)
 	}
-	if strings.Contains(form, "hx-post") {
+	if form.has("hx-post") {
 		t.Errorf("the form swaps a row this page does not have:\n%s", form)
-	}
-	if !strings.Contains(form, `action="`+logPath(bigFellaID)+`"`) {
-		t.Errorf("the form does not post to the plant's log:\n%s", form)
 	}
 }
 
@@ -525,7 +546,7 @@ func TestPlantSheet_OpensOnTheCareDueSoonest(t *testing.T) {
 		rosewoodID, bigFellaID, feedID, day(time.September, 1))
 
 	body := f.sheet(t, plantSheetPath(bigFellaID), false).Body.String()
-	if !strings.Contains(body, `<input type="radio" name="care" value="water" checked>`) {
+	if !readHTML(body).first(isTag("input"), attrIs("name", "care"), attrIs("value", "water")).has("checked") {
 		t.Errorf("the sheet did not open on the watering:\n%s", body)
 	}
 }
@@ -546,7 +567,7 @@ func TestPlantSheet_RecordsTheCareAndRedirectsToThePlant(t *testing.T) {
 	}
 	// The watering resets the interval, so the row that read two days late
 	// now counts from today.
-	if got := rowFor(t, f.page(t, bigFellaID), "Water"); got.when != "Due in 10 days" || got.late {
+	if got := rowFor(t, f.page(t, bigFellaID), "Water"); got.when != "Due in 10 days" {
 		t.Errorf("the schedule row reads %+v, want the watering ten days out", got)
 	}
 }
@@ -578,11 +599,11 @@ func TestPlantSheet_ARefusedTimeReRendersThePlantsPage(t *testing.T) {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusUnprocessableEntity)
 	}
 	body := rec.Body.String()
-	if !strings.Contains(body, "That time is in the future.") {
+	if !strings.Contains(text(body), "That time is in the future.") {
 		t.Errorf("the refusal says nothing:\n%s", text(body))
 	}
-	if name := heroName.FindStringSubmatch(body); name == nil || text(name[2]) != "Big Fella" {
-		t.Errorf("the refusal did not come back on the plant's page:\n%s", text(body))
+	if got := plantHeading(body); got != "Big Fella" {
+		t.Errorf("the refusal came back under the heading %q, want the plant's page:\n%s", got, text(body))
 	}
 	if len(f.events(t, bigFellaID)) != 1 {
 		t.Error("the refused post wrote an event")
@@ -625,16 +646,20 @@ func givePicture(t *testing.T, tx pgx.Tx, plantID uuid.UUID) uuid.UUID {
 	return photoID
 }
 
-// images returns the src of every <img> in the markup.
+// images returns the src of every img in the markup that has one, in page
+// order.
 func images(markup string) []string {
 	var srcs []string
-	for _, m := range imgSrc.FindAllStringSubmatch(markup, -1) {
-		srcs = append(srcs, m[1])
+	for _, img := range readHTML(markup).all(isTag("img"), hasAttr("src")) {
+		srcs = append(srcs, img.attr("src"))
 	}
 	return srcs
 }
 
-var imgSrc = regexp.MustCompile(`<img[^>]*\ssrc="([^"]*)"`)
+// picture returns the img showing the photo at its full size, or nil.
+func picture(page string, plantID, photoID uuid.UUID) *element {
+	return readHTML(page).first(isTag("img"), attrIs("src", photoFullPath(plantID, photoID)))
+}
 
 func TestPlant_APlantWithAPictureShowsItAtTheTop(t *testing.T) {
 	f := rosewoodPlant(t)
@@ -647,10 +672,11 @@ func TestPlant_APlantWithAPictureShowsItAtTheTop(t *testing.T) {
 	if got := images(page); len(got) == 0 || got[0] != photoFullPath(bigFellaID, photoID) {
 		t.Errorf("the page's images are %v, want the picture at %s first", got, photoFullPath(bigFellaID, photoID))
 	}
-	if !strings.Contains(page, `alt="Picture of Big Fella"`) {
-		t.Error("the picture does not say whose it is")
+	if got := picture(page, bigFellaID, photoID).attr("alt"); got != "Picture of Big Fella" {
+		t.Errorf("the picture's alt text is %q, want Picture of Big Fella", got)
 	}
-	if !strings.Contains(page, `<a class="hero__pic" href="`+photoPath(bigFellaID, photoID)+`"`) {
+	link := readHTML(page).first(isTag("a"), attrIs("href", photoPath(bigFellaID, photoID)))
+	if link.first(isTag("img"), attrIs("src", photoFullPath(bigFellaID, photoID))) == nil {
 		t.Error("the picture is not a link to its photo's page")
 	}
 }
@@ -663,11 +689,11 @@ func TestPlant_ThePictureIsPositionedAtItsFocalPoint(t *testing.T) {
 	f.exec(t, "UPDATE photo SET focus_x = 0, focus_y = 100 WHERE id = $1", photoID)
 	moved := f.page(t, bigFellaID)
 
-	if !strings.Contains(centred, `style="object-position:50% 50%"`) {
-		t.Errorf("a photo with no focal point set is not centred:\n%s", hero(centred))
+	if got := picture(centred, bigFellaID, photoID).attr("style"); got != "object-position:50% 50%" {
+		t.Errorf("a photo with no focal point set has the style %q, want it centred", got)
 	}
-	if !strings.Contains(moved, `style="object-position:0% 100%"`) {
-		t.Errorf("the picture is not positioned at the bottom left:\n%s", hero(moved))
+	if got := picture(moved, bigFellaID, photoID).attr("style"); got != "object-position:0% 100%" {
+		t.Errorf("the picture has the style %q, want it positioned at the bottom left", got)
 	}
 }
 
@@ -680,23 +706,9 @@ func TestPlant_APlantWithSeveralPhotosPositionsThePictureAtItsOwnFocalPoint(t *t
 
 	page := f.page(t, bigFellaID)
 
-	if !strings.Contains(page, `style="object-position:0% 100%"`) {
-		t.Errorf("the picture is not positioned at the bottom left:\n%s", hero(page))
+	if got := picture(page, bigFellaID, pictureID).attr("style"); got != "object-position:0% 100%" {
+		t.Errorf("the picture has the style %q, want it positioned at the bottom left", got)
 	}
-}
-
-// hero returns the block at the top of the plant's page, where the picture is,
-// to print in a failure message.
-func hero(page string) string {
-	start := strings.Index(page, `<div class="hero">`)
-	if start < 0 {
-		return page
-	}
-	end := strings.Index(page[start:], "</div>")
-	if end < 0 {
-		return page
-	}
-	return page[start : start+end]
 }
 
 func TestPlant_APlantWithNoPictureHasNoImage(t *testing.T) {
@@ -723,23 +735,28 @@ func givePhoto(t *testing.T, tx pgx.Tx, plantID, uploadedBy uuid.UUID, uploadedA
 	return photoID
 }
 
-// strip returns the href of every link in the Photos section, in order.
-func strip(t *testing.T, page string) []string {
+// photosSection returns the Photos section of a plant's page, or nil.
+func photosSection(page string) *element {
+	return readHTML(page).first(attrIs("aria-labelledby", "photos"))
+}
+
+// strip returns the href of every link in the Photos section other than See
+// all, in order.
+func strip(t *testing.T, page string, plantID uuid.UUID) []string {
 	t.Helper()
 
-	byID, _ := sections(page)
-	section, ok := byID["photos"]
-	if !ok {
+	section := photosSection(page)
+	if section == nil {
 		t.Fatal("the page has no Photos section")
 	}
 	var hrefs []string
-	for _, m := range stripLink.FindAllStringSubmatch(section, -1) {
-		hrefs = append(hrefs, m[1])
+	for _, link := range section.all(isTag("a")) {
+		if href := link.attr("href"); href != photosPath(plantID) {
+			hrefs = append(hrefs, href)
+		}
 	}
 	return hrefs
 }
-
-var stripLink = regexp.MustCompile(`<a class="shot[^"]*" href="([^"]*)"`)
 
 func TestPlant_TheStripShowsTheNewestPhotosFirstAfterTheAddTile(t *testing.T) {
 	f := rosewoodPlant(t)
@@ -750,11 +767,11 @@ func TestPlant_TheStripShowsTheNewestPhotosFirstAfterTheAddTile(t *testing.T) {
 	page := f.page(t, bigFellaID)
 
 	want := []string{newPhotoPath(bigFellaID), photoPath(bigFellaID, newer), photoPath(bigFellaID, older)}
-	if got := strip(t, page); !slices.Equal(got, want) {
+	if got := strip(t, page, bigFellaID); !slices.Equal(got, want) {
 		t.Errorf("the strip links to %v, want %v", got, want)
 	}
-	if !strings.Contains(page, ">yesterday</span>") || !strings.Contains(page, ">4 Aug</span>") {
-		t.Errorf("the captions do not say yesterday and 4 Aug:\n%s", text(page))
+	if got, want := photosSection(page).text(), "Photos Add yesterday 4 Aug"; got != want {
+		t.Errorf("the Photos section reads %q, want %q", got, want)
 	}
 }
 
@@ -766,11 +783,11 @@ func TestPlant_TheStripHoldsSixPhotosAndThenLinksToSeeAll(t *testing.T) {
 
 	page := f.page(t, bigFellaID)
 
-	if got := strip(t, page); len(got) != 7 {
+	if got := strip(t, page, bigFellaID); len(got) != 7 {
 		t.Errorf("the strip has %d links, want the add tile and 6 photos", len(got))
 	}
-	if !strings.Contains(page, `href="`+photosPath(bigFellaID)+`">See all 7</a>`) {
-		t.Errorf("the Photos head does not link to all 7:\n%s", text(page))
+	if got := photosSection(page).first(isTag("a"), attrIs("href", photosPath(bigFellaID))).text(); got != "See all 7" {
+		t.Errorf("the link to %s reads %q, want See all 7", photosPath(bigFellaID), got)
 	}
 }
 
@@ -780,7 +797,7 @@ func TestPlant_TheStripHasNoSeeAllLinkWhileItHoldsEveryPhoto(t *testing.T) {
 
 	page := f.page(t, bigFellaID)
 
-	if strings.Contains(page, "See all") {
+	if strings.Contains(text(page), "See all") {
 		t.Error("the Photos head links to See all for a plant whose photos all fit in the strip")
 	}
 }
@@ -792,7 +809,7 @@ func TestPlant_ASitterSeesTheStripWithoutTheAddTile(t *testing.T) {
 
 	page := f.page(t, bigFellaID)
 
-	if got, want := strip(t, page), []string{photoPath(bigFellaID, photoID)}; !slices.Equal(got, want) {
+	if got, want := strip(t, page, bigFellaID), []string{photoPath(bigFellaID, photoID)}; !slices.Equal(got, want) {
 		t.Errorf("the strip links to %v, want %v", got, want)
 	}
 }
@@ -803,8 +820,7 @@ func TestPlant_ASitterOnAPlantWithNoPhotosReadsNoPhotosYet(t *testing.T) {
 
 	page := f.page(t, bigFellaID)
 
-	byID, _ := sections(page)
-	if got := text(byID["photos"]); got != "Photos No photos yet." {
+	if got := photosSection(page).text(); got != "Photos No photos yet." {
 		t.Errorf("the Photos section reads %q, want the heading and No photos yet.", got)
 	}
 }
@@ -816,7 +832,7 @@ func TestPlant_AnArchivedPlantHasNoAddTile(t *testing.T) {
 
 	page := f.page(t, bigFellaID)
 
-	if got, want := strip(t, page), []string{photoPath(bigFellaID, photoID)}; !slices.Equal(got, want) {
+	if got, want := strip(t, page, bigFellaID), []string{photoPath(bigFellaID, photoID)}; !slices.Equal(got, want) {
 		t.Errorf("the strip links to %v, want %v", got, want)
 	}
 }

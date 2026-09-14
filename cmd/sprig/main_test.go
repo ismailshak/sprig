@@ -3,13 +3,19 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
+	"io/fs"
 	"log/slog"
 	"net"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+	"uuid"
+
+	"github.com/jackc/pgx/v5"
 
 	"github.com/ismailshak/sprig/internal/push"
 )
@@ -140,5 +146,55 @@ func TestSubcommand_SweepWithAMissingPhotoDirectoryNamesIt(t *testing.T) {
 		t.Errorf("err = %v, want one naming %s", err, dir)
 	}
 }
+
+func TestSubcommand_SweepDeletesAnExpiredSessionAndAnOldPhotoFileNoRowPointsAt(t *testing.T) {
+	d := adminFixture(t)
+	ctx := t.Context()
+
+	// The default session lifetime is 30 days.
+	if _, err := d.pool.Exec(ctx, `INSERT INTO session (token_hash, user_id, last_seen_at)
+		VALUES ('expired', $1, now() - interval '31 days'), ('live', $1, now())`, adminUserID); err != nil {
+		t.Fatalf("seeding the sessions: %v", err)
+	}
+
+	// The sweep deletes a file no row points at only when it is under a garden
+	// and plant directory and over an hour old.
+	dir := t.TempDir()
+	orphan := filepath.Join(dir, adminGardenID.String(), orphanPlantID.String(), "photo.jpg")
+	if err := os.MkdirAll(filepath.Dir(orphan), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(orphan, []byte("orphan"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	written := time.Now().Add(-2 * time.Hour)
+	if err := os.Chtimes(orphan, written, written); err != nil {
+		t.Fatal(err)
+	}
+	d.env["SPRIG_PHOTO_DIR"] = dir
+
+	var stdout bytes.Buffer
+	if err := subcommand(ctx, []string{"sweep"}, d.getenv, &stdout); err != nil {
+		t.Fatalf("sweep: %v\n%s", err, stdout.String())
+	}
+
+	rows, err := d.pool.Query(ctx, "SELECT token_hash FROM session")
+	if err != nil {
+		t.Fatalf("reading the sessions: %v", err)
+	}
+	tokens, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	if err != nil {
+		t.Fatalf("reading the sessions: %v", err)
+	}
+	if len(tokens) != 1 || tokens[0] != "live" {
+		t.Errorf("the sessions left are %v, want only the live one", tokens)
+	}
+	if _, err := os.Stat(orphan); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("stat of the orphan file = %v, want it deleted", err)
+	}
+}
+
+// orphanPlantID names the plant directory of a photo file no row points at.
+var orphanPlantID = uuid.MustParse("00000000-0000-7000-8000-000000000403")
 
 func noEnv(string) string { return "" }
