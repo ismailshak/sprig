@@ -1,5 +1,6 @@
 import type { Locator, Page } from '@playwright/test';
 import type { Plant } from '../harness/garden';
+import { photosPage } from './photos';
 
 // The Add a photo page.
 export class PhotoFormScreen {
@@ -36,8 +37,9 @@ export class PhotoFormScreen {
     return this.page.getByRole('button', { name: 'Add photo' });
   }
 
+  // A photo that is added redirects to the plant's Photos page.
   async submit(): Promise<void> {
     await this.submitButton().click();
-    await this.page.waitForLoadState();
+    await this.page.waitForURL(photosPage);
   }
 }

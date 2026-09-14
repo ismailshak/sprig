@@ -121,8 +121,6 @@ test('a saved schedule survives a reload', async ({ page, plant }) => {
   await plant.editSchedule('Water');
   await plant.every('Water').fill('20');
   await plant.saveSchedule('Water');
-  // With JavaScript the save is a swap that click does not wait for. A reload
-  // before the row has changed cancels the request before the save commits.
   await expect(plant.scheduleRow('Water')).toContainText('Every 20 days');
 
   await page.reload();

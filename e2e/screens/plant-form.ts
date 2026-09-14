@@ -1,5 +1,6 @@
 import type { Locator, Page } from '@playwright/test';
 import type { Plant } from '../harness/garden';
+import { plantPage } from './plant';
 
 // The file to give the picker: a path on disk, or bytes made up in the test.
 type ChosenFile = string | { name: string; mimeType: string; buffer: Buffer };
@@ -48,7 +49,7 @@ export class PlantFormScreen {
   // without it a navigation.
   async schedule(care: string): Promise<void> {
     await this.row(care).getByRole('button', { name: 'Not scheduled' }).click();
-    await this.page.waitForLoadState();
+    await this.row(care).getByRole('button', { name: 'Don’t schedule' }).waitFor();
   }
 
   // dontSchedule clicks Don't schedule and waits for the row to show Not
@@ -130,8 +131,14 @@ export class PlantFormScreen {
     return this.page.locator(`input[name="${name}"]`);
   }
 
+  submitButton(button: 'Add plant' | 'Save changes'): Locator {
+    return this.page.getByRole('button', { name: button });
+  }
+
+  // A plant that is saved redirects to its own page. A refused form renders on
+  // the URL it posted to, so a test of a refusal clicks submitButton instead.
   async submit(button: 'Add plant' | 'Save changes'): Promise<void> {
-    await this.page.getByRole('button', { name: button }).click();
-    await this.page.waitForLoadState();
+    await this.submitButton(button).click();
+    await this.page.waitForURL(plantPage);
   }
 }

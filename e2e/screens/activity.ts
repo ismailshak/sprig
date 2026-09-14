@@ -72,7 +72,7 @@ export class ActivityScreen {
   // Without JavaScript the link is a navigation rather than a swap.
   async openSheet(row: Locator): Promise<void> {
     await row.getByRole('link').click();
-    await this.page.waitForLoadState();
+    await this.page.getByRole('dialog').waitFor();
   }
 
   undo(row: Locator): Locator {

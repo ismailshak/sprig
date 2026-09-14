@@ -1,5 +1,10 @@
 import type { Locator, Page } from '@playwright/test';
 import type { Plant } from '../harness/garden';
+import { photoPage } from './photos';
+
+// The URL of a plant's own page. Matching the id keeps it from matching
+// /plants/new.
+export const plantPage = /\/plants\/[0-9a-f-]{36}$/;
 
 export class PlantScreen {
   constructor(private readonly page: Page) {}
@@ -25,7 +30,7 @@ export class PlantScreen {
   // Pressing the picture goes to that photo's own page.
   async openPicture(): Promise<void> {
     await this.picture().click();
-    await this.page.waitForLoadState();
+    await this.page.waitForURL(photoPage);
   }
 
   // The Add tile at the head of the Photos strip, for a member who may add
@@ -50,7 +55,7 @@ export class PlantScreen {
   // way. With JavaScript it is an htmx swap, without it a navigation.
   async editSchedule(care: string): Promise<void> {
     await this.scheduleRow(care).getByRole('link').click();
-    await this.page.waitForLoadState();
+    await this.scheduleRow(care).getByRole('button', { name: 'Save' }).waitFor();
   }
 
   // Every control's label includes its care type. The add form's rows use the
@@ -72,21 +77,23 @@ export class PlantScreen {
   }
 
   async saveSchedule(care: string): Promise<void> {
-    await this.scheduleRow(care).getByRole('button', { name: 'Save' }).click();
-    await this.page.waitForLoadState();
+    const save = this.scheduleRow(care).getByRole('button', { name: 'Save' });
+    await save.click();
+    await save.waitFor({ state: 'detached' });
   }
 
   async cancelSchedule(care: string): Promise<void> {
     await this.scheduleRow(care).getByRole('link', { name: 'Cancel' }).click();
-    await this.page.waitForLoadState();
+    await this.scheduleRow(care).getByRole('button', { name: 'Save' }).waitFor({ state: 'detached' });
   }
 
   // Remove asks for confirmation. The first click replaces the editor's buttons
   // with the question and the second confirms.
   async removeSchedule(care: string): Promise<void> {
     await this.askToRemoveSchedule(care);
-    await this.scheduleRow(care).getByRole('button', { name: 'Remove' }).click();
-    await this.page.waitForLoadState();
+    const remove = this.scheduleRow(care).getByRole('button', { name: 'Remove' });
+    await remove.click();
+    await remove.waitFor({ state: 'detached' });
   }
 
   // The editor's Cancel is a link and the confirmation's is a button, so this
@@ -99,7 +106,7 @@ export class PlantScreen {
 
   async cancelRemoveSchedule(care: string): Promise<void> {
     await this.scheduleRow(care).getByRole('button', { name: 'Cancel' }).click();
-    await this.page.waitForLoadState();
+    await this.scheduleRow(care).getByRole('link', { name: 'Remove' }).waitFor();
   }
 
   recentLines(): Locator {
@@ -114,15 +121,15 @@ export class PlantScreen {
 
   async edit(): Promise<void> {
     await this.page.getByRole('link', { name: 'Edit plant' }).click();
-    await this.page.waitForLoadState();
+    await this.page.waitForURL(/\/edit$/);
   }
 
   // Archive asks for confirmation. The first click replaces the buttons with
-  // the question and the second confirms.
+  // the question and the second confirms. Confirming redirects to Plants.
   async archive(): Promise<void> {
     await this.askToArchive();
     await this.foot().getByRole('button', { name: 'Archive' }).click();
-    await this.page.waitForLoadState();
+    await this.page.waitForURL('/plants');
   }
 
   // The confirmation's Archive button has the same accessible name as the
@@ -134,8 +141,9 @@ export class PlantScreen {
   }
 
   async cancelArchive(): Promise<void> {
-    await this.foot().getByRole('button', { name: 'Cancel' }).click();
-    await this.page.waitForLoadState();
+    const cancel = this.foot().getByRole('button', { name: 'Cancel' });
+    await cancel.click();
+    await cancel.waitFor({ state: 'detached' });
   }
 
   // The confirmation and the buttons share this id. The server names it as the
@@ -147,13 +155,14 @@ export class PlantScreen {
   // Restore has no confirmation step. With JavaScript it swaps the page under
   // the top bar. Without JavaScript the post redirects back to the page.
   async restore(): Promise<void> {
-    await this.page.getByRole('button', { name: 'Restore' }).click();
-    await this.page.waitForLoadState();
+    const restore = this.page.getByRole('button', { name: 'Restore' });
+    await restore.click();
+    await restore.waitFor({ state: 'detached' });
   }
 
   // Log care is a link without JavaScript, so the click is a navigation.
   async logCare(): Promise<void> {
     await this.page.getByRole('link', { name: 'Log care' }).click();
-    await this.page.waitForLoadState();
+    await this.page.getByRole('dialog').waitFor();
   }
 }
