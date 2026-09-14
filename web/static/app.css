@@ -1294,7 +1294,9 @@ a.foot-link { text-decoration: none; color: var(--ink-2); }
   border-top: var(--row-divider);
 }
 
-.panel__note { margin: 0; font-size: 14px; line-height: 1.55; }
+/* Notes are typed in a textarea. pre-line keeps their line breaks and still
+   collapses runs of spaces. */
+.panel__note { margin: 0; font-size: 14px; line-height: 1.55; white-space: pre-line; }
 
 .panel__fact {
   display: flex;
