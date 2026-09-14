@@ -115,10 +115,10 @@ func TestPhoto_DeleteIsShownToTheUploaderWithDeleteOwn(t *testing.T) {
 	own := f.storedPhoto(t, bigFellaID, readerID, thursday)
 	theirs := f.storedPhoto(t, bigFellaID, raviID, thursday)
 
-	if page := f.photoPage(t, bigFellaID, own, false, "").Body.String(); !strings.Contains(page, deletePhotoPath(bigFellaID, own)) {
+	if page := f.photoPage(t, bigFellaID, own, false, "").Body.String(); !pointsAt(readHTML(page), deletePhotoPath(bigFellaID, own)) {
 		t.Error("the reader's own photo has no Delete")
 	}
-	if page := f.photoPage(t, bigFellaID, theirs, false, "").Body.String(); strings.Contains(page, deletePhotoPath(bigFellaID, theirs)) {
+	if page := f.photoPage(t, bigFellaID, theirs, false, "").Body.String(); pointsAt(readHTML(page), deletePhotoPath(bigFellaID, theirs)) {
 		t.Error("another member's photo offers Delete to a reader with delete_own alone")
 	}
 }
@@ -131,7 +131,7 @@ func TestPhoto_DeleteIsShownOnAnyPhotoWithDeleteAny(t *testing.T) {
 
 	page := f.photoPage(t, bigFellaID, theirs, false, "").Body.String()
 
-	if !strings.Contains(page, deletePhotoPath(bigFellaID, theirs)) {
+	if !pointsAt(readHTML(page), deletePhotoPath(bigFellaID, theirs)) {
 		t.Error("another member's photo has no Delete for a reader with delete_any")
 	}
 }
@@ -143,7 +143,7 @@ func TestPhoto_ASitterSeesNoDelete(t *testing.T) {
 
 	page := f.photoPage(t, bigFellaID, photoID, false, "").Body.String()
 
-	if strings.Contains(page, "Delete") {
+	if strings.Contains(text(page), "Delete") {
 		t.Error("a sitter's photo page offers Delete")
 	}
 }
@@ -159,10 +159,10 @@ func TestPhoto_DeleteAsksFirstAndAnHTMXRequestGetsTheFootAlone(t *testing.T) {
 	if !strings.Contains(text(whole.Body.String()), "Delete this photo? This can’t be undone. Cancel Delete") {
 		t.Errorf("the page does not ask:\n%s", text(whole.Body.String()))
 	}
-	if !strings.Contains(whole.Body.String(), "<html") {
+	if readHTML(whole.Body.String()).first(isTag("html")) == nil {
 		t.Error("a navigation got the foot alone, want the whole page")
 	}
-	if strings.Contains(foot.Body.String(), "<html") || !strings.Contains(foot.Body.String(), `id="photo-foot"`) {
+	if doc := readHTML(foot.Body.String()); doc.first(isTag("html")) != nil || doc.byID(photoFootID) == nil {
 		t.Error("the htmx request did not get the foot alone")
 	}
 	if f.photoExists(t, photoID) == false {
@@ -257,8 +257,8 @@ func TestPhoto_TheImageHasThePhotosWidthAndHeightOnIt(t *testing.T) {
 
 	page := f.photoPage(t, bigFellaID, photoID, false, "").Body.String()
 
-	want := fmt.Sprintf(`width="%d" height="%d"`, row.Width, row.Height)
-	if !strings.Contains(page, want) {
-		t.Errorf("the image does not have %s:\n%s", want, page)
+	img := readHTML(page).first(isTag("img"), attrIs("src", photoFullPath(bigFellaID, photoID)))
+	if img.attr("width") != fmt.Sprint(row.Width) || img.attr("height") != fmt.Sprint(row.Height) {
+		t.Errorf("the image is %s, want width %d and height %d", img, row.Width, row.Height)
 	}
 }

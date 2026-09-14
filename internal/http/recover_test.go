@@ -162,13 +162,13 @@ func cannotBeUsed(t *testing.T, rec *httptest.ResponseRecorder) string {
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Errorf("status = %d, want %d", rec.Code, http.StatusUnprocessableEntity)
 	}
-	if !strings.Contains(page, codeCannotBeUsedTitle) || !strings.Contains(text(page), codeCannotBeUsedLine) {
+	if !strings.Contains(text(page), codeCannotBeUsedTitle) || !strings.Contains(text(page), codeCannotBeUsedLine) {
 		t.Errorf("the page does not say the code cannot be used:\n%s", text(page))
 	}
-	if !strings.Contains(page, `href="`+recoverPath+`">Try another code</a>`) {
+	if !linkTo(page, recoverPath, "Try another code") {
 		t.Errorf("the page has no link back to the form:\n%s", text(page))
 	}
-	if strings.Contains(page, "<form") {
+	if readHTML(page).first(isTag("form")) != nil {
 		t.Errorf("the page has a form on it, and there is nothing to post:\n%s", text(page))
 	}
 	return page
@@ -183,17 +183,21 @@ func addDevice(t *testing.T, rec *httptest.ResponseRecorder, status int, code st
 	if rec.Code != status {
 		t.Errorf("status = %d, want %d:\n%s", rec.Code, status, text(page))
 	}
-	if !strings.Contains(page, `<h1 class="bare__title">`+addThisDevice+`</h1>`) {
-		t.Errorf("the page is not Add this device:\n%s", text(page))
+	if got := readHTML(page).first(isTag("h1")).text(); got != addThisDevice {
+		t.Errorf("the heading is %q, want %q:\n%s", got, addThisDevice, text(page))
 	}
-	if !strings.Contains(page, `<input type="hidden" name="`+codeField+`" value="`+code+`">`) {
-		t.Errorf("the form does not carry the code %q:\n%s", code, page)
+	form := formTo(page, recoverPasskeyPath)
+	if form == nil {
+		t.Fatalf("the page has no form posting to %s:\n%s", recoverPasskeyPath, page)
 	}
-	if !strings.Contains(page, `action="`+recoverPasskeyPath+`"`) || !strings.Contains(page, `data-challenge="`+recoverChallengePath+`"`) {
-		t.Errorf("the form does not post to the passkey route with the challenge route on it:\n%s", page)
+	if got := form.attr("data-challenge"); got != recoverChallengePath {
+		t.Errorf("the form asks for a challenge at %q, want %s", got, recoverChallengePath)
 	}
-	if !strings.Contains(page, `<button class="wide-action" type="submit" disabled>`+registerLabel+`</button>`) {
-		t.Errorf("the button is not %q, disabled until the script runs:\n%s", registerLabel, page)
+	if got, _ := hiddenValue(form, codeField); got != code {
+		t.Errorf("the form carries the code %q, want %q:\n%s", got, code, form)
+	}
+	if button := buttonLabelled(t, page, registerLabel); button.attr("type") != "submit" || !button.has("disabled") {
+		t.Errorf("the %s button is not a submit button disabled until the script runs:\n%s", registerLabel, button)
 	}
 	return page
 }
@@ -207,19 +211,21 @@ func TestRecover_ThePageIsOneCodeFieldAndSaysItCannotHelpSomebodyWhoNeverMadeCod
 		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusOK, text(rec.Body.String()))
 	}
 	page := rec.Body.String()
-	if !strings.Contains(page, `<h1 class="bare__title">`+recoverTitle+`</h1>`) {
-		t.Errorf("the heading is not %q:\n%s", recoverTitle, text(page))
+	doc := readHTML(page)
+	if got := doc.first(isTag("h1")).text(); got != recoverTitle {
+		t.Errorf("the heading is %q, want %q:\n%s", got, recoverTitle, text(page))
 	}
-	if !strings.Contains(page, `name="`+codeField+`" type="text"`) {
-		t.Errorf("the page has no field for the code:\n%s", page)
+	form := formTo(page, recoverPath)
+	if form.first(isTag("input"), attrIs("name", codeField), attrIs("type", "text")) == nil {
+		t.Errorf("the form posting to %s has no text field for the code:\n%s", recoverPath, page)
 	}
-	if !strings.Contains(page, `action="`+recoverPath+`"`) || !strings.Contains(page, ">Continue</button>") {
-		t.Errorf("the form does not post the code to the page's own URL:\n%s", page)
+	if form.first(isTag("button"), textIs("Continue")) == nil {
+		t.Errorf("the form does not post the code to the page's own URL with Continue:\n%s", page)
 	}
-	if strings.Contains(page, "<nav") {
+	if hasTabBar(page) {
 		t.Errorf("the page has a tab bar, and nobody here is signed in:\n%s", page)
 	}
-	if !strings.Contains(page, "No recovery codes? Ask the garden’s owner for a new invite link.") {
+	if !strings.Contains(text(page), "No recovery codes? Ask the garden’s owner for a new invite link.") {
 		t.Errorf("the page does not say who it cannot help:\n%s", text(page))
 	}
 }
@@ -230,7 +236,7 @@ func TestRecover_ALiveCodeTypedInCapitalsAndSpacesOpensAddThisDevice(t *testing.
 	rec := f.check(t, " K4RT 9WME3XQD\n")
 
 	addDevice(t, rec, http.StatusOK, elliesCode)
-	if !strings.Contains(rec.Body.String(), "Code accepted. Add a passkey on this device, then sign in with it.") {
+	if !strings.Contains(text(rec.Body.String()), "Code accepted. Add a passkey on this device, then sign in with it.") {
 		t.Errorf("the page does not say the code worked:\n%s", text(rec.Body.String()))
 	}
 	if at := f.usedAt(t, elliesCode); at != nil {
@@ -342,7 +348,7 @@ func TestRecover_ADeviceThatDidNotCheckWhoWasUsingItIsRefusedAndTheCodeStaysLive
 	rec := f.register(t, elliesCode, device)
 
 	page := addDevice(t, rec, http.StatusUnprocessableEntity, elliesCode)
-	if !strings.Contains(page, "This device didn’t verify you.") {
+	if !strings.Contains(text(page), "This device didn’t verify you.") {
 		t.Errorf("the page does not say the device did not verify:\n%s", text(page))
 	}
 	if at := f.usedAt(t, elliesCode); at != nil {
@@ -376,7 +382,7 @@ func TestRecover_AnAnswerWithNoCeremonyLeavesTheCodeLiveAndSaysToPressAgain(t *t
 	rec := f.request(t, f.handler.register, recoverPasskeyPath, url.Values{codeField: {elliesCode}, credentialField: {"{}"}})
 
 	page := addDevice(t, rec, http.StatusUnprocessableEntity, elliesCode)
-	if !strings.Contains(page, "The request timed out. Try again.") {
+	if !strings.Contains(text(page), "The request timed out. Try again.") {
 		t.Errorf("the page does not say the request expired:\n%s", text(page))
 	}
 	if at := f.usedAt(t, elliesCode); at != nil {
@@ -408,10 +414,10 @@ func TestRecover_TheNinthCodePostedFromOneAddressInAMinuteIsRefusedWithTooManyAt
 		t.Fatalf("the ninth post: status = %d, want %d", rec.Code, http.StatusTooManyRequests)
 	}
 	page := rec.Body.String()
-	if !strings.Contains(page, `<h1 class="bare__title">`+tooManyAttemptsTitle+`</h1>`) || !strings.Contains(text(page), tooManyAttemptsLine) {
+	if readHTML(page).first(isTag("h1")).text() != tooManyAttemptsTitle || !strings.Contains(text(page), tooManyAttemptsLine) {
 		t.Errorf("the page does not say there were too many attempts:\n%s", text(page))
 	}
-	if strings.Contains(page, "<form") || strings.Contains(page, addThisDevice) {
+	if readHTML(page).first(isTag("form")) != nil || strings.Contains(text(page), addThisDevice) {
 		t.Errorf("the ninth post checked the code, and a live one opened the registration form:\n%s", text(page))
 	}
 	if rec := postFrom(t, handler, recoverPath, "203.0.113.2", codeForm(noSuchCode)); rec.Code != http.StatusUnprocessableEntity {

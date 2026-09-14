@@ -175,32 +175,55 @@ func TestSetup_WithSignUpOffAnEmptyInstallServesTheFormWithACreateButtonThatStar
 		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusOK, rec.Body.String())
 	}
 	page := rec.Body.String()
-	for _, want := range []string{
-		"Set up your garden",
-		`action="` + setupPath + `"`,
-		`data-passkey="create"`,
-		`data-challenge="` + setupChallengePath + `"`,
-		`id="garden" name="garden"`,
-		`id="name" name="name"`,
-		`name="timezone" data-propose`,
-		`<input type="hidden" name="` + credentialField + `">`,
-		"Requires JavaScript and a browser with passkey support.",
-	} {
-		if !strings.Contains(page, want) {
-			t.Errorf("the page lacks %s:\n%s", want, page)
+	for _, want := range []string{"Set up your garden", "Requires JavaScript and a browser with passkey support."} {
+		if !strings.Contains(text(page), want) {
+			t.Errorf("the page lacks %s:\n%s", want, text(page))
 		}
+	}
+	form := passkeyForm(t, page, setupPath, setupChallengePath)
+	for _, field := range []string{"garden", "name"} {
+		if got := form.byID(field).attr("name"); got != field {
+			t.Errorf("the %s field posts as %q, want %s:\n%s", field, got, field, form)
+		}
+	}
+	zone := form.byID("timezone")
+	if zone.attr("name") != "timezone" || !zone.has("data-propose") {
+		t.Errorf("the timezone select is not marked for the script to propose the browser's zone:\n%s", zone)
 	}
 	if !buttonIsDisabled(t, page, createLabel) {
 		t.Errorf("%s is not disabled:\n%s", createLabel, page)
 	}
 	// The select opens on the placeholder, so a form the script did not fill
 	// in posts an empty zone and gets the message under the field.
-	if !strings.Contains(page, `<option value="" selected>Timezone</option>`) {
-		t.Errorf("the select does not open on the empty option labelled Timezone:\n%s", page)
+	if chosen := zone.first(isTag("option"), hasAttr("selected")); chosen.attr("value") != "" || chosen.text() != "Timezone" {
+		t.Errorf("the select does not open on the empty option labelled Timezone:\n%s", zone)
 	}
-	if strings.Contains(page, "nav__item") {
+	if hasTabBar(page) {
 		t.Error("the page renders the tab bar, and there is no garden to tab to")
 	}
+}
+
+// passkeyForm returns the form on page that posts to action. It fails the test
+// unless the form is set up for the page's script to create a passkey with a
+// challenge from challenge and put the credential in the hidden credential
+// input.
+func passkeyForm(t *testing.T, page, action, challenge string) *element {
+	t.Helper()
+
+	form := formTo(page, action)
+	if form == nil {
+		t.Fatalf("the page has no form posting to %s:\n%s", action, page)
+	}
+	if got := form.attr("data-passkey"); got != "create" {
+		t.Errorf("the form's data-passkey is %q, want create", got)
+	}
+	if got := form.attr("data-challenge"); got != challenge {
+		t.Errorf("the form asks for a challenge at %q, want %s", got, challenge)
+	}
+	if _, ok := hiddenValue(form, credentialField); !ok {
+		t.Errorf("the form has no hidden %s input for the credential:\n%s", credentialField, form)
+	}
+	return form
 }
 
 func TestSetup_WithSignUpOffEveryRouteIs404OnceAnAccountExists(t *testing.T) {
@@ -376,7 +399,7 @@ func TestSetup_ADisplayNameAnotherAccountHoldsGetsAHandleWithASuffix(t *testing.
 	}
 }
 
-func TestSetup_AnEmptyFieldIsRefusedOnTheChallengeAndTheMessageIsUnderItOnThePost(t *testing.T) {
+func TestSetup_AnEmptyFieldIsRefusedOnTheChallengeAndItsMessageIsShownOnThePost(t *testing.T) {
 	// The two text fields are posted as spaces, because a name of spaces is
 	// no name. The select posts the placeholder's empty value.
 	cases := []struct {
@@ -407,12 +430,12 @@ func TestSetup_AnEmptyFieldIsRefusedOnTheChallengeAndTheMessageIsUnderItOnThePos
 				t.Fatalf("the post: status = %d, want %d:\n%s", rec.Code, http.StatusUnprocessableEntity, text(rec.Body.String()))
 			}
 			page := rec.Body.String()
-			if got := errorUnder(page, c.field); got != c.message {
-				t.Errorf("under %s: %q, want %q", c.field, got, c.message)
+			if !strings.Contains(text(page), c.message) {
+				t.Errorf("the refused form does not say %q:\n%s", c.message, text(page))
 			}
 			for _, other := range cases {
-				if other.field != c.field && errorUnder(page, other.field) != "" {
-					t.Errorf("a message under %s, and that field was filled in", other.field)
+				if other.field != c.field && strings.Contains(text(page), other.message) {
+					t.Errorf("the refused form says %q, and the %s field was filled in", other.message, other.field)
 				}
 			}
 			f.nothingWritten(t)
@@ -435,7 +458,7 @@ func TestSetup_TheRefusedFormComesBackWithWhatWasTypedAndTheZoneChosen(t *testin
 	}
 	// The zone chosen must not be replaced by the browser's when the page is
 	// rendered again.
-	if strings.Contains(page, "data-propose") {
+	if readHTML(page).byID("timezone").has("data-propose") {
 		t.Error("the refused form is marked for the browser's zone to be proposed, so the zone chosen would be replaced")
 	}
 }
@@ -464,7 +487,7 @@ func TestSetup_AnAnswerWithNoChallengeBehindItSaysTheRequestExpiredAndWritesNoth
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusUnprocessableEntity, text(rec.Body.String()))
 	}
-	if !strings.Contains(rec.Body.String(), "The request timed out. Try again.") {
+	if !strings.Contains(text(rec.Body.String()), "The request timed out. Try again.") {
 		t.Errorf("the page does not say the request expired:\n%s", text(rec.Body.String()))
 	}
 	if got := valueOf(t, rec.Body.String(), "garden"); got != "Greenhouse" {
@@ -484,7 +507,7 @@ func TestSetup_ADeviceThatDidNotCheckItWasYouLeavesNoGardenBehind(t *testing.T) 
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusUnprocessableEntity, text(rec.Body.String()))
 	}
-	if !strings.Contains(rec.Body.String(), "This device didn’t verify you.") {
+	if !strings.Contains(text(rec.Body.String()), "This device didn’t verify you.") {
 		t.Errorf("the page does not say the device did not verify:\n%s", text(rec.Body.String()))
 	}
 	if cookieNamed(t, rec, "__Host-sprig_session") != nil {
@@ -520,7 +543,7 @@ func TestSetup_AChallengeFromThePasskeysPageDoesNotCreateAGarden(t *testing.T) {
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusUnprocessableEntity, text(rec.Body.String()))
 	}
-	if !strings.Contains(rec.Body.String(), "The request timed out") {
+	if !strings.Contains(text(rec.Body.String()), "The request timed out") {
 		t.Errorf("the page does not say the request expired:\n%s", text(rec.Body.String()))
 	}
 	if n := f.count(t, "garden"); n != 0 {
@@ -663,8 +686,8 @@ func TestSetup_AHandleAnotherAccountHoldsIsRefusedOnTheChallengeAndNamedOnThePos
 		t.Fatalf("the post: status = %d, want %d:\n%s", rec.Code, http.StatusUnprocessableEntity, text(rec.Body.String()))
 	}
 	page := rec.Body.String()
-	if got := errorUnder(page, "handle"); got != "robin is already taken." {
-		t.Errorf("under Handle: %q, want the taken message", got)
+	if !strings.Contains(text(page), "robin is already taken.") {
+		t.Errorf("the refused form does not say robin is already taken.:\n%s", text(page))
 	}
 	if got := valueOf(t, page, "handle"); got != "robin" {
 		t.Errorf("Handle came back as %q, want robin", got)

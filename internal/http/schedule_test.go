@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"regexp"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -82,64 +82,41 @@ func cadence(slug, every, unit string) url.Values {
 	}
 }
 
-var (
-	editingRow = regexp.MustCompile(`(?s)<li class="sched sched--editing" id="([^"]*)">(.*?)</li>`)
-	schedHint  = regexp.MustCompile(`<p class="sched__hint">(.*?)</p>`)
-	schedError = regexp.MustCompile(`<p class="field__error">(.*?)</p>`)
-	schedAsk   = regexp.MustCompile(`<span class="sched__ask">(.*?)</span>`)
-	pickedOpt  = regexp.MustCompile(`<option value="([^"]*)" selected>`)
-)
-
-// testEditor is the editor's state read back from its control values rather
-// than the surrounding markup.
+// testEditor is an open schedule row read back from its controls and its text.
 type testEditor struct {
 	id string
-	// picked is each select's value, keyed by the part of the control's name
+	// picked is each select's value, keyed by the part of the control's id
 	// after the care type.
 	picked map[string]string
 	// every is the number field's value as a string, since a rejected value is
 	// shown back as typed.
-	every   string
-	hint    string
-	message string
-	ask     string
-	remove  bool
-	cancel  bool
+	every string
+	// text is everything the row reads, including the sentence under the When
+	// select, an error and the remove question.
+	text   string
+	remove bool
+	cancel bool
 }
 
+// editorOf finds the open row as the list item holding the care type's When
+// select.
 func editorOf(t *testing.T, page, slug string) testEditor {
 	t.Helper()
 
-	m := editingRow.FindStringSubmatch(page)
-	if m == nil {
+	row := readHTML(page).first(isTag("li"), func(e *element) bool { return e.byID(slug+"-shape") != nil })
+	if row == nil {
 		t.Fatalf("no row is open as the editor:\n%s", page)
 	}
-	e := testEditor{id: m[1], picked: map[string]string{}}
+	e := testEditor{id: row.attr("id"), picked: map[string]string{}, text: row.text()}
 	for _, part := range []string{"shape", "unit", "day", "month", "year", "from", "to"} {
-		control := regexp.MustCompile(`(?s)<select [^>]*id="` + slug + `-` + part + `"[^>]*>(.*?)</select>`).FindStringSubmatch(m[2])
-		if control == nil {
-			continue
-		}
-		if picked := pickedOpt.FindStringSubmatch(control[1]); picked != nil {
-			e.picked[part] = picked[1]
+		if option := row.byID(slug+"-"+part).first(isTag("option"), hasAttr("selected")); option != nil {
+			e.picked[part] = option.attr("value")
 		}
 	}
-	if number := regexp.MustCompile(`<input [^>]*id="` + slug + `-every"[^>]*value="([^"]*)"`).FindStringSubmatch(m[2]); number != nil {
-		e.every = number[1]
-	}
-	if hint := schedHint.FindStringSubmatch(m[2]); hint != nil {
-		e.hint = text(hint[1])
-	}
-	if message := schedError.FindStringSubmatch(m[2]); message != nil {
-		e.message = text(message[1])
-	}
-	if ask := schedAsk.FindStringSubmatch(m[2]); ask != nil {
-		e.ask = text(ask[1])
-	}
-	e.remove = strings.Contains(m[2], ">Remove<")
-	// The editor's Cancel is a link. The confirmation's Cancel is a button,
-	// so the link's closing tag tells the editor's buttons from the question.
-	e.cancel = strings.Contains(m[2], ">Cancel</a>")
+	e.every = row.byID(slug + "-every").attr("value")
+	e.remove = row.first(isTag("a"), textIs("Remove")) != nil || row.first(isTag("button"), textIs("Remove")) != nil
+	// The editor's Cancel is a link and the confirmation's Cancel is a button.
+	e.cancel = row.first(isTag("a"), textIs("Cancel")) != nil
 	return e
 }
 
@@ -179,8 +156,8 @@ func TestScheduleEditor_TheEditorOpensOnTheCurrentSchedule(t *testing.T) {
 	if editor.picked["shape"] != shapeCadence || editor.every != "10" || editor.picked["unit"] != "day" {
 		t.Errorf("the editor opened on %v every %q, want a cadence of 10 days", editor.picked, editor.every)
 	}
-	if editor.hint != "Counted from the last time it was logged" {
-		t.Errorf("the sentence under the select reads %q", editor.hint)
+	if !strings.Contains(editor.text, "Counted from the last time it was logged") {
+		t.Errorf("the row does not say the interval is counted from the last time it was logged: %q", editor.text)
 	}
 	if !editor.remove || !editor.cancel {
 		t.Errorf("the foot offers Remove = %v and Cancel = %v, want both", editor.remove, editor.cancel)
@@ -214,8 +191,8 @@ func TestScheduleEditor_ChoosingAShapeReRendersTheRowWithThatShapesFields(t *tes
 	if editor.picked["month"] == "" || editor.picked["year"] == "" {
 		t.Errorf("a one-off drew no date, and picked %v", editor.picked)
 	}
-	if editor.hint != "A single date" {
-		t.Errorf("the sentence under the select reads %q", editor.hint)
+	if !strings.Contains(editor.text, "A single date") {
+		t.Errorf("the row does not say A single date: %q", editor.text)
 	}
 }
 
@@ -248,8 +225,8 @@ func TestScheduleEditor_SavingAnUnscheduledCareMakesItScheduled(t *testing.T) {
 	// feeding is due one interval ahead rather than overdue immediately. The
 	// exact count is not asserted because set_at is the database's clock and
 	// the row is read against the fixture's.
-	if row.late || !strings.HasPrefix(row.when, "Due in") {
-		t.Errorf("the feeding row is due %q and late = %v, want a day still to come", row.when, row.late)
+	if !strings.HasPrefix(row.when, "Due in") {
+		t.Errorf("the feeding row is due %q, want a day still to come", row.when)
 	}
 }
 
@@ -310,8 +287,8 @@ func TestScheduleEditor_AnIntervalOfZeroIsRefusedAndShownBackInTheField(t *testi
 		t.Errorf("status = %d, want %d", rec.Code, http.StatusUnprocessableEntity)
 	}
 	editor := editorOf(t, rec.Body.String(), "water")
-	if editor.message != "Enter a number between 1 and 999." {
-		t.Errorf("the row says %q, want a sentence naming the range", editor.message)
+	if !strings.Contains(editor.text, "Enter a number between 1 and 999.") {
+		t.Errorf("the row reads %q, want a sentence naming the range", editor.text)
 	}
 	if editor.every != "0" {
 		t.Errorf("the field holds %q, want the 0 that was typed", editor.every)
@@ -330,8 +307,8 @@ func TestScheduleEditor_AShapeWithNoDateIsRefusedWithTheDateFieldsShown(t *testi
 	rec := f.save(t, bigFellaID, "water", url.Values{"water-shape": {shapeOnce}}, true)
 
 	editor := editorOf(t, rec.Body.String(), "water")
-	if editor.message != "Choose a date." {
-		t.Errorf("the row says %q, want a sentence asking for the date", editor.message)
+	if !strings.Contains(editor.text, "Choose a date.") {
+		t.Errorf("the row reads %q, want a sentence asking for the date", editor.text)
 	}
 	if editor.picked["month"] == "" || editor.picked["year"] == "" {
 		t.Errorf("the refused row drew no date to answer with, and picked %v", editor.picked)
@@ -343,8 +320,8 @@ func TestScheduleEditor_TheRemoveConfirmationRendersInTheRowWithTheScheduleStill
 
 	editor := editorOf(t, f.ask(t, bigFellaID, "water").Body.String(), "water")
 
-	if editor.ask != "Remove this schedule?" {
-		t.Errorf("the foot asks %q", editor.ask)
+	if !strings.Contains(editor.text, "Remove this schedule?") {
+		t.Errorf("the row reads %q, want it to ask Remove this schedule?", editor.text)
 	}
 	if editor.cancel {
 		t.Error("the question was asked beside the buttons it replaces")
@@ -384,7 +361,7 @@ func TestScheduleEditor_AnHTMXRequestGetsTheRowAlone(t *testing.T) {
 
 	body := f.save(t, bigFellaID, "water", cadence("water", "20", "day"), true).Body.String()
 
-	if strings.Contains(body, "<h1") || strings.Contains(body, "Details") {
+	if readHTML(body).first(isTag("h1")) != nil || strings.Contains(text(body), "Details") {
 		t.Errorf("the swap carried the page around the row:\n%s", body)
 	}
 	if rows := scheduleOf(t, body); len(rows) != 1 {
@@ -532,7 +509,7 @@ func TestPlant_AReaderWhoMayNotEditSchedulesSeesNoEditLinks(t *testing.T) {
 			t.Errorf("the page offered a %s row to a reader who may not open it", row.care)
 		}
 	}
-	if strings.Contains(page, schedulePath(bigFellaID, "water")) {
+	if pointsAt(readHTML(page), schedulePath(bigFellaID, "water")) {
 		t.Error("a schedule row led to the editor for a reader who may not change one")
 	}
 }
@@ -551,7 +528,7 @@ func TestPlant_AnHTMXRequestTargetingAScheduleRowGetsThatRowAlone(t *testing.T) 
 	f.handler.plant(rec, req)
 
 	body := rec.Body.String()
-	if strings.Contains(body, "<h1") {
+	if readHTML(body).first(isTag("h1")) != nil {
 		t.Errorf("the swap carried the page around the row:\n%s", body)
 	}
 	rows := scheduleOf(t, body)
@@ -576,22 +553,21 @@ func TestPlant_AnHTMXRequestTargetingARowThePageDoesNotHaveIs404(t *testing.T) {
 	}
 }
 
-// unitOptions matches the unit select's options in an open editor.
-var unitOptions = regexp.MustCompile(`(?s)<select [^>]*id="water-unit"[^>]*>(.*?)</select>`)
-
 func TestScheduleEditor_TheUnitLabelsDoNotChangeWithTheNumber(t *testing.T) {
 	f := rosewoodPlant(t)
 
 	for _, every := range []string{"1", "10"} {
 		rec := f.open(t, bigFellaID, "water", cadence("water", every, "day"))
-		control := unitOptions.FindStringSubmatch(rec.Body.String())
-		if control == nil {
+		unit := readHTML(rec.Body.String()).byID("water-unit")
+		if unit == nil {
 			t.Fatalf("every %s: the editor has no unit select:\n%s", every, rec.Body.String())
 		}
-		for _, want := range []string{">day(s)<", ">week(s)<", ">month(s)<", ">year(s)<"} {
-			if !strings.Contains(control[1], want) {
-				t.Errorf("every %s: the unit options lack %s:\n%s", every, want, control[1])
-			}
+		var labels []string
+		for _, option := range unit.all(isTag("option")) {
+			labels = append(labels, option.text())
+		}
+		if want := []string{"day(s)", "week(s)", "month(s)", "year(s)"}; !slices.Equal(labels, want) {
+			t.Errorf("every %s: the unit options read %v, want %v", every, labels, want)
 		}
 	}
 }

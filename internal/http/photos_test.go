@@ -6,7 +6,6 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -57,19 +56,22 @@ func (f *formFixture) grid(t *testing.T, plantID uuid.UUID, query string, htmx b
 	return rec
 }
 
-// tiles returns the href of every photo tile's link, in order.
+// tiles returns the href of every link that holds a photo, in order.
 func tiles(markup string) []string {
 	var hrefs []string
-	for _, m := range tileLink.FindAllStringSubmatch(markup, -1) {
-		hrefs = append(hrefs, m[1])
+	for _, link := range readHTML(markup).all(isTag("a")) {
+		if link.first(isTag("img")) != nil {
+			hrefs = append(hrefs, link.attr("href"))
+		}
 	}
 	return hrefs
 }
 
-var (
-	tileLink  = regexp.MustCompile(`<li class="tile"><a href="([^"]*)"`)
-	olderTile = regexp.MustCompile(`id="photos-more" hx-get="([^"]*)"`)
-)
+// olderPhotos returns the URL the Older photos tile fetches, or "" when the
+// page has no such tile.
+func olderPhotos(markup string) string {
+	return readHTML(markup).byID("photos-more").attr("hx-get")
+}
 
 func TestPhotos_TheGridListsThePlantsPhotosNewestFirst(t *testing.T) {
 	f := plantFormOn(t)
@@ -86,7 +88,7 @@ func TestPhotos_TheGridListsThePlantsPhotosNewestFirst(t *testing.T) {
 	if got := tiles(rec.Body.String()); !slices.Equal(got, want) {
 		t.Errorf("the grid links to %v, want %v", got, want)
 	}
-	if olderTile.MatchString(rec.Body.String()) {
+	if olderPhotos(rec.Body.String()) != "" {
 		t.Error("the grid offers older photos when it holds every photo")
 	}
 }
@@ -103,11 +105,11 @@ func TestPhotos_TheGridShowsTwentyFourPhotosAndTheOlderTileFetchesTheRest(t *tes
 	if got := tiles(first); len(got) != gridPageSize || got[0] != photoPath(bigFellaID, ids[0]) {
 		t.Fatalf("the first page has %d tiles starting at %v, want %d starting at the newest", len(got), got[:1], gridPageSize)
 	}
-	m := olderTile.FindStringSubmatch(first)
-	if m == nil {
+	older := olderPhotos(first)
+	if older == "" {
 		t.Fatal("the first page has no Older photos tile")
 	}
-	rec := f.grid(t, bigFellaID, strings.TrimPrefix(m[1], photosPath(bigFellaID)), true)
+	rec := f.grid(t, bigFellaID, strings.TrimPrefix(older, photosPath(bigFellaID)), true)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("the older page answered %d:\n%s", rec.Code, rec.Body.String())
 	}
@@ -115,10 +117,10 @@ func TestPhotos_TheGridShowsTwentyFourPhotosAndTheOlderTileFetchesTheRest(t *tes
 	if got, want := tiles(second), []string{photoPath(bigFellaID, ids[gridPageSize])}; !slices.Equal(got, want) {
 		t.Errorf("the second page links to %v, want %v", got, want)
 	}
-	if olderTile.MatchString(second) {
+	if olderPhotos(second) != "" {
 		t.Error("the last page offers older photos")
 	}
-	if strings.Contains(second, "<html") {
+	if readHTML(second).first(isTag("html")) != nil {
 		t.Error("the Older photos tile got a whole page, want the tiles alone")
 	}
 }
@@ -128,15 +130,15 @@ func TestPhotos_ALastPageOfOnePhotoIsAnnouncedAsOnePhoto(t *testing.T) {
 	for i := range gridPageSize + 1 {
 		f.storedPhoto(t, bigFellaID, readerID, thursday.Add(-time.Duration(i)*time.Minute))
 	}
-	m := olderTile.FindStringSubmatch(f.grid(t, bigFellaID, "", false).Body.String())
-	if m == nil {
+	older := olderPhotos(f.grid(t, bigFellaID, "", false).Body.String())
+	if older == "" {
 		t.Fatal("the first page has no Older photos tile")
 	}
 
-	second := f.grid(t, bigFellaID, strings.TrimPrefix(m[1], photosPath(bigFellaID)), true).Body.String()
+	second := f.grid(t, bigFellaID, strings.TrimPrefix(older, photosPath(bigFellaID)), true).Body.String()
 
-	if want := announced("1 older photo added."); !strings.Contains(second, want) {
-		t.Errorf("the last page is not announced as one photo:\nwant %s\n%s", want, second)
+	if got, want := announcedIn(second), "1 older photo added."; got != want {
+		t.Errorf("the last page announces %q, want %q", got, want)
 	}
 }
 
@@ -146,18 +148,18 @@ func TestPhotos_TheOlderPhotosLinkGetsTheWholePageWithTheRemainingTiles(t *testi
 	for i := range gridPageSize + 1 {
 		ids = append(ids, f.storedPhoto(t, bigFellaID, readerID, thursday.Add(-time.Duration(i)*time.Minute)))
 	}
-	m := olderTile.FindStringSubmatch(f.grid(t, bigFellaID, "", false).Body.String())
-	if m == nil {
+	older := olderPhotos(f.grid(t, bigFellaID, "", false).Body.String())
+	if older == "" {
 		t.Fatal("the first page has no Older photos tile")
 	}
 
-	rec := f.grid(t, bigFellaID, strings.TrimPrefix(m[1], photosPath(bigFellaID)), false)
+	rec := f.grid(t, bigFellaID, strings.TrimPrefix(older, photosPath(bigFellaID)), false)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("the older page answered %d:\n%s", rec.Code, rec.Body.String())
 	}
 	page := rec.Body.String()
-	if !strings.Contains(page, "<html") {
+	if readHTML(page).first(isTag("html")) == nil {
 		t.Error("following the link got the tiles alone, want the whole page")
 	}
 	if got, want := tiles(page), []string{photoPath(bigFellaID, ids[gridPageSize])}; !slices.Equal(got, want) {
@@ -174,11 +176,11 @@ func TestPhotos_TwoPhotosUploadedInTheSameSecondAreEachListedOnceAcrossThePages(
 	}
 
 	first := f.grid(t, bigFellaID, "", false).Body.String()
-	m := olderTile.FindStringSubmatch(first)
-	if m == nil {
+	older := olderPhotos(first)
+	if older == "" {
 		t.Fatal("the first page has no Older photos tile")
 	}
-	second := f.grid(t, bigFellaID, strings.TrimPrefix(m[1], photosPath(bigFellaID)), true).Body.String()
+	second := f.grid(t, bigFellaID, strings.TrimPrefix(older, photosPath(bigFellaID)), true).Body.String()
 
 	seen := append(tiles(first), tiles(second)...)
 	slices.Sort(seen)
@@ -210,8 +212,8 @@ func TestPhotos_APlantWithNoPhotosOffersAMemberAddPhoto(t *testing.T) {
 	if !strings.Contains(text(page), "No photos yet") {
 		t.Errorf("the page does not say there are no photos:\n%s", text(page))
 	}
-	if !strings.Contains(page, `href="`+newPhotoPath(bigFellaID)+`">Add photo</a>`) {
-		t.Error("the empty page does not offer Add photo")
+	if got := readHTML(page).first(isTag("a"), attrIs("href", newPhotoPath(bigFellaID))).text(); got != "Add photo" {
+		t.Errorf("the link to %s reads %q, want Add photo", newPhotoPath(bigFellaID), got)
 	}
 }
 
@@ -222,7 +224,7 @@ func TestPhotos_ASitterIsNotOfferedAddPhoto(t *testing.T) {
 
 	page := f.grid(t, bigFellaID, "", false).Body.String()
 
-	if strings.Contains(page, newPhotoPath(bigFellaID)) {
+	if pointsAt(readHTML(page), newPhotoPath(bigFellaID)) {
 		t.Error("a sitter's grid links to Add a photo")
 	}
 }
@@ -233,8 +235,8 @@ func TestPhotos_AMembersGridLeadsWithTheAddTile(t *testing.T) {
 
 	page := f.grid(t, bigFellaID, "", false).Body.String()
 
-	if !strings.Contains(page, `<li class="tile tile--add"><a href="`+newPhotoPath(bigFellaID)+`"`) {
-		t.Error("the grid has no add tile")
+	if got := readHTML(page).byID("photo-grid").first(isTag("a")).attr("href"); got != newPhotoPath(bigFellaID) {
+		t.Errorf("the grid's first link points at %q, want the add tile at %s", got, newPhotoPath(bigFellaID))
 	}
 }
 
@@ -248,7 +250,7 @@ func TestPhotos_AnArchivedPlantsGridHasNoAddTile(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
 	}
-	if strings.Contains(rec.Body.String(), newPhotoPath(bigFellaID)) {
+	if pointsAt(readHTML(rec.Body.String()), newPhotoPath(bigFellaID)) {
 		t.Error("an archived plant's grid links to Add a photo")
 	}
 }

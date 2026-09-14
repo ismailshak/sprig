@@ -46,7 +46,7 @@ func TestNew_TheRequestLogLineIncludesTheRequestID(t *testing.T) {
 	handler := New(logger, testSessions(), testPasskeys(), rejectEveryToken, noLiveToken, nil, testPhotos(t), testTemplates(), testAssets(), "", false, testPushKey, nil, nil, nil, nil)
 
 	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/healthz", nil))
+	handler.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, offlinePath, nil))
 
 	lines := strings.Split(strings.TrimSpace(buf.String()), "\n")
 	if len(lines) != 1 {
@@ -65,8 +65,8 @@ func TestNew_TheRequestLogLineIncludesTheRequestID(t *testing.T) {
 	if entry["request_id"] != header {
 		t.Errorf("logged request_id = %v, want the header's %q", entry["request_id"], header)
 	}
-	if entry["pattern"] != "GET /healthz" {
-		t.Errorf("pattern = %v, want %q", entry["pattern"], "GET /healthz")
+	if entry["pattern"] != "GET "+offlinePath {
+		t.Errorf("pattern = %v, want %q", entry["pattern"], "GET "+offlinePath)
 	}
 }
 

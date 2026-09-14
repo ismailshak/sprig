@@ -3,7 +3,6 @@ package http
 import (
 	"net/http"
 	"net/url"
-	"regexp"
 	"strings"
 	"testing"
 	"uuid"
@@ -11,14 +10,21 @@ import (
 	"github.com/ismailshak/sprig/internal/auth"
 )
 
-var (
-	recoveryLine  = regexp.MustCompile(`(?s)<li class="row row--setting row--stack">(.*?)</li>`)
-	settingName   = regexp.MustCompile(`(?s)<span class="row__name">(.*?)</span>`)
-	settingMeta   = regexp.MustCompile(`(?s)<span class="row__meta">(.*?)</span></span>`)
-	wideAction    = regexp.MustCompile(`(?s)<button class="wide-action"[^>]*>(.*?)</button>`)
-	secretCode    = regexp.MustCompile(`<li>([^<]+)</li>`)
-	secretSection = regexp.MustCompile(`(?s)<div class="secret">(.*?)</div>`)
-)
+// batchRow returns the text of the row saying how many of the account's codes
+// are left. It is empty when the page has no such row.
+func batchRow(page string) string {
+	for _, row := range readHTML(page).all(isTag("li")) {
+		if strings.Contains(row.text(), " left") {
+			return row.text()
+		}
+	}
+	return ""
+}
+
+// createButton returns the text of the button that posts a new set of codes.
+func createButton(page string) string {
+	return formTo(page, recoveryPath).first(isTag("button")).text()
+}
 
 func TestRecovery_ABatchReadsAsHowManyAreLeftAndWhenItWasMade(t *testing.T) {
 	f := moreGarden(t)
@@ -28,17 +34,10 @@ func TestRecovery_ABatchReadsAsHowManyAreLeftAndWhenItWasMade(t *testing.T) {
 
 	page := f.page(t, f.handler.recovery, recoveryPath)
 
-	line := recoveryLine.FindStringSubmatch(page)
-	if line == nil {
-		t.Fatalf("the page has no row for the batch:\n%s", page)
+	if got, want := batchRow(page), "2 of 3 left Made 3 Aug"; got != want {
+		t.Errorf("the batch reads %q, want %q:\n%s", got, want, text(page))
 	}
-	if got, want := text(settingName.FindStringSubmatch(line[1])[1]), "2 of 3 left"; got != want {
-		t.Errorf("the batch reads %q, want %q", got, want)
-	}
-	if got, want := text(settingMeta.FindStringSubmatch(line[1])[1]), "Made 3 Aug"; got != want {
-		t.Errorf("the batch was %q, want %q", got, want)
-	}
-	if got, want := text(wideAction.FindStringSubmatch(page)[1]), "Create new codes"; got != want {
+	if got, want := createButton(page), "Create new codes"; got != want {
 		t.Errorf("the button reads %q, want %q", got, want)
 	}
 }
@@ -48,13 +47,13 @@ func TestRecovery_AnAccountHoldingNoneIsToldSoAndOfferedASet(t *testing.T) {
 
 	page := f.page(t, f.handler.recovery, recoveryPath)
 
-	if recoveryLine.MatchString(page) {
-		t.Errorf("the page shows a batch for an account holding none:\n%s", page)
+	if row := batchRow(page); row != "" {
+		t.Errorf("the page shows the batch %q for an account holding none", row)
 	}
-	if !strings.Contains(page, "As the owner, nobody can send you a new invite link") {
-		t.Errorf("the page does not say the account is holding none:\n%s", page)
+	if !strings.Contains(text(page), "As the owner, nobody can send you a new invite link") {
+		t.Errorf("the page does not say the account is holding none:\n%s", text(page))
 	}
-	if got, want := text(wideAction.FindStringSubmatch(page)[1]), "Create codes"; got != want {
+	if got, want := createButton(page), "Create codes"; got != want {
 		t.Errorf("the button reads %q, want %q", got, want)
 	}
 }
@@ -65,10 +64,10 @@ func TestRecovery_AMemberIsNotToldThatOnlyAnOwnerIsPromptedForCodes(t *testing.T
 
 	page := f.page(t, f.handler.recovery, recoveryPath)
 
-	if strings.Contains(page, "only an owner is prompted") {
+	if strings.Contains(text(page), "only an owner is prompted") {
 		t.Errorf("the page tells a member only an owner is prompted:\n%s", page)
 	}
-	if got, want := text(wideAction.FindStringSubmatch(page)[1]), "Create codes"; got != want {
+	if got, want := createButton(page), "Create codes"; got != want {
 		t.Errorf("the button reads %q, want %q", got, want)
 	}
 }
@@ -79,8 +78,8 @@ func TestRecovery_AnotherAccountsCodesAreNotShownAsThisAccountsBatch(t *testing.
 
 	page := f.page(t, f.handler.recovery, recoveryPath)
 
-	if recoveryLine.MatchString(page) {
-		t.Errorf("the page shows a batch that belongs to another account:\n%s", page)
+	if row := batchRow(page); row != "" {
+		t.Errorf("the page shows the batch %q, and it belongs to another account", row)
 	}
 }
 
@@ -93,26 +92,22 @@ func TestRecovery_CreatingCodesShowsTenOnceAndStoresOnlyTheirHashes(t *testing.T
 		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusOK, text(rec.Body.String()))
 	}
 	page := rec.Body.String()
-	box := secretSection.FindStringSubmatch(page)
-	if box == nil {
-		t.Fatalf("the page has no box for the codes:\n%s", text(page))
-	}
 	var codes []string
-	for _, m := range secretCode.FindAllStringSubmatch(box[1], -1) {
-		codes = append(codes, m[1])
+	for _, item := range readHTML(page).all(isTag("li")) {
+		codes = append(codes, item.text())
 	}
 	if len(codes) != 10 {
-		t.Fatalf("the box lists %d codes, want 10:\n%s", len(codes), box[1])
+		t.Fatalf("the page lists %d codes, want 10:\n%s", len(codes), text(page))
 	}
-	if !strings.Contains(box[1], "These codes are shown only once") {
-		t.Errorf("the box does not say the codes are shown once:\n%s", box[1])
+	if !strings.Contains(text(page), "These codes are shown only once") {
+		t.Errorf("the page does not say the codes are shown once:\n%s", text(page))
 	}
 	// Copy all is rendered hidden with the codes one per line on it, for the
 	// page's script to put on the clipboard.
-	if !strings.Contains(box[1], `data-copy="`+strings.Join(codes, "\n")+`" hidden>Copy all</button>`) {
-		t.Errorf("Copy all does not hold the ten codes:\n%s", box[1])
+	if copyAll := buttonLabelled(t, page, "Copy all"); copyAll.attr("data-copy") != strings.Join(codes, "\n") || !copyAll.has("hidden") {
+		t.Errorf("Copy all is not hidden with the ten codes on it:\n%s", copyAll)
 	}
-	if !strings.Contains(page, `<a class="wide-action" href="`+accountPath+`">Done</a>`) {
+	if !linkTo(page, accountPath, "Done") {
 		t.Errorf("the page has no Done link back to Account:\n%s", text(page))
 	}
 	for _, code := range codes {
@@ -132,15 +127,11 @@ func TestRecovery_CreatingCodesShowsTenOnceAndStoresOnlyTheirHashes(t *testing.T
 	}
 
 	again := f.page(t, f.handler.recovery, recoveryPath)
-	if secretSection.MatchString(again) {
+	if strings.Contains(text(again), "These codes are shown only once") {
 		t.Errorf("the next request shows the codes again:\n%s", text(again))
 	}
-	line := recoveryLine.FindStringSubmatch(again)
-	if line == nil {
-		t.Fatalf("the page has no row for the batch:\n%s", text(again))
-	}
-	if got, want := text(settingName.FindStringSubmatch(line[1])[1]), "10 of 10 left"; got != want {
-		t.Errorf("the batch reads %q, want %q", got, want)
+	if got, want := batchRow(again), "10 of 10 left"; !strings.HasPrefix(got, want) {
+		t.Errorf("the batch reads %q, want it to start %q", got, want)
 	}
 }
 

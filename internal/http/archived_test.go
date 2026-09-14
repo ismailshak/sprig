@@ -4,7 +4,6 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
-	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -15,13 +14,30 @@ import (
 	"github.com/ismailshak/sprig/internal/store"
 )
 
-var (
-	archivedLinkEl = regexp.MustCompile(`<a class="foot-link" href="([^"]+)">(.*?)<svg`)
-	archivedRowEl  = regexp.MustCompile(`(?s)<a class="row row--link" href="([^"]+)">(.*?)</a>`)
-	rowMeta        = regexp.MustCompile(`(?s)<span class="row__meta">(.*?)</span>\s*</span>`)
-	backLink       = regexp.MustCompile(`<a class="backlink" href="([^"]+)">(?:<svg.*?</svg>)?([^<]+)</a>`)
-	restoreForm    = regexp.MustCompile(`<form method="post" action="([^"]+)"[^>]*><button class="care care--outline"[^>]*>Restore</button></form>`)
-)
+// archivedPlantsLink returns the link to Archived plants, or nil.
+func archivedPlantsLink(page string) *element {
+	return readHTML(page).first(isTag("a"), attrIs("href", archivedPlantsPath))
+}
+
+// plantRows returns the href and the text of every link to a plant's page, in
+// page order.
+func plantRows(page string) (hrefs, texts []string) {
+	for _, link := range readHTML(page).all(isTag("a")) {
+		href := link.attr("href")
+		if _, err := uuid.Parse(strings.TrimPrefix(href, plantsPath+"/")); err != nil {
+			continue
+		}
+		hrefs = append(hrefs, href)
+		texts = append(texts, link.text())
+	}
+	return hrefs, texts
+}
+
+// restoreButton returns the Restore button of the form that posts to the
+// plant's restore URL, or nil.
+func restoreButton(doc *element, plantID uuid.UUID) *element {
+	return doc.first(isTag("form"), attrIs("action", restorePlantPath(plantID))).first(isTag("button"), textIs("Restore"))
+}
 
 // archiveTwo archives Doris and Nigel on the Plants fixture's garden, Nigel
 // more recently, and adds an archived plant to another garden.
@@ -60,8 +76,8 @@ func (f *plantsFixture) restore(t *testing.T, plantID uuid.UUID) *httptest.Respo
 func TestPlants_TheArchivedPlantsLinkIsAbsentWithNothingArchived(t *testing.T) {
 	f := rosewoodPlants(t)
 
-	if m := archivedLinkEl.FindStringSubmatch(f.show(t)); m != nil {
-		t.Errorf("Plants links to Archived plants as %q with nothing archived", m[2])
+	if link := archivedPlantsLink(f.show(t)); link != nil {
+		t.Errorf("Plants links to Archived plants as %q with nothing archived", link.text())
 	}
 }
 
@@ -69,13 +85,13 @@ func TestPlants_TheArchivedPlantsLinkReadsTheNumberArchived(t *testing.T) {
 	f := rosewoodPlants(t)
 	archiveTwo(t, f)
 
-	m := archivedLinkEl.FindStringSubmatch(f.show(t))
+	link := archivedPlantsLink(f.show(t))
 
-	if m == nil {
+	if link == nil {
 		t.Fatal("Plants has no link to Archived plants with two plants archived")
 	}
-	if m[1] != archivedPlantsPath || m[2] != "2 archived" {
-		t.Errorf("the link reads %q to %s, want \"2 archived\" to %s", m[2], m[1], archivedPlantsPath)
+	if got := link.text(); got != "2 archived" {
+		t.Errorf("the link to %s reads %q, want \"2 archived\"", archivedPlantsPath, got)
 	}
 }
 
@@ -83,22 +99,13 @@ func TestArchived_ListsTheGardensArchivedPlantsMostRecentFirstWithTheDay(t *test
 	f := rosewoodPlants(t)
 	archiveTwo(t, f)
 
-	page := f.archived(t)
+	hrefs, rows := plantRows(f.archived(t))
 
-	var hrefs, names, metas []string
-	for _, m := range archivedRowEl.FindAllStringSubmatch(page, -1) {
-		hrefs = append(hrefs, m[1])
-		names = append(names, text(rowLeadName.FindStringSubmatch(m[2])[2]))
-		metas = append(metas, text(rowMeta.FindStringSubmatch(m[2])[1]))
-	}
-	if want := []string{"Nigel", "Doris"}; !slices.Equal(names, want) {
-		t.Errorf("Archived plants lists %v, want %v: this garden's, the most recently archived first", names, want)
+	if want := []string{"Nigel Boston fern · Archived 1 Sep", "Doris Snake plant · Archived 4 Aug"}; !slices.Equal(rows, want) {
+		t.Errorf("Archived plants lists %q, want %q: this garden's, the most recently archived first, each with the day", rows, want)
 	}
 	if want := []string{plantPath(nigelID), plantPath(dorisID)}; !slices.Equal(hrefs, want) {
 		t.Errorf("the rows link to %v, want %v", hrefs, want)
-	}
-	if want := []string{"Boston fern · Archived 1 Sep", "Snake plant · Archived 4 Aug"}; !slices.Equal(metas, want) {
-		t.Errorf("the second lines read %v, want %v", metas, want)
 	}
 }
 
@@ -108,7 +115,7 @@ func TestArchived_AnArchiveDateInAnotherYearNamesTheYear(t *testing.T) {
 
 	page := f.archived(t)
 
-	if !strings.Contains(page, "Archived 31 Dec 2025") {
+	if !strings.Contains(text(page), "Archived 31 Dec 2025") {
 		t.Errorf("the row does not name the year:\n%s", text(page))
 	}
 }
@@ -118,7 +125,7 @@ func TestArchived_AnEmptyArchiveReadsNothingArchived(t *testing.T) {
 
 	page := f.archived(t)
 
-	if archivedRowEl.MatchString(page) || !strings.Contains(page, "No archived plants") {
+	if _, rows := plantRows(page); len(rows) != 0 || !strings.Contains(text(page), "No archived plants") {
 		t.Errorf("the empty archive reads:\n%s", text(page))
 	}
 }
@@ -129,8 +136,8 @@ func TestPlant_AnArchivedPlantSaysWhenItWasArchived(t *testing.T) {
 
 	page := f.page(t, bigFellaID)
 
-	if !strings.Contains(page, `<p class="hero__where">Archived 1 Sep</p>`) {
-		t.Errorf("the page does not say when the plant was archived:\n%s", text(page))
+	if got, want := hero(page), "Big Fella Swiss cheese plant · Monstera deliciosa Living room Archived 1 Sep"; got != want {
+		t.Errorf("the top of the page reads %q, want %q", got, want)
 	}
 }
 
@@ -138,16 +145,16 @@ func TestPlant_AnArchivedPlantOffersRestoreAndGoesBackToArchivedPlants(t *testin
 	f := rosewoodPlant(t)
 	f.exec(t, "UPDATE plant SET archived_at = now() WHERE id = $1", bigFellaID)
 
-	page := f.page(t, bigFellaID)
+	doc := readHTML(f.page(t, bigFellaID))
 
-	if m := restoreForm.FindStringSubmatch(page); m == nil || m[1] != restorePlantPath(bigFellaID) {
-		t.Errorf("the page has no Restore posting to %s:\n%v", restorePlantPath(bigFellaID), m)
+	if restoreButton(doc, bigFellaID) == nil {
+		t.Errorf("the page has no Restore posting to %s", restorePlantPath(bigFellaID))
 	}
-	if m := backLink.FindStringSubmatch(page); m == nil || m[1] != archivedPlantsPath || m[2] != "Archived plants" {
-		t.Errorf("the back link is %v, want Archived plants at %s", m, archivedPlantsPath)
+	if back := doc.byID("plant-bar").first(isTag("a")); back.attr("href") != archivedPlantsPath || back.text() != "Archived plants" {
+		t.Errorf("the back link is %s, want Archived plants at %s", back, archivedPlantsPath)
 	}
 	for _, absent := range []string{editPlantPath(bigFellaID), archivePlantPath(bigFellaID)} {
-		if strings.Contains(page, absent) {
+		if pointsAt(doc, absent) {
 			t.Errorf("an archived plant's page offers %s", absent)
 		}
 	}
@@ -158,7 +165,7 @@ func TestPlant_AReaderWhoMayNotArchiveGetsNoRestore(t *testing.T) {
 	f.principal.Capabilities = auth.Capabilities{auth.CareLog: true}
 	f.exec(t, "UPDATE plant SET archived_at = now() WHERE id = $1", bigFellaID)
 
-	if page := f.page(t, bigFellaID); restoreForm.MatchString(page) {
+	if restoreButton(readHTML(f.page(t, bigFellaID)), bigFellaID) != nil {
 		t.Error("a reader without plant.archive was offered Restore")
 	}
 }
@@ -179,8 +186,8 @@ func TestPlant_RestoringPutsAnArchivedPlantBackOnThePlantsList(t *testing.T) {
 	if !slices.ContainsFunc(list, func(p store.Plant) bool { return p.ID == dorisID }) {
 		t.Error("the restored plant is not on the plant list")
 	}
-	if m := archivedLinkEl.FindStringSubmatch(f.show(t)); m == nil || m[2] != "1 archived" {
-		t.Errorf("after restoring one of two, the Archived plants link reads %v, want 1 archived", m)
+	if got := archivedPlantsLink(f.show(t)).text(); got != "1 archived" {
+		t.Errorf("after restoring one of two, the Archived plants link reads %q, want 1 archived", got)
 	}
 }
 
@@ -229,8 +236,9 @@ func TestPlant_RestoreSwapsTheBackLinkToPlants(t *testing.T) {
 
 	body := fragment(t, f.restoreSwap(t, bigFellaID), plantBodyID)
 
-	if m := backLink.FindStringSubmatch(body); m == nil || m[1] != plantsPath || m[2] != "Plants" {
-		t.Errorf("the swap's back link is %v, want Plants at %s", m, plantsPath)
+	back := readHTML(body).first(attrIs("hx-swap-oob", "innerHTML:#plant-bar")).first(isTag("a"))
+	if back.attr("href") != plantsPath || back.text() != "Plants" {
+		t.Errorf("the swap's back link is %s, want Plants at %s", back, plantsPath)
 	}
 }
 
@@ -239,13 +247,15 @@ func TestPlant_RestoreSwapsThePageUnderTheTopBarAndOffersArchiveInstead(t *testi
 	f.exec(t, "UPDATE plant SET archived_at = now() WHERE id = $1", bigFellaID)
 
 	body := fragment(t, f.restoreSwap(t, bigFellaID), plantBodyID)
-	if restoreForm.MatchString(body) {
+
+	doc := readHTML(body)
+	if restoreButton(doc, bigFellaID) != nil {
 		t.Errorf("the swap still offers Restore:\n%s", text(body))
 	}
-	if !strings.Contains(body, archivePlantPath(bigFellaID)) {
+	if !pointsAt(doc, archivePlantPath(bigFellaID)) {
 		t.Errorf("the swap has no Archive button, so the plant does not read as restored:\n%s", text(body))
 	}
-	if want := announced("Big Fella restored. It’s back on Plants."); !strings.Contains(body, want) {
-		t.Errorf("the swap does not announce the restore:\n%s", body)
+	if got, want := announcedIn(body), "Big Fella restored. It’s back on Plants."; got != want {
+		t.Errorf("the swap announces %q, want %q", got, want)
 	}
 }

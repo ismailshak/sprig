@@ -28,25 +28,33 @@ func TestSignIn_ThePageIsServedWithNoSessionAndPostsToTheSignInRoutes(t *testing
 		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusOK, rec.Body.String())
 	}
 	page := rec.Body.String()
-	for _, want := range []string{
-		"Sign in to sprig",
-		`action="` + signInPath + `"`,
-		`data-passkey="get"`,
-		`data-challenge="` + challengePath + `"`,
-		`<input type="hidden" name="` + credentialField + `">`,
-		"Requires JavaScript and a browser with passkey support.",
-		`href="` + recoverPath + `"`,
-	} {
-		if !strings.Contains(page, want) {
-			t.Errorf("the page lacks %s:\n%s", want, page)
+	for _, want := range []string{"Sign in to sprig", "Requires JavaScript and a browser with passkey support."} {
+		if !strings.Contains(text(page), want) {
+			t.Errorf("the page lacks %s:\n%s", want, text(page))
 		}
+	}
+	form := formTo(page, signInPath)
+	if form == nil {
+		t.Fatalf("the page has no form posting to %s:\n%s", signInPath, page)
+	}
+	if got := form.attr("data-passkey"); got != "get" {
+		t.Errorf("the form's data-passkey is %q, want get", got)
+	}
+	if got := form.attr("data-challenge"); got != challengePath {
+		t.Errorf("the form asks for a challenge at %q, want %s", got, challengePath)
+	}
+	if _, ok := hiddenValue(form, credentialField); !ok {
+		t.Errorf("the form has no hidden %s input for the credential:\n%s", credentialField, form)
+	}
+	if readHTML(page).first(isTag("a"), attrIs("href", recoverPath)) == nil {
+		t.Errorf("the page has no link to %s:\n%s", recoverPath, page)
 	}
 	// Only the browser can talk to the device, so a press with no script
 	// running would post an empty credential.
 	if !buttonIsDisabled(t, page, signInLabel) {
 		t.Errorf("%s is not disabled:\n%s", signInLabel, page)
 	}
-	if strings.Contains(page, "nav__item") {
+	if hasTabBar(page) {
 		t.Error("the sign-in page renders the tab bar, and nobody is signed in to use it")
 	}
 }
@@ -67,7 +75,7 @@ func TestSignIn_AnAnswerWithNoChallengeBehindItSaysTheRequestExpiredOnThePage(t 
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusUnauthorized, text(rec.Body.String()))
 	}
-	if !strings.Contains(rec.Body.String(), "Sign-in timed out. Try again.") {
+	if !strings.Contains(text(rec.Body.String()), "Sign-in timed out. Try again.") {
 		t.Errorf("the page does not say the request expired:\n%s", text(rec.Body.String()))
 	}
 	// The form is still on the page, so a second attempt takes no navigation.
@@ -181,8 +189,8 @@ func TestSignIn_ASignInWithANextPathLandsOnThatPath(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusOK, rec.Body.String())
 	}
-	if !strings.Contains(rec.Body.String(), `<input type="hidden" name="`+nextField+`" value="`+next+`">`) {
-		t.Errorf("the form has no hidden input for %s:\n%s", next, rec.Body.String())
+	if got, _ := hiddenValue(formTo(rec.Body.String(), signInPath), nextField); got != next {
+		t.Errorf("the form's hidden %s input holds %q, want %s:\n%s", nextField, got, next, rec.Body.String())
 	}
 
 	rec = f.signInWithNext(t, h, device, next)
@@ -207,7 +215,7 @@ func TestSignIn_ANextPathOnAnotherSiteIsRefusedAndTheSignInLandsOnToday(t *testi
 
 			rec := httptest.NewRecorder()
 			h.showSignIn(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, signInPath+"?"+nextField+"="+url.QueryEscape(next), nil))
-			if strings.Contains(rec.Body.String(), `name="`+nextField+`"`) {
+			if readHTML(rec.Body.String()).first(attrIs("name", nextField)) != nil {
 				t.Errorf("the form has a hidden input for %q:\n%s", next, rec.Body.String())
 			}
 
@@ -230,7 +238,7 @@ func TestSignIn_ARefusedSignInKeepsTheNextPathOnTheForm(t *testing.T) {
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusUnauthorized, text(rec.Body.String()))
 	}
-	if !strings.Contains(rec.Body.String(), `<input type="hidden" name="`+nextField+`" value="`+next+`">`) {
-		t.Errorf("the form lost %s:\n%s", next, rec.Body.String())
+	if got, _ := hiddenValue(formTo(rec.Body.String(), signInPath), nextField); got != next {
+		t.Errorf("the form's hidden %s input holds %q, want %s:\n%s", nextField, got, next, rec.Body.String())
 	}
 }

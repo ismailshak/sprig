@@ -439,21 +439,26 @@ var (
 func routeQueries(t *testing.T) *store.Queries {
 	t.Helper()
 
-	ctx := t.Context()
 	tx := pgtest.Tx(t, migrateSchema)
 	rosewoodID := sitterPrincipal().Garden.ID
+	// Prune is a care type with no events, for the route that deletes one.
+	ownedGarden{
+		id:        rosewoodID,
+		name:      "Rosewood",
+		owner:     store.AppUser{ID: sitterPrincipal().User.ID, DisplayName: "Ellie", Handle: "ellie", Timezone: "Europe/London"},
+		careTypes: []store.CareType{{Name: "Water", Slug: "water"}, {Name: "Feed", Slug: "feed"}, {Name: "Prune", Slug: "prune"}},
+	}.insert(t, tx)
 	seed := []struct {
 		sql  string
 		args []any
 	}{
-		{"INSERT INTO garden (id, name) VALUES ($1, 'Rosewood'), ($2, 'Fairview')", []any{rosewoodID, fairviewID}},
-		{`INSERT INTO care_type (garden_id, name, slug)
-			VALUES ($1, 'Water', 'water'), ($2, 'Water', 'water'), ($1, 'Feed', 'feed'), ($2, 'Feed', 'feed')`, []any{rosewoodID, fairviewID}},
-		// The Garden page's routes: a type with no events for the delete route,
-		// one that is already off for the route that turns one back on, and one
-		// only Fairview has for the scope check.
+		{"INSERT INTO garden (id, name) VALUES ($1, 'Fairview')", []any{fairviewID}},
+		{"INSERT INTO care_type (garden_id, name, slug) VALUES ($1, 'Water', 'water'), ($1, 'Feed', 'feed')", []any{fairviewID}},
+		// The Garden page's other routes: a care type that is already off for the
+		// route that turns one back on, and one only Fairview has for the scope
+		// check.
 		{`INSERT INTO care_type (garden_id, name, slug, archived_at)
-			VALUES ($1, 'Prune', 'prune', NULL), ($1, 'Mist', 'mist', now()), ($2, 'Trim', 'trim', NULL)`, []any{rosewoodID, fairviewID}},
+			VALUES ($1, 'Mist', 'mist', now()), ($2, 'Trim', 'trim', NULL)`, []any{rosewoodID, fairviewID}},
 		{"INSERT INTO plant (id, garden_id, nickname) VALUES ($1, $2, 'Big Fella'), ($3, $4, 'Gerald')", []any{rosewoodPlantID, rosewoodID, fairviewPlantID, fairviewID}},
 		{"INSERT INTO plant (id, garden_id, nickname) VALUES ($1, $2, 'Doris'), ($3, $4, 'Nigel')", []any{rosewoodArchivedID, rosewoodID, fairviewArchivedID, fairviewID}},
 		{"INSERT INTO plant (id, garden_id, nickname, archived_at) VALUES ($1, $2, 'Barry', now()), ($3, $4, 'Kev', now())", []any{rosewoodRestoreID, rosewoodID, fairviewRestoreID, fairviewID}},
@@ -461,7 +466,6 @@ func routeQueries(t *testing.T) *store.Queries {
 			SELECT garden_id, $1, id, 7, 'day' FROM care_type WHERE garden_id = $2`, []any{rosewoodPlantID, rosewoodID}},
 		{`INSERT INTO care_schedule (garden_id, plant_id, care_type_id, interval_count, interval_unit)
 			SELECT garden_id, $1, id, 7, 'day' FROM care_type WHERE garden_id = $2`, []any{fairviewPlantID, fairviewID}},
-		{"INSERT INTO app_user (id, display_name, handle, timezone) VALUES ($1, 'Ellie', 'ellie', 'Europe/London')", []any{sitterPrincipal().User.ID}},
 		{`INSERT INTO care_event (id, garden_id, plant_id, care_type_id, performed_by, performed_at, done)
 			SELECT $1, garden_id, $2, id, $3, now(), true FROM care_type WHERE garden_id = $4 AND slug = 'water'`, []any{rosewoodEventID, rosewoodPlantID, sitterPrincipal().User.ID, rosewoodID}},
 		{`INSERT INTO care_event (id, garden_id, plant_id, care_type_id, performed_by, performed_at, done)
@@ -487,11 +491,12 @@ func routeQueries(t *testing.T) *store.Queries {
 		{`INSERT INTO push_subscription (id, user_id, endpoint, p256dh_key, auth_key)
 			VALUES ($1, $2, 'https://push.invalid/reader', 'key', 'key'), ($3, $4, 'https://push.invalid/stranger', 'key', 'key')`,
 			[]any{readerBrowserID, sitterPrincipal().User.ID, strangerBrowserID, strangerID}},
-		// The rows People and Tokens act on. The reader is a member of
-		// Rosewood, because a page listing members has to find their own row.
+		// The rows People and Tokens act on. The reader's own membership of
+		// Rosewood is inserted with the garden, because a page listing members
+		// has to find their own row.
 		{"INSERT INTO app_user (id, display_name, handle, timezone) VALUES ($1, 'Jo', 'jo', 'Europe/London'), ($2, 'Robin', 'robin', 'Europe/Lisbon')", []any{joID, fairviewMemberID}},
-		{`INSERT INTO membership (garden_id, user_id, role, digest_hour) VALUES ($1, $2, 'owner', 8), ($1, $3, 'member', 8), ($1, $4, 'sitter', 8), ($5, $6, 'member', 8)`,
-			[]any{rosewoodID, sitterPrincipal().User.ID, strangerID, joID, fairviewID, fairviewMemberID}},
+		{`INSERT INTO membership (garden_id, user_id, role, digest_hour) VALUES ($1, $2, 'member', 8), ($1, $3, 'sitter', 8), ($4, $5, 'member', 8)`,
+			[]any{rosewoodID, strangerID, joID, fairviewID, fairviewMemberID}},
 		{`INSERT INTO invite (id, garden_id, token_hash, role, created_by, expires_at)
 			VALUES ($1, $2, 'rosewood-invite', 'sitter', $3, now() + interval '7 days'),
 			       ($4, $5, 'fairview-invite', 'sitter', $6, now() + interval '7 days')`,
@@ -512,9 +517,7 @@ func routeQueries(t *testing.T) *store.Queries {
 	}
 
 	for _, row := range seed {
-		if _, err := tx.Exec(ctx, row.sql, row.args...); err != nil {
-			t.Fatalf("seeding: %v\n%s", err, row.sql)
-		}
+		mustExec(t, tx, row.sql, row.args...)
 	}
 	return store.New(tx)
 }

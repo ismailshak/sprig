@@ -397,7 +397,7 @@ func TestRequireGarden_ASessionInAGardenReachesTheRoute(t *testing.T) {
 
 // onNoGardenPage reports whether body is the "You're in no garden" page.
 func onNoGardenPage(body string) bool {
-	return strings.Contains(body, "No garden yet")
+	return strings.Contains(text(body), "No garden yet")
 }
 
 func TestRequireGarden_ASessionOnNoGardenIsToldSoAndIsOfferedSetUpOnlyWhenSignUpIsOn(t *testing.T) {
@@ -418,14 +418,16 @@ func TestRequireGarden_ASessionOnNoGardenIsToldSoAndIsOfferedSetUpOnlyWhenSignUp
 			if !onNoGardenPage(page) {
 				t.Errorf("the page does not say the account is in no garden:\n%s", page)
 			}
-			for _, want := range []string{"You’re signed in as Ellie", `<form method="post" action="` + signOutPath + `">`} {
-				if !strings.Contains(page, want) {
-					t.Errorf("the page lacks %s:\n%s", want, page)
-				}
+			if !strings.Contains(text(page), "You’re signed in as Ellie") {
+				t.Errorf("the page does not say who is signed in:\n%s", text(page))
+			}
+			doc := readHTML(page)
+			if signOut := doc.first(isTag("form"), attrIs("action", signOutPath)); signOut.attr("method") != "post" {
+				t.Errorf("the page has no form that posts to %s:\n%s", signOutPath, page)
 			}
 			buttonNamed(t, page, "Sign out")
 			for _, tab := range []string{plantsPath, morePath} {
-				if strings.Contains(page, `href="`+tab+`"`) {
+				if doc.first(isTag("a"), attrIs("href", tab)) != nil {
 					t.Errorf("the page links to %s, and there is no garden to open", tab)
 				}
 			}
@@ -467,7 +469,7 @@ func TestAuthenticate_AFailedLookupIsA500LoggedOnce(t *testing.T) {
 	if rec.Code != http.StatusInternalServerError {
 		t.Errorf("status = %d, want %d", rec.Code, http.StatusInternalServerError)
 	}
-	if !strings.Contains(rec.Body.String(), serverErrorTitle) {
+	if !strings.Contains(text(rec.Body.String()), serverErrorTitle) {
 		t.Errorf("the browser read %q, want the %q page", rec.Body.String(), serverErrorTitle)
 	}
 

@@ -6,7 +6,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
-	"strings"
+	"slices"
 	"testing"
 	"uuid"
 
@@ -64,12 +64,12 @@ func TestPhotoForm_ThePageHasTheFieldAndTheLineForABrowserThatCannotResize(t *te
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusOK, rec.Body.String())
 	}
-	page := rec.Body.String()
-	if !strings.Contains(page, `id="photo-field" hidden`) || !strings.Contains(page, `id="photo-unsupported"`) {
+	doc := readHTML(rec.Body.String())
+	if !doc.byID("photo-field").has("hidden") || doc.byID("photo-unsupported") == nil {
 		t.Error("the page lacks the hidden photo field or the line for a browser that cannot resize")
 	}
-	if !strings.Contains(page, `href="`+plantPath(bigFellaID)+`">Cancel</a>`) {
-		t.Error("Cancel does not go back to the plant's page")
+	if got := doc.first(isTag("a"), textIs("Cancel")).attr("href"); got != plantPath(bigFellaID) {
+		t.Errorf("Cancel points at %q, want the plant's page", got)
 	}
 }
 
@@ -94,6 +94,26 @@ func TestPhotoForm_APostedPhotoIsStoredAndThePostGoesToTheGrid(t *testing.T) {
 	}
 }
 
+// photoRefusals holds every message the photo field shows when a post is
+// refused.
+var photoRefusals = []string{"Choose a photo.", photoQuotaFull, photoNotImage, plainText(tooLargeTitle, tooLargeLine)}
+
+// refusedWith fails the test unless the page shows want and no other message
+// in photoRefusals.
+func refusedWith(t *testing.T, page, want string) {
+	t.Helper()
+
+	shown := paragraphsShown(page)
+	if !slices.Contains(shown, want) {
+		t.Errorf("the page does not say %q. It says %q", want, shown)
+	}
+	for _, other := range photoRefusals {
+		if other != want && slices.Contains(shown, other) {
+			t.Errorf("the page says %q as well as %q", other, want)
+		}
+	}
+}
+
 func TestPhotoForm_APostWithNoPhotoSaysChooseAPhotoFirst(t *testing.T) {
 	f := plantFormOn(t)
 
@@ -102,9 +122,7 @@ func TestPhotoForm_APostWithNoPhotoSaysChooseAPhotoFirst(t *testing.T) {
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusUnprocessableEntity, rec.Body.String())
 	}
-	if got := errorsOn(rec.Body.String()); len(got) != 1 || got[0] != "Choose a photo." {
-		t.Errorf("the form's errors are %v, want Choose a photo.", got)
-	}
+	refusedWith(t, rec.Body.String(), "Choose a photo.")
 }
 
 func TestPhotoForm_ABodyLongerThanTheRoomLeftIs413WithTheReasonBeforeItIsRead(t *testing.T) {
@@ -120,9 +138,7 @@ func TestPhotoForm_ABodyLongerThanTheRoomLeftIs413WithTheReasonBeforeItIsRead(t 
 	if rec.Code != http.StatusRequestEntityTooLarge {
 		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusRequestEntityTooLarge, rec.Body.String())
 	}
-	if got := errorsOn(rec.Body.String()); len(got) != 1 || got[0] != photoQuotaFull {
-		t.Errorf("the form's errors are %v, want %q", got, photoQuotaFull)
-	}
+	refusedWith(t, rec.Body.String(), photoQuotaFull)
 	if got := f.storedFiles(t); len(got) != 0 {
 		t.Errorf("the directory holds %v, want nothing", got)
 	}
@@ -140,9 +156,7 @@ func TestPhotoForm_APhotoTheGardenHasNoRoomForIsRefusedWithTheReasonAndNothingIs
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusUnprocessableEntity, rec.Body.String())
 	}
-	if got := errorsOn(rec.Body.String()); len(got) != 1 || got[0] != photoQuotaFull {
-		t.Errorf("the form's errors are %v, want %q", got, photoQuotaFull)
-	}
+	refusedWith(t, rec.Body.String(), photoQuotaFull)
 	if got := f.storedFiles(t); len(got) != 0 {
 		t.Errorf("the directory holds %v, want nothing", got)
 	}
@@ -192,7 +206,7 @@ func TestPhotoForm_AddAPhotoHasNoFocusField(t *testing.T) {
 
 	page := f.addPhotoPage(t, bigFellaID).Body.String()
 
-	if strings.Contains(page, `name="focus"`) {
+	if readHTML(page).first(attrIs("name", "focus")) != nil {
 		t.Error("Add a photo has a focus field, want none, because a progress photo is not cropped")
 	}
 }
@@ -205,9 +219,7 @@ func TestPhotoForm_AFileThatIsNotAPhotoIsRefusedWithTheReasonUnderTheFieldAndNot
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusUnprocessableEntity, rec.Body.String())
 	}
-	if got := errorsOn(rec.Body.String()); len(got) != 1 || got[0] != photoNotImage {
-		t.Errorf("the form's errors are %v, want %q", got, photoNotImage)
-	}
+	refusedWith(t, rec.Body.String(), photoNotImage)
 	if got := f.storedFiles(t); len(got) != 0 {
 		t.Errorf("the directory holds %v, want nothing", got)
 	}
@@ -222,9 +234,7 @@ func TestPhotoForm_APhotoOverTheFileLimitIsRefusedWithTheLimitUnderTheField(t *t
 	if rec.Code != http.StatusRequestEntityTooLarge {
 		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusRequestEntityTooLarge, rec.Body.String())
 	}
-	if got := errorsOn(rec.Body.String()); len(got) != 1 || got[0] != plainText(tooLargeTitle, tooLargeLine) {
-		t.Errorf("the form's errors are %v, want the size limit", got)
-	}
+	refusedWith(t, rec.Body.String(), plainText(tooLargeTitle, tooLargeLine))
 	if got := f.storedFiles(t); len(got) != 0 {
 		t.Errorf("the directory holds %v, want nothing", got)
 	}

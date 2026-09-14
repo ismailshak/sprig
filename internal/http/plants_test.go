@@ -4,7 +4,6 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -60,20 +59,8 @@ func (f *plantsFixture) show(t *testing.T) string {
 
 func (f *plantsFixture) exec(t *testing.T, sql string, args ...any) {
 	t.Helper()
-	if _, err := f.tx.Exec(t.Context(), sql, args...); err != nil {
-		t.Fatalf("%v\n%s", err, sql)
-	}
+	mustExec(t, f.tx, sql, args...)
 }
-
-var (
-	roomTitle       = regexp.MustCompile(`(?s)<h2 class="section__title[^"]*"[^>]*>(.*?)</h2>`)
-	roomCount       = regexp.MustCompile(`<span class="section__count">(\d+)</span>`)
-	plantRowElement = regexp.MustCompile(`(?s)<li>(.*?)</li>`)
-	rowLeadName     = regexp.MustCompile(`(?s)<span class="row__name([^"]*)">(.*?)</span>`)
-	rowSecond       = regexp.MustCompile(`(?s)<span class="row__meta"><span class="row__part">(.*?)</span></span>`)
-	rowStanding     = regexp.MustCompile(`(?s)<span class="standing">(.*?)</span>`)
-	rowLinkStart    = regexp.MustCompile(`<a class="row row--link" href="([^"]+)">`)
-)
 
 type room struct {
 	title string
@@ -81,62 +68,62 @@ type room struct {
 	rows  []plantsTestRow
 }
 
+// plantsTestRow is one row on the Plants page.
 type plantsTestRow struct {
-	href         string
-	lead         string
-	leadItalic   bool
-	second       string
-	secondItalic bool
-	standing     string
+	// href is the URL the row links to.
+	href string
+	// text is everything the row says: the plant's name, its second line and
+	// the overdue care, in that order.
+	text string
 }
 
 // roomsOf reads the rooms and their plants back out of the page in page order.
+// A room is a section named by its heading. Its count is the first word of
+// the section's text after the title.
 func roomsOf(t *testing.T, page string) []room {
 	t.Helper()
 
-	sectionsByID, order := sections(page)
-	out := make([]room, 0, len(order))
-	for _, id := range order {
-		markup := sectionsByID[id]
-		title := roomTitle.FindStringSubmatch(markup)
-		count := roomCount.FindStringSubmatch(markup)
-		if title == nil || count == nil {
-			t.Fatalf("the section %s has no title or no count:\n%s", id, markup)
+	doc := readHTML(page)
+	var out []room
+	for _, section := range doc.all(isTag("section"), hasAttr("aria-labelledby")) {
+		title := doc.byID(section.attr("aria-labelledby")).text()
+		after := strings.Fields(strings.TrimPrefix(section.text(), title))
+		if title == "" || len(after) == 0 {
+			t.Fatalf("the section has no title or no count:\n%s", section)
 		}
-		r := room{title: text(title[1]), count: count[1]}
-		for _, m := range plantRowElement.FindAllStringSubmatch(markup, -1) {
-			r.rows = append(r.rows, plantsTestRowOf(t, m[1]))
+		r := room{title: title, count: after[0]}
+		for _, item := range section.all(isTag("li")) {
+			link := item.first(isTag("a"))
+			if link == nil {
+				t.Fatalf("the row is not a link:\n%s", item)
+			}
+			r.rows = append(r.rows, plantsTestRow{href: link.attr("href"), text: item.text()})
 		}
 		out = append(out, r)
 	}
 	return out
 }
 
-func plantsTestRowOf(t *testing.T, markup string) plantsTestRow {
-	t.Helper()
-
-	link := rowLinkStart.FindStringSubmatch(markup)
-	lead := rowLeadName.FindStringSubmatch(markup)
-	if link == nil || lead == nil {
-		t.Fatalf("the row is not a link with a name:\n%s", markup)
+func rowTexts(rows []plantsTestRow) []string {
+	texts := make([]string, 0, len(rows))
+	for _, r := range rows {
+		texts = append(texts, r.text)
 	}
-	row := plantsTestRow{href: link[1], lead: text(lead[2]), leadItalic: strings.Contains(lead[1], "row__name--sp")}
-	if m := rowSecond.FindStringSubmatch(markup); m != nil {
-		row.second = text(m[1])
-		row.secondItalic = strings.Contains(m[1], "<i>")
-	}
-	if m := rowStanding.FindStringSubmatch(markup); m != nil {
-		row.standing = text(m[1])
-	}
-	return row
+	return texts
 }
 
-func leadNames(rows []plantsTestRow) []string {
-	names := make([]string, 0, len(rows))
-	for _, r := range rows {
-		names = append(names, r.lead)
+// rowsStartWith reports whether each row's text starts with the name at the
+// same place in names.
+func rowsStartWith(rows []plantsTestRow, names []string) bool {
+	if len(rows) != len(names) {
+		return false
 	}
-	return names
+	for i, r := range rows {
+		if r.text != names[i] && !strings.HasPrefix(r.text, names[i]+" ") {
+			return false
+		}
+	}
+	return true
 }
 
 func TestPlants_GroupsPlantsByRoomWithNoRoomLast(t *testing.T) {
@@ -154,15 +141,15 @@ func TestPlants_GroupsPlantsByRoomWithNoRoomLast(t *testing.T) {
 		{"No room", []string{"Sprout"}},
 	}
 	if len(rooms) != len(want) {
-		t.Fatalf("the plant list draws %d rooms, want %d", len(rooms), len(want))
+		t.Fatalf("the plant list shows %d rooms, want %d", len(rooms), len(want))
 	}
 	for i, w := range want {
 		got := rooms[i]
 		if got.title != w.title {
 			t.Errorf("room %d is %q, want %q", i, got.title, w.title)
 		}
-		if names := leadNames(got.rows); strings.Join(names, ", ") != strings.Join(w.plants, ", ") {
-			t.Errorf("%s holds %v, want %v", w.title, names, w.plants)
+		if !rowsStartWith(got.rows, w.plants) {
+			t.Errorf("%s holds %v, want %v", w.title, rowTexts(got.rows), w.plants)
 		}
 		if want := strconv.Itoa(len(w.plants)); got.count != want {
 			t.Errorf("%s counts %s, want %s", w.title, got.count, want)
@@ -188,8 +175,8 @@ func TestPlants_OrderingIgnoresCase(t *testing.T) {
 		if r.title != "Windowsill" {
 			continue
 		}
-		if got, want := leadNames(r.rows), []string{"aloe", "Opuntia microdasys", "Spike"}; !slices.Equal(got, want) {
-			t.Errorf("Windowsill holds %v, want %v", got, want)
+		if want := []string{"aloe", "Opuntia microdasys", "Spike"}; !rowsStartWith(r.rows, want) {
+			t.Errorf("Windowsill holds %v, want %v", rowTexts(r.rows), want)
 		}
 	}
 }
@@ -212,60 +199,54 @@ func TestPlants_ARowLinksToItsPlant(t *testing.T) {
 func TestPlants_ARowShowsThePlantsOtherNameOnASecondLine(t *testing.T) {
 	rooms := roomsOf(t, rosewoodPlants(t).show(t))
 
-	byName := map[string]plantsTestRow{}
+	var rows []plantsTestRow
 	for _, r := range rooms {
-		for _, row := range r.rows {
-			byName[row.lead] = row
-		}
+		rows = append(rows, r.rows...)
 	}
 
-	want := map[string]struct {
-		second       string
-		leadItalic   bool
-		secondItalic bool
-	}{
+	want := map[string]string{
 		// Big Fella has three names. The list shows the nickname and the common
-		// name.
-		"Big Fella": {second: "Swiss cheese plant"},
-		// Opuntia microdasys has only a botanical name, shown in italics.
-		"Opuntia microdasys": {leadItalic: true},
+		// name, then the watering it is late for.
+		"Big Fella": "Big Fella Swiss cheese plant Water 2 days late",
+		// Opuntia microdasys has only a botanical name. Its row has no second
+		// line.
+		"Opuntia microdasys": "Opuntia microdasys",
 		// Sprout has a nickname and no other name.
-		"Sprout": {},
+		"Sprout": "Sprout",
 	}
 	for name, w := range want {
-		row, ok := byName[name]
-		if !ok {
+		i := slices.IndexFunc(rows, func(r plantsTestRow) bool { return rowsStartWith([]plantsTestRow{r}, []string{name}) })
+		if i < 0 {
 			t.Errorf("the plant list has no row for %s", name)
 			continue
 		}
-		if row.second != w.second {
-			t.Errorf("%s reads %q on its second line, want %q", name, row.second, w.second)
-		}
-		if row.leadItalic != w.leadItalic {
-			t.Errorf("%s leads in italic = %v, want %v", name, row.leadItalic, w.leadItalic)
-		}
-		if row.secondItalic != w.secondItalic {
-			t.Errorf("%s carries its second name in italic = %v, want %v", name, row.secondItalic, w.secondItalic)
+		if rows[i].text != w {
+			t.Errorf("%s's row reads %q, want %q", name, rows[i].text, w)
 		}
 	}
 }
 
+// Doris and Nigel are due today. The Plants page does not mention that, since
+// Today does.
 func TestPlants_OnlyAnOverduePlantShowsAStatusLine(t *testing.T) {
 	rooms := roomsOf(t, rosewoodPlants(t).show(t))
 
-	standing := map[string]string{}
+	var got []string
 	for _, r := range rooms {
-		for _, row := range r.rows {
-			if row.standing != "" {
-				standing[row.lead] = row.standing
-			}
-		}
+		got = append(got, rowTexts(r.rows)...)
 	}
 
-	// Doris and Nigel are due today. The Plants page does not mention that,
-	// since Today does.
-	if want := map[string]string{"Big Fella": "Water 2 days late"}; len(standing) != len(want) || standing["Big Fella"] != want["Big Fella"] {
-		t.Errorf("the plant list's standings are %v, want %v", standing, want)
+	want := []string{
+		"Nigel Boston fern",
+		"Doris Snake plant",
+		"Trail Mix Golden pothos",
+		"Big Fella Swiss cheese plant Water 2 days late",
+		"Opuntia microdasys",
+		"Spike Golden barrel cactus",
+		"Sprout",
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("the plant list's rows read\n%q\nwant\n%q", got, want)
 	}
 }
 
@@ -281,26 +262,31 @@ func TestPlants_TheStatusLineNamesTheMostOverdueCare(t *testing.T) {
 		if r.title != "Living room" {
 			continue
 		}
-		if got, want := r.rows[0].standing, "Feed 14 days late"; got != want {
-			t.Errorf("Big Fella stands at %q, want %q", got, want)
+		if got, want := r.rows[0].text, "Big Fella Swiss cheese plant Feed 14 days late"; got != want {
+			t.Errorf("Big Fella's row reads %q, want %q", got, want)
 		}
 		return
 	}
 	t.Fatal("the plant list has no Living room")
 }
 
+// addLink returns the link on the page to the add form, or nil.
+func addLink(page string) *element {
+	return readHTML(page).first(isTag("a"), attrIs("href", newPlantPath))
+}
+
 func TestPlants_ASitterSeesNoAddButton(t *testing.T) {
 	f := rosewoodPlants(t)
 	f.principal.Capabilities = auth.Capabilities{auth.CareLog: true}
 
-	if page := f.show(t); strings.Contains(page, "/plants/new") {
+	if page := f.show(t); addLink(page) != nil {
 		t.Errorf("a sitter was offered the add form:\n%s", text(page))
 	}
 }
 
 func TestPlants_AMemberWhoMayCreatePlantsSeesTheAddButton(t *testing.T) {
-	if page := rosewoodPlants(t).show(t); !strings.Contains(page, `href="/plants/new"`) {
-		t.Errorf("the plant list carries no Add:\n%s", text(page))
+	if page := rosewoodPlants(t).show(t); addLink(page) == nil {
+		t.Errorf("the plant list has no Add:\n%s", text(page))
 	}
 }
 
@@ -317,8 +303,8 @@ func TestPlants_AGardenWithNoPlantsShowsAnAddPlantLink(t *testing.T) {
 	f.empty(t)
 
 	page := f.show(t)
-	if _, order := sections(page); len(order) > 0 {
-		t.Errorf("an empty garden draws the rooms %v", order)
+	if rooms := roomsOf(t, page); len(rooms) > 0 {
+		t.Errorf("an empty garden shows %d rooms", len(rooms))
 	}
 	for _, want := range []string{"No plants yet", "Add a plant to see its tasks here.", "Add plant"} {
 		if !strings.Contains(text(page), want) {
@@ -336,7 +322,7 @@ func TestPlants_ASitterInAnEmptyGardenSeesNoAddPlantLink(t *testing.T) {
 	if !strings.Contains(text(page), "No plants yet") {
 		t.Errorf("the empty plant list says nothing:\n%s", text(page))
 	}
-	if strings.Contains(page, "/plants/new") {
+	if addLink(page) != nil {
 		t.Errorf("a sitter was offered the add form:\n%s", text(page))
 	}
 }

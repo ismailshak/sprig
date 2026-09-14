@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"regexp"
 	"strings"
 	"testing"
 
@@ -81,23 +80,53 @@ func (f *moreFixture) challengeCookie(t *testing.T, handler http.HandlerFunc, pa
 	return cookie
 }
 
-// buttonNamed returns the markup of the button labelled label, whatever
-// attributes it has. It fails the test when the page has no such button.
-func buttonNamed(t *testing.T, page, label string) string {
+// buttonLabelled returns the button whose text is label. It fails the test
+// when the page has no such button.
+func buttonLabelled(t *testing.T, page, label string) *element {
 	t.Helper()
 
-	button := regexp.MustCompile(`(?s)<button[^>]*>\s*` + regexp.QuoteMeta(label) + `\s*</button>`).FindString(page)
-	if button == "" {
+	button := readHTML(page).first(isTag("button"), textIs(label))
+	if button == nil {
 		t.Fatalf("the page has no %s button:\n%s", label, page)
 	}
 	return button
 }
 
-// buttonIsDisabled reports whether the button labelled label is disabled.
+// buttonNamed returns the markup of the button whose text is label. It fails
+// the test when the page has no such button.
+func buttonNamed(t *testing.T, page, label string) string {
+	t.Helper()
+	return buttonLabelled(t, page, label).String()
+}
+
+// buttonIsDisabled reports whether the button whose text is label is disabled.
 func buttonIsDisabled(t *testing.T, page, label string) bool {
 	t.Helper()
+	return buttonLabelled(t, page, label).has("disabled")
+}
 
-	return strings.Contains(buttonNamed(t, page, label), " disabled")
+// formTo returns the form on page that posts to action, or nil.
+func formTo(page, action string) *element {
+	return readHTML(page).first(isTag("form"), attrIs("action", action))
+}
+
+// hiddenValue returns the value of the hidden input named name inside e. The
+// bool is false when e holds no such input.
+func hiddenValue(e *element, name string) (string, bool) {
+	input := e.first(isTag("input"), attrIs("type", "hidden"), attrIs("name", name))
+	return input.attr("value"), input != nil
+}
+
+// hasTabBar reports whether page renders the tab bar. The tab bar is the only
+// nav element the layout renders.
+func hasTabBar(page string) bool {
+	return readHTML(page).first(isTag("nav")) != nil
+}
+
+// selectedValue returns the value of the option chosen in sel. It is empty
+// when no option is chosen.
+func selectedValue(sel *element) string {
+	return sel.first(isTag("option"), hasAttr("selected")).attr("value")
 }
 
 func TestPasskeys_AddAPasskeyPostsToTheChallengeURLAndThenToThePasskeysPage(t *testing.T) {
@@ -107,11 +136,12 @@ func TestPasskeys_AddAPasskeyPostsToTheChallengeURLAndThenToThePasskeysPage(t *t
 
 	// The form and its challenge URL are the contract the script runs on. It
 	// posts to data-challenge for a challenge, then posts this form.
-	if !strings.Contains(page, `data-challenge="`+registerPath+`"`) {
-		t.Errorf("the page does not offer a challenge at %s:\n%s", registerPath, page)
+	form := formTo(page, passkeysPath)
+	if form == nil {
+		t.Fatalf("the Add a passkey form does not post to %s:\n%s", passkeysPath, page)
 	}
-	if !strings.Contains(page, `action="`+passkeysPath+`"`) {
-		t.Errorf("the Add a passkey form does not post to %s:\n%s", passkeysPath, page)
+	if got := form.attr("data-challenge"); got != registerPath {
+		t.Errorf("the form offers a challenge at %q, want %s", got, registerPath)
 	}
 }
 
@@ -190,11 +220,11 @@ func TestPasskeys_AnAnswerWithNoChallengeBehindItSaysTheRequestExpired(t *testin
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusUnprocessableEntity, rec.Body.String())
 	}
-	if !strings.Contains(rec.Body.String(), "The request timed out") {
+	if !strings.Contains(text(rec.Body.String()), "The request timed out") {
 		t.Errorf("the page does not say the request expired:\n%s", text(rec.Body.String()))
 	}
 	// The page it renders still lists the devices already enrolled.
-	if !strings.Contains(rec.Body.String(), "MacBook Air") {
+	if !strings.Contains(text(rec.Body.String()), "MacBook Air") {
 		t.Errorf("the page lost the passkeys the account already has:\n%s", text(rec.Body.String()))
 	}
 }
@@ -376,7 +406,7 @@ func TestPasskeys_ARegisteredDeviceIsOnTheListAndSignsIn(t *testing.T) {
 	f.enrolDevice(t, h, device)
 
 	page := f.page(t, f.handler.passkeys, passkeysPath)
-	if got := strings.Count(page, "Remove"); got != 3 {
+	if got := len(readHTML(page).all(isTag("button"), textIs("Remove"))); got != 3 {
 		t.Errorf("the page offers Remove %d times, want 3 for the two seeded devices and the new one:\n%s", got, text(page))
 	}
 
@@ -441,7 +471,7 @@ func TestSignIn_AnAnswerThatDoesNotCheckOutIsRefusedAndIsNotAServerError(t *test
 	if rec.Code != http.StatusUnauthorized {
 		t.Errorf("status = %d, want %d:\n%s", rec.Code, http.StatusUnauthorized, rec.Body.String())
 	}
-	if !strings.Contains(rec.Body.String(), "couldn’t be verified") {
+	if !strings.Contains(text(rec.Body.String()), "couldn’t be verified") {
 		t.Errorf("the refusal does not say the passkey could not be checked:\n%s", rec.Body.String())
 	}
 	if strings.Contains(log.String(), `"level":"ERROR"`) {
@@ -463,7 +493,7 @@ func TestPasskeys_AnAnswerThatDoesNotCheckOutSaysSoOnThePage(t *testing.T) {
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusUnprocessableEntity, text(rec.Body.String()))
 	}
-	if !strings.Contains(rec.Body.String(), "couldn’t be verified") {
+	if !strings.Contains(text(rec.Body.String()), "couldn’t be verified") {
 		t.Errorf("the page does not say the passkey could not be checked:\n%s", text(rec.Body.String()))
 	}
 }
@@ -481,7 +511,7 @@ func TestPasskeys_ADeviceRegisteredASecondTimeIsRefusedOnThePage(t *testing.T) {
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusUnprocessableEntity, text(rec.Body.String()))
 	}
-	if !strings.Contains(rec.Body.String(), "already has a passkey") {
+	if !strings.Contains(text(rec.Body.String()), "already has a passkey") {
 		t.Errorf("the page does not say the device already has a passkey:\n%s", text(rec.Body.String()))
 	}
 }

@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -27,17 +26,6 @@ const (
 	chromeOnMac    = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36"
 )
 
-var (
-	checkedBox    = regexp.MustCompile(`<input type="checkbox" id="([^"]+)"[^>]*?( checked)?>`)
-	selectedHour  = regexp.MustCompile(`<option value="(\d+)" selected>`)
-	hourOption    = regexp.MustCompile(`<option value="(\d+)"[^>]*>([^<]+)</option>`)
-	hourSelect    = regexp.MustCompile(`(?s)<select class="input input--narrow" id="hour".*?</select>`)
-	stackRow      = regexp.MustCompile(`(?s)<li class="row row--setting row--stack">(.*?)</li>`)
-	stackRowName  = regexp.MustCompile(`(?s)<span class="row__name">(.*?)</span>`)
-	stackRowMeta  = regexp.MustCompile(`(?s)<span class="row__part">(.*?)</span>`)
-	stackRowDrops = regexp.MustCompile(`<form method="post" action="([^"]+)"[^>]*><button class="row__drop"`)
-)
-
 type stackedRow struct {
 	name string
 	meta string
@@ -46,22 +34,29 @@ type stackedRow struct {
 	drop string
 }
 
-// stackedRowsOf reads the rows on Passkeys and under Subscribed devices. Both
-// pages render the same row markup.
+// stackedRowsOf reads the rows of the passkey list on Passkeys and of
+// Subscribed devices on Notifications. A row is a list item in either section:
+// its name, the line under the name, and the form holding Remove.
 func stackedRowsOf(page string) []stackedRow {
+	doc := readHTML(page)
 	var out []stackedRow
-	for _, m := range stackRow.FindAllStringSubmatch(page, -1) {
-		row := stackedRow{}
-		if name := stackRowName.FindStringSubmatch(m[1]); name != nil {
-			row.name = text(name[1])
+	for _, section := range []string{passkeysListID, devicesID} {
+		for _, item := range doc.byID(section).all(isTag("li")) {
+			var runs []string
+			for _, c := range item.children {
+				if child, ok := c.(*element); ok && child.tag != "form" {
+					runs = append(runs, textRuns(child)...)
+				}
+			}
+			row := stackedRow{drop: item.first(isTag("form")).attr("action")}
+			if len(runs) > 0 {
+				row.name = runs[0]
+			}
+			if len(runs) > 1 {
+				row.meta = runs[1]
+			}
+			out = append(out, row)
 		}
-		if meta := stackRowMeta.FindStringSubmatch(m[1]); meta != nil {
-			row.meta = text(meta[1])
-		}
-		if drop := stackRowDrops.FindStringSubmatch(m[1]); drop != nil {
-			row.drop = drop[1]
-		}
-		out = append(out, row)
 	}
 	return out
 }
@@ -70,13 +65,17 @@ func stackedRowsOf(page string) []stackedRow {
 func checkedOn(t *testing.T, page, id string) bool {
 	t.Helper()
 
-	for _, m := range checkedBox.FindAllStringSubmatch(page, -1) {
-		if m[1] == id {
-			return m[2] != ""
-		}
+	box := readHTML(page).byID(id)
+	if box.attr("type") != "checkbox" {
+		t.Fatalf("the page has no %s checkbox:\n%s", id, page)
 	}
-	t.Fatalf("the page has no %s checkbox:\n%s", id, page)
-	return false
+	return box.has("checked")
+}
+
+// hourSelectOf returns the select the digest's hour is chosen with, or nil
+// when the page has none.
+func hourSelectOf(page string) *element {
+	return readHTML(page).byID("hour")
 }
 
 func TestNotifications_TheTwoTypesAreCheckedAsTheyAreStored(t *testing.T) {
@@ -95,16 +94,16 @@ func TestNotifications_TheTwoTypesAreCheckedAsTheyAreStored(t *testing.T) {
 func TestNotifications_TheHourIsOnThePageOnlyWhileTheDigestIsOn(t *testing.T) {
 	f := moreGarden(t)
 
-	page := f.page(t, f.handler.notifications, notificationsPath)
-	if !hourSelect.MatchString(page) {
-		t.Error("the digest is on and the page offers no hour")
+	hour := hourSelectOf(f.page(t, f.handler.notifications, notificationsPath))
+	if hour == nil {
+		t.Fatal("the digest is on and the page offers no hour")
 	}
-	if got := selectedHour.FindStringSubmatch(hourSelect.FindString(page)); got == nil || got[1] != "8" {
-		t.Errorf("the hour selected is %v, want 8", got)
+	if got := hour.first(isTag("option"), hasAttr("selected")).attr("value"); got != "8" {
+		t.Errorf("the hour selected is %q, want 8", got)
 	}
 
 	f.exec(t, "UPDATE notification_preference SET enabled = false WHERE membership_id = $1 AND kind = 'digest'", moreMembershipID)
-	if hourSelect.MatchString(f.page(t, f.handler.notifications, notificationsPath)) {
+	if hourSelectOf(f.page(t, f.handler.notifications, notificationsPath)) != nil {
 		t.Error("the digest is off and the page still offers an hour")
 	}
 }
@@ -113,13 +112,11 @@ func TestNotifications_TheHourIsOnThePageOnlyWhileTheDigestIsOn(t *testing.T) {
 func hourLabelOf(t *testing.T, page, value string) string {
 	t.Helper()
 
-	for _, m := range hourOption.FindAllStringSubmatch(hourSelect.FindString(page), -1) {
-		if m[1] == value {
-			return text(m[2])
-		}
+	option := hourSelectOf(page).first(isTag("option"), attrIs("value", value))
+	if option == nil {
+		t.Fatalf("the digest select has no option for %q:\n%s", value, page)
 	}
-	t.Fatalf("the digest select has no option for %q:\n%s", value, page)
-	return ""
+	return option.text()
 }
 
 func TestNotifications_TheDigestSelectReadsMidnightAndNoonAsTwelve(t *testing.T) {
@@ -178,14 +175,14 @@ func TestNotifications_ASaveShowsTheHourJustSavedWithoutReloadingThePage(t *test
 	rec := f.swap(t, f.handler.saveNotifications, notificationsPath, notificationsID, "", "", form)
 
 	body := fragment(t, rec, notificationsID)
-	if !strings.Contains(body, `<option value="19" selected>`) {
-		t.Errorf("the swap shows an hour other than the one just saved:\n%s", text(body))
+	if got := hourSelectOf(body).first(isTag("option"), hasAttr("selected")).attr("value"); got != "19" {
+		t.Errorf("the swap shows the hour %q selected, want the 19 just saved", got)
 	}
-	if !strings.Contains(text(withoutAnnouncement(body)), "Saved") {
+	if !strings.Contains(readHTML(body).byID(notificationsID).text(), "Saved") {
 		t.Errorf("the swap has no Saved line:\n%s", text(body))
 	}
-	if !strings.Contains(body, announced(savedAnnouncement)) {
-		t.Errorf("the swap does not announce the save:\n%s", body)
+	if got := announcement(body); got != savedAnnouncement {
+		t.Errorf("the swap announces %q, want %q", got, savedAnnouncement)
 	}
 }
 
@@ -327,18 +324,16 @@ func TestBrowserName_NamesTheDeviceAndTheBrowserTheSubscriptionCameFrom(t *testi
 	}
 }
 
-// pushKeyAttribute captures the data-key of the form that posts to the
-// subscribe URL. The action is in the pattern because a subscription posted to
-// the page's own action would be saved as settings with both types off.
-var pushKeyAttribute = regexp.MustCompile(`<form method="post" action="` + subscribePath + `"[^>]* data-key="([^"]*)"`)
-
+// The form is found by its action because a subscription posted to the page's
+// own action would be saved as settings with both types off.
 func TestNotifications_AddThisDevicePostsToTheSubscribeURLWithThePublicKey(t *testing.T) {
 	f := moreGarden(t)
 
 	page := f.page(t, f.handler.notifications, notificationsPath)
 
-	if got := pushKeyAttribute.FindStringSubmatch(page); got == nil || got[1] != testPushKey {
-		t.Errorf("the data-key of a form posting to %s is %v, want the configured public key", subscribePath, got)
+	form := readHTML(page).first(isTag("form"), attrIs("action", subscribePath))
+	if got := form.attr("data-key"); got != testPushKey {
+		t.Errorf("the data-key of a form posting to %s is %q, want the configured public key", subscribePath, got)
 	}
 }
 
@@ -351,7 +346,7 @@ func TestNotifications_WithPushOffThePageSaysNotificationsAreNotSetUpAndOffersNo
 	if !strings.Contains(text(page), "Notifications aren’t enabled on this server") {
 		t.Errorf("the page does not say notifications are not set up:\n%s", page)
 	}
-	if checkedBox.MatchString(page) {
+	if readHTML(page).first(isTag("input"), attrIs("type", "checkbox")) != nil {
 		t.Errorf("push is off and the page still offers a switch:\n%s", page)
 	}
 	if len(stackedRowsOf(page)) != 0 {
@@ -548,12 +543,16 @@ func (r *recordedSends) send(_ context.Context, subscription store.PushSubscript
 func TestNotifications_SendATestIsOfferedOnlyWhileABrowserIsSubscribed(t *testing.T) {
 	f := moreGarden(t)
 
-	if !strings.Contains(f.page(t, f.handler.notifications, notificationsPath), `action="`+sendTestPath+`"`) {
+	sendTest := func() *element {
+		return readHTML(f.page(t, f.handler.notifications, notificationsPath)).first(isTag("form"), attrIs("action", sendTestPath))
+	}
+
+	if sendTest() == nil {
 		t.Error("two browsers are subscribed and the page offers no Send a test")
 	}
 
 	f.exec(t, "DELETE FROM push_subscription WHERE user_id = $1", moreUserID)
-	if strings.Contains(f.page(t, f.handler.notifications, notificationsPath), `action="`+sendTestPath+`"`) {
+	if sendTest() != nil {
 		t.Error("no browser is subscribed and the page still offers Send a test")
 	}
 }
@@ -681,7 +680,7 @@ func TestNotifications_ARemoveSentAsASwapGetsTheDevicesWithoutThatRow(t *testing
 	rec := f.swap(t, f.handler.removeBrowser, removeBrowserPath(phonePushID), devicesID, "browser", phonePushID.String(), url.Values{})
 
 	body := fragment(t, rec, devicesID)
-	if strings.Contains(body, removeBrowserPath(phonePushID)) {
+	if readHTML(body).first(isTag("form"), attrIs("action", removeBrowserPath(phonePushID))) != nil {
 		t.Errorf("the removed browser is still listed:\n%s", text(body))
 	}
 }
@@ -703,20 +702,23 @@ func TestSubscribe_AddThisDeviceGetsTheDevicesWithTheNewRow(t *testing.T) {
 	if rows := stackedRowsOf(body); len(rows) != 3 {
 		t.Errorf("the devices after adding one are %v, want the two already subscribed and the new one", rows)
 	}
-	if want := announced("Device added."); !strings.Contains(body, want) {
-		t.Errorf("the swap does not announce the new device:\n%s", body)
+	if got := announcement(body); got != "Device added." {
+		t.Errorf("the swap announces %q, want %q", got, "Device added.")
 	}
 }
-
-var sendTestAutofocus = regexp.MustCompile(`<button[^>]*\bautofocus\b[^>]*>Send test notification</button>`)
 
 func TestNotifications_SendTestNotificationIsMarkedAutofocusOnlyInTheResponseToAddThisDevice(t *testing.T) {
 	f := moreGarden(t)
 
-	if !sendTestAutofocus.MatchString(fragment(t, f.addDevice(t), devicesID)) {
+	sendTest := func(body string) *element {
+		return readHTML(body).first(isTag("button"), textIs("Send test notification"))
+	}
+
+	if !sendTest(fragment(t, f.addDevice(t), devicesID)).has("autofocus") {
 		t.Error("the response to Add this device does not put focus on Send test notification")
 	}
-	if sendTestAutofocus.MatchString(f.page(t, f.handler.notifications, notificationsPath)) {
-		t.Error("the page opened on its own puts focus on Send test notification")
+	page := f.page(t, f.handler.notifications, notificationsPath)
+	if button := sendTest(page); button == nil || button.has("autofocus") {
+		t.Errorf("the page opened on its own has Send test notification as %v, want it without autofocus", button)
 	}
 }

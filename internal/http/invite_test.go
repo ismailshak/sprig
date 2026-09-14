@@ -3,7 +3,6 @@ package http
 import (
 	"net/http"
 	"net/url"
-	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -17,13 +16,13 @@ func TestInvite_TheChipsOfferTheTwoRolesAndSaySoInTheWordsAMembersRowUses(t *tes
 
 	page := f.page(t, f.handler.invite, invitePath+"?role=member")
 
-	if got := chips(page); !slices.Equal(got, []string{"Member", "Sitter"}) {
+	if got := roleChips(page); !slices.Equal(got, []string{"Member", "Sitter"}) {
 		t.Errorf("the chips read %v, want Member and Sitter", got)
 	}
 	if pressed := chipPressed(page); pressed != "Member" {
 		t.Errorf("%q is pressed, want Member", pressed)
 	}
-	if !strings.Contains(page, roleWhat["member"]) {
+	if !strings.Contains(text(page), roleWhat["member"]) {
 		t.Errorf("the sentence under the chips is not the one a member's row uses:\n%s", page)
 	}
 }
@@ -77,7 +76,7 @@ func TestInvite_TheEndDateLandsOnTheMembershipTheLinkWillCreate(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusOK, rec.Body.String())
 	}
-	if !strings.Contains(rec.Body.String(), "Their access ends on 14 Sep") {
+	if !strings.Contains(text(rec.Body.String()), "Their access ends on 14 Sep") {
 		t.Errorf("the paragraph under the link does not say when the access ends:\n%s", rec.Body.String())
 	}
 
@@ -119,7 +118,7 @@ func TestInvite_ADateTheFieldCannotHoldIsRefusedWithTheFormStillOnThePage(t *tes
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusUnprocessableEntity)
 	}
 	page := rec.Body.String()
-	if !strings.Contains(page, untilUnusable) {
+	if !strings.Contains(text(page), untilUnusable) {
 		t.Errorf("the message under the end date is missing:\n%s", page)
 	}
 	if pressed := chipPressed(page); pressed != "Member" {
@@ -141,24 +140,40 @@ func invitesInGarden(t *testing.T, f *moreFixture) int {
 	return count
 }
 
-var untilElement = regexp.MustCompile(`<input class="input input--narrow" id="until" name="until" type="date" min="[^"]*" value="([^"]*)">`)
+// roleChipButtons returns the role chips on the invite form. A chip is a
+// button that sends the form as a GET under the name role.
+func roleChipButtons(page string) []*element {
+	return readHTML(page).all(isTag("button"), attrIs("name", "role"), attrIs("formmethod", "get"))
+}
 
-// chipPressed returns the word on the one chip that is pressed.
+// roleChips returns the text of each role chip, in page order.
+func roleChips(page string) []string {
+	var out []string
+	for _, chip := range roleChipButtons(page) {
+		out = append(out, chip.text())
+	}
+	return out
+}
+
+// chipPressed returns the text of the one role chip that is pressed.
 func chipPressed(page string) string {
-	if m := pressedButton.FindStringSubmatch(page); m != nil {
-		return text(m[1])
+	for _, chip := range roleChipButtons(page) {
+		if chip.attr("aria-pressed") == "true" {
+			return chip.text()
+		}
 	}
 	return ""
 }
 
+// endDateField returns the date the end date field holds.
 func endDateField(t *testing.T, page string) string {
 	t.Helper()
 
-	m := untilElement.FindStringSubmatch(page)
-	if m == nil {
+	field := readHTML(page).byID("until")
+	if field == nil {
 		t.Fatalf("no end date field on:\n%s", page)
 	}
-	return m[1]
+	return field.attr("value")
 }
 
 func TestInvite_TheEndDateFieldOffersNothingBeforeTomorrowInTheInvitersZone(t *testing.T) {
@@ -169,7 +184,7 @@ func TestInvite_TheEndDateFieldOffersNothingBeforeTomorrowInTheInvitersZone(t *t
 
 	page := f.page(t, f.handler.invite, invitePath)
 
-	if !strings.Contains(page, `type="date" min="2026-09-03"`) {
+	if field := readHTML(page).byID("until"); field.attr("type") != "date" || field.attr("min") != "2026-09-03" {
 		t.Errorf("the end date field does not start on tomorrow in the inviter's zone:\n%s", page)
 	}
 }
@@ -198,7 +213,7 @@ func TestInvite_AnEndDateThatHasAlreadyBegunIsRefusedAndTomorrowIsNot(t *testing
 			rec := f.do(t, f.handler.createInviteLink, invitePath, url.Values{"role": {"sitter"}, "until": {c.posted}})
 
 			if !c.refused {
-				if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "/invite/") {
+				if rec.Code != http.StatusOK || !strings.Contains(text(rec.Body.String()), "/invite/") {
 					t.Fatalf("status = %d, want %d with the link on the page:\n%s", rec.Code, http.StatusOK, text(rec.Body.String()))
 				}
 				return
@@ -207,10 +222,10 @@ func TestInvite_AnEndDateThatHasAlreadyBegunIsRefusedAndTomorrowIsNot(t *testing
 				t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusUnprocessableEntity, text(rec.Body.String()))
 			}
 			page := rec.Body.String()
-			if !strings.Contains(page, untilTooEarly) {
+			if !strings.Contains(text(page), untilTooEarly) {
 				t.Errorf("the message under the end date is missing:\n%s", text(page))
 			}
-			if !strings.Contains(page, `value="`+c.posted+`"`) {
+			if got := endDateField(t, page); got != c.posted {
 				t.Errorf("the field lost the date that was typed:\n%s", page)
 			}
 			if invitesInGarden(t, f) != before {

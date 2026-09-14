@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -106,26 +105,68 @@ func (f *logFixture) restore(t *testing.T, plantID, eventID uuid.UUID, form url.
 	return rec
 }
 
-var (
-	hiddenInput = regexp.MustCompile(`<input[^>]*\stype="hidden"[^>]*>`)
-	attribute   = regexp.MustCompile(`([a-z-]+)="([^"]*)"`)
-	loggedLead  = regexp.MustCompile(`<p class="sheet__logged">([^<]*)</p>`)
-)
-
-// hiddenFields reads the hidden inputs of a form, which is what the browser
-// sends back when its button is pressed.
+// hiddenFields reads the names and values of the hidden inputs in markup. A
+// browser posts them when the form's button is pressed.
 func hiddenFields(markup string) url.Values {
 	values := url.Values{}
-	for _, input := range hiddenInput.FindAllString(markup, -1) {
-		attrs := map[string]string{}
-		for _, m := range attribute.FindAllStringSubmatch(input, -1) {
-			attrs[m[1]] = m[2]
-		}
-		if name := attrs["name"]; name != "" {
-			values.Set(name, attrs["value"])
+	for _, input := range readHTML(markup).all(isTag("input"), attrIs("type", "hidden")) {
+		if name := input.attr("name"); name != "" {
+			values.Set(name, input.attr("value"))
 		}
 	}
 	return values
+}
+
+// correctionSheet returns the open sheet in a response, or nil. The closed
+// sheet has the same id and is not a dialog.
+func correctionSheet(body string) *element {
+	return readHTML(body).first(isTag("dialog"), attrIs("id", "sheet"))
+}
+
+// legendFieldset returns the first fieldset on the sheet whose legend reads
+// legend.
+func legendFieldset(sheet *element, legend string) *element {
+	return sheet.first(isTag("fieldset"), func(e *element) bool { return e.first(isTag("legend")).text() == legend })
+}
+
+// againFieldset returns the Remind me in fieldset for one care type. The sheet
+// holds one for every care type it offers.
+func againFieldset(sheet *element, care string) *element {
+	return sheet.first(isTag("fieldset"), func(e *element) bool { return e.first(attrIs("name", againField(care))) != nil })
+}
+
+// labelTexts returns the text of each label in a fieldset, in page order. On
+// the sheet each label is one chip.
+func labelTexts(fieldset *element) []string {
+	var texts []string
+	for _, label := range fieldset.all(isTag("label")) {
+		texts = append(texts, label.text())
+	}
+	return texts
+}
+
+// checkedLabel returns the text of the label in a fieldset whose radio button
+// is checked, or "" when none is.
+func checkedLabel(fieldset *element) string {
+	for _, label := range fieldset.all(isTag("label")) {
+		if label.first(isTag("input"), hasAttr("checked")) != nil {
+			return label.text()
+		}
+	}
+	return ""
+}
+
+// loggedSentence returns the sentence on the sheet that says who logged the
+// care and when, or "".
+func loggedSentence(sheet *element) string {
+	return sheet.first(isTag("p"), func(e *element) bool { return strings.HasPrefix(e.text(), "Logged by ") }).text()
+}
+
+// sheetClosedBy reports whether a swap's response replaces the page's sheet,
+// out of band, with an empty element. That closes an open sheet.
+func sheetClosedBy(doc *element) bool {
+	sheet := doc.byID("sheet")
+	return sheet != nil && sheet.attr("hx-swap-oob") == "true" && sheet.first() == nil && sheet.text() == ""
 }
 
 func TestCorrect_TheSheetOverARowIsFilledInFromTheEvent(t *testing.T) {
@@ -135,31 +176,30 @@ func TestCorrect_TheSheetOverARowIsFilledInFromTheEvent(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d:\n%s", rec.Code, rec.Body.String())
 	}
-	dialog := dialogElement.FindString(rec.Body.String())
-	if dialog == "" {
+	sheet := correctionSheet(rec.Body.String())
+	if sheet == nil {
 		t.Fatalf("the page holds no dialog:\n%s", rec.Body.String())
 	}
 
-	by := fields(dialog)
-	if got := checked(by["Care"]); got != "Feed" {
+	if got := checkedLabel(legendFieldset(sheet, "Care")); got != "Feed" {
 		t.Errorf("Care is %q, want Feed", got)
 	}
-	if got := checked(by["Outcome"]); got != "Done" {
+	if got := checkedLabel(legendFieldset(sheet, "Outcome")); got != "Done" {
 		t.Errorf("Outcome is %q, want Done", got)
 	}
-	if got := checked(by["When"]); got != "Yesterday" {
+	if got := checkedLabel(legendFieldset(sheet, "When")); got != "Yesterday" {
 		t.Errorf("When is %q, want Yesterday", got)
 	}
-	if !strings.Contains(dialog, `name="time" value="18:00"`) {
-		t.Errorf("the time field does not hold six in the evening:\n%s", by["When"])
+	if got := sheet.first(attrIs("name", "time")).attr("value"); got != "18:00" {
+		t.Errorf("the time field holds %q, want six in the evening", got)
 	}
-	if !strings.Contains(dialog, `value="New pot"`) {
-		t.Errorf("the note field does not hold the note that was recorded:\n%s", dialog)
+	if got := sheet.first(attrIs("name", "note")).attr("value"); got != "New pot" {
+		t.Errorf("the note field holds %q, want the note that was recorded", got)
 	}
-	if !strings.Contains(dialog, ">Save changes</button>") {
+	if sheet.first(isTag("button"), textIs("Save changes")) == nil {
 		t.Error("the primary button does not read Save changes")
 	}
-	if !strings.Contains(dialog, ">Delete</button>") {
+	if sheet.first(isTag("button"), textIs("Delete")) == nil {
 		t.Error("the sheet offers no Delete")
 	}
 }
@@ -168,9 +208,9 @@ func TestCorrect_TheSheetOffersEveryCareTypeInTheGarden(t *testing.T) {
 	f := rosewoodCorrections(t)
 	// Big Fella is scheduled for watering alone, and the garden has two care
 	// types, because an event can be of any type.
-	dialog := dialogElement.FindString(f.openSheet(t, bigFellaID, f.eventID(t, bigFellaID), logQuery{}, false).Body.String())
+	sheet := correctionSheet(f.openSheet(t, bigFellaID, f.eventID(t, bigFellaID), logQuery{}, false).Body.String())
 
-	if got := chips(fields(dialog)["Care"]); strings.Join(got, "|") != "Water|Feed" {
+	if got := labelTexts(legendFieldset(sheet, "Care")); strings.Join(got, "|") != "Water|Feed" {
 		t.Errorf("Care offers %v, want every care type in the garden", got)
 	}
 }
@@ -178,23 +218,23 @@ func TestCorrect_TheSheetOffersEveryCareTypeInTheGarden(t *testing.T) {
 func TestCorrect_TheSheetsFormPostsToAURLThatKeepsTheLogsFilter(t *testing.T) {
 	f := rosewoodCorrections(t)
 	q := logQuery{plant: &nigelID}
-	dialog := dialogElement.FindString(f.openSheet(t, nigelID, f.eventID(t, nigelID), q, false).Body.String())
+	sheet := correctionSheet(f.openSheet(t, nigelID, f.eventID(t, nigelID), q, false).Body.String())
 
-	if form := sheetForm.FindString(dialog); !strings.Contains(form, plantParam+"="+nigelID.String()) {
-		t.Errorf("the form does not post to the filtered log:\n%s", form)
+	action := sheet.first(isTag("form"), attrIs("method", "post")).attr("action")
+	if target, err := url.Parse(action); err != nil || target.Query().Get(plantParam) != nigelID.String() {
+		t.Errorf("the form posts to %q, want the log filtered to Nigel", action)
 	}
 }
 
 func TestCorrect_ASkipShowsTheIntervalItWasLoggedWith(t *testing.T) {
 	f := rosewoodCorrections(t)
 	// Doris was skipped for two days, and is watered every 21.
-	dialog := dialogElement.FindString(f.openSheet(t, dorisID, f.eventID(t, dorisID), logQuery{}, false).Body.String())
+	sheet := correctionSheet(f.openSheet(t, dorisID, f.eventID(t, dorisID), logQuery{}, false).Body.String())
 
-	by := fields(dialog)
-	if got := checked(by["Outcome"]); got != "Skipped" {
+	if got := checkedLabel(legendFieldset(sheet, "Outcome")); got != "Skipped" {
 		t.Errorf("Outcome is %q, want Skipped", got)
 	}
-	if got := checked(by["Remind me in"]); got != "2 days" {
+	if got := checkedLabel(againFieldset(sheet, "water")); got != "2 days" {
 		t.Errorf("Remind me in is %q, want the two days the skip was recorded with", got)
 	}
 }
@@ -204,25 +244,21 @@ func TestCorrect_AnIntervalTheScheduleNoLongerOffersIsStillOnTheSheet(t *testing
 	// A skip logged when the schedule said five days. Nothing offers five now
 	// that Doris is watered every 21.
 	f.exec(t, "UPDATE care_event SET override_interval_days = 5 WHERE plant_id = $1", dorisID)
-	dialog := dialogElement.FindString(f.openSheet(t, dorisID, f.eventID(t, dorisID), logQuery{}, false).Body.String())
+	sheet := correctionSheet(f.openSheet(t, dorisID, f.eventID(t, dorisID), logQuery{}, false).Body.String())
 
-	if got := chips(remindersFor(dialog, "water")); strings.Join(got, "|") != "1 day|2 days|3 days|5 days|21 days (usual)" {
+	if got := labelTexts(againFieldset(sheet, "water")); strings.Join(got, "|") != "1 day|2 days|3 days|5 days|21 days (usual)" {
 		t.Errorf("Remind me in offers %v, want the five days the skip holds among the chips", got)
 	}
-	if got := checked(remindersFor(dialog, "water")); got != "5 days" {
+	if got := checkedLabel(againFieldset(sheet, "water")); got != "5 days" {
 		t.Errorf("Remind me in is %q, want the five days the skip holds", got)
 	}
 }
 
 func TestCorrect_TheSheetSaysWhoLoggedTheCareAndWhen(t *testing.T) {
 	f := rosewoodCorrections(t)
-	dialog := dialogElement.FindString(f.openSheet(t, nigelID, f.eventID(t, nigelID), logQuery{}, false).Body.String())
+	sheet := correctionSheet(f.openSheet(t, nigelID, f.eventID(t, nigelID), logQuery{}, false).Body.String())
 
-	m := loggedLead.FindStringSubmatch(dialog)
-	if m == nil {
-		t.Fatalf("the sheet says nothing about who recorded the care:\n%s", dialog)
-	}
-	if got := text(m[1]); got != "Logged by you yesterday at 6:00pm." {
+	if got := loggedSentence(sheet); got != "Logged by you yesterday at 6:00pm." {
 		t.Errorf("the sheet says %q", got)
 	}
 }
@@ -231,13 +267,9 @@ func TestCorrect_CareEnteredADayAfterItWasGivenNamesBothDays(t *testing.T) {
 	f := rosewoodCorrections(t)
 	// Nigel was fed yesterday evening and written down this morning.
 	f.exec(t, "UPDATE care_event SET recorded_at = $2 WHERE plant_id = $1", nigelID, at(time.September, 3, 8, 0))
-	dialog := dialogElement.FindString(f.openSheet(t, nigelID, f.eventID(t, nigelID), logQuery{}, false).Body.String())
+	sheet := correctionSheet(f.openSheet(t, nigelID, f.eventID(t, nigelID), logQuery{}, false).Body.String())
 
-	m := loggedLead.FindStringSubmatch(dialog)
-	if m == nil {
-		t.Fatalf("the sheet says nothing about who recorded the care:\n%s", dialog)
-	}
-	if got := text(m[1]); got != "Logged by you today for yesterday at 6:00pm." {
+	if got := loggedSentence(sheet); got != "Logged by you today for yesterday at 6:00pm." {
 		t.Errorf("the sheet says %q, want the day it was entered as well as the day it happened", got)
 	}
 }
@@ -296,9 +328,9 @@ func TestCorrect_ASaveWithATimeLaterThanNowIsRefusedAndTheSheetSaysThatIsLaterTh
 	if rec.Header().Get("HX-Retarget") != "#sheet" {
 		t.Error("the refusal is not aimed back at the sheet")
 	}
-	dialog := dialogElement.FindString(rec.Body.String())
-	if !strings.Contains(fields(dialog)["When"], `<p class="field__error">That time is in the future.</p>`) {
-		t.Errorf("the sheet does not say the time is later than now:\n%s", text(dialog))
+	sheet := correctionSheet(rec.Body.String())
+	if !strings.Contains(legendFieldset(sheet, "When").text(), "That time is in the future.") {
+		t.Errorf("the sheet does not say the time is later than now:\n%s", sheet.text())
 	}
 	if got := dayOf(f.show(t), "Big Fella"); got != "Today" {
 		t.Errorf("Big Fella's row moved to %q, want the refused save to have written nothing", got)
@@ -327,13 +359,14 @@ func TestCorrect_ASavedCorrectionSwapsTheLogAndClosesTheSheet(t *testing.T) {
 		t.Fatalf("status = %d:\n%s", rec.Code, rec.Body.String())
 	}
 	body := rec.Body.String()
-	if strings.HasPrefix(body, "<!doctype html>") {
+	doc := readHTML(body)
+	if doc.first(isTag("html")) != nil {
 		t.Errorf("the response is the whole page, want the log body alone:\n%.120s", body)
 	}
-	if !strings.Contains(body, `id="log-body"`) {
+	if doc.byID(logBodyID) == nil {
 		t.Errorf("the response does not hold the log body:\n%.120s", body)
 	}
-	if !strings.Contains(body, `<div id="sheet" hx-swap-oob="true"></div>`) {
+	if !sheetClosedBy(doc) {
 		t.Error("the response does not close the sheet")
 	}
 	if got := dayOf(body, "Big Fella"); got != "Yesterday" {
@@ -370,13 +403,15 @@ func TestCorrect_TheRowADeleteLeavesSaysDeletedAndOffersUndo(t *testing.T) {
 	if got := rows[0]; got != "Big Fella Deleted Undo" {
 		t.Errorf("the row says %q, want the plant, Deleted and an Undo button", got)
 	}
-	if !strings.Contains(body, `id="`+eventRowID(eventID)+`"`) {
+	doc := readHTML(body)
+	if doc.byID(eventRowID(eventID)) == nil {
 		t.Error("the row does not keep the id the delete was aimed at")
 	}
-	if !strings.Contains(body, `action="`+eventPath(bigFellaID, eventID, "/restore", logQuery{})+`"`) {
+	restore := doc.first(isTag("form"), attrIs("action", eventPath(bigFellaID, eventID, "/restore", logQuery{})))
+	if restore.first(isTag("button"), textIs("Undo")) == nil {
 		t.Error("Undo does not post to the event's restore URL")
 	}
-	if !strings.Contains(body, `<div id="sheet" hx-swap-oob="true"></div>`) {
+	if !sheetClosedBy(doc) {
 		t.Error("the response does not close the sheet the Delete was pressed in")
 	}
 }
@@ -459,7 +494,7 @@ func TestCorrect_ASitterMayNotCorrectCareSomebodyElseGave(t *testing.T) {
 		t.Errorf("saving somebody else's care got %d, want %d", rec.Code, http.StatusNotFound)
 	}
 
-	if strings.Contains(f.show(t), eventPath(dorisID, eventID, "", logQuery{})) {
+	if readHTML(f.show(t)).first(attrIs("href", eventPath(dorisID, eventID, "", logQuery{}))) != nil {
 		t.Error("the log links to a sheet the reader may not open")
 	}
 }
@@ -489,11 +524,11 @@ func TestCorrect_ACareTypeArchivedSinceIsStillOnTheSheet(t *testing.T) {
 		t.Fatalf("status = %d:\n%s", rec.Code, rec.Body.String())
 	}
 
-	by := fields(dialogElement.FindString(rec.Body.String()))
-	if got := chips(by["Care"]); strings.Join(got, "|") != "Water|Feed" {
+	care := legendFieldset(correctionSheet(rec.Body.String()), "Care")
+	if got := labelTexts(care); strings.Join(got, "|") != "Water|Feed" {
 		t.Errorf("Care offers %v, want the feed the event was logged as among them", got)
 	}
-	if got := checked(by["Care"]); got != "Feed" {
+	if got := checkedLabel(care); got != "Feed" {
 		t.Errorf("Care is %q, want Feed", got)
 	}
 }
@@ -592,11 +627,11 @@ func TestCorrect_ASheetOverCareTheReaderMayNotDeleteHasNoDeleteButton(t *testing
 		t.Fatalf("status = %d:\n%s", rec.Code, rec.Body.String())
 	}
 
-	dialog := dialogElement.FindString(rec.Body.String())
-	if !strings.Contains(dialog, ">Save changes</button>") {
+	sheet := correctionSheet(rec.Body.String())
+	if sheet.first(isTag("button"), textIs("Save changes")) == nil {
 		t.Error("the sheet the reader may correct does not offer Save changes")
 	}
-	if strings.Contains(dialog, ">Delete</button>") {
+	if sheet.first(isTag("button"), textIs("Delete")) != nil {
 		t.Error("the sheet offers Delete on care the reader may not delete")
 	}
 }
@@ -606,12 +641,12 @@ func TestCorrect_TheSheetOverAnOlderEventHoldsTheDayAndTimeItHappened(t *testing
 	// Trail Mix was watered at nine in the morning, thirteen days ago. Anything
 	// older than yesterday is edited on the day-and-time field rather than a
 	// chip, so that field has to hold the day the care happened.
-	dialog := dialogElement.FindString(f.openSheet(t, trailMixID, f.eventID(t, trailMixID), logQuery{}, false).Body.String())
+	sheet := correctionSheet(f.openSheet(t, trailMixID, f.eventID(t, trailMixID), logQuery{}, false).Body.String())
 
-	if got := checked(fields(dialog)["When"]); got != "Another day" {
+	if got := checkedLabel(legendFieldset(sheet, "When")); got != "Another day" {
 		t.Errorf("When is %q, want Another day", got)
 	}
-	if !strings.Contains(dialog, `name="at" value="2026-08-21T09:00"`) {
-		t.Errorf("the day and time field does not hold the morning of 21 August:\n%s", dialog)
+	if got := sheet.first(attrIs("name", "at")).attr("value"); got != "2026-08-21T09:00" {
+		t.Errorf("the day and time field holds %q, want the morning of 21 August", got)
 	}
 }

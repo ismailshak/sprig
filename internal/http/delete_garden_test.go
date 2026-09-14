@@ -80,7 +80,7 @@ func TestDeleteGarden_ThePageNamesTheGardenAndAsksForItsName(t *testing.T) {
 	if !strings.Contains(text(page), "Type Rosewood to confirm") {
 		t.Errorf("the page does not ask for the garden's name:\n%s", text(page))
 	}
-	if !strings.Contains(page, "Deleting Rosewood deletes its plants") {
+	if !strings.Contains(text(page), "Deleting Rosewood deletes its plants") {
 		t.Errorf("the page does not say what goes:\n%s", text(page))
 	}
 }
@@ -93,8 +93,8 @@ func TestDeleteGarden_ANameThatIsNotTheGardensIsRefusedAndNothingIsDeleted(t *te
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusUnprocessableEntity)
 	}
 	page := rec.Body.String()
-	if got := errorUnder(page, "name"); got != deleteGardenMismatch {
-		t.Errorf("the message under the field is %q, want %q", got, deleteGardenMismatch)
+	if !strings.Contains(text(page), deleteGardenMismatch) {
+		t.Errorf("the refused form does not say %q:\n%s", deleteGardenMismatch, text(page))
 	}
 	if got := valueOf(t, page, "name"); got != "Rosewod" {
 		t.Errorf("the field holds %q after the refusal, want what was typed", got)
@@ -178,11 +178,15 @@ func TestDeleteGarden_AGardenWithNoPhotosHasNoDirectoryAndDeletesAnyway(t *testi
 func TestGarden_DeleteGardenIsLinkedOnlyForAReaderWithGardenDelete(t *testing.T) {
 	f := moreGarden(t)
 
-	if page := f.page(t, f.handler.garden, gardenPath); strings.Contains(page, deleteGardenPath) {
+	deleteLink := func() *element {
+		return readHTML(f.page(t, f.handler.garden, gardenPath)).first(isTag("a"), attrIs("href", deleteGardenPath))
+	}
+
+	if deleteLink() != nil {
 		t.Error("a reader without garden.delete is offered Delete garden")
 	}
 	f.principal.Capabilities[auth.GardenDelete] = true
-	if page := f.page(t, f.handler.garden, gardenPath); !strings.Contains(page, `href="`+deleteGardenPath+`">Delete garden`) {
-		t.Errorf("the owner's Garden page has no Delete garden link:\n%s", text(page))
+	if link := deleteLink(); link.text() != "Delete garden" {
+		t.Errorf("the link to %s reads %q, want Delete garden", deleteGardenPath, link.text())
 	}
 }

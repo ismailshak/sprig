@@ -9,32 +9,34 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/ismailshak/sprig/web"
 )
 
-// The tree is compiled into the binary, so a parse failure here is a broken
-// build rather than a failing test.
-func testTemplates() *Templates {
+// testTemplates parses the template tree once per test binary, because nearly
+// every handler test calls it and a parse reads and hashes every template. The
+// tree is compiled into the binary. A parse failure here is a broken build
+// rather than a failing test.
+var testTemplates = sync.OnceValue(func() *Templates {
 	templates, err := ParseTemplates(slog.New(slog.NewJSONHandler(io.Discard, nil)), "", testAssets())
 	if err != nil {
 		panic(err)
 	}
 	return templates
-}
+})
 
 // The template tree is the real one rather than a fixture, so a template
 // referencing a missing file fails here as well as in a browser.
-func testAssets() *Assets {
+var testAssets = sync.OnceValue(func() *Assets {
 	assets, err := NewAssets(web.Static)
 	if err != nil {
 		panic(err)
 	}
 	return assets
-}
+})
 
 // The fixture's rows come from a partial rather than inline markup, so one
 // definition serves both a swap and a page load.
@@ -106,11 +108,12 @@ func TestRender_TheFragmentIsTheSameMarkupThePageContains(t *testing.T) {
 	fragment := renderTo(t, templates, true, v, row).Body.String()
 	page := renderTo(t, templates, false, v, struct{ Rows []fixtureRowData }{[]fixtureRowData{row}}).Body.String()
 
-	if !strings.Contains(fragment, `id="care-Doris-water"`) {
-		t.Fatalf("the fragment carried no id for a swap to target:\n%s", fragment)
+	swapped := readHTML(fragment).byID("care-Doris-water")
+	if swapped == nil {
+		t.Fatalf("the fragment has no element under the id a swap targets:\n%s", fragment)
 	}
-	if !strings.Contains(page, fragment) {
-		t.Errorf("the page does not contain the fragment verbatim.\nfragment:\n%s\npage:\n%s", fragment, page)
+	if got := readHTML(page).byID("care-Doris-water"); got.String() != swapped.String() {
+		t.Errorf("the page's row is not the fragment.\nfragment:\n%s\npage:\n%s", fragment, page)
 	}
 }
 
@@ -120,7 +123,7 @@ func TestRender_ANavigationGetsTheWholePage(t *testing.T) {
 	rec := renderTo(t, templates, false, view{page: "today", fragment: "care-row"}, struct{ Rows []fixtureRowData }{})
 
 	body := rec.Body.String()
-	if !strings.HasPrefix(body, "<!doctype html>") {
+	if readHTML(body).first(isTag("body")) == nil {
 		t.Errorf("a request without HX-Request got something other than a page:\n%s", body)
 	}
 	if got := rec.Header().Get("Content-Type"); got != "text/html; charset=utf-8" {
@@ -135,7 +138,7 @@ func TestRender_AViewWithNoFragmentGivesHTMXTheWholePage(t *testing.T) {
 
 	rec := renderTo(t, templates, true, view{page: "today"}, struct{ Rows []fixtureRowData }{})
 
-	if !strings.HasPrefix(rec.Body.String(), "<!doctype html>") {
+	if readHTML(rec.Body.String()).first(isTag("body")) == nil {
 		t.Errorf("an htmx request to a page with no fragment got:\n%s", rec.Body.String())
 	}
 }
@@ -150,11 +153,8 @@ func TestRender_ATemplateThatFailsHalfwayWritesNothing(t *testing.T) {
 	if rec.Code != http.StatusInternalServerError {
 		t.Errorf("status = %d, want %d", rec.Code, http.StatusInternalServerError)
 	}
-	if strings.Contains(rec.Body.String(), "<!doctype html>") {
+	if readHTML(rec.Body.String()).first() != nil {
 		t.Errorf("the failed render wrote part of the page:\n%s", rec.Body.String())
-	}
-	if want := "care-rows"; strings.Contains(rec.Body.String(), want) {
-		t.Errorf("the failed render wrote %q", want)
 	}
 	if n := strings.Count(logged.String(), `"level":"ERROR"`); n != 1 {
 		t.Errorf("the failure produced %d error lines, want 1", n)
@@ -187,7 +187,7 @@ func TestParseTemplates_ADirectoryOnDiskIsRereadPerRender(t *testing.T) {
 		t.Fatalf("parsing the tree: %v", err)
 	}
 
-	if body := renderTo(t, templates, false, view{page: "today"}, nil).Body.String(); !strings.Contains(body, "first") {
+	if body := renderTo(t, templates, false, view{page: "today"}, nil).Body.String(); !strings.Contains(text(body), "first") {
 		t.Fatalf("the first render did not read the file on disk:\n%s", body)
 	}
 
@@ -196,24 +196,27 @@ func TestParseTemplates_ADirectoryOnDiskIsRereadPerRender(t *testing.T) {
 		t.Fatalf("rewriting the page: %v", err)
 	}
 
-	if body := renderTo(t, templates, false, view{page: "today"}, nil).Body.String(); !strings.Contains(body, "second") {
+	if body := renderTo(t, templates, false, view{page: "today"}, nil).Body.String(); !strings.Contains(text(body), "second") {
 		t.Errorf("the second render did not pick up the edit:\n%s", body)
 	}
 }
 
-// announced is the element a swap's response ends with when the view has an
-// announcement: what htmx puts into the layout's live region.
-func announced(sentence string) string {
-	return `<span hx-swap-oob="innerHTML:#status">` + sentence + `</span>`
+// textWithoutAnnouncement returns the text a person reads in a swap's response
+// with the announcement left out. A test of what the page says then cannot
+// match the sentence the response announces instead.
+func textWithoutAnnouncement(body string) string {
+	page := readHTML(body)
+	if announced := page.first(attrIs("hx-swap-oob", "innerHTML:#status")); announced != nil {
+		announced.children = nil
+	}
+	return page.text()
 }
 
-// withoutAnnouncement is a swap's response with the announcement removed, so a
-// test of what the page says does not match the sentence read out instead.
-func withoutAnnouncement(body string) string {
-	return announcedElement.ReplaceAllString(body, "")
+// announcement returns the text of the element a swap's response puts into
+// the layout's live region, or "" when the response has none.
+func announcement(body string) string {
+	return readHTML(body).first(attrIs("hx-swap-oob", "innerHTML:#status")).text()
 }
-
-var announcedElement = regexp.MustCompile(`(?s)<span hx-swap-oob="innerHTML:#status">.*?</span>`)
 
 func TestRender_AFragmentEndsWithItsAnnouncementAndAPageHasNone(t *testing.T) {
 	templates := testTemplates()
@@ -223,11 +226,17 @@ func TestRender_AFragmentEndsWithItsAnnouncementAndAPageHasNone(t *testing.T) {
 	fragment := renderTo(t, templates, true, v, data).Body.String()
 	page := renderTo(t, templates, false, v, todayPage{}).Body.String()
 
-	if !strings.HasSuffix(strings.TrimSpace(fragment), announced("All done for today.")) {
+	var last *element
+	for _, child := range readHTML(fragment).children {
+		if e, ok := child.(*element); ok {
+			last = e
+		}
+	}
+	if last.attr("hx-swap-oob") != "innerHTML:#status" || last.text() != "All done for today." {
 		t.Errorf("the fragment does not end with the announcement:\n%s", fragment)
 	}
-	if strings.Contains(page, "hx-swap-oob") {
-		t.Errorf("the whole page carries an out-of-band element:\n%s", page)
+	if readHTML(page).first(hasAttr("hx-swap-oob")) != nil {
+		t.Errorf("the whole page has an out-of-band element:\n%s", page)
 	}
 }
 
@@ -237,7 +246,8 @@ func TestRender_AnAnnouncementIsEscaped(t *testing.T) {
 
 	fragment := renderTo(t, templates, true, v, careSettled{Head: todayHead{Clear: true}}).Body.String()
 
-	if !strings.Contains(fragment, announced("&lt;b&gt;Nigel&lt;/b&gt;")) {
+	announced := readHTML(fragment).first(attrIs("hx-swap-oob", "innerHTML:#status"))
+	if announced.text() != "<b>Nigel</b>" || announced.first(isTag("b")) != nil {
 		t.Errorf("the announcement was not escaped:\n%s", fragment)
 	}
 }
