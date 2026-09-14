@@ -40,8 +40,13 @@ description = "Load the seed gardens into the dev database"
 run = "go run ./cmd/seed"
 
 [tasks.lint]
-description = "Run golangci-lint over the whole module, and check the generated queries are current"
-run = ["sqlc diff", "golangci-lint run"]
+description = "Run golangci-lint, check the generated queries are current and the files are formatted, and type-check the e2e suite"
+run = [
+  "sqlc diff",
+  "golangci-lint run",
+  "mise run format --check",
+  "pnpm --dir e2e check",
+]
 
 [tasks.vulncheck]
 description = "Report the known vulnerabilities the module's code can reach"
@@ -60,18 +65,6 @@ run = 'goose -dir db/migrations -s create "${usage_name?}" sql'
 [tasks."generate"]
 description = "Regenerate the sqlc queries in internal/store from db/queries"
 run = "sqlc generate"
-
-[tasks.format]
-description = "Format the e2e subproject, the app's JavaScript and the markdown at the root with prettier"
-dir = "e2e"
-run = [
-  "pnpm install --frozen-lockfile",
-  "pnpm run format",
-  # The app's scripts and the root markdown are outside this directory, so
-  # they are named here and given the same config. The script glob does not
-  # reach the vendored htmx. That is a directory below, under web/static/vendor.
-  "pnpm exec prettier --write --config .prettierrc.json ../web/static/*.js ../*.md",
-]
 
 [tasks.hooks]
 description = "Point git at the hooks in .githooks, which is a per-clone setting"
