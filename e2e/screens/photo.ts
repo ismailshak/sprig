@@ -1,4 +1,5 @@
 import type { Locator, Page } from '@playwright/test';
+import { photosPage } from './photos';
 
 // One photo's own page.
 export class PhotoScreen {
@@ -14,11 +15,12 @@ export class PhotoScreen {
   }
 
   // Delete asks for confirmation. The first click replaces the button with
-  // the question and the second confirms.
+  // the question and the second confirms. Confirming redirects to the plant's
+  // Photos page.
   async delete(): Promise<void> {
     await this.askToDelete();
     await this.foot().getByRole('button', { name: 'Delete' }).click();
-    await this.page.waitForLoadState();
+    await this.page.waitForURL(photosPage);
   }
 
   // The confirmation's Delete button has the same accessible name as the button
@@ -30,8 +32,9 @@ export class PhotoScreen {
   }
 
   async cancelDelete(): Promise<void> {
-    await this.foot().getByRole('button', { name: 'Cancel' }).click();
-    await this.page.waitForLoadState();
+    const cancel = this.foot().getByRole('button', { name: 'Cancel' });
+    await cancel.click();
+    await cancel.waitFor({ state: 'detached' });
   }
 
   // The confirmation and the button share this id. The server names it as

@@ -1,6 +1,13 @@
 import type { Locator, Page } from '@playwright/test';
 import type { Plant } from '../harness/garden';
 
+// The URL of a plant's Photos page.
+export const photosPage = /\/plants\/[0-9a-f-]{36}\/photos$/;
+
+// The URL of one photo's own page. Matching the id keeps it from matching
+// /photos/new.
+export const photoPage = /\/plants\/[0-9a-f-]{36}\/photos\/[0-9a-f-]{36}$/;
+
 // A plant's Photos page, the grid of every photo newest first.
 export class PhotosScreen {
   constructor(private readonly page: Page) {}
@@ -16,7 +23,7 @@ export class PhotosScreen {
 
   async openTile(index: number): Promise<void> {
     await this.tiles().nth(index).click();
-    await this.page.waitForLoadState();
+    await this.page.waitForURL(photoPage);
   }
 
   // The tile at the head of the grid for a member who may add photos.

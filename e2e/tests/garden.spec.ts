@@ -38,6 +38,7 @@ test('an event stays on the log after its care type is turned off @swap', async 
   await garden.open();
   await garden.row(careTypes.repot).click();
   await garden.drop('Turn off').click();
+  await expect(garden.row(careTypes.repot)).toContainText('Off');
 
   await page.goto(`/activity?plant=${seeded.bigFella.id}`);
   await expect(activity.rows().filter({ hasText: 'Repotted' })).toHaveCount(1);

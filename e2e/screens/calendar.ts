@@ -34,10 +34,11 @@ export class CalendarScreen {
     return this.page.getByRole('link', { name: /\d+ due$/ }).first();
   }
 
-  // Without JavaScript the click loads a new page, so this waits for it to load.
+  // With JavaScript the click swaps the day's sheet in. Without it the click
+  // loads the page with the sheet open.
   async openDay(day: Locator): Promise<void> {
     await day.click();
-    await this.page.waitForLoadState();
+    await this.daySheet().waitFor();
   }
 
   daySheet(): Locator {

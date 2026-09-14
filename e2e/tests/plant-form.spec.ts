@@ -19,7 +19,7 @@ test("a new plant's page shows the watering schedule entered on the form @swap",
 }) => {
   await plants.open();
   await page.getByRole('link', { name: 'Add', exact: true }).click();
-  await page.waitForLoadState();
+  await page.waitForURL('/plants/new');
 
   await plantForm.field('Nickname').fill('Ada');
   await plantForm.field('Room').fill('Study');
@@ -36,7 +36,7 @@ test('a plant with no name is refused and the room typed is kept', async ({ page
   await plantForm.openNew();
   await plantForm.field('Room').fill('Study');
 
-  await plantForm.submit('Add plant');
+  await plantForm.submitButton('Add plant').click();
 
   await expect(page.getByText('Enter at least one name.')).toBeVisible();
   await expect(plantForm.field('Room')).toHaveValue('Study');
@@ -92,7 +92,7 @@ test('a one-off schedule posted without a date is refused until a date is given 
   await plantForm.schedule('Repot');
   await plantForm.shape('Repot').selectOption({ label: 'Just once' });
 
-  await plantForm.submit('Add plant');
+  await plantForm.submitButton('Add plant').click();
 
   await expect(page.getByText('Choose a date.')).toBeVisible();
   await plantForm.date('Repot', 'month').selectOption({ label: 'March' });
@@ -362,7 +362,7 @@ test('a form refused for having no name says the photo needs choosing again @js'
   await plantForm.choosePhoto('Add photo', photos.gpsTagged);
   await expect(plantForm.photoPreview()).toBeVisible();
 
-  await plantForm.submit('Add plant');
+  await plantForm.submitButton('Add plant').click();
 
   await expect(page.getByText('Enter at least one name.')).toBeVisible();
   await expect(page.getByText('Choose the photo again.')).toBeVisible();
