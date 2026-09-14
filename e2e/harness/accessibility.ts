@@ -5,6 +5,7 @@ import { AccountScreen } from '../screens/account';
 import { ActivityScreen } from '../screens/activity';
 import { AppearanceScreen } from '../screens/appearance';
 import { ArchivedPlantsScreen } from '../screens/archived-plants';
+import { CalendarScreen } from '../screens/calendar';
 import { CloseAccountScreen } from '../screens/close-account';
 import { DeleteGardenScreen } from '../screens/delete-garden';
 import { ErrorPageScreen } from '../screens/error-page';
@@ -50,7 +51,8 @@ async function withOnePhoto(page: Page): Promise<void> {
 }
 
 // pages is every page in the app, plus the Log care and Switch garden sheets
-// over Today. A new page in the app gets a line here.
+// over Today and a day's sheet over the calendar. A new page in the app gets a
+// line here.
 export const pages: CheckedPage[] = [
   { name: 'Sign in', open: (page) => new SignInScreen(page).open() },
   { name: 'You’re invited', open: (page) => new InvitedScreen(page).open(invites.sitter.token) },
@@ -133,6 +135,17 @@ export const pages: CheckedPage[] = [
     },
   },
   { name: 'Activity', as: people.ellie.handle, open: (page) => new ActivityScreen(page).open() },
+  { name: 'Calendar', as: people.ellie.handle, open: (page) => new CalendarScreen(page).open() },
+  {
+    name: 'Day sheet',
+    as: people.ellie.handle,
+    open: async (page) => {
+      const calendar = new CalendarScreen(page);
+      await calendar.open();
+      await calendar.openDay(calendar.firstDayWithCareDue());
+      await calendar.daySheet().waitFor();
+    },
+  },
   { name: 'More', as: people.ellie.handle, open: (page) => new MoreScreen(page).open() },
   { name: 'Account', as: people.ellie.handle, open: (page) => new AccountScreen(page).open() },
   { name: 'Recovery codes', as: people.ellie.handle, open: (page) => new RecoveryScreen(page).open() },

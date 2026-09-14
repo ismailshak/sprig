@@ -14,6 +14,11 @@ export class ActivityScreen {
     return this.page.getByRole('link', { name: plant.name });
   }
 
+  // The icon link in the whole garden's top bar.
+  calendar(): Locator {
+    return this.page.getByRole('link', { name: 'Calendar' });
+  }
+
   // The filters sit in a details element under the title that renders closed.
   // Its summary reads Filter, followed by what is set.
   async showFilters(): Promise<void> {

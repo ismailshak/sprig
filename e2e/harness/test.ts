@@ -4,6 +4,7 @@ import { AccountScreen } from '../screens/account';
 import { ActivityScreen } from '../screens/activity';
 import { AppearanceScreen } from '../screens/appearance';
 import { ArchivedPlantsScreen } from '../screens/archived-plants';
+import { CalendarScreen } from '../screens/calendar';
 import { CloseAccountScreen } from '../screens/close-account';
 import { DeleteGardenScreen } from '../screens/delete-garden';
 import { ErrorPageScreen } from '../screens/error-page';
@@ -39,6 +40,7 @@ type Screens = {
   activity: ActivityScreen;
   appearance: AppearanceScreen;
   archivedPlants: ArchivedPlantsScreen;
+  calendar: CalendarScreen;
   closeAccount: CloseAccountScreen;
   deleteGarden: DeleteGardenScreen;
   errorPage: ErrorPageScreen;
@@ -119,6 +121,9 @@ export const test = base.extend<{ seededGarden: void; cspViolations: void } & Sc
   },
   archivedPlants: async ({ page }, use) => {
     await use(new ArchivedPlantsScreen(page));
+  },
+  calendar: async ({ page }, use) => {
+    await use(new CalendarScreen(page));
   },
   closeAccount: async ({ page }, use) => {
     await use(new CloseAccountScreen(page));
