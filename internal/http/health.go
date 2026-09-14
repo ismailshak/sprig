@@ -7,6 +7,9 @@ import (
 	"github.com/ismailshak/sprig/internal/build"
 )
 
+// healthzPattern is the route the image's HEALTHCHECK requests.
+const healthzPattern = "GET /healthz"
+
 type healthzResponse struct {
 	Status    string `json:"status"`
 	Version   string `json:"version"`
