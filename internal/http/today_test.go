@@ -854,3 +854,15 @@ func TestToday_TheRemindersBannerIsRenderedOnlyWithPushOnAndANotificationTypeOn(
 		})
 	}
 }
+
+func TestToday_OnlyComingUpLinksToTheCalendar(t *testing.T) {
+	f := rosewood(t)
+
+	sections, _ := sectionsOf(f.show(t))
+
+	for id, want := range map[string]string{"overdue": "", "due-today": "", "coming-up": "See more in the calendar"} {
+		if got := sections[id].first(isTag("a"), attrIs("href", calendarPath)).text(); got != want {
+			t.Errorf("the link to the calendar in %s reads %q, want %q", id, got, want)
+		}
+	}
+}

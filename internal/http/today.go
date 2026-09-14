@@ -242,6 +242,10 @@ type todaySection struct {
 	// Alert colours the title. Only Overdue has it.
 	Alert bool
 	Rows  []careRow
+	// Calendar is the URL of the link under the rows. Only Coming up has it,
+	// because that section stops a week out and the calendar shows the
+	// months after.
+	Calendar string
 }
 
 type todayEmpty struct {
@@ -349,7 +353,7 @@ func newTodayPage(principal auth.Principal, g gardenDay) todayPage {
 		page.Sections = append(page.Sections, todaySection{ID: "due-today", Title: "Due today", Rows: careRows(rows, now)})
 	}
 	if rows := day.ComingUp; len(rows) > 0 {
-		page.Sections = append(page.Sections, todaySection{ID: "coming-up", Title: "Coming up", Rows: careRows(rows, now)})
+		page.Sections = append(page.Sections, todaySection{ID: "coming-up", Title: "Coming up", Rows: careRows(rows, now), Calendar: calendarPath})
 	}
 
 	page.Head = newTodayHead(principal, day, latest, plants, now)

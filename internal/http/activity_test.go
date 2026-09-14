@@ -1070,3 +1070,17 @@ func TestActivity_AHistoryRestoreGetsTheInsideOfTheLogAndNotTheElementItself(t *
 		t.Errorf("the response does not hold the filters and the log body:\n%.200s", body)
 	}
 }
+
+func TestActivity_TheWholeGardensLogLinksToTheCalendarAndAPlantsLogDoesNot(t *testing.T) {
+	f := rosewoodLog(t)
+	calendarLink := func(page string) *element {
+		return readHTML(page).first(isTag("a"), attrIs("aria-label", "Calendar"))
+	}
+
+	if got := calendarLink(f.show(t)).attr("href"); got != calendarPath {
+		t.Errorf("the whole garden's log links to the calendar at %q, want %q", got, calendarPath)
+	}
+	if link := calendarLink(f.get(t, plantActivityPath(bigFellaID))); link != nil {
+		t.Errorf("a plant's log links to the calendar at %q", link.attr("href"))
+	}
+}

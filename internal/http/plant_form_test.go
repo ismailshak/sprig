@@ -1004,6 +1004,27 @@ func TestPlantForm_SavingClearsEmptiedFields(t *testing.T) {
 	}
 }
 
+// A browser submits a line break in a textarea as CRLF.
+func TestPlantForm_NotesAreSavedWithTheirLineBreaks(t *testing.T) {
+	f := plantFormOn(t)
+	values := addValues()
+	values.Set("nickname", "Big Fella")
+	values.Set("notes", "Water from below.\r\nRotate weekly.")
+
+	rec := f.save(t, bigFellaID, values)
+
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusSeeOther)
+	}
+	plant, err := store.New(f.tx).GetPlant(t.Context(), rosewoodID, bigFellaID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if value(plant.Notes) != "Water from below.\r\nRotate weekly." {
+		t.Errorf("the note reads %q, want the two lines that were typed", value(plant.Notes))
+	}
+}
+
 func TestPlantForm_ASaveWithNoNameIsRefusedAndWritesNothing(t *testing.T) {
 	f := plantFormOn(t)
 	values := addValues()

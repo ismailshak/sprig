@@ -1,13 +1,13 @@
-{{/* The argument is Today, Plants, Activity, More, "Under Plants" or "Under
-     More". Every tab is a link, including the one for the page being shown.
-     "Under X" marks that tab aria-current="true" rather than "page", because
-     the reader is on a page reached from that tab rather than on the tab's
-     own page. */}}
+{{/* The argument is Today, Plants, Activity, More, "Under Plants", "Under
+     Activity" or "Under More". Every tab is a link, including the one for the
+     page being shown. "Under X" marks that tab aria-current="true" instead of
+     "page", because the page shown is reached from that tab and is not the
+     tab's own page. */}}
 {{define "tabs"}}
 <nav class="nav">
 <a class="nav__item" href="/"{{if eq . "Today"}} aria-current="page"{{end}}>{{template "icon-today"}}Today</a>
 <a class="nav__item" href="/plants"{{if eq . "Plants"}} aria-current="page"{{else if eq . "Under Plants"}} aria-current="true"{{end}}>{{template "icon-plants"}}Plants</a>
-<a class="nav__item" href="/activity"{{if eq . "Activity"}} aria-current="page"{{end}}>{{template "icon-activity"}}Activity</a>
+<a class="nav__item" href="/activity"{{if eq . "Activity"}} aria-current="page"{{else if eq . "Under Activity"}} aria-current="true"{{end}}>{{template "icon-activity"}}Activity</a>
 <a class="nav__item" href="/more"{{if eq . "More"}} aria-current="page"{{else if eq . "Under More"}} aria-current="true"{{end}}>{{template "icon-more"}}More</a>
 </nav>
 {{end}}

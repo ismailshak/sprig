@@ -5,7 +5,7 @@ import { expect, test } from '../harness/test';
 test('the More tab opens the index', async ({ page, more }) => {
   await signIn(page, people.ellie.handle);
 
-  await page.getByRole('link', { name: 'More' }).click();
+  await page.getByRole('navigation').getByRole('link', { name: 'More' }).click();
 
   await expect(page).toHaveURL('/more');
   await expect(page.getByRole('heading', { name: 'More' })).toBeVisible();

@@ -57,6 +57,7 @@ var routeAccess = map[string]access{
 	"GET /plants":            {},
 	"GET /plants/archived":   {},
 	"GET /activity":          {},
+	"GET /activity/calendar": {},
 	"GET /plants/new":        {capability: auth.PlantCreate},
 	"POST /plants/new":       {capability: auth.PlantCreate},
 	"GET /plants/{plant}":    {path: plantPath(rosewoodPlantID), foreign: plantPath(fairviewPlantID)},

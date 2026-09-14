@@ -37,6 +37,10 @@ export class TodayScreen {
     return this.page.getByRole('region', { name: title });
   }
 
+  calendar(): Locator {
+    return this.section('Coming up').getByRole('link', { name: 'See more in the calendar' });
+  }
+
   // The id format is the server's and lives here so a change to it is one
   // edit.
   careRow(plant: Plant, care: string): Locator {
