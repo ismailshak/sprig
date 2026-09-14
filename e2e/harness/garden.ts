@@ -75,27 +75,14 @@ export const careTypes = {
 
 export const plants = {
   bigFella: { id: '00000000-0000-7000-8000-050000000001', name: 'Big Fella' },
-  gerald: { id: '00000000-0000-7000-8000-050000000002', name: 'Gerald' },
   doris: { id: '00000000-0000-7000-8000-050000000003', name: 'Doris' },
   nigel: { id: '00000000-0000-7000-8000-050000000005', name: 'Nigel' },
-  trailMix: { id: '00000000-0000-7000-8000-050000000007', name: 'Trail Mix' },
-  motherInLaw: { id: '00000000-0000-7000-8000-050000000004', name: 'Mother-in-Law' },
-  // The seed gives this plant no nickname, so the page shows its common name.
-  goldenPothos: { id: '00000000-0000-7000-8000-050000000008', name: 'Golden pothos' },
-  littleFella: { id: '00000000-0000-7000-8000-050000000009', name: 'Little Fella' },
-  // Opuntia microdasys has only a botanical name.
-  opuntia: { id: '00000000-0000-7000-8000-050000000011', name: 'Opuntia microdasys' },
-  // The seed gives Sprout no room, so Plants lists it under No room.
-  sprout: { id: '00000000-0000-7000-8000-050000000012', name: 'Sprout' },
 } as const;
 
-// The three archived plants in the Home garden, most recently archived first.
-// Upstairs has none. Sweet basil has no nickname. Its page and its row show
-// the common name.
+// Two of the three archived plants in the Home garden. Upstairs has none.
 export const archivedPlants = {
   barry: { id: '00000000-0000-7000-8000-050000000013', name: 'Barry', room: 'Living room' },
   kev: { id: '00000000-0000-7000-8000-050000000014', name: 'Kev', room: 'Bathroom' },
-  sweetBasil: { id: '00000000-0000-7000-8000-050000000015', name: 'Sweet basil', room: 'Kitchen' },
 } as const;
 
 // No room is the heading Plants uses for plants with no room set. It is not a

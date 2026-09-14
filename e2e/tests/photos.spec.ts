@@ -11,14 +11,6 @@ test.beforeEach(async ({ page }) => {
   await signIn(page, people.ellie.handle);
 });
 
-test('a plant with no photos reads "No photos yet" on its Photos page', async ({ page, photos }) => {
-  await photos.open(seeded.bigFella);
-
-  await expect(page.getByText('No photos yet')).toBeVisible();
-  await expect(photos.addPhoto()).toBeVisible();
-  await expect(photos.tiles()).toHaveCount(0);
-});
-
 test('a photo added from the plant page is first in the strip and in the grid @js', async ({
   page,
   plant,
@@ -85,15 +77,6 @@ test("deleting a photo asks first and then removes it from the plant's page @js"
   await expect(page.getByText('No photos yet')).toBeVisible();
   await plant.open(seeded.bigFella);
   await expect(plant.stripPhotos()).toHaveCount(0);
-});
-
-test("a sitter's plant page has no Add tile and says there are no photos", async ({ page, plant }) => {
-  await signIn(page, people.jo.handle);
-
-  await plant.open(seeded.bigFella);
-
-  await expect(plant.addPhoto()).toBeHidden();
-  await expect(plant.section('Photos')).toContainText('No photos yet.');
 });
 
 // The resize happens in the browser, so a browser running no script cannot

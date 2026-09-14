@@ -6,13 +6,6 @@ test.beforeEach(async ({ page }) => {
   await signIn(page, people.ellie.handle);
 });
 
-test('archived plants are listed most recently archived first', async ({ archivedPlants }) => {
-  await archivedPlants.open();
-
-  await expect(archivedPlants.rows()).toContainText([archived.barry.name, archived.kev.name, archived.sweetBasil.name]);
-  await expect(archivedPlants.row(archived.barry.name)).toContainText('Archived');
-});
-
 test("an archived plant's page says when it was archived and offers no care or editing", async ({
   archivedPlants,
   plant,

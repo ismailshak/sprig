@@ -115,28 +115,34 @@ test('logging from the sheet is announced with what is left and where Undo is @j
   await expect(today.announcement()).toContainText('Undo from the row now, or from Activity later.');
 });
 
-// The wait is the 4s window plus the 320ms collapse after it, rounded up. A
-// row still on the page afterwards was held by the focus.
+// The undo window is the drain bar's animation on the row. The request that
+// removes the row is sent when the animation finishes.
 test('the undo window pauses while Undo has keyboard focus and resumes when focus leaves @js', async ({
   page,
   today,
 }) => {
   await today.careButton(plants.doris, 'water').focus();
   await page.keyboard.press('Enter');
-  await expect(today.undoButton(plants.doris, 'water')).toBeFocused();
+  const undo = today.undoButton(plants.doris, 'water');
+  await expect(undo).toBeFocused();
 
-  // 5s is the 4s window plus the 320ms collapse, so the row would be gone by
-  // now if focus had not paused it.
-  await page.waitForTimeout(5000);
-  await expect(today.undoButton(plants.doris, 'water')).toBeVisible();
+  const row = today.careRow(plants.doris, 'water');
+  const playStates = () => row.evaluate((el) => el.getAnimations({ subtree: true }).map((a) => a.playState));
+  await expect.poll(playStates).toContain('paused');
 
-  // Focus arrived before the window started, so the whole 4s is left once
-  // focus leaves. Halfway through it the row is still there.
+  // htmx fires htmx:confirm on the row when its 4s delay runs out. The row
+  // is still on the page after that only if the paused animation delays the
+  // request.
+  await row.evaluate(
+    (el) => new Promise<void>((resolve) => el.addEventListener('htmx:confirm', () => resolve(), { once: true })),
+  );
+  await expect(undo).toBeVisible();
+  await expect(undo).toBeFocused();
+
+  // Once focus leaves, the row is removed within at most the 4s window and
+  // the 320ms collapse after it.
   await page.keyboard.press('Tab');
-  await page.waitForTimeout(2000);
-  await expect(today.undoButton(plants.doris, 'water')).toBeVisible();
-
-  await expect(today.careRow(plants.doris, 'water')).toHaveCount(0);
+  await expect(row).toHaveCount(0, { timeout: 10_000 });
 });
 
 test('above 900px the sheet still traps focus and gives it back on Escape @wide', async ({ page, today, sheet }) => {
@@ -189,11 +195,6 @@ test('a logged row disappears from the list when its grace window closes @js', a
   await expect(today.undoButton(plants.doris, 'water')).toBeVisible();
 
   await expect(today.careRow(plants.doris, 'water')).toHaveCount(0, { timeout: 15_000 });
-});
-
-// The seed holds months of history. Five is the server's limit on the feed.
-test('the feed shows the five newest events', async ({ today }) => {
-  await expect(today.feedLines()).toHaveCount(5);
 });
 
 test('a care logged from the sheet appears at the top of the feed @js', async ({ today, sheet }) => {

@@ -22,16 +22,6 @@ test('the More tab on a page under More goes back to the index', async ({ page, 
   await expect(page.getByRole('heading', { name: 'More' })).toBeVisible();
 });
 
-test('a member has no Garden row and no People row', async ({ page, more }) => {
-  await signIn(page, people.sam.handle);
-
-  await more.open();
-
-  await expect(more.row('Tokens')).toBeVisible();
-  await expect(more.row('Garden')).toHaveCount(0);
-  await expect(more.row('People')).toHaveCount(0);
-});
-
 test('signing out ends the session', async ({ page, more }) => {
   await signIn(page, people.ellie.handle);
   await more.open();

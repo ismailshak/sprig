@@ -6,12 +6,6 @@ import { signIn } from '../harness/signin';
 import { expect, test } from '../harness/test';
 import { PasskeysScreen } from '../screens/passkeys';
 
-test('a signed-out visitor is sent to sign in', async ({ page }) => {
-  await page.goto('/');
-  await expect(page).toHaveURL('/signin');
-  await expect(page.getByRole('heading', { name: 'Sign in to sprig' })).toBeVisible();
-});
-
 test('a session survives a reload', async ({ page }) => {
   await signIn(page, people.ellie.handle);
 

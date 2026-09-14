@@ -102,14 +102,6 @@ export class PlantScreen {
     await this.page.waitForLoadState();
   }
 
-  detailLabels(): Locator {
-    return this.section('Details').getByRole('term');
-  }
-
-  detailValues(): Locator {
-    return this.section('Details').getByRole('definition');
-  }
-
   recentLines(): Locator {
     return this.section('Recent activity').getByRole('listitem');
   }

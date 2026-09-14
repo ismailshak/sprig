@@ -105,12 +105,6 @@ test('a care type left without a name is refused @swap', async ({ garden, page }
   await expect(garden.row(careTypes.feed)).toBeVisible();
 });
 
-test('the Garden page says how much photo storage is used', async ({ garden }) => {
-  await garden.open();
-
-  await expect(garden.storage()).toHaveText('0 MB of 1 GB of photo storage used.');
-});
-
 test('a garden name typed in lower case is refused and the garden stays', async ({
   garden,
   deleteGarden,

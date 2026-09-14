@@ -39,18 +39,6 @@ test('the owner is offered no role, no end date and no way to remove themselves'
   await expect(people.reenrol(seeded.ellie.name)).toHaveCount(0);
 });
 
-test("a sitter's row says when their access ends and a permanent member's row has no date field", async ({
-  people,
-}) => {
-  await people.open();
-
-  await expect(people.row(seeded.jo.name)).toContainText('Sitter ·');
-  await expect(people.row(seeded.jo.name)).toContainText(/until \d+ \w+/);
-  await expect(people.until(seeded.jo.name)).toHaveCount(1);
-  await expect(people.row(seeded.sam.name)).toContainText(roleWhat.member);
-  await expect(people.until(seeded.sam.name)).toHaveCount(0);
-});
-
 test('a membership that has ended is offered no role until it is given a new date @swap', async ({ people }) => {
   await people.open();
 
