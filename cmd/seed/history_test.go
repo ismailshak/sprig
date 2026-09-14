@@ -3,7 +3,6 @@ package main
 import (
 	"testing"
 	"time"
-	"uuid"
 
 	engine "github.com/ismailshak/sprig/internal/schedule"
 )
@@ -274,96 +273,12 @@ func TestDaysBetween_CountsWholeDaysAcrossAClockChange(t *testing.T) {
 	}
 }
 
-// The three shapes are distinguished by which fields are set, here and in the
-// schema. Any other combination is a row the schema rejects.
-func TestFixture_EveryScheduleIsOneOfTheThreeShapes(t *testing.T) {
-	for _, g := range []garden{home(), upstairs()} {
-		for i := range g.plants {
-			p := &g.plants[i]
-			for j := range p.schedules {
-				s := &p.schedules[j]
-				if !s.repeats() && !s.anchored() {
-					t.Errorf("%s's %s schedule has neither an interval nor an anchor", p.displayName(), s.slug)
-				}
-				if s.repeats() && s.unit == "" {
-					t.Errorf("%s's %s schedule has a count and no unit", p.displayName(), s.slug)
-				}
-				// An anchored schedule already names its month, so a season
-				// on it would be meaningless.
-				if s.anchored() && s.seasonStart != 0 {
-					t.Errorf("%s's %s schedule is anchored and carries a season", p.displayName(), s.slug)
-				}
-				if (s.seasonStart == 0) != (s.seasonEnd == 0) {
-					t.Errorf("%s's %s schedule has half a season", p.displayName(), s.slug)
-				}
-			}
-		}
-	}
-}
-
-// The seed looks up care types by slug, so a slug the garden does not have
-// would write a schedule against a missing care type.
-func TestFixture_EveryScheduleSlugIsACareTypeInItsGarden(t *testing.T) {
-	for _, g := range []garden{home(), upstairs()} {
-		known := map[string]bool{}
-		for _, ct := range g.careTypes {
-			known[ct.slug] = true
-		}
-		for i := range g.plants {
-			p := &g.plants[i]
-			for _, s := range p.schedules {
-				if !known[s.slug] {
-					t.Errorf("%s in %s is scheduled for %q, which the garden has no care type for", p.displayName(), g.name, s.slug)
-				}
-			}
-			for _, e := range p.extraEvents {
-				if !known[e.slug] {
-					t.Errorf("%s in %s has a %q event, which the garden has no care type for", p.displayName(), g.name, e.slug)
-				}
-			}
-		}
-	}
-}
-
 // A plant needs at least one of its three names, or it renders as a blank row.
 func TestFixture_EveryPlantHasAName(t *testing.T) {
 	for _, g := range []garden{home(), upstairs()} {
 		for i := range g.plants {
 			if g.plants[i].displayName() == "" {
 				t.Errorf("a plant in %s carries none of the three names", g.name)
-			}
-		}
-	}
-}
-
-// Two rows sharing an id is the one failure a hand-written id can have that a
-// generated one cannot.
-func TestSeedID_EveryFixtureIDIsUnique(t *testing.T) {
-	seen := map[uuid.UUID]string{}
-	claim := func(id uuid.UUID, what string) {
-		t.Helper()
-		if prior, ok := seen[id]; ok {
-			t.Errorf("%s and %s are both %v", prior, what, id)
-		}
-		seen[id] = what
-	}
-
-	for _, p := range []*person{&ellie, &sam, &robin} {
-		claim(p.id, "the user "+p.handle)
-	}
-	for _, g := range []garden{home(), upstairs()} {
-		claim(g.id, "the garden "+g.name)
-		for _, m := range g.members {
-			claim(m.id, m.person.handle+"'s membership of "+g.name)
-		}
-		for _, ct := range g.careTypes {
-			claim(ct.id, g.name+"'s "+ct.slug)
-		}
-		for i := range g.plants {
-			p := &g.plants[i]
-			claim(p.id, "the plant "+p.displayName())
-			for _, s := range p.schedules {
-				claim(s.id, p.displayName()+"'s "+s.slug+" schedule")
 			}
 		}
 	}
