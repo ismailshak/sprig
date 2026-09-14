@@ -1,0 +1,89 @@
+{{define "title"}}Calendar · sprig{{end}}
+
+{{/* Today links to the current month. It is shown on the current month too,
+     because the bar is outside #calendar and a swap does not replace it. */}}
+{{define "main"}}
+<header class="topbar topbar--log topbar--stack">
+<a class="backlink" href="{{.Back}}">{{template "icon-back"}}Activity</a>
+<div class="topbar__row">
+<h1 class="topbar__title">Calendar</h1>
+<a class="topbar__link" href="{{.Today}}" hx-get="{{.Today}}" hx-target="#calendar" hx-swap="outerHTML settle:0ms" hx-push-url="true">Today</a>
+</div>
+</header>
+{{template "calendar" .}}
+{{end}}
+
+{{/* Previous, Next and Today swap this element and push the month's URL.
+     hx-history-elt makes htmx save and restore it for Back and Forward in
+     place of the whole body. */}}
+{{define "calendar"}}<div class="app__body app__body--log" id="calendar" hx-history-elt>
+{{template "calendar-contents" .}}
+</div>{{end}}
+
+{{/* A Back or Forward that misses htmx's history cache is sent this template
+     alone. htmx puts the response inside the element it restores, so it has
+     to be the inside of #calendar.
+
+     Previous and Next have ids so htmx puts focus back on the one that was
+     pressed after the swap. An empty span is rendered in place of a missing
+     Previous or Next to keep the month's name centred. */}}
+{{define "calendar-contents"}}<div class="month__head">
+{{with .Previous}}<a class="month__step" id="month-previous" href="{{.}}" hx-get="{{.}}" hx-target="#calendar" hx-swap="outerHTML settle:0ms" hx-push-url="true" aria-label="Previous month">{{template "icon-back"}}</a>{{else}}<span></span>{{end}}
+<h2 class="month__title">{{.Title}}</h2>
+{{with .Next}}<a class="month__step" id="month-next" href="{{.}}" hx-get="{{.}}" hx-target="#calendar" hx-swap="outerHTML settle:0ms" hx-push-url="true" aria-label="Next month">{{template "icon-chevron"}}</a>{{else}}<span></span>{{end}}
+</div>
+{{with .MonthDue}}<section class="section month__due" aria-labelledby="month-due">
+<div class="section__head"><h3 class="section__title" id="month-due">{{$.MonthDueTitle}}</h3></div>
+<ul class="list">{{range .}}{{template "calendar-row" .}}
+{{end}}</ul>
+</section>{{end}}
+<table class="month__grid">
+<thead><tr>{{range .Weekdays}}<th scope="col">{{.}}</th>{{end}}</tr></thead>
+<tbody>
+{{range .Weeks}}<tr>{{range .}}{{template "calendar-day" .}}{{end}}</tr>
+{{end}}</tbody>
+</table>{{end}}
+
+{{/* The link's aria-label counts the care on the day, so the list inside it is
+     hidden from screen readers. The stylesheet shows each care's icon on a
+     phone and the plant's name from 600px. */}}
+{{define "calendar-day"}}<td{{if .Today}} aria-current="date"{{end}}>{{if .Number}}
+{{if .Href}}<a class="month__day" href="{{.Href}}" hx-get="{{.Href}}" hx-target="#sheet" hx-swap="outerHTML" aria-label="{{.Label}}">{{else}}<span class="month__day">{{end}}
+<span class="month__number">{{.Number}}</span>
+{{if .Shown}}<ul class="month__cares" aria-hidden="true">{{range .Shown}}<li class="month__care{{if .Skipped}} month__care--skipped{{else if .Logged}} month__care--logged{{end}}"><span class="month__icon">{{template "care-icon" .Slug}}</span><span class="month__name">{{.Name}}</span></li>{{end}}{{with .More}}<li class="month__more">+{{.}}</li>{{end}}</ul>{{end}}
+{{if .Href}}</a>{{else}}</span>{{end}}
+{{end}}</td>{{end}}
+
+{{define "calendar-row"}}<li><a class="row row--link" href="{{.Href}}">
+{{template "avatar" .Picture}}
+<span class="row__text">
+<span class="row__name{{if .Botanical}} row__name--sp{{end}}">{{.Name}}</span>
+<span class="row__meta"><span class="row__part">{{.Care}}</span>{{with .Note}}<span class="dot">&middot;</span><span class="row__part{{if $.Late}} late{{end}}">{{.}}</span>{{end}}</span>
+</span>
+</a></li>{{end}}
+
+{{/* The button reads Close rather than Cancel because the sheet has nothing to
+     cancel. The scrim is out of the tab order and hidden from screen readers
+     because Close and Escape close the sheet. tabindex -1 lets the script
+     focus the dialog without making it a Tab stop. */}}
+{{define "day-sheet"}}{{with .Sheet}}<dialog open class="sheet" id="sheet" aria-labelledby="day-sheet-title" tabindex="-1">
+<form method="dialog"><button class="sheet__scrim" tabindex="-1" aria-hidden="true"></button></form>
+<div class="sheet__panel">
+<div class="sheet__grip"></div>
+<h2 class="sheet__title" id="day-sheet-title">{{.Title}}</h2>
+{{with .Logged}}<h3 class="section__title sheet__group">Logged</h3>
+<ul class="list">{{range .}}{{template "calendar-row" .}}
+{{end}}</ul>{{end}}
+{{with .Due}}<h3 class="section__title sheet__group">Due</h3>
+<ul class="list">{{range .}}{{template "calendar-row" .}}
+{{end}}</ul>{{end}}
+<form method="dialog"><button class="sheet__cancel">Close</button></form>
+</div>
+</dialog>{{else}}<div id="sheet"></div>{{end}}{{end}}
+
+{{define "nav"}}{{template "tabs" "Under Activity"}}{{end}}
+
+{{define "overlay"}}{{template "day-sheet" .}}{{end}}
+
+{{define "script"}}<script src="{{asset "sheet.js"}}" defer></script>
+<script src="{{asset "history.js"}}" defer></script>{{end}}

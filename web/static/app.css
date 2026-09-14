@@ -112,6 +112,20 @@ button {
 
 .topbar__switch svg { width: 20px; height: 20px; }
 
+/* The calendar link at the right of Activity's bar. The negative margins line
+   the icon up with the column's edge and the title's middle while the tap
+   target stays full size. */
+.topbar__icon {
+  display: grid;
+  place-items: center;
+  width: var(--tap);
+  height: var(--tap);
+  margin: 0 -10px -6px 0;
+  color: var(--ink-2);
+}
+
+.topbar__icon svg { width: 22px; height: 22px; }
+
 /* The garden sheet's heading. The log-care sheet has a plant's row here
    instead, so this is the one sheet with a title. */
 .sheet__title {
@@ -1817,6 +1831,150 @@ a.plant__keep { text-decoration: none; }
 }
 
 .filters__form .care--small { margin-bottom: 2px; }
+
+/* On iOS Safari a date field with its platform appearance renders wider than
+   the Care select above it at the same width. iOS shows no placeholder in an
+   empty date field, so min-height keeps it from collapsing. iOS centres the
+   date, and text-align puts it on the left like the select's text. */
+.filters__form input[type="date"] { appearance: none; min-height: 34px; text-align: left; }
+.filters__form input[type="date"]::-webkit-date-and-time-value { text-align: left; }
+
+/* ----------------------------------------------------------------- calendar */
+
+/* The calendar's title and its Today link on one line, under the back link. */
+.topbar__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  align-self: stretch;
+  gap: 12px;
+}
+
+/* A text link at the right of a bar, the same size and colour as the back
+   link. The negative margins keep the bar as tall as the title while the tap
+   target stays full size. */
+.topbar__link {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--tap);
+  margin: -6px -4px -6px 0;
+  padding: 0 4px;
+  font-size: 15px;
+  color: var(--ink-2);
+  text-decoration: none;
+}
+
+/* Previous, the month's name and Next on one line. */
+.month__head {
+  display: grid;
+  grid-template-columns: var(--tap) 1fr var(--tap);
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.month__title {
+  margin: 0;
+  text-align: center;
+  font-family: var(--font-display);
+  font-weight: var(--display-weight);
+  letter-spacing: var(--display-tracking);
+  font-size: 20px;
+}
+
+.month__step {
+  display: grid;
+  place-items: center;
+  width: var(--tap);
+  height: var(--tap);
+  color: var(--ink-2);
+}
+
+.month__step svg { width: 20px; height: 20px; }
+
+.month__due { margin-bottom: 18px; }
+
+/* A fixed table layout gives the seven columns one width, whatever a day
+   holds. */
+.month__grid {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+}
+
+.month__grid th {
+  padding: 6px 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-3);
+}
+
+.month__grid td { padding: 0; vertical-align: top; border-top: var(--row-divider); }
+
+.month__day {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  min-height: 64px;
+  padding: 5px 1px;
+  border-radius: 6px;
+  color: inherit;
+  text-decoration: none;
+}
+
+@media (hover: hover) {
+  a.month__day:hover { background: var(--surface-2); }
+}
+
+.month__number {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+
+[aria-current="date"] .month__number {
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 600;
+}
+
+/* On a phone a day is about 48px wide, so each care shows as its icon. */
+.month__cares {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 2px;
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.month__care { color: var(--ink-2); }
+.month__care--logged { color: var(--accent); }
+.month__care--skipped { color: var(--ink-3); }
+.month__icon svg { display: block; width: 12px; height: 12px; }
+.month__name { display: none; }
+.month__more { font-size: 10px; line-height: 12px; color: var(--ink-3); }
+
+/* From this width a day has room for the plants' names in place of the icons. */
+@media (min-width: 600px) {
+  .month__day { align-items: stretch; min-height: 96px; padding: 5px 4px; }
+  .month__number { align-self: center; }
+  .month__cares { flex-direction: column; flex-wrap: nowrap; justify-content: flex-start; gap: 1px; }
+  .month__care { color: var(--ink); }
+  .month__care--logged, .month__care--skipped { color: var(--ink-3); }
+  .month__icon { display: none; }
+  .month__name { display: block; overflow: hidden; font-size: 12px; white-space: nowrap; text-overflow: ellipsis; }
+  .month__more { font-size: 11px; line-height: 1.4; }
+}
+
+/* The Logged and Due headings in a day's sheet. */
+.sheet__group { margin: 14px 0 8px; }
 
 /* Usually one control, two on any page after the first. They sit at opposite
    ends rather than stacking. */

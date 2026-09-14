@@ -43,6 +43,7 @@
 <ul class="list">
 {{range .Rows}}{{template "care-row" .}}
 {{end}}</ul>
+{{with .Calendar}}<a class="foot-link" href="{{.}}">See more in the calendar{{template "icon-chevron"}}</a>{{end}}
 </section>
 {{end}}
 

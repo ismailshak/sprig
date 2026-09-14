@@ -91,6 +91,7 @@ func routes(logger *slog.Logger, sessions *auth.Sessions, passkeys *auth.Passkey
 		{pattern: "GET /plants/{plant}/photos/{photo}/delete", capability: auth.PhotoDeleteOwn, handler: http.HandlerFunc(plantsHandler.confirmDelete)},
 		{pattern: "POST /plants/{plant}/photos/{photo}/delete", capability: auth.PhotoDeleteOwn, handler: http.HandlerFunc(plantsHandler.deletePhoto)},
 		{pattern: "GET /activity", handler: http.HandlerFunc(activityHandler.show)},
+		{pattern: "GET " + calendarPath, handler: http.HandlerFunc(activityHandler.calendar)},
 		{pattern: "GET /plants/{plant}/log", capability: auth.CareLog, handler: http.HandlerFunc(todayHandler.sheet)},
 		{pattern: "POST /plants/{plant}/log", capability: auth.CareLog, handler: http.HandlerFunc(todayHandler.log)},
 		{pattern: "DELETE /plants/{plant}/log/{event}", capability: auth.CareDeleteOwn, handler: http.HandlerFunc(todayHandler.undo)},

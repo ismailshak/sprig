@@ -4,11 +4,10 @@
      the vertical line per item, and a gap between events draws its own stretch
      of it dashed, so every item has to be in the same list. */}}
 {{define "main"}}
-{{/* The whole garden's log is reached from the tab bar, so it needs no back
-     link. Filtered to one plant it is reached from that plant's page, and the
-     bar carries a link back to it above the title. The two lines read as "Big
-     Fella" then "Activity", which says the same as "Big Fella's activity" in a
-     bar that has room for it. */}}
+{{/* The whole garden's log is reached from the tab bar, so its bar has no back
+     link. It has a link to the calendar. A plant's log has a link back to the
+     plant above the title. The two lines, "Big Fella" and "Activity", read as
+     "Big Fella's activity". */}}
 {{with .Back}}
 <header class="topbar topbar--log topbar--stack">
 <a class="backlink" href="{{.Href}}">{{template "icon-back"}}{{.Label}}</a>
@@ -17,6 +16,7 @@
 {{else}}
 <header class="topbar topbar--log">
 <h1 class="topbar__title">Activity</h1>
+{{with .Calendar}}<a class="topbar__icon" href="{{.}}" aria-label="Calendar">{{template "icon-calendar"}}</a>{{end}}
 </header>
 {{end}}
 {{template "log" .}}

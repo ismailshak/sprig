@@ -422,6 +422,9 @@ type activityPage struct {
 	// Back links to the plant the log is filtered to. It is nil for the whole
 	// garden's log, which is reached from the tab bar and needs no way back.
 	Back *link
+	// Calendar is the URL of the calendar link in the top bar. It is empty on
+	// the log filtered to one plant, where the bar has Back instead.
+	Calendar string
 	// Filters is the care type and date range form above the list.
 	Filters logFilters
 	Items   []logItem
@@ -525,6 +528,8 @@ func newActivityPage(principal auth.Principal, q logQuery, plant *store.Plant, e
 	var page activityPage
 	if plant != nil {
 		page.Back = &link{Label: plant.DisplayName(), Href: plantPath(plant.ID)}
+	} else {
+		page.Calendar = calendarPath
 	}
 
 	more := len(events) > logPageSize
