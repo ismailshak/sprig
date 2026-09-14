@@ -27,6 +27,11 @@ func runJob(ctx context.Context, logger *slog.Logger, name string, now func() ti
 			logger.Error(name+" job failed", "err", err)
 			next = now().Add(retryAfter)
 		}
+		if next.IsZero() {
+			logger.Debug(name + " job waiting for a change")
+		} else {
+			logger.Debug(name+" job next runs", "at", next)
+		}
 
 		// fire stays nil for a zero next, so the select waits for a wake or
 		// for ctx to end.
@@ -39,6 +44,7 @@ func runJob(ctx context.Context, logger *slog.Logger, name string, now func() ti
 		select {
 		case <-ctx.Done():
 		case <-wake:
+			logger.Debug(name + " job woken by a change")
 		case <-fire:
 		}
 		if timer != nil {

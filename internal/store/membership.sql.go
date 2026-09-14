@@ -139,7 +139,10 @@ func (q *Queries) GetMemberByHandle(ctx context.Context, gardenID uuid.UUID, han
 }
 
 const getMembershipWithUserAndGarden = `-- name: GetMembershipWithUserAndGarden :one
-SELECT membership.id, membership.garden_id, membership.user_id, membership.role, membership.invited_by, membership.created_at, membership.expires_at, membership.digest_hour, membership.remind_again_at, app_user.id, app_user.display_name, app_user.handle, app_user.timezone, app_user.created_at, app_user.last_garden_id, app_user.closed_at, garden.id, garden.name, garden.created_at
+SELECT membership.id, membership.garden_id, membership.user_id, membership.role, membership.invited_by, membership.created_at, membership.expires_at, membership.digest_hour, membership.remind_again_at, app_user.id, app_user.display_name, app_user.handle, app_user.timezone, app_user.created_at, app_user.last_garden_id, app_user.closed_at, garden.id, garden.name, garden.created_at,
+    ARRAY(SELECT role_capability.capability FROM role_capability
+        WHERE role_capability.role = membership.role
+        ORDER BY role_capability.capability)::text[] AS capabilities
 FROM membership
 JOIN app_user ON app_user.id = membership.user_id
 JOIN garden ON garden.id = membership.garden_id
@@ -147,13 +150,16 @@ WHERE membership.garden_id = $1 AND membership.user_id = $2
 `
 
 type GetMembershipWithUserAndGardenRow struct {
-	Membership Membership
-	AppUser    AppUser
-	Garden     Garden
+	Membership   Membership
+	AppUser      AppUser
+	Garden       Garden
+	Capabilities []string
 }
 
-// Runs on every authenticated request, so one join fetches all three rows in a
-// single round trip.
+// Returns the membership, the account, the garden and the role's capabilities
+// in one round trip, because it runs on every signed-in request. The
+// capabilities are not cached, so a row added to role_capability takes effect
+// on the next request.
 func (q *Queries) GetMembershipWithUserAndGarden(ctx context.Context, gardenID uuid.UUID, userID uuid.UUID) (GetMembershipWithUserAndGardenRow, error) {
 	row := q.db.QueryRow(ctx, getMembershipWithUserAndGarden, gardenID, userID)
 	var i GetMembershipWithUserAndGardenRow
@@ -177,6 +183,7 @@ func (q *Queries) GetMembershipWithUserAndGarden(ctx context.Context, gardenID u
 		&i.Garden.ID,
 		&i.Garden.Name,
 		&i.Garden.CreatedAt,
+		&i.Capabilities,
 	)
 	return i, err
 }

@@ -30,6 +30,9 @@ type Principal struct {
 	Capabilities Capabilities
 	// APIToken is nil unless the request presented a bearer token.
 	APIToken *store.APIToken
+	// SessionTouched is true when resolving the request moved the session's
+	// deadline forward.
+	SessionTouched bool
 }
 
 // Can reports whether the principal's role has capability. Templates and
@@ -74,7 +77,7 @@ func NewResolver(sessions *Sessions, queries *store.Queries) *Resolver {
 // has none live. An account with no live membership stays signed in, so it can
 // set up a garden of its own or accept an invite.
 func (r *Resolver) Resolve(ctx context.Context, now time.Time, token string) (Principal, error) {
-	session, err := r.sessions.Lookup(ctx, now, token)
+	session, touched, err := r.sessions.Lookup(ctx, now, token)
 	if err != nil {
 		return Principal{}, err
 	}
@@ -85,7 +88,7 @@ func (r *Resolver) Resolve(ctx context.Context, now time.Time, token string) (Pr
 			return Principal{}, fmt.Errorf("read the membership: %w", err)
 		}
 		if err == nil && !MembershipEnded(row.Membership, now) {
-			return r.principal(ctx, session, row)
+			return principalOf(session, touched, row), nil
 		}
 	}
 
@@ -101,7 +104,7 @@ func (r *Resolver) Resolve(ctx context.Context, now time.Time, token string) (Pr
 		if err != nil {
 			return Principal{}, fmt.Errorf("read the account: %w", err)
 		}
-		return Principal{Session: session, User: user}, nil
+		return Principal{Session: session, User: user, SessionTouched: touched}, nil
 	}
 	if err != nil {
 		return Principal{}, err
@@ -114,21 +117,18 @@ func (r *Resolver) Resolve(ctx context.Context, now time.Time, token string) (Pr
 	if err != nil {
 		return Principal{}, fmt.Errorf("read the membership: %w", err)
 	}
-	return r.principal(ctx, session, row)
+	return principalOf(session, touched, row), nil
 }
 
-func (r *Resolver) principal(ctx context.Context, session store.Session, row store.GetMembershipWithUserAndGardenRow) (Principal, error) {
-	names, err := r.queries.ListRoleCapabilities(ctx, row.Membership.Role)
-	if err != nil {
-		return Principal{}, fmt.Errorf("read the role's capabilities: %w", err)
-	}
+func principalOf(session store.Session, touched bool, row store.GetMembershipWithUserAndGardenRow) Principal {
 	return Principal{
-		Session:      session,
-		User:         row.AppUser,
-		Garden:       row.Garden,
-		Membership:   row.Membership,
-		Capabilities: NewCapabilities(names),
-	}, nil
+		Session:        session,
+		User:           row.AppUser,
+		Garden:         row.Garden,
+		Membership:     row.Membership,
+		Capabilities:   NewCapabilities(row.Capabilities),
+		SessionTouched: touched,
+	}
 }
 
 // startingMembership returns the membership Resolve moves a session to.

@@ -43,18 +43,19 @@ const (
 	apiToken
 )
 
-// Authenticate requires a principal on every request credentialFor says takes
-// the session cookie, and puts it on the context for PrincipalFrom. A request
-// with no cookie, or with one that resolves to no session, is redirected to
-// sign in. A resolved session has its cookie reissued, so the cookie's expiry
-// extends along with the session row's.
+// Authenticate requires a principal on every request whose route takes the
+// session cookie, and puts it on the context for PrincipalFrom. credentials is
+// keyed by the route pattern MatchPattern puts on the context. A pattern the
+// map does not hold takes the session cookie. A request with no cookie, or with
+// one that resolves to no session, is redirected to sign in. The cookie is
+// reissued when resolving the session moved its deadline.
 //
 // A public route and a route taking an API token both pass through here.
 // requireToken resolves the bearer token further in, inside the mux.
-func Authenticate(logger *slog.Logger, templates *Templates, sessions *auth.Sessions, resolver Resolver, credentialFor func(*http.Request) credential) func(http.Handler) http.Handler {
+func Authenticate(logger *slog.Logger, templates *Templates, sessions *auth.Sessions, resolver Resolver, credentials map[string]credential) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			switch credentialFor(r) {
+			switch credentials[patternFrom(r)] {
 			case noCredential, apiToken:
 				next.ServeHTTP(w, r)
 				return
@@ -62,6 +63,7 @@ func Authenticate(logger *slog.Logger, templates *Templates, sessions *auth.Sess
 
 			token := sessions.TokenFromRequest(r)
 			if token == "" {
+				logger.LogAttrs(r.Context(), slog.LevelDebug, "session refused", slog.String("reason", "the request has no session cookie"))
 				http.Redirect(w, r, signInPath, http.StatusSeeOther)
 				return
 			}
@@ -69,6 +71,7 @@ func Authenticate(logger *slog.Logger, templates *Templates, sessions *auth.Sess
 			principal, err := resolver.Resolve(r.Context(), time.Now(), token)
 			switch {
 			case errors.Is(err, auth.ErrNoSession):
+				logger.LogAttrs(r.Context(), slog.LevelDebug, "session refused", slog.String("reason", err.Error()))
 				http.SetCookie(w, sessions.ClearedCookie())
 				http.Redirect(w, r, signInPath, http.StatusSeeOther)
 				return
@@ -77,7 +80,9 @@ func Authenticate(logger *slog.Logger, templates *Templates, sessions *auth.Sess
 				return
 			}
 
-			http.SetCookie(w, sessions.Cookie(token))
+			if principal.SessionTouched {
+				http.SetCookie(w, sessions.Cookie(token))
+			}
 			ctx := context.WithValue(r.Context(), principalKey, principal)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
@@ -117,14 +122,22 @@ func unauthorized(w http.ResponseWriter) {
 
 // hasSession reports whether the request's session cookie resolves to a
 // signed-in account. The account need not be in a garden. A request with no
-// cookie costs no lookup, so a public route may call this.
-func hasSession(r *http.Request, sessions *auth.Sessions, resolver *auth.Resolver, now time.Time) bool {
+// cookie costs no lookup, so a public route may call this. It sets the session
+// cookie again on w when resolving the session moved its deadline, because
+// otherwise the cookie would expire before the row.
+func hasSession(w http.ResponseWriter, r *http.Request, sessions *auth.Sessions, resolver *auth.Resolver, now time.Time) bool {
 	token := sessions.TokenFromRequest(r)
 	if token == "" {
 		return false
 	}
-	_, err := resolver.Resolve(r.Context(), now, token)
-	return err == nil
+	principal, err := resolver.Resolve(r.Context(), now, token)
+	if err != nil {
+		return false
+	}
+	if principal.SessionTouched {
+		http.SetCookie(w, sessions.Cookie(token))
+	}
+	return true
 }
 
 // noGardenPage is the data for the "You're in no garden" page. Every route

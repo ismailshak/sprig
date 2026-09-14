@@ -542,8 +542,24 @@ func TestSetup_ABrowserAlreadySignedInHasThatSessionEnded(t *testing.T) {
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusSeeOther, text(rec.Body.String()))
 	}
-	if _, err := f.handler.sessions.Lookup(t.Context(), thursday, first); err == nil {
+	if _, _, err := f.handler.sessions.Lookup(t.Context(), thursday, first); err == nil {
 		t.Error("the session the browser arrived with still resolves")
+	}
+}
+
+func TestSetup_OpeningThePageAnHourAfterTheLastRequestSetsTheSessionCookieAgain(t *testing.T) {
+	f := setupOn(t, true)
+	token := f.mustCreate(t, aGardenForm(), aDevice())
+	f.handler.now = func() time.Time { return thursday.Add(time.Hour) }
+
+	rec := f.request(t, f.handler.show, setupPath, nil, &http.Cookie{Name: "__Host-sprig_session", Value: token})
+
+	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != setupSignedInPath {
+		t.Fatalf("status = %d, Location = %q, want %d to %s", rec.Code, rec.Header().Get("Location"), http.StatusSeeOther, setupSignedInPath)
+	}
+	cookie := cookieNamed(t, rec, "__Host-sprig_session")
+	if cookie == nil || cookie.Value != token || cookie.MaxAge != int(testTTL/time.Second) {
+		t.Errorf("the session cookie set is %+v, want the browser's token with Max-Age %d", cookie, int(testTTL/time.Second))
 	}
 }
 

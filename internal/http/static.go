@@ -2,6 +2,7 @@ package http
 
 import (
 	"bytes"
+	"compress/gzip"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"net/http"
 	"path"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -65,10 +67,15 @@ type asset struct {
 	content []byte
 	etag    string
 	hashed  bool
+	gzipped []byte
+	// gzippedETag differs from etag because a cache stores the two encodings
+	// as two responses.
+	gzippedETag string
+	contentType string
 }
 
-// NewAssets reads every file under fsys. It keeps the bytes rather than the
-// FS, because hashing has already read them.
+// NewAssets reads every file under fsys and compresses each one with gzip. It
+// keeps the bytes rather than the FS, because hashing has already read them.
 func NewAssets(fsys fs.FS) (*Assets, error) {
 	a := &Assets{paths: map[string]string{}, files: map[string]asset{}}
 	err := fs.WalkDir(fsys, ".", func(name string, entry fs.DirEntry, err error) error {
@@ -81,12 +88,30 @@ func NewAssets(fsys fs.FS) (*Assets, error) {
 		}
 		sum := sha256.Sum256(content)
 		digest := hex.EncodeToString(sum[:])
-		etag := `"` + digest[:hashLength] + `"`
+		gzipped, err := gzipIfSmaller(content)
+		if err != nil {
+			return fmt.Errorf("compressing %s: %w", name, err)
+		}
+		contentType := mime.TypeByExtension(path.Ext(name))
+		if contentType == "" {
+			contentType = http.DetectContentType(content)
+		}
 
-		hashed := assetPrefix + insertHash(name, digest)
-		a.paths[name] = hashed
-		a.files[hashed] = asset{name: name, content: content, etag: etag, hashed: true}
-		a.files[assetPrefix+name] = asset{name: name, content: content, etag: etag}
+		plain := asset{
+			name:        name,
+			content:     content,
+			contentType: contentType,
+			etag:        `"` + digest[:hashLength] + `"`,
+			gzipped:     gzipped,
+			gzippedETag: `"` + digest[:hashLength] + `-gzip"`,
+		}
+		hashed := plain
+		hashed.hashed = true
+
+		url := assetPrefix + insertHash(name, digest)
+		a.paths[name] = url
+		a.files[url] = hashed
+		a.files[assetPrefix+name] = plain
 		return nil
 	})
 	if err != nil {
@@ -95,8 +120,63 @@ func NewAssets(fsys fs.FS) (*Assets, error) {
 	return a, nil
 }
 
-// insertHash puts the hash before the extension, so the name still ends in
-// .css or .woff2 and http.ServeContent reads the content type from it.
+// gzipIfSmaller returns content compressed with gzip, or nil when the
+// compressed bytes are not smaller than content.
+func gzipIfSmaller(content []byte) ([]byte, error) {
+	var buf bytes.Buffer
+	w, err := gzip.NewWriterLevel(&buf, gzip.BestCompression)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := w.Write(content); err != nil {
+		return nil, err
+	}
+	if err := w.Close(); err != nil {
+		return nil, err
+	}
+	if buf.Len() >= len(content) {
+		return nil, nil
+	}
+	return buf.Bytes(), nil
+}
+
+// acceptsGzip reports whether the request's Accept-Encoding allows gzip. It
+// does when gzip is listed with a q-value above zero, or when gzip is not
+// listed and * is.
+func acceptsGzip(r *http.Request) bool {
+	star := false
+	for _, header := range r.Header.Values("Accept-Encoding") {
+		for coding := range strings.SplitSeq(header, ",") {
+			name, params, _ := strings.Cut(coding, ";")
+			allowed := qValue(params) > 0
+			switch strings.ToLower(strings.TrimSpace(name)) {
+			case "gzip", "x-gzip":
+				return allowed
+			case "*":
+				star = allowed
+			}
+		}
+	}
+	return star
+}
+
+// qValue returns the q parameter among params, the part of one Accept-Encoding
+// coding after its first semicolon. It returns 1 when there is none or it does
+// not parse.
+func qValue(params string) float64 {
+	for param := range strings.SplitSeq(params, ";") {
+		name, value, _ := strings.Cut(strings.TrimSpace(param), "=")
+		if !strings.EqualFold(name, "q") {
+			continue
+		}
+		if q, err := strconv.ParseFloat(strings.TrimSpace(value), 64); err == nil {
+			return q
+		}
+	}
+	return 1
+}
+
+// insertHash puts the hash before the extension, as in app.3f2a9c1b04de.css.
 func insertHash(name, digest string) string {
 	ext := path.Ext(name)
 	return strings.TrimSuffix(name, ext) + "." + digest[:hashLength] + ext
@@ -123,7 +203,8 @@ func (a *Assets) content(name string) ([]byte, bool) {
 
 // handler serves the two URLs each file has and nothing else. A name that is
 // not in the map is a 404, so there is no directory listing and no path that
-// reaches a file outside the tree.
+// reaches a file outside the tree. A file with a gzipped form is sent gzipped
+// to a request that accepts gzip.
 func (a *Assets) handler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		f, ok := a.files[r.URL.Path]
@@ -138,10 +219,23 @@ func (a *Assets) handler() http.Handler {
 			cacheControl = hashedCacheControl
 		}
 		w.Header().Set("Cache-Control", cacheControl)
+		content, etag := f.content, f.etag
+		if f.gzipped != nil {
+			// Without Vary, a cache keyed on the URL alone could give the
+			// gzipped bytes to a client that did not ask for them.
+			w.Header().Set("Vary", "Accept-Encoding")
+			if acceptsGzip(r) {
+				content, etag = f.gzipped, f.gzippedETag
+				w.Header().Set("Content-Encoding", "gzip")
+			}
+		}
+		// For a file with no known extension, ServeContent sniffs the type from
+		// the bytes it sends. Those can be the gzipped bytes.
+		w.Header().Set("Content-Type", f.contentType)
 		// ServeContent compares this with If-None-Match and returns 304 on a match.
-		w.Header().Set("ETag", f.etag)
+		w.Header().Set("ETag", etag)
 		// A zero modification time leaves Last-Modified off the response.
 		// Revalidation here goes through the ETag.
-		http.ServeContent(w, r, f.name, time.Time{}, bytes.NewReader(f.content))
+		http.ServeContent(w, r, f.name, time.Time{}, bytes.NewReader(content))
 	})
 }

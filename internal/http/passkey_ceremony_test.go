@@ -509,7 +509,7 @@ func TestSignIn_SigningInAgainEndsTheSessionTheBrowserAlreadyHad(t *testing.T) {
 	if fresh == nil || fresh.Value == old {
 		t.Fatalf("the sign-in set %+v, want a new session cookie", fresh)
 	}
-	if _, err := h.sessions.Lookup(t.Context(), now, old); !errors.Is(err, auth.ErrNoSession) {
+	if _, _, err := h.sessions.Lookup(t.Context(), now, old); !errors.Is(err, auth.ErrNoSession) {
 		t.Errorf("the first session still resolves after a second sign-in: %v, want %v", err, auth.ErrNoSession)
 	}
 }

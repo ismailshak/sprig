@@ -1,9 +1,11 @@
 package push
 
 import (
+	"bytes"
 	"log/slog"
 	"net/http"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 	"uuid"
@@ -84,6 +86,29 @@ func TestNotifier_ReachesBothBrowsersAMemberHasSubscribed(t *testing.T) {
 
 	if got, want := service.received(), []string{"/ellie-mac", "/ellie-phone"}; !slices.Equal(got, want) {
 		t.Errorf("the push service received %q, want %q", got, want)
+	}
+}
+
+func TestNotifier_TheDebugLogNeverHoldsABrowsersEndpointPath(t *testing.T) {
+	service := newPushService(t, http.StatusCreated)
+	service.statuses["/ellie-mac"] = http.StatusInternalServerError
+	tx := pgtest.Tx(t, migrateSchema)
+	seedRosewood(t, tx, service)
+	turnActivityOn(t, tx, ellieMembershipID)
+	notifier := newNotifier(t, tx, service)
+	var buf bytes.Buffer
+	notifier.logger = slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+
+	notifier.SendActivity(t.Context(), rosewoodID, samID, Notification{Title: "Rosewood", Body: "Sam watered Doris.", URL: "/plants/doris"})
+	notifier.Wait()
+
+	if !strings.Contains(buf.String(), `"level":"DEBUG"`) {
+		t.Fatalf("nothing was logged at debug level: %s", buf.String())
+	}
+	for _, path := range []string{"/ellie-mac", "/ellie-phone"} {
+		if strings.Contains(buf.String(), path) {
+			t.Errorf("the log holds the endpoint path %s: %s", path, buf.String())
+		}
 	}
 }
 

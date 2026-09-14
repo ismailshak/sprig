@@ -18,11 +18,18 @@ import (
 	"github.com/ismailshak/sprig/internal/store"
 )
 
-// ErrNoSession is returned for a token with no live session. A token that was
-// never issued, one signed out, one revoked and one unused past the TTL all
-// return the same error, because callers treat them the same and a distinct
-// error would tell an attacker which tokens were once real.
+// ErrNoSession matches, under errors.Is, every error Lookup returns for a token
+// with no live session. The message says whether the row was missing, had
+// expired or was deleted during the lookup. Log it at debug level and never
+// send it to the browser, because it tells an attacker which tokens were once
+// real.
 var ErrNoSession = errors.New("no live session")
+
+// touchInterval is how old last_seen_at must be before a lookup writes a new
+// one. Writing it on every request would make every page view a write. A
+// session in use therefore expires up to this much earlier than its last
+// request plus the TTL.
+const touchInterval = 5 * time.Minute
 
 // sessionTokenBytes is 256 bits of randomness per token.
 const sessionTokenBytes = 32
@@ -86,16 +93,22 @@ func (c CookieSettings) Validate() error {
 // Sessions creates, looks up and deletes rows in the session table, and builds
 // the cookie that holds a session token.
 type Sessions struct {
-	queries *store.Queries
-	ttl     time.Duration
-	cookie  CookieSettings
+	queries    *store.Queries
+	ttl        time.Duration
+	cookie     CookieSettings
+	touchAfter time.Duration
 }
 
 // NewSessions returns Sessions whose sessions expire after ttl without use.
 // ttl is truncated to whole seconds, because Max-Age is an integer and the
 // cookie and the row have to agree on the deadline.
+//
+// Under a ttl shorter than ten touch intervals, a session is touched once
+// last_seen_at is a tenth of the ttl old. A session used every minute under a
+// three-minute ttl would otherwise expire between touches.
 func NewSessions(queries *store.Queries, ttl time.Duration, cookie CookieSettings) *Sessions {
-	return &Sessions{queries: queries, ttl: ttl.Truncate(time.Second), cookie: cookie}
+	ttl = ttl.Truncate(time.Second)
+	return &Sessions{queries: queries, ttl: ttl, cookie: cookie, touchAfter: min(touchInterval, ttl/10)}
 }
 
 // Create starts a session for userID at now and returns the token to put in
@@ -126,41 +139,43 @@ func (s *Sessions) Create(ctx context.Context, now time.Time, userID uuid.UUID, 
 	return token, session, nil
 }
 
-// Lookup returns the session for token and moves its deadline forward to now
-// plus the TTL. An expired row is deleted here rather than left for the daily
-// sweep.
-func (s *Sessions) Lookup(ctx context.Context, now time.Time, token string) (store.Session, error) {
+// Lookup returns the session for token. When the session was last seen at
+// least the touch interval before now, Lookup moves its deadline forward to now
+// plus the TTL and the bool is true. An expired row is deleted here rather than
+// left for the daily sweep.
+func (s *Sessions) Lookup(ctx context.Context, now time.Time, token string) (store.Session, bool, error) {
 	hash := HashToken(token)
 
 	session, err := s.queries.GetSessionByTokenHash(ctx, hash)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return store.Session{}, ErrNoSession
+		return store.Session{}, false, fmt.Errorf("%w: no session has this token", ErrNoSession)
 	}
 	if err != nil {
-		return store.Session{}, fmt.Errorf("read the session: %w", err)
+		return store.Session{}, false, fmt.Errorf("read the session: %w", err)
 	}
 
 	if SessionExpired(session.LastSeenAt, now, s.ttl) {
 		if err := s.queries.DeleteSession(ctx, hash); err != nil {
-			return store.Session{}, fmt.Errorf("delete the expired session: %w", err)
+			return store.Session{}, false, fmt.Errorf("delete the expired session: %w", err)
 		}
-		return store.Session{}, ErrNoSession
+		return store.Session{}, false, fmt.Errorf("%w: the session expired, last seen at %s", ErrNoSession, session.LastSeenAt.UTC().Format(time.RFC3339))
 	}
 
-	// A clock reading earlier than the row must not move the deadline back.
-	if !now.After(session.LastSeenAt) {
-		return session, nil
+	// A clock reading earlier than the row gives a negative age. The deadline
+	// is then left where it is.
+	if now.Sub(session.LastSeenAt) < s.touchAfter {
+		return session, false, nil
 	}
 	session, err = s.queries.TouchSession(ctx, now, hash)
 	if errors.Is(err, pgx.ErrNoRows) {
 		// The row was deleted between the read and the update, by a sign-out
 		// elsewhere or a deleted membership.
-		return store.Session{}, ErrNoSession
+		return store.Session{}, false, fmt.Errorf("%w: the session was deleted while it was read", ErrNoSession)
 	}
 	if err != nil {
-		return store.Session{}, fmt.Errorf("touch the session: %w", err)
+		return store.Session{}, false, fmt.Errorf("touch the session: %w", err)
 	}
-	return session, nil
+	return session, true, nil
 }
 
 // Delete removes the session for token, so a cookie still holding it no longer
