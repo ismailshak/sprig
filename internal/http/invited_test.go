@@ -629,6 +629,24 @@ func TestInvited_ABrowserAlreadySignedInGetsANewSessionInPlaceOfItsOld(t *testin
 	}
 }
 
+func TestInvited_OpeningAnInviteLinkAnHourAfterTheLastRequestSetsTheSessionCookieAgain(t *testing.T) {
+	f := invitedGarden(t)
+	token, _, err := f.handler.sessions.Create(t.Context(), thursday.Add(-time.Hour), moreUserID, &moreGardenID, nil, "")
+	if err != nil {
+		t.Fatalf("starting Ellie's session: %v", err)
+	}
+
+	rec := f.request(t, f.handler.show, sitterLink, InvitedPath(sitterLink), nil, f.handler.sessions.Cookie(token))
+
+	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != acceptPath(sitterLink) {
+		t.Fatalf("status = %d, Location = %q, want %d to %s", rec.Code, rec.Header().Get("Location"), http.StatusSeeOther, acceptPath(sitterLink))
+	}
+	cookie := cookieNamed(t, rec, "__Host-sprig_session")
+	if cookie == nil || cookie.Value != token || cookie.MaxAge != int(testTTL/time.Second) {
+		t.Errorf("the session cookie set is %+v, want the browser's token with Max-Age %d", cookie, int(testTTL/time.Second))
+	}
+}
+
 // invitedMux is the whole handler over the fixture's transaction, so a
 // request to an invite route goes through the rate limiters the route table
 // wraps it in. The trusted header is empty, so an address is the request's

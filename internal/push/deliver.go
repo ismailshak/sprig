@@ -14,6 +14,9 @@ import (
 // successful sends. A push failure is logged and the next browser tried, so
 // the only error returned is a database failure.
 func deliver(ctx context.Context, logger *slog.Logger, q *store.Queries, sender *Sender, handle string, subscriptions []store.PushSubscription, n Notification, now time.Time) (int, error) {
+	if len(subscriptions) == 0 {
+		logger.Debug("no browser subscribed", "user", handle)
+	}
 	sent := 0
 	for _, subscription := range subscriptions {
 		var write storeFailure
@@ -25,6 +28,7 @@ func deliver(ctx context.Context, logger *slog.Logger, q *store.Queries, sender 
 		case err != nil:
 			logger.Error("push failed", "user", handle, "user_agent", userAgentOf(subscription), "err", err)
 		default:
+			logger.Debug("push sent", "user", handle, "service", serviceOf(subscription.Endpoint), "user_agent", userAgentOf(subscription))
 			sent++
 		}
 	}

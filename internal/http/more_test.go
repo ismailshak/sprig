@@ -458,7 +458,7 @@ func TestMore_SigningOutDeletesTheSessionAndClearsTheCookie(t *testing.T) {
 	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != signInPath {
 		t.Errorf("status = %d to %q, want %d to %s", rec.Code, rec.Header().Get("Location"), http.StatusSeeOther, signInPath)
 	}
-	if _, err := sessions.Lookup(t.Context(), thursday, token); err == nil {
+	if _, _, err := sessions.Lookup(t.Context(), thursday, token); err == nil {
 		t.Error("the session still resolves after signing out")
 	}
 	cookie := rec.Result().Cookies()[0]

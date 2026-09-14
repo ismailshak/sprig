@@ -124,13 +124,43 @@ func shape(s store.CareSchedule, last *store.CareEvent, loc *time.Location) (Occ
 		// it, so a monthly series anchored on the 31st returns to the 31st
 		// after February.
 		anchor, sinceDay := anchorDay(*s.AnchorDate, loc), dayOf(since, loc)
-		for k := 0; ; k++ {
+		for k := firstStep(anchor, sinceDay, *s.IntervalCount, *s.IntervalUnit); ; k++ {
 			at := advance(anchor, *s.IntervalCount, *s.IntervalUnit, k)
 			if at.After(sinceDay) {
 				return Occurrence{At: at, Precision: *s.AnchorPrecision}, true
 			}
 		}
 	}
+}
+
+// firstStep returns the step the search for the first occurrence after sinceDay
+// starts at. Every step before it falls before sinceDay. Starting at zero would
+// take 3,650 steps for a daily series anchored ten years back.
+//
+// For months and years it counts calendar months and ignores the day, because
+// the day is clamped to the month's length.
+func firstStep(anchor, sinceDay time.Time, count int32, unit string) int {
+	var elapsed, per int
+	switch unit {
+	case UnitDay:
+		elapsed, per = DaysBetween(anchor, sinceDay), int(count)
+	case UnitWeek:
+		elapsed, per = DaysBetween(anchor, sinceDay), 7*int(count)
+	case UnitMonth:
+		elapsed, per = monthsBetween(anchor, sinceDay), int(count)
+	case UnitYear:
+		elapsed, per = monthsBetween(anchor, sinceDay), 12*int(count)
+	default:
+		return 0
+	}
+	if elapsed <= 0 {
+		return 0
+	}
+	return elapsed / per
+}
+
+func monthsBetween(from, to time.Time) int {
+	return (to.Year()-from.Year())*12 + int(to.Month()-from.Month())
 }
 
 func dayOf(t time.Time, loc *time.Location) time.Time {

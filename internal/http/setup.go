@@ -197,7 +197,7 @@ func (h *setup) show(w http.ResponseWriter, r *http.Request) {
 		h.templates.notFound(w, r)
 		return
 	}
-	if hasSession(r, h.sessions, h.resolver, h.now()) {
+	if hasSession(w, r, h.sessions, h.resolver, h.now()) {
 		http.Redirect(w, r, setupSignedInPath, http.StatusSeeOther)
 		return
 	}

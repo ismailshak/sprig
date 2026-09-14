@@ -197,6 +197,43 @@ func TestResolver_AnAccountWithNoLiveMembershipIsResolvedOnNoGarden(t *testing.T
 	}
 }
 
+func TestResolver_SessionTouchedIsTrueOnlyForTheLookupThatMovedTheDeadline(t *testing.T) {
+	r, _ := resolverOnTx(t, nil)
+	token := signIn(t, r, testUserID, testGardenID)
+
+	touchedAt := signedInAt.Add(touchInterval)
+	principal, err := r.Resolve(t.Context(), touchedAt, token)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if !principal.InGarden() || !principal.SessionTouched {
+		t.Errorf("in a garden = %v and touched = %v, want both true", principal.InGarden(), principal.SessionTouched)
+	}
+
+	principal, err = r.Resolve(t.Context(), touchedAt.Add(time.Minute), token)
+	if err != nil {
+		t.Fatalf("Resolve a minute later: %v", err)
+	}
+	if principal.SessionTouched {
+		t.Error("a lookup a minute after the touch reported the session touched")
+	}
+}
+
+func TestResolver_SessionTouchedIsReportedForAnAccountInNoGarden(t *testing.T) {
+	endsAt := signedInAt.AddDate(0, 0, 7)
+	r, tx := resolverOnTx(t, &endsAt)
+	token := signIn(t, r, otherUserID, testGardenID)
+	endEveryMembership(t, tx, otherUserID, endsAt)
+
+	principal, err := r.Resolve(t.Context(), endsAt, token)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if principal.InGarden() || !principal.SessionTouched {
+		t.Errorf("in a garden = %v and touched = %v, want false and true", principal.InGarden(), principal.SessionTouched)
+	}
+}
+
 func TestResolver_ARenewedMembershipPutsTheSessionBackOnTheGardenWithNoSignIn(t *testing.T) {
 	ctx := t.Context()
 	endsAt := signedInAt.AddDate(0, 0, 7)

@@ -115,6 +115,7 @@ func (p *Notifier) sendActivity(ctx context.Context, gardenID, actor uuid.UUID, 
 		p.logger.Error("activity not sent", "garden_id", gardenID, "err", err)
 		return
 	}
+	p.logger.Debug("activity recipients", "garden_id", gardenID, "browsers", len(rows))
 
 	// The rows come ordered by member, so one person's browsers are
 	// consecutive.

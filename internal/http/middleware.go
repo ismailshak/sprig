@@ -1,6 +1,7 @@
 package http
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 	"runtime/debug"
@@ -8,27 +9,43 @@ import (
 )
 
 // patternResolver is satisfied by *http.ServeMux. Its Handler method reports
-// which pattern matched a request without dispatching it, so Logging can
-// record the route instead of the literal path.
+// which pattern matched a request without dispatching it.
 type patternResolver interface {
 	Handler(r *http.Request) (http.Handler, string)
 }
 
-// Logging logs one line per request, carrying the method, the route
-// pattern, the status and the duration. The request id comes from the
-// logger's handler rather than from an explicit attribute here.
-func Logging(logger *slog.Logger, patterns patternResolver) func(http.Handler) http.Handler {
+// MatchPattern puts the route pattern patterns.Handler returns for the request
+// on the request's context. Middleware inside it reads the pattern with
+// patternFrom instead of matching the request again.
+func MatchPattern(patterns patternResolver) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			_, pattern := patterns.Handler(r)
+			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), patternKey, pattern)))
+		})
+	}
+}
 
+// patternFrom returns the route pattern MatchPattern put on r's context. It is
+// empty when no route matched and when r did not pass through MatchPattern.
+func patternFrom(r *http.Request) string {
+	pattern, _ := r.Context().Value(patternKey).(string)
+	return pattern
+}
+
+// Logging logs one line per request with the method, the route pattern, the
+// status and the duration. The request id comes from the logger's handler
+// rather than from an explicit attribute here.
+func Logging(logger *slog.Logger) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
 			start := time.Now()
 			next.ServeHTTP(rec, r)
 
 			logger.LogAttrs(r.Context(), slog.LevelInfo, "request",
 				slog.String("method", r.Method),
-				slog.String("pattern", pattern),
+				slog.String("pattern", patternFrom(r)),
 				slog.Int("status", rec.status),
 				slog.Duration("duration", time.Since(start)),
 			)

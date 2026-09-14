@@ -100,19 +100,24 @@ func NewSender(keys Keys, client *http.Client) *Sender {
 	return &Sender{keys: keys, client: client}
 }
 
-// sendError wraps err with the scheme and host of the endpoint and leaves out
-// the path. Anyone holding the whole endpoint URL can push to that browser, so
-// it must not reach a log line.
+// serviceOf returns the scheme and host of a push endpoint, or "the push
+// service" when it has no host. It leaves out the path, because anyone holding
+// the whole endpoint URL can push to that browser.
+func serviceOf(endpoint string) string {
+	if parsed, err := url.Parse(endpoint); err == nil && parsed.Host != "" {
+		return parsed.Scheme + "://" + parsed.Host
+	}
+	return "the push service"
+}
+
+// sendError wraps err with the scheme and host of the endpoint. It unwraps a
+// *url.Error first, because that error's message holds the whole URL.
 func sendError(endpoint string, err error) error {
 	var transport *url.Error
 	if errors.As(err, &transport) {
 		err = transport.Err
 	}
-	service := "the push service"
-	if parsed, parseErr := url.Parse(endpoint); parseErr == nil && parsed.Host != "" {
-		service = parsed.Scheme + "://" + parsed.Host
-	}
-	return fmt.Errorf("sending to %s: %w", service, err)
+	return fmt.Errorf("sending to %s: %w", serviceOf(endpoint), err)
 }
 
 // Send delivers n to one subscription. It returns ErrGone when the push

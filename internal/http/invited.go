@@ -263,7 +263,7 @@ func (h *invited) show(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	token := r.PathValue("token")
-	if !open.reenrol() && hasSession(r, h.sessions, h.resolver, h.now()) {
+	if !open.reenrol() && hasSession(w, r, h.sessions, h.resolver, h.now()) {
 		http.Redirect(w, r, acceptPath(token), http.StatusSeeOther)
 		return
 	}

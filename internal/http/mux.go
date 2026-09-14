@@ -257,6 +257,8 @@ var publicRoutes = map[string]bool{
 // New builds sprig's handler. resolver turns a session cookie into a
 // principal. tokens turns a bearer token into one. The middleware order
 // matters. RequestID runs outermost so the id is set before anything logs.
+// MatchPattern is next, because Logging and Authenticate read the route
+// pattern it puts on the context.
 // SecurityHeaders is outside Recover so the 500 a panic produces has the
 // security headers too. Logging wraps Recover so a recovered panic's 500
 // still gets a request line. The cross-origin check is inside Logging and
@@ -296,18 +298,13 @@ func New(logger *slog.Logger, sessions *auth.Sessions, passkeys *auth.Passkeys, 
 		mux.Handle(r.pattern, h)
 	}
 
-	credentials := credentialsFor(table)
-	credentialFor := func(r *http.Request) credential {
-		_, pattern := mux.Handler(r)
-		return credentials[pattern]
-	}
-
 	var handler http.Handler = mux
-	handler = Authenticate(logger, templates, sessions, resolver, credentialFor)(handler)
+	handler = Authenticate(logger, templates, sessions, resolver, credentialsFor(table))(handler)
 	handler = crossOrigin().Handler(handler)
 	handler = Recover(logger, templates)(handler)
-	handler = Logging(logger, mux)(handler)
+	handler = Logging(logger)(handler)
 	handler = SecurityHeaders(handler)
+	handler = MatchPattern(mux)(handler)
 	handler = RequestID(handler)
 	return handler
 }

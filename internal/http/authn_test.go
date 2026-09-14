@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -99,10 +100,10 @@ func sitterPrincipal() auth.Principal {
 }
 
 // protected returns Authenticate over a public route, two routes taking the
-// session cookie and one taking an API token. The returned pointer holds the
-// principal GET /plants saw. The API token route has no requireToken around
-// it, so a request that reaches its handler is one Authenticate let through
-// untouched.
+// session cookie and one taking an API token, with MatchPattern outside it.
+// The returned pointer holds the principal GET /plants saw. The API token route
+// has no requireToken around it, so a request that reaches its handler is one
+// Authenticate let through untouched.
 func protected(t *testing.T, resolver Resolver) (http.Handler, *auth.Principal) {
 	t.Helper()
 
@@ -116,21 +117,13 @@ func protected(t *testing.T, resolver Resolver) (http.Handler, *auth.Principal) 
 	mux.HandleFunc("POST /plants", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusCreated) })
 	mux.HandleFunc("GET /api/plants", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
 
-	credentialFor := func(r *http.Request) credential {
-		_, pattern := mux.Handler(r)
-		switch pattern {
-		case "GET /healthz":
-			return noCredential
-		case "GET /api/plants":
-			return apiToken
-		}
-		return sessionCookie
-	}
+	credentials := map[string]credential{"GET /healthz": noCredential, "GET /api/plants": apiToken}
 	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
-	return Authenticate(logger, testTemplates(), testSessions(), resolver, credentialFor)(mux), &seen
+	return MatchPattern(mux)(Authenticate(logger, testTemplates(), testSessions(), resolver, credentials)(mux)), &seen
 }
 
-func sessionOnly(*http.Request) credential { return sessionCookie }
+// sessionOnly makes every route take the session cookie.
+var sessionOnly = map[string]credential{}
 
 func cookieNamed(t *testing.T, rec *httptest.ResponseRecorder, name string) *http.Cookie {
 	t.Helper()
@@ -188,8 +181,10 @@ func TestAuthenticate_AnUnknownTokenClearsTheCookieAndRedirectsToSignIn(t *testi
 	}
 }
 
-func TestAuthenticate_AValidSessionReachesTheHandlerAndExtendsTheCookie(t *testing.T) {
-	handler, seen := protected(t, acceptEveryToken(sitterPrincipal()))
+func TestAuthenticate_ATouchedSessionReachesTheHandlerAndExtendsTheCookie(t *testing.T) {
+	principal := sitterPrincipal()
+	principal.SessionTouched = true
+	handler, seen := protected(t, acceptEveryToken(principal))
 
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, signedIn(httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/plants", nil)))
@@ -206,6 +201,47 @@ func TestAuthenticate_AValidSessionReachesTheHandlerAndExtendsTheCookie(t *testi
 	cookie := cookieNamed(t, rec, "__Host-sprig_session")
 	if cookie == nil || cookie.Value != testToken || cookie.MaxAge != int(testTTL/time.Second) {
 		t.Errorf("Set-Cookie = %v, want the same token reissued with Max-Age %d", cookie, int(testTTL/time.Second))
+	}
+}
+
+func TestAuthenticate_ASessionWhoseDeadlineDidNotMoveIsNotSentTheCookie(t *testing.T) {
+	handler, _ := protected(t, acceptEveryToken(sitterPrincipal()))
+
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, signedIn(httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/plants", nil)))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	if cookie := cookieNamed(t, rec, "__Host-sprig_session"); cookie != nil {
+		t.Errorf("Set-Cookie = %v, want none for a session whose row was not touched", cookie)
+	}
+}
+
+func TestAuthenticate_ARefusedSessionIsLoggedAtDebugWithoutTheToken(t *testing.T) {
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	expired := failEveryToken(fmt.Errorf("%w: the session expired", auth.ErrNoSession))
+	handler := Authenticate(logger, testTemplates(), testSessions(), expired, sessionOnly)(http.NotFoundHandler())
+
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, signedIn(httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/plants", nil)))
+	if rec.Code != http.StatusSeeOther {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusSeeOther)
+	}
+
+	lines := strings.Split(strings.TrimSpace(buf.String()), "\n")
+	if len(lines) != 1 {
+		t.Fatalf("got %d log lines, want 1: %v", len(lines), lines)
+	}
+	var entry map[string]any
+	if err := json.Unmarshal([]byte(lines[0]), &entry); err != nil {
+		t.Fatalf("log line was not JSON: %v", err)
+	}
+	if entry["level"] != "DEBUG" {
+		t.Errorf("level = %v, want DEBUG", entry["level"])
+	}
+	if strings.Contains(buf.String(), testToken) {
+		t.Error("the log line holds the session token")
 	}
 }
 

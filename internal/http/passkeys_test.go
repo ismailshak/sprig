@@ -136,10 +136,10 @@ func TestPasskeys_RemovingAPasskeyEndsTheSessionsItSignedInAndNoOther(t *testing
 	if removal.Code != http.StatusSeeOther {
 		t.Fatalf("removing: status = %d, want %d:\n%s", removal.Code, http.StatusSeeOther, removal.Body.String())
 	}
-	if _, err := h.sessions.Lookup(t.Context(), now, byPasskey); !errors.Is(err, auth.ErrNoSession) {
+	if _, _, err := h.sessions.Lookup(t.Context(), now, byPasskey); !errors.Is(err, auth.ErrNoSession) {
 		t.Errorf("the session the removed passkey signed in still resolves: err = %v, want %v", err, auth.ErrNoSession)
 	}
-	if _, err := h.sessions.Lookup(t.Context(), now, byDevSignIn); err != nil {
+	if _, _, err := h.sessions.Lookup(t.Context(), now, byDevSignIn); err != nil {
 		t.Errorf("the session with no passkey behind it stopped resolving: %v", err)
 	}
 }

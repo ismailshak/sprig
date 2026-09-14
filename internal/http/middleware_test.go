@@ -55,7 +55,7 @@ func TestLogging_OneLineWithPatternAndStatus(t *testing.T) {
 		w.WriteHeader(http.StatusTeapot)
 	})
 
-	handler := Logging(logger, mux)(mux)
+	handler := MatchPattern(mux)(Logging(logger)(mux))
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/plants/42", nil)
 	handler.ServeHTTP(httptest.NewRecorder(), req)
 

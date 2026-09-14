@@ -92,6 +92,8 @@ Sign-in and account recovery are rate limited per client address. Behind a proxy
 
 The app sends no `Strict-Transport-Security` header. Set HSTS where TLS terminates.
 
+The app gzips static files only. Turn on compression at the proxy for pages.
+
 The Content-Security-Policy allows scripts from the app's origin only. Turn off any proxy feature that injects a script into pages.
 
 ## Configuration

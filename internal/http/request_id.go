@@ -15,6 +15,7 @@ type contextKey int
 const (
 	requestIDKey contextKey = iota
 	principalKey
+	patternKey
 )
 
 // RequestID generates an id for every request, attaches it to the request's

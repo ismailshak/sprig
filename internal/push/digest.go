@@ -103,6 +103,7 @@ func (d *Digest) sendDue(ctx context.Context) (time.Time, error) {
 		if again := member.RemindAgainAt; again != nil {
 			switch {
 			case again.After(now):
+				d.logger.Debug("digest again not due", "user", member.Handle, "garden", member.GardenName, "at", *again)
 				soonest(*again)
 			default:
 				err := d.sendAgain(ctx, member, loc, *again, now)
@@ -122,6 +123,7 @@ func (d *Digest) sendDue(ctx context.Context) (time.Time, error) {
 				"date", skipped.In(loc).Format(dateKey), "late", now.Sub(skipped).Truncate(time.Second))
 		}
 		if at.After(now) {
+			d.logger.Debug("digest not due", "user", member.Handle, "garden", member.GardenName, "at", at)
 			soonest(at)
 			continue
 		}
@@ -158,6 +160,7 @@ func (d *Digest) send(ctx context.Context, member store.ListDigestMembersRow, lo
 			return fmt.Errorf("claiming the send: %w", err)
 		}
 		if claimed == 0 {
+			d.logger.Debug("digest already sent", "user", member.Handle, "garden", member.GardenName, "date", key)
 			return nil
 		}
 
@@ -206,6 +209,7 @@ func (d *Digest) sendAgain(ctx context.Context, member store.ListDigestMembersRo
 			return fmt.Errorf("claiming the send: %w", err)
 		}
 		if claimed == 0 {
+			d.logger.Debug("digest again already sent", "user", member.Handle, "garden", member.GardenName, "at", at)
 			return nil
 		}
 		if now.Sub(again) >= maxLate {

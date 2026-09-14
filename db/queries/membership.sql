@@ -1,7 +1,12 @@
--- Runs on every authenticated request, so one join fetches all three rows in a
--- single round trip.
+-- Returns the membership, the account, the garden and the role's capabilities
+-- in one round trip, because it runs on every signed-in request. The
+-- capabilities are not cached, so a row added to role_capability takes effect
+-- on the next request.
 -- name: GetMembershipWithUserAndGarden :one
-SELECT sqlc.embed(membership), sqlc.embed(app_user), sqlc.embed(garden)
+SELECT sqlc.embed(membership), sqlc.embed(app_user), sqlc.embed(garden),
+    ARRAY(SELECT role_capability.capability FROM role_capability
+        WHERE role_capability.role = membership.role
+        ORDER BY role_capability.capability)::text[] AS capabilities
 FROM membership
 JOIN app_user ON app_user.id = membership.user_id
 JOIN garden ON garden.id = membership.garden_id

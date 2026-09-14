@@ -78,7 +78,7 @@ func TestSessions_ATokenResolvesFromTheTableAlone(t *testing.T) {
 	}
 
 	restarted := NewSessions(store.New(tx), testTTL, testCookie)
-	got, err := restarted.Lookup(ctx, signedInAt.Add(time.Minute), token)
+	got, _, err := restarted.Lookup(ctx, signedInAt.Add(time.Minute), token)
 	if err != nil {
 		t.Fatalf("Lookup through a second Sessions: %v", err)
 	}
@@ -97,7 +97,7 @@ func TestSessions_ATokenResolvesFromTheTableAlone(t *testing.T) {
 func TestSessions_AnUnknownTokenIsNoSession(t *testing.T) {
 	sessions, _ := sessionsOnTx(t)
 
-	_, err := sessions.Lookup(t.Context(), signedInAt, NewSessionToken())
+	_, _, err := sessions.Lookup(t.Context(), signedInAt, NewSessionToken())
 	if !errors.Is(err, ErrNoSession) {
 		t.Fatalf("Lookup of a token never issued = %v, want ErrNoSession", err)
 	}
@@ -113,7 +113,7 @@ func TestSessions_LookupMovesTheDeadlineForward(t *testing.T) {
 	}
 
 	dayTwentyNine := signedInAt.AddDate(0, 0, 29)
-	got, err := sessions.Lookup(ctx, dayTwentyNine, token)
+	got, _, err := sessions.Lookup(ctx, dayTwentyNine, token)
 	if err != nil {
 		t.Fatalf("Lookup on day 29: %v", err)
 	}
@@ -126,8 +126,68 @@ func TestSessions_LookupMovesTheDeadlineForward(t *testing.T) {
 
 	// Day 45 is past the TTL counted from sign-in but inside it counted from
 	// the day 29 lookup.
-	if _, err := sessions.Lookup(ctx, signedInAt.AddDate(0, 0, 45), token); err != nil {
+	if _, _, err := sessions.Lookup(ctx, signedInAt.AddDate(0, 0, 45), token); err != nil {
 		t.Errorf("Lookup on day 45, sixteen days after the last use: %v", err)
+	}
+}
+
+func TestSessions_ALookupWithinTheTouchIntervalLeavesLastSeenAtUnchanged(t *testing.T) {
+	ctx := t.Context()
+	sessions, tx := sessionsOnTx(t)
+
+	token, _, err := sessions.Create(ctx, signedInAt, testUserID, &testGardenID, nil, "")
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	got, touched, err := sessions.Lookup(ctx, signedInAt.Add(touchInterval-time.Second), token)
+	if err != nil {
+		t.Fatalf("Lookup: %v", err)
+	}
+	if touched || !got.LastSeenAt.Equal(signedInAt) {
+		t.Errorf("Lookup returned touched = %v and last seen %s, want false and %s", touched, got.LastSeenAt, signedInAt)
+	}
+
+	var stored time.Time
+	if err := tx.QueryRow(ctx, "SELECT last_seen_at FROM session WHERE token_hash = $1", HashToken(token)).Scan(&stored); err != nil {
+		t.Fatalf("reading the row: %v", err)
+	}
+	if !stored.Equal(signedInAt) {
+		t.Errorf("the row's last_seen_at = %s, want it left at %s", stored, signedInAt)
+	}
+}
+
+func TestSessions_ALookupAtTheTouchIntervalMovesTheDeadline(t *testing.T) {
+	ctx := t.Context()
+	sessions, _ := sessionsOnTx(t)
+
+	token, _, err := sessions.Create(ctx, signedInAt, testUserID, &testGardenID, nil, "")
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	at := signedInAt.Add(touchInterval)
+	got, touched, err := sessions.Lookup(ctx, at, token)
+	if err != nil {
+		t.Fatalf("Lookup: %v", err)
+	}
+	if !touched || !got.LastSeenAt.Equal(at) {
+		t.Errorf("Lookup returned touched = %v and last seen %s, want true and %s", touched, got.LastSeenAt, at)
+	}
+}
+
+// A one-minute TTL is shorter than the touch interval.
+func TestSessions_ASessionUsedEveryTenSecondsUnderAOneMinuteTTLStaysLive(t *testing.T) {
+	ctx := t.Context()
+	_, tx := sessionsOnTx(t)
+	sessions := NewSessions(store.New(tx), time.Minute, testCookie)
+
+	token, _, err := sessions.Create(ctx, signedInAt, testUserID, &testGardenID, nil, "")
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	for at := signedInAt.Add(10 * time.Second); at.Before(signedInAt.Add(5 * time.Minute)); at = at.Add(10 * time.Second) {
+		if _, _, err := sessions.Lookup(ctx, at, token); err != nil {
+			t.Fatalf("Lookup %s after sign-in: %v", at.Sub(signedInAt), err)
+		}
 	}
 }
 
@@ -139,7 +199,7 @@ func TestSessions_AClockEarlierThanTheRowDoesNotMoveTheDeadlineBack(t *testing.T
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
-	got, err := sessions.Lookup(ctx, signedInAt.Add(-time.Hour), token)
+	got, _, err := sessions.Lookup(ctx, signedInAt.Add(-time.Hour), token)
 	if err != nil {
 		t.Fatalf("Lookup: %v", err)
 	}
@@ -157,7 +217,7 @@ func TestSessions_AnExpiredSessionIsRefusedAndItsRowDeleted(t *testing.T) {
 		t.Fatalf("Create: %v", err)
 	}
 
-	_, err = sessions.Lookup(ctx, signedInAt.Add(testTTL), token)
+	_, _, err = sessions.Lookup(ctx, signedInAt.Add(testTTL), token)
 	if !errors.Is(err, ErrNoSession) {
 		t.Fatalf("Lookup at the deadline = %v, want ErrNoSession", err)
 	}
@@ -170,7 +230,7 @@ func TestSessions_AnExpiredSessionIsRefusedAndItsRowDeleted(t *testing.T) {
 		t.Errorf("the expired row is still there")
 	}
 
-	if _, err := sessions.Lookup(ctx, signedInAt, token); !errors.Is(err, ErrNoSession) {
+	if _, _, err := sessions.Lookup(ctx, signedInAt, token); !errors.Is(err, ErrNoSession) {
 		t.Errorf("Lookup after expiry with an earlier clock = %v, want ErrNoSession", err)
 	}
 }
@@ -186,7 +246,7 @@ func TestSessions_DeleteEndsTheSessionServerSide(t *testing.T) {
 	if err := sessions.Delete(ctx, token); err != nil {
 		t.Fatalf("Delete: %v", err)
 	}
-	if _, err := sessions.Lookup(ctx, signedInAt.Add(time.Minute), token); !errors.Is(err, ErrNoSession) {
+	if _, _, err := sessions.Lookup(ctx, signedInAt.Add(time.Minute), token); !errors.Is(err, ErrNoSession) {
 		t.Fatalf("Lookup after Delete = %v, want ErrNoSession", err)
 	}
 	if err := sessions.Delete(ctx, token); err != nil {
@@ -212,10 +272,10 @@ func TestSessions_DeleteEndsOneSessionAndLeavesTheOthers(t *testing.T) {
 	if err := sessions.Delete(ctx, phone); err != nil {
 		t.Fatalf("Delete: %v", err)
 	}
-	if _, err := sessions.Lookup(ctx, signedInAt.Add(time.Minute), phone); !errors.Is(err, ErrNoSession) {
+	if _, _, err := sessions.Lookup(ctx, signedInAt.Add(time.Minute), phone); !errors.Is(err, ErrNoSession) {
 		t.Errorf("Lookup of the deleted session = %v, want ErrNoSession", err)
 	}
-	got, err := sessions.Lookup(ctx, signedInAt.Add(time.Minute), laptop)
+	got, _, err := sessions.Lookup(ctx, signedInAt.Add(time.Minute), laptop)
 	if err != nil {
 		t.Fatalf("Lookup of the other session after Delete: %v", err)
 	}
