@@ -658,13 +658,39 @@ func TestInvited_OpeningAnInviteLinkAnHourAfterTheLastRequestSetsTheSessionCooki
 // request to an invite route goes through the rate limiters the route table
 // wraps it in. The trusted header is empty, so an address is the request's
 // RemoteAddr.
+func invitedMux(t *testing.T, f *invitedFixture) http.Handler {
+	t.Helper()
+	return New(invitedDependencies(t, f))
+}
+
+// invitedDependencies returns the Dependencies for New over the fixture's
+// transaction, with the fixture's session resolver.
 //
 // New builds its handlers on time.Now, not the fixture's Thursday, so the
 // sitter's invite gets an expiry and an access end counted from now.
-func invitedMux(t *testing.T, f *invitedFixture) http.Handler {
+func invitedDependencies(t *testing.T, f *invitedFixture) Dependencies {
 	t.Helper()
 	f.exec(t, `UPDATE invite SET expires_at = now() + interval '7 days', membership_expires_at = now() + interval '14 days' WHERE token_hash = $1`, auth.HashToken(sitterLink))
-	return New(testLogger, f.handler.sessions, f.handler.passkeys, rejectEveryToken, noLiveToken, f.queries, testPhotos(t), testTemplates(), testAssets(), "", false, testPushKey, nil, nil, nil, nil)
+	deps := testDependencies(t)
+	deps.Sessions = f.handler.sessions
+	deps.Passkeys = f.handler.passkeys
+	deps.Resolver = f.handler.resolver
+	deps.Queries = f.queries
+	return deps
+}
+
+// The cookie matches no session row. Only the resolver passed to New accepts
+// it, so a page that reads the session any other way renders the join form.
+func TestNew_AJoinLinkRedirectsASignedInBrowserToAcceptTheInvite(t *testing.T) {
+	f := invitedGarden(t)
+	deps := invitedDependencies(t, f)
+	deps.Resolver = acceptEveryToken(noGardenPrincipal())
+	rec := httptest.NewRecorder()
+	New(deps).ServeHTTP(rec, signedIn(httptest.NewRequestWithContext(t.Context(), http.MethodGet, InvitedPath(sitterLink), nil)))
+
+	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != acceptPath(sitterLink) {
+		t.Errorf("got %d to %q, want %d to %s", rec.Code, rec.Header().Get("Location"), http.StatusSeeOther, acceptPath(sitterLink))
+	}
 }
 
 // postFrom posts form to path from address through handler.

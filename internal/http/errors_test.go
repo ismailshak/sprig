@@ -16,8 +16,9 @@ func browsing(r *http.Request) *http.Request {
 }
 
 func TestNotFound_ABrowserOnAnUnknownPathGetsThePageNotFoundPage(t *testing.T) {
-	app := New(testLogger, testSessions(), testPasskeys(), acceptEveryToken(memberWith(everyCapability())), noLiveToken, nil,
-		testPhotos(t), testTemplates(), testAssets(), "", false, testPushKey, nil, nil, nil, nil)
+	deps := testDependencies(t)
+	deps.Resolver = acceptEveryToken(memberWith(everyCapability()))
+	app := New(deps)
 	rec := httptest.NewRecorder()
 	app.ServeHTTP(rec, browsing(signedIn(httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/nope", nil))))
 
@@ -44,8 +45,9 @@ func errorPageText(body string) string {
 }
 
 func TestNotFound_ARequestThatIsNotABrowserNavigationReadsOneLineOfText(t *testing.T) {
-	app := New(testLogger, testSessions(), testPasskeys(), acceptEveryToken(memberWith(everyCapability())), noLiveToken, nil,
-		testPhotos(t), testTemplates(), testAssets(), "", false, testPushKey, nil, nil, nil, nil)
+	deps := testDependencies(t)
+	deps.Resolver = acceptEveryToken(memberWith(everyCapability()))
+	app := New(deps)
 	for name, prepare := range map[string]func(*http.Request){
 		"no Accept header": func(*http.Request) {},
 		"htmx": func(r *http.Request) {
@@ -71,8 +73,9 @@ func TestNotFound_ARequestThatIsNotABrowserNavigationReadsOneLineOfText(t *testi
 }
 
 func TestBadRequest_ABrowserPostingAFormThatCannotBeParsedReadsTheErrorPage(t *testing.T) {
-	app := New(testLogger, testSessions(), testPasskeys(), acceptEveryToken(memberWith(everyCapability())), noLiveToken, nil,
-		testPhotos(t), testTemplates(), testAssets(), "", false, testPushKey, nil, nil, nil, nil)
+	deps := testDependencies(t)
+	deps.Resolver = acceptEveryToken(memberWith(everyCapability()))
+	app := New(deps)
 	// %zz is not a percent-encoding, so ParseForm refuses the body.
 	req := browsing(signedIn(httptest.NewRequestWithContext(t.Context(), http.MethodPost, accountPath, strings.NewReader("display_name=%zz"))))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")

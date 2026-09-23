@@ -74,7 +74,13 @@ func TestHandle_ADisplayNameWithNoLetterOrDigitIsSuggestedAsGardener(t *testing.
 // limiters are in front of it.
 func handleMux(t *testing.T, f *setupFixture) http.Handler {
 	t.Helper()
-	return New(testLogger, f.handler.sessions, f.handler.passkeys, rejectEveryToken, noLiveToken, f.queries, testPhotos(t), testTemplates(), testAssets(), "", true, testPushKey, nil, nil, nil, nil)
+	deps := testDependencies(t)
+	deps.Sessions = f.handler.sessions
+	deps.Passkeys = f.handler.passkeys
+	deps.Resolver = f.handler.resolver
+	deps.Queries = f.queries
+	deps.SignupEnabled = true
+	return New(deps)
 }
 
 func TestHandle_TheThirtyFirstSuggestionInAMinuteFromOneAddressIsRefused(t *testing.T) {

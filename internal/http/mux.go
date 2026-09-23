@@ -37,35 +37,64 @@ type route struct {
 
 type middleware func(http.Handler) http.Handler
 
+// Dependencies is what New builds the handler from. Wake, NotifyActivity,
+// NotifyUser and SendTest are nil and PushKey is empty when push is off.
+type Dependencies struct {
+	Logger   *slog.Logger
+	Sessions *auth.Sessions
+	Passkeys *auth.Passkeys
+	// Resolver turns a session cookie into the principal signed in with it.
+	// Every route that reads the session cookie uses it, including the Set up
+	// your garden page and the page an invite link opens.
+	Resolver Resolver
+	// Tokens turns an API token in the Authorization header into a principal.
+	Tokens    Resolver
+	Queries   *store.Queries
+	Photos    *photo.Store
+	Templates *Templates
+	Assets    *Assets
+	// TrustedIPHeader is the header a reverse proxy puts the client address
+	// in. Empty means RemoteAddr is the client address.
+	TrustedIPHeader string
+	// SignupEnabled is true when Set up your garden is served on an install
+	// that already has an account.
+	SignupEnabled bool
+	// PushKey is the VAPID public key the Notifications page gives the
+	// browser.
+	PushKey string
+	// Wake has the digest and deadlines jobs work out their next send again.
+	Wake func()
+	// NotifyActivity sends the garden's other members a push notification
+	// about care someone has just logged.
+	NotifyActivity func(ctx context.Context, gardenID, actorID uuid.UUID, n push.Notification)
+	// NotifyUser sends one person a notification about their access or their
+	// garden.
+	NotifyUser func(ctx context.Context, user store.AppUser, n push.Notification)
+	// SendTest sends the Notifications page's test message to one browser.
+	SendTest func(ctx context.Context, subscription store.PushSubscription, n push.Notification) error
+}
+
 // routes is every route the server has. New registers from this slice and the
 // enforcement test walks it, because http.ServeMux does not list its patterns
 // and a route registered directly on the mux would be one the test cannot see.
 // devRoutes is what a development build adds, and empty otherwise.
-// signupEnabled is SPRIG_SIGNUP_ENABLED, whether Set up your garden is served
-// on an install that already has an account. pushKey is the VAPID public key
-// the Notifications page gives the browser. It is empty when push is off.
-// test sends that page's test message to one browser. It is nil when push is
-// off.
-func routes(logger *slog.Logger, sessions *auth.Sessions, passkeys *auth.Passkeys, queries *store.Queries, photos *photo.Store, templates *Templates, assets *Assets, trustedIPHeader string, signupEnabled bool, pushKey string, wake wakeJobs, notify notifyActivity, notifyOne notifyUser, test sendTest) []route {
-	todayHandler := &today{logger: logger, queries: queries, templates: templates, now: time.Now, notify: notify, wake: wake, pushKey: pushKey}
-	plantsHandler := &plants{logger: logger, queries: queries, photos: photos, templates: templates, now: time.Now, notify: notifyOne}
-	activityHandler := &activity{logger: logger, queries: queries, templates: templates, now: time.Now}
-	choresHandler := &chores{logger: logger, queries: queries, templates: templates, now: time.Now}
-	// The setup and invite pages use the resolver to tell whether the browser
-	// is already signed in.
-	resolver := auth.NewResolver(sessions, queries)
-	passkeyHandler := &passkeyCeremony{logger: logger, passkeys: passkeys, sessions: sessions, queries: queries, templates: templates, now: time.Now}
-	moreHandler := &more{logger: logger, sessions: sessions, queries: queries, photos: photos, templates: templates, build: build.Read(), now: time.Now, pushKey: pushKey, wake: wake, notify: notifyOne, test: test}
-	setupHandler := &setup{logger: logger, passkeys: passkeys, sessions: sessions, resolver: resolver, queries: queries, templates: templates, now: time.Now, enabled: signupEnabled, wake: wake, pushKey: pushKey}
-	invitedHandler := &invited{logger: logger, passkeys: passkeys, sessions: sessions, resolver: resolver, queries: queries, templates: templates, now: time.Now, wake: wake, notify: notifyOne}
-	recoverHandler := &recoverAccount{logger: logger, passkeys: passkeys, queries: queries, templates: templates, now: time.Now}
-	handleHandler := &handleSuggestions{queries: queries, templates: templates, logger: logger}
-	recoverLimit := newRecoverLimits(trustedIPHeader)
+func routes(d Dependencies) []route {
+	todayHandler := &today{logger: d.Logger, queries: d.Queries, templates: d.Templates, now: time.Now, notify: d.NotifyActivity, wake: d.Wake, pushKey: d.PushKey}
+	plantsHandler := &plants{logger: d.Logger, queries: d.Queries, photos: d.Photos, templates: d.Templates, now: time.Now, notify: d.NotifyUser}
+	activityHandler := &activity{logger: d.Logger, queries: d.Queries, templates: d.Templates, now: time.Now}
+	choresHandler := &chores{logger: d.Logger, queries: d.Queries, templates: d.Templates, now: time.Now}
+	passkeyHandler := &passkeyCeremony{logger: d.Logger, passkeys: d.Passkeys, sessions: d.Sessions, queries: d.Queries, templates: d.Templates, now: time.Now}
+	moreHandler := &more{logger: d.Logger, sessions: d.Sessions, queries: d.Queries, photos: d.Photos, templates: d.Templates, build: build.Read(), now: time.Now, pushKey: d.PushKey, wake: d.Wake, notify: d.NotifyUser, test: d.SendTest}
+	setupHandler := &setup{logger: d.Logger, passkeys: d.Passkeys, sessions: d.Sessions, resolver: d.Resolver, queries: d.Queries, templates: d.Templates, now: time.Now, enabled: d.SignupEnabled, wake: d.Wake, pushKey: d.PushKey}
+	invitedHandler := &invited{logger: d.Logger, passkeys: d.Passkeys, sessions: d.Sessions, resolver: d.Resolver, queries: d.Queries, templates: d.Templates, now: time.Now, wake: d.Wake, notify: d.NotifyUser}
+	recoverHandler := &recoverAccount{logger: d.Logger, passkeys: d.Passkeys, queries: d.Queries, templates: d.Templates, now: time.Now}
+	handleHandler := &handleSuggestions{queries: d.Queries, templates: d.Templates, logger: d.Logger}
+	recoverLimit := newRecoverLimits(d.TrustedIPHeader)
 	base := []route{
 		{pattern: healthzPattern, handler: http.HandlerFunc(handleHealthz)},
-		{pattern: assetPattern, handler: assets.handler()},
-		{pattern: "GET " + serviceWorkerPath, handler: http.HandlerFunc(newServiceWorker(assets, templates).serve)},
-		{pattern: "GET " + offlinePath, handler: offline(templates)},
+		{pattern: assetPattern, handler: d.Assets.handler()},
+		{pattern: "GET " + serviceWorkerPath, handler: http.HandlerFunc(newServiceWorker(d.Assets, d.Templates).serve)},
+		{pattern: "GET " + offlinePath, handler: offline(d.Templates)},
 		{pattern: "GET /{$}", handler: http.HandlerFunc(todayHandler.show)},
 		{pattern: "POST " + RemindAgainPath, handler: http.HandlerFunc(todayHandler.remindAgain)},
 		{pattern: "GET /plants", handler: http.HandlerFunc(plantsHandler.show)},
@@ -113,18 +142,18 @@ func routes(logger *slog.Logger, sessions *auth.Sessions, passkeys *auth.Passkey
 		{pattern: "POST " + registerPath, handler: http.HandlerFunc(passkeyHandler.registerChallenge)},
 		{pattern: "POST " + passkeysPath, handler: http.HandlerFunc(passkeyHandler.register)},
 		{pattern: "GET " + signInPath, handler: http.HandlerFunc(passkeyHandler.showSignIn)},
-		{pattern: "POST " + challengePath, limits: signInLimits(trustedIPHeader, http.HandlerFunc(tooManySignInChallenges)), handler: http.HandlerFunc(passkeyHandler.signInChallenge)},
-		{pattern: "POST " + signInPath, limits: signInLimits(trustedIPHeader, http.HandlerFunc(passkeyHandler.tooManySignInAnswers)), handler: http.HandlerFunc(passkeyHandler.signIn)},
+		{pattern: "POST " + challengePath, limits: signInLimits(d.TrustedIPHeader, http.HandlerFunc(tooManySignInChallenges)), handler: http.HandlerFunc(passkeyHandler.signInChallenge)},
+		{pattern: "POST " + signInPath, limits: signInLimits(d.TrustedIPHeader, http.HandlerFunc(passkeyHandler.tooManySignInAnswers)), handler: http.HandlerFunc(passkeyHandler.signIn)},
 		{pattern: "GET " + setupPath, handler: http.HandlerFunc(setupHandler.show)},
 		{pattern: "POST " + setupChallengePath, handler: http.HandlerFunc(setupHandler.challenge)},
 		{pattern: "POST " + setupPath, handler: http.HandlerFunc(setupHandler.create)},
-		{pattern: "GET " + handlePath, limits: handleLimits(trustedIPHeader), handler: http.HandlerFunc(handleHandler.suggest)},
+		{pattern: "GET " + handlePath, limits: handleLimits(d.TrustedIPHeader), handler: http.HandlerFunc(handleHandler.suggest)},
 		{pattern: "GET " + setupSignedInPath, withoutGarden: true, handler: http.HandlerFunc(setupHandler.showSignedIn)},
 		{pattern: "POST " + setupSignedInPath, withoutGarden: true, handler: http.HandlerFunc(setupHandler.createSignedIn)},
 		{pattern: "GET " + remindersPath, handler: http.HandlerFunc(setupHandler.reminders)},
 		{pattern: "GET " + invitedPattern, handler: http.HandlerFunc(invitedHandler.show)},
-		{pattern: "POST " + invitedPattern + "/challenge", limits: inviteLimits(trustedIPHeader, http.HandlerFunc(tooManyChallenges)), handler: http.HandlerFunc(invitedHandler.challenge)},
-		{pattern: "POST " + invitedPattern, limits: inviteLimits(trustedIPHeader, http.HandlerFunc(invitedHandler.tooManyAnswers)), handler: http.HandlerFunc(invitedHandler.redeem)},
+		{pattern: "POST " + invitedPattern + "/challenge", limits: inviteLimits(d.TrustedIPHeader, http.HandlerFunc(tooManyChallenges)), handler: http.HandlerFunc(invitedHandler.challenge)},
+		{pattern: "POST " + invitedPattern, limits: inviteLimits(d.TrustedIPHeader, http.HandlerFunc(invitedHandler.tooManyAnswers)), handler: http.HandlerFunc(invitedHandler.redeem)},
 		{pattern: "GET " + recoverPath, handler: http.HandlerFunc(recoverHandler.show)},
 		{pattern: "POST " + recoverPath, limits: recoverLimit.around(http.HandlerFunc(recoverHandler.tooManyCodes)), handler: http.HandlerFunc(recoverHandler.check)},
 		{pattern: "POST " + recoverChallengePath, limits: recoverLimit.around(http.HandlerFunc(tooManyRecoveryChallenges)), handler: http.HandlerFunc(recoverHandler.challenge)},
@@ -164,9 +193,9 @@ func routes(logger *slog.Logger, sessions *auth.Sessions, passkeys *auth.Passkey
 		{pattern: "POST " + TokensPath + "/{token}/revoke", capability: auth.TokenManage, handler: http.HandlerFunc(moreHandler.revokeToken)},
 		{pattern: "GET " + choresPath, bearer: true, limits: choresLimits(), handler: http.HandlerFunc(choresHandler.show)},
 		// Every path no other route matches.
-		{pattern: "/", withoutGarden: true, handler: http.HandlerFunc(templates.notFound)},
+		{pattern: "/", withoutGarden: true, handler: http.HandlerFunc(d.Templates.notFound)},
 	}
-	return append(base, devRoutes(sessions, queries, templates)...)
+	return append(base, devRoutes(d.Sessions, d.Queries, d.Templates)...)
 }
 
 // signInLimits returns the rate limiters wrapped around one of the two sign-in
@@ -255,41 +284,34 @@ var publicRoutes = map[string]bool{
 	"POST " + recoverPasskeyPath:   true,
 }
 
-// New builds sprig's handler. resolver turns a session cookie into a
-// principal. tokens turns a bearer token into one. The middleware order
-// matters. RequestID runs outermost so the id is set before anything logs.
-// MatchPattern is next, because Logging and Authenticate read the route
-// pattern it puts on the context.
-// SecurityHeaders is outside Recover so the 500 a panic produces has the
-// security headers too. Logging wraps Recover so a recovered panic's 500
+// New builds sprig's handler. The middleware order matters. RequestID runs
+// outermost so the id is set before anything logs. MatchPattern is next,
+// because Logging and Authenticate read the route pattern it puts on the
+// context. SecurityHeaders is outside Recover so the 500 a panic produces has
+// the security headers too. Logging wraps Recover so a recovered panic's 500
 // still gets a request line. The cross-origin check is inside Logging and
 // Recover so a refused request is logged like any other. Authentication is
 // inside that so a cross-site post is refused before it costs a session
-// lookup. wake is called after a handler commits a change to what the two
-// push jobs send and when. notify is called after a handler records care, to
-// send the garden's other members a push notification about it. notifyUser
-// sends one person a notification about their access or their garden. test
-// sends the Notifications page's test message to one browser. All four are
-// nil when push is off.
-func New(logger *slog.Logger, sessions *auth.Sessions, passkeys *auth.Passkeys, resolver, tokens Resolver, queries *store.Queries, photos *photo.Store, templates *Templates, assets *Assets, trustedIPHeader string, signupEnabled bool, pushKey string, wake func(), notify func(ctx context.Context, gardenID, actorID uuid.UUID, n push.Notification), notifyUser func(ctx context.Context, user store.AppUser, n push.Notification), test func(ctx context.Context, subscription store.PushSubscription, n push.Notification) error) http.Handler {
+// lookup.
+func New(d Dependencies) http.Handler {
 	mux := http.NewServeMux()
-	table := routes(logger, sessions, passkeys, queries, photos, templates, assets, trustedIPHeader, signupEnabled, pushKey, wake, notify, notifyUser, test)
+	table := routes(d)
 	for _, r := range table {
 		h := r.handler
 		if r.capability != "" {
-			h = require(r.capability, templates, h)
+			h = require(r.capability, d.Templates, h)
 		}
 		// The garden check goes outside the capability check. An account
 		// in no garden has no capabilities, so the capability check would
 		// return 404 before this page could be rendered.
 		if !publicRoutes[r.pattern] && !r.withoutGarden {
-			h = requireGarden(templates, signupEnabled, h)
+			h = requireGarden(d.Templates, d.SignupEnabled, h)
 		}
 		// The token lookup goes outside the garden check because the token is
 		// where the garden comes from. It goes inside the limiters so a request
 		// past the budget costs no lookup.
 		if r.bearer {
-			h = requireToken(logger, templates, tokens, h)
+			h = requireToken(d.Logger, d.Templates, d.Tokens, h)
 		}
 		// Wrapping backwards leaves limits[0] outermost, so a request already
 		// refused by the per-address budget spends nothing from the shared one.
@@ -300,10 +322,10 @@ func New(logger *slog.Logger, sessions *auth.Sessions, passkeys *auth.Passkeys, 
 	}
 
 	var handler http.Handler = mux
-	handler = Authenticate(logger, templates, sessions, resolver, credentialsFor(table))(handler)
+	handler = Authenticate(d.Logger, d.Templates, d.Sessions, d.Resolver, credentialsFor(table))(handler)
 	handler = crossOrigin().Handler(handler)
-	handler = Recover(logger, templates)(handler)
-	handler = Logging(logger)(handler)
+	handler = Recover(d.Logger, d.Templates)(handler)
+	handler = Logging(d.Logger)(handler)
 	handler = SecurityHeaders(handler)
 	handler = MatchPattern(mux)(handler)
 	handler = RequestID(handler)

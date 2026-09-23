@@ -4,8 +4,6 @@ package http
 
 import (
 	"errors"
-	"io"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -63,12 +61,16 @@ func devStack(t *testing.T) (http.Handler, *auth.Resolver) {
 	queries := store.New(tx)
 	sessions := auth.NewSessions(queries, testTTL, auth.CookieSettings{Name: "__Host-sprig_session", Secure: true})
 	resolver := auth.NewResolver(sessions, queries)
-	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
 	passkeys, err := auth.NewPasskeys(queries, "localhost", "sprig", "http://localhost:8080", auth.CookieSettings{Name: "__Host-sprig_session", Secure: true})
 	if err != nil {
 		t.Fatalf("building the passkeys: %v", err)
 	}
-	return New(logger, sessions, passkeys, resolver, noLiveToken, queries, testPhotos(t), testTemplates(), testAssets(), "", false, testPushKey, nil, nil, nil, nil), resolver
+	deps := testDependencies(t)
+	deps.Sessions = sessions
+	deps.Passkeys = passkeys
+	deps.Resolver = resolver
+	deps.Queries = queries
+	return New(deps), resolver
 }
 
 func postHandle(t *testing.T, handler http.Handler, handle string, cookie *http.Cookie) *httptest.ResponseRecorder {

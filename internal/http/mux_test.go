@@ -3,7 +3,6 @@ package http
 import (
 	"bytes"
 	"encoding/json"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -12,8 +11,8 @@ import (
 )
 
 func TestNew_HealthzOK(t *testing.T) {
-	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
-	handler := New(logger, testSessions(), testPasskeys(), rejectEveryToken, noLiveToken, nil, testPhotos(t), testTemplates(), testAssets(), "", false, testPushKey, nil, nil, nil, nil)
+	deps := testDependencies(t)
+	handler := New(deps)
 
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/healthz", nil))
@@ -43,7 +42,9 @@ func TestNew_HealthzOK(t *testing.T) {
 func TestNew_TheRequestLogLineIncludesTheRequestID(t *testing.T) {
 	var buf bytes.Buffer
 	logger := slog.New(NewContextHandler(slog.NewJSONHandler(&buf, nil)))
-	handler := New(logger, testSessions(), testPasskeys(), rejectEveryToken, noLiveToken, nil, testPhotos(t), testTemplates(), testAssets(), "", false, testPushKey, nil, nil, nil, nil)
+	deps := testDependencies(t)
+	deps.Logger = logger
+	handler := New(deps)
 
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, offlinePath, nil))
@@ -72,8 +73,9 @@ func TestNew_TheRequestLogLineIncludesTheRequestID(t *testing.T) {
 
 // A stranger cannot tell a path that exists from one that does not.
 func TestNew_UnknownRouteIsSignInForAStrangerAndNotFoundForAMember(t *testing.T) {
-	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
-	handler := New(logger, testSessions(), testPasskeys(), acceptEveryToken(sitterPrincipal()), noLiveToken, nil, testPhotos(t), testTemplates(), testAssets(), "", false, testPushKey, nil, nil, nil, nil)
+	deps := testDependencies(t)
+	deps.Resolver = acceptEveryToken(sitterPrincipal())
+	handler := New(deps)
 
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/nope", nil))
@@ -90,8 +92,8 @@ func TestNew_UnknownRouteIsSignInForAStrangerAndNotFoundForAMember(t *testing.T)
 
 // GET is not checked because no GET route changes state.
 func TestNew_RefusesAnUnsafeMethodFromAnotherOrigin(t *testing.T) {
-	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
-	handler := New(logger, testSessions(), testPasskeys(), rejectEveryToken, noLiveToken, nil, testPhotos(t), testTemplates(), testAssets(), "", false, testPushKey, nil, nil, nil, nil)
+	deps := testDependencies(t)
+	handler := New(deps)
 
 	// The requests have no cookie, so an accepted one reaches the session
 	// check and is redirected to sign in. A refused one is a 403 before that.
@@ -150,5 +152,18 @@ func TestCredentialsFor_ABearerRouteTakesTheAPITokenAndEveryOtherRouteTheSession
 	}
 	if got := credentials["GET /plants"]; got != sessionCookie {
 		t.Errorf("the route flagged neither takes credential %d, want the session cookie", got)
+	}
+}
+
+// Queries is nil, so only the resolver passed to New can accept the cookie.
+func TestNew_SetUpYourGardenRedirectsASignedInBrowserToTheSignedInForm(t *testing.T) {
+	deps := testDependencies(t)
+	deps.Resolver = acceptEveryToken(noGardenPrincipal())
+	deps.SignupEnabled = true
+	rec := httptest.NewRecorder()
+	New(deps).ServeHTTP(rec, signedIn(httptest.NewRequestWithContext(t.Context(), http.MethodGet, setupPath, nil)))
+
+	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != setupSignedInPath {
+		t.Errorf("got %d to %q, want %d to %s", rec.Code, rec.Header().Get("Location"), http.StatusSeeOther, setupSignedInPath)
 	}
 }
