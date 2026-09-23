@@ -5,36 +5,13 @@
   </picture>
 </p>
 
-A plant care tracker. One Go binary and a Postgres database. Sign-in is by passkey.
+Sprig is a plant care tracker, with sitters who can log care while you're away. It manages watering, feeding, repotting and custom care types. Sign-in is by passkey only.
 
-## Running it yourself
+## Self-hosting
 
-You need the image, a Postgres and a directory for photos.
+Sprig runs as a container image, `ghcr.io/ismailshak/sprig`, and needs a Postgres database.
 
-- The image is `ghcr.io/ismailshak/sprig`. Pin a version such as `0.1.0`. `latest` is the newest release and `main` is every merge.
-- The app serves plain HTTP. Put TLS in front of it. Passkeys need an https origin.
-- The container runs as user 65532 and writes photos to `SPRIG_PHOTO_DIR`. Make the mounted directory writable by that user.
-
-### With docker run
-
-```sh
-docker network create sprig
-
-docker run -d --name sprig-db --network sprig \
-  -e POSTGRES_USER=sprig -e POSTGRES_PASSWORD=change-me -e POSTGRES_DB=sprig \
-  -v sprig-db:/var/lib/postgresql \
-  postgres:18-alpine
-
-docker run -d --name sprig --network sprig -p 8080:8080 \
-  -v /srv/sprig/photos:/photos \
-  -e SPRIG_DATABASE_URL=postgres://sprig:change-me@sprig-db:5432/sprig?sslmode=disable \
-  -e SPRIG_BASE_URL=https://sprig.example.com \
-  -e SPRIG_RP_ID=example.com \
-  -e SPRIG_PHOTO_DIR=/photos \
-  ghcr.io/ismailshak/sprig:0.1.0
-```
-
-### With compose
+Example compose file:
 
 ```yaml
 services:
@@ -56,7 +33,7 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      - /srv/sprig/photos:/photos
+      - ./photos:/photos
     environment:
       SPRIG_DATABASE_URL: postgres://sprig:change-me@db:5432/sprig?sslmode=disable
       SPRIG_BASE_URL: https://sprig.example.com
@@ -70,35 +47,42 @@ volumes:
   db-data:
 ```
 
-The container runs the migrations when it starts.
+Change the database password and replace `example.com` with your own domain. Sprig serves plain HTTP, but passkeys only work over https, so browsers need to reach it through something that handles TLS, such as a reverse proxy or a tunnel.
 
-### The first account
+The container runs as user 65532, so the photo directory has to be writable by that user:
 
-Sign-up is off by default. On an empty database, `/setup` creates the first account and its garden. After that a person joins by invite, or at `/setup` when `SPRIG_SIGNUP_ENABLED` is on.
+```sh
+mkdir photos
+sudo chown 65532:65532 photos
+```
+
+Once it's running, open `/setup` to create your account and your garden. After that, people join by invite. If you want anyone to be able to sign up at `/setup`, set `SPRIG_SIGNUP_ENABLED=true`.
+
+`latest` is the newest release. Each release also has its own version tag, such as `0.4.0`. Migrations run when the container starts, so to upgrade, change the tag and restart.
 
 ### Push notifications
 
-Notifications are off by default. To turn them on, make a VAPID key pair:
+Push notifications are off by default. To turn them on, generate a VAPID key pair:
 
 ```sh
-docker run --rm ghcr.io/ismailshak/sprig:0.1.0 vapid
+docker run --rm ghcr.io/ismailshak/sprig:latest vapid
 ```
 
-It prints `SPRIG_VAPID_PUBLIC_KEY` and `SPRIG_VAPID_PRIVATE_KEY`. Set those, set `SPRIG_VAPID_SUBJECT` to a `mailto:` address or an https URL, and set `SPRIG_PUSH_ENABLED=true`. Keep the pair. A new pair drops every subscription.
+Set the two keys it prints, along with `SPRIG_VAPID_SUBJECT` (a `mailto:` address or an https URL) and `SPRIG_PUSH_ENABLED=true`. Don't lose the keys. If you generate a new pair, every device has to subscribe again.
 
 ### Behind a proxy
 
-Sign-in and account recovery are rate limited per client address. Behind a proxy, set `SPRIG_TRUSTED_IP_HEADER` to the header the proxy puts the client address in. Set it only when every request reaches the app through that proxy. The app trusts the header.
+When Sprig runs behind a proxy, every request reaches it from the proxy's address, so make sure to set `SPRIG_TRUSTED_IP_HEADER` to the header your proxy puts the client's address in, such as `X-Real-IP` or `CF-Connecting-IP`, so that clients can be told apart. Sprig rate limits a few routes, so without the header those limits apply to all users at once.
 
-The app sends no `Strict-Transport-Security` header. Set HSTS where TLS terminates.
+A few things are left to the proxy:
 
-The app gzips static files only. Turn on compression at the proxy for pages.
-
-The Content-Security-Policy allows scripts from the app's origin only. Turn off any proxy feature that injects a script into pages.
+- Sprig doesn't send a `Strict-Transport-Security` header, so set HSTS there.
+- Sprig only gzips static files, so turn on compression there if you want pages compressed too.
+- Sprig's Content-Security-Policy only allows scripts from its own origin, so turn off any proxy feature that injects scripts into pages.
 
 ## Configuration
 
-Every setting is an environment variable, read once at startup. A missing or invalid value stops the process. The error lists every problem.
+Every setting is an environment variable, read once at startup. If a value is missing or invalid, the process stops and the error lists every problem at once.
 
 | Variable                  | Required        | Default                 | What it is                                                                                                                                                                                             |
 | ------------------------- | --------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -121,31 +105,31 @@ Every setting is an environment variable, read once at startup. A missing or inv
 | `SPRIG_LOG_LEVEL`         | no              | `info`                  | One of `debug`, `info`, `warn`, `error`.                                                                                                                                                               |
 | `SPRIG_LOG_FORMAT`        | no              | `text`                  | `text` or `json`.                                                                                                                                                                                      |
 
-A passkey is bound to the relying party id. Changing the id loses every passkey, so set `SPRIG_RP_ID` before anyone registers one. Set it to the registrable domain, `example.com` rather than `sprig.example.com`, and the app can move to another name under that domain and keep every passkey. The value must be the base URL's host or a parent domain of it.
+Set `SPRIG_RP_ID` before anyone registers a passkey. Passkeys are tied to it so if you change it later existing passkeys stop working. It defaults to the base URL's host, like `sprig.example.com`. You can also set it to a parent domain like `example.com`, which lets you move Sprig to another subdomain later without affecting passkeys.
 
-## Operating it
+## Maintenance
 
-`GET /healthz` returns the version and revision as JSON. It needs no sign-in. The image's `HEALTHCHECK` runs `sprig health`. That GETs the route on `SPRIG_ADDR` and exits non-zero unless it gets a 200. The check runs every five minutes. For the first 30 seconds after the container starts, it runs every second until it passes. Compose can override the interval. The server logs a request to `/healthz` at debug level.
+Back up the Postgres database and the photo directory together.
 
-Once a day the server deletes rows no page shows: sessions past `SPRIG_SESSION_TTL`, redeemed invites and expired sign-in links older than 30 days, and recovery codes a newer batch replaced. It logs what it deleted. Rows a page shows, such as an expired token on Tokens or an ended membership on People, are deleted from that page.
-
-`sprig sweep` runs that pass, then deletes photo files under `SPRIG_PHOTO_DIR` that no row points at and are over an hour old. It prints any row whose file is missing and exits non-zero. That is how a bad restore or mount shows up. Run it by hand with the server's environment:
+After restoring a backup, run `sprig sweep`. It lists any photos whose files are missing and deletes files that no photo refers to.
 
 ```sh
 docker compose exec sprig /sprig sweep
 ```
 
-`sprig admin invite --user <handle>` prints a sign-in link for an account. It is for a garden's owner who has lost every device, because nobody else can make one for them on People. The link adds a passkey to that account, works once and expires after 7 days. The handle is the one on that person's Account page.
+If a garden owner loses every device and their recovery codes, generate a sign-in link for them:
 
 ```sh
-docker compose exec sprig /sprig admin invite --user emma
+docker compose exec sprig /sprig admin invite --user <handle>
 ```
 
-Back up the Postgres database and the photo directory together.
+The link adds a new passkey to their account and expires after 7 days. Their handle is shown next to their name on the People page.
 
-### The chores endpoint
+The image has a built-in health check. If you want to monitor Sprig from outside, `GET /healthz` returns 200 and needs no sign-in.
 
-`GET /api/chores` returns one garden's overdue, due and upcoming cares as JSON, for a device or a script that polls it. It takes an API token from the garden's Tokens page as a bearer token. A missing, revoked or expired token gets a 401.
+## Chores API
+
+`GET /api/chores` returns a garden's overdue, due and upcoming care as JSON. Create a token on the garden's Tokens page and send it as a bearer token:
 
 ```sh
 curl -H "Authorization: Bearer sprg_..." https://sprig.example.com/api/chores
@@ -168,17 +152,18 @@ curl -H "Authorization: Bearer sprg_..." https://sprig.example.com/api/chores
 }
 ```
 
-`chores` is in the Today page's order, most overdue first, one entry per care. `upcoming` is every care not yet due, soonest first. `when` uses the Today page's words. `date` is today in the timezone of the account that created the token. The limit is 6 requests a minute per token. Past it the response is 429 with `Retry-After`.
+Each token can make 6 requests a minute.
 
 ## Developing
 
-Everything runs through [mise](https://mise.jdx.dev). Run `mise install` once.
+Sprig uses [mise](https://mise.jdx.dev) for its toolchain and tasks. Run `mise install` once, then:
 
 ```
-mise run dev    # Postgres in a container, the server on the host, rebuilt on each change
-mise run test   # Go tests against a throwaway Postgres
-mise run e2e    # the Playwright suite against a seeded throwaway Postgres
+mise run dev    # start Postgres and the server and rebuilds on change
+mise run seed   # load example gardens
+mise run test   # Go tests
+mise run e2e    # Playwright tests
 mise run lint
 ```
 
-`mise run dev` serves `http://localhost:8080` with a development sign-in in place of passkeys. Push is on, with a throwaway VAPID pair the e2e stack shares, so a browser on localhost can subscribe. `mise run seed` loads two example gardens. The development sign-in is behind a build tag and is not in the published image.
+The dev server runs at `http://localhost:8080` and lets you sign in without a passkey at `/dev/signin`. Run `mise tasks` to see the rest.
