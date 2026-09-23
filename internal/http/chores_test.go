@@ -3,8 +3,6 @@ package http
 import (
 	"context"
 	"encoding/json"
-	"io"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -193,14 +191,16 @@ func TestChores_AGardenWithNothingScheduledSendsEmptyListsRatherThanNull(t *test
 func chorePolls(t *testing.T) (func(token string) *httptest.ResponseRecorder, *int) {
 	t.Helper()
 
-	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
 	queries := routeQueries(t)
 	lookups := 0
 	tokens := ResolverFunc(func(context.Context, time.Time, string) (auth.Principal, error) {
 		lookups++
 		return tokenPrincipal(), nil
 	})
-	handler := New(logger, testSessions(), testPasskeys(), rejectEveryToken, tokens, queries, testPhotos(t), testTemplates(), testAssets(), "", false, testPushKey, nil, nil, nil, nil)
+	deps := testDependencies(t)
+	deps.Tokens = tokens
+	deps.Queries = queries
+	handler := New(deps)
 
 	return func(token string) *httptest.ResponseRecorder {
 		t.Helper()

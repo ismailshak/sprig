@@ -78,7 +78,11 @@ func photosServedTo(t *testing.T, queries *store.Queries) servedPhotos {
 			t.Fatal(err)
 		}
 	}
-	f.handler = New(testLogger, testSessions(), testPasskeys(), acceptEveryToken(memberWith(everyCapability())), noLiveToken, queries, photos, testTemplates(), testAssets(), "", false, testPushKey, nil, nil, nil, nil)
+	deps := testDependencies(t)
+	deps.Resolver = acceptEveryToken(memberWith(everyCapability()))
+	deps.Queries = queries
+	deps.Photos = photos
+	f.handler = New(deps)
 	return f
 }
 

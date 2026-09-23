@@ -125,7 +125,7 @@ func unauthorized(w http.ResponseWriter) {
 // cookie costs no lookup, so a public route may call this. It sets the session
 // cookie again on w when resolving the session moved its deadline, because
 // otherwise the cookie would expire before the row.
-func hasSession(w http.ResponseWriter, r *http.Request, sessions *auth.Sessions, resolver *auth.Resolver, now time.Time) bool {
+func hasSession(w http.ResponseWriter, r *http.Request, sessions *auth.Sessions, resolver Resolver, now time.Time) bool {
 	token := sessions.TokenFromRequest(r)
 	if token == "" {
 		return false

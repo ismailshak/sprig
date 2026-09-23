@@ -1,8 +1,6 @@
 package http
 
 import (
-	"io"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -12,12 +10,14 @@ import (
 // The headers come from middleware, so the route table is walked for the range
 // of responses under it: pages, redirects to sign in, 404s and refused posts.
 func TestSecurityHeaders_EveryRouteSetsAllFourHeaders(t *testing.T) {
-	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
 	queries := routeQueries(t)
-	stranger := New(logger, testSessions(), testPasskeys(), rejectEveryToken, noLiveToken, queries, testPhotos(t), testTemplates(), testAssets(), "", false, testPushKey, nil, nil, nil, nil)
-	owner := New(logger, testSessions(), testPasskeys(), acceptEveryToken(memberWith(everyCapability())), noLiveToken, queries, testPhotos(t), testTemplates(), testAssets(), "", false, testPushKey, nil, nil, nil, nil)
+	deps := testDependencies(t)
+	deps.Queries = queries
+	stranger := New(deps)
+	deps.Resolver = acceptEveryToken(memberWith(everyCapability()))
+	owner := New(deps)
 
-	for _, r := range routes(testLogger, testSessions(), testPasskeys(), nil, testPhotos(t), testTemplates(), testAssets(), "", false, testPushKey, nil, nil, nil, nil) {
+	for _, r := range routes(testDependencies(t)) {
 		method, path := splitPattern(r.pattern)
 		if a := routeAccess[r.pattern]; a.path != "" {
 			path = a.path

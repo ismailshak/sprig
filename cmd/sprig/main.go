@@ -169,8 +169,6 @@ func run(ctx context.Context, getenv func(string) string, stdout io.Writer) erro
 
 	queries := store.New(pool)
 	sessions := auth.NewSessions(queries, cfg.sessionTTL, cfg.cookie)
-	resolver := auth.NewResolver(sessions, queries)
-	tokens := auth.NewAPITokens(queries)
 	passkeys, err := auth.NewPasskeys(queries, cfg.rpID, "sprig", cfg.baseURL.String(), cfg.cookie)
 	if err != nil {
 		return err
@@ -183,9 +181,9 @@ func run(ctx context.Context, getenv func(string) string, stdout io.Writer) erro
 	var deadlines *push.Deadlines
 	var notifier *push.Notifier
 	var wake func()
-	var notify func(context.Context, uuid.UUID, uuid.UUID, push.Notification)
+	var notifyActivity func(context.Context, uuid.UUID, uuid.UUID, push.Notification)
 	var notifyUser func(context.Context, store.AppUser, push.Notification)
-	var test func(context.Context, store.PushSubscription, push.Notification) error
+	var sendTest func(context.Context, store.PushSubscription, push.Notification) error
 	if cfg.pushEnabled {
 		pushKey = cfg.push.Public
 		sender := push.NewSender(cfg.push, nil)
@@ -198,11 +196,28 @@ func run(ctx context.Context, getenv func(string) string, stdout io.Writer) erro
 			digest.Wake()
 			deadlines.Wake()
 		}
-		notify = notifier.SendActivity
+		notifyActivity = notifier.SendActivity
 		notifyUser = notifier.SendToUser
-		test = push.NewTestMessage(queries, sender, cfg.baseURL.String()).Send
+		sendTest = push.NewTestMessage(queries, sender, cfg.baseURL.String()).Send
 	}
-	handler := sprighttp.New(logger, sessions, passkeys, resolver, tokens, queries, photos, templates, assets, cfg.trustedIPHeader, cfg.signupEnabled, pushKey, wake, notify, notifyUser, test)
+	handler := sprighttp.New(sprighttp.Dependencies{
+		Logger:          logger,
+		Sessions:        sessions,
+		Passkeys:        passkeys,
+		Resolver:        auth.NewResolver(sessions, queries),
+		Tokens:          auth.NewAPITokens(queries),
+		Queries:         queries,
+		Photos:          photos,
+		Templates:       templates,
+		Assets:          assets,
+		TrustedIPHeader: cfg.trustedIPHeader,
+		SignupEnabled:   cfg.signupEnabled,
+		PushKey:         pushKey,
+		Wake:            wake,
+		NotifyActivity:  notifyActivity,
+		NotifyUser:      notifyUser,
+		SendTest:        sendTest,
+	})
 
 	// run does not return until the sweep and the two push jobs have stopped
 	// and every notification a handler started has finished sending. The

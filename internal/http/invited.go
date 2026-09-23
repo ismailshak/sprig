@@ -192,7 +192,7 @@ type invited struct {
 	// resolver turns the session cookie a browser opens a join link with into
 	// the account behind it, so the page can send that account to accept the
 	// invite as itself.
-	resolver  *auth.Resolver
+	resolver  Resolver
 	queries   *store.Queries
 	templates *Templates
 	// now supplies the current time, so a test can fix the day.

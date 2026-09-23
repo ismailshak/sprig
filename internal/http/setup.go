@@ -158,7 +158,7 @@ type setup struct {
 	sessions *auth.Sessions
 	// resolver reads the session cookie on a request, so GET /setup can tell a
 	// signed-in browser from a stranger.
-	resolver  *auth.Resolver
+	resolver  Resolver
 	queries   *store.Queries
 	templates *Templates
 	// now supplies the current time, so a test can fix the day.

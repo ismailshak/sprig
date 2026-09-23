@@ -43,6 +43,23 @@ func testPasskeys() *auth.Passkeys {
 	return passkeys
 }
 
+// testDependencies returns the Dependencies most tests build New from. Queries
+// is nil. Resolver refuses every session cookie and Tokens every API token
+// until a test replaces them.
+func testDependencies(t *testing.T) Dependencies {
+	return Dependencies{
+		Logger:    testLogger,
+		Sessions:  testSessions(),
+		Passkeys:  testPasskeys(),
+		Resolver:  rejectEveryToken,
+		Tokens:    noLiveToken,
+		Photos:    testPhotos(t),
+		Templates: testTemplates(),
+		Assets:    testAssets(),
+		PushKey:   testPushKey,
+	}
+}
+
 func signedIn(r *http.Request) *http.Request {
 	r.AddCookie(&http.Cookie{Name: "__Host-sprig_session", Value: testToken})
 	return r
@@ -499,8 +516,9 @@ func TestRequire_AMissingCapabilityIsTheSame404AsAnUnknownPath(t *testing.T) {
 	// The unknown path goes through the whole app. The comparison is then
 	// against the 404 the route table serves and not one this test wrote. The
 	// body differs between a browser and a script, so the loop checks both.
-	app := New(testLogger, testSessions(), testPasskeys(), acceptEveryToken(sitterPrincipal()), noLiveToken, nil,
-		testPhotos(t), testTemplates(), testAssets(), "", false, testPushKey, nil, nil, nil, nil)
+	deps := testDependencies(t)
+	deps.Resolver = acceptEveryToken(sitterPrincipal())
+	app := New(deps)
 	for name, prepare := range map[string]func(*http.Request) *http.Request{"a browser": browsing, "a script": func(r *http.Request) *http.Request { return r }} {
 		unknown := httptest.NewRecorder()
 		app.ServeHTTP(unknown, prepare(signedIn(httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/nope", nil))))
