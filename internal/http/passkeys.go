@@ -1,6 +1,7 @@
 package http
 
 import (
+	"log/slog"
 	"net/http"
 	"time"
 	"uuid"
@@ -52,6 +53,13 @@ func passkeyLabel(key store.PasskeyCredential) string {
 	return key.Name
 }
 
+type passkeys struct {
+	logger    *slog.Logger
+	queries   *store.Queries
+	templates *Templates
+	now       func() time.Time
+}
+
 type passkeysPage struct {
 	Bar  topbar
 	Keys []passkeyRow
@@ -83,13 +91,13 @@ type passkeyRow struct {
 	Remove string
 }
 
-func (h *more) passkeys(w http.ResponseWriter, r *http.Request) {
+func (h *passkeys) show(w http.ResponseWriter, r *http.Request) {
 	h.renderPasskeys(w, r, "")
 }
 
 // renderPasskeys writes the page, or the list alone for a swap of it.
 // announce is the sentence the swap puts in the live region.
-func (h *more) renderPasskeys(w http.ResponseWriter, r *http.Request, announce string) {
+func (h *passkeys) renderPasskeys(w http.ResponseWriter, r *http.Request, announce string) {
 	principal := PrincipalFrom(r)
 	keys, err := h.queries.ListPasskeys(r.Context(), principal.User.ID)
 	if err != nil {
@@ -109,10 +117,10 @@ func (h *more) renderPasskeys(w http.ResponseWriter, r *http.Request, announce s
 // page on its next request. When the removed passkey is the one this session
 // signed in with, the response redirects to the sign-in page instead of the
 // list, because that session was deleted with it. Removing the last credential
-// is refused by the query, because an account with none has no way back in.
+// is refused by the query, because an account with none cannot sign in.
 // The delete runs under a lock on the account's row, so two removals sent at
 // the same moment cannot both pass that check and empty the list.
-func (h *more) removePasskey(w http.ResponseWriter, r *http.Request) {
+func (h *passkeys) removePasskey(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	passkeyID, err := uuid.Parse(r.PathValue("key"))
 	if err != nil {

@@ -84,7 +84,17 @@ func routes(d Dependencies) []route {
 	activityHandler := &activity{logger: d.Logger, queries: d.Queries, templates: d.Templates, now: time.Now}
 	choresHandler := &chores{logger: d.Logger, queries: d.Queries, templates: d.Templates, now: time.Now}
 	passkeyHandler := &passkeyCeremony{logger: d.Logger, passkeys: d.Passkeys, sessions: d.Sessions, queries: d.Queries, templates: d.Templates, now: time.Now}
-	moreHandler := &more{logger: d.Logger, sessions: d.Sessions, queries: d.Queries, photos: d.Photos, templates: d.Templates, build: build.Read(), now: time.Now, pushKey: d.PushKey, wake: d.Wake, notify: d.NotifyUser, test: d.SendTest}
+	moreHandler := &more{logger: d.Logger, sessions: d.Sessions, queries: d.Queries, templates: d.Templates, build: build.Read(), now: time.Now}
+	accountHandler := &account{logger: d.Logger, queries: d.Queries, templates: d.Templates, wake: d.Wake}
+	closeAccountHandler := &closeAccount{logger: d.Logger, sessions: d.Sessions, queries: d.Queries, templates: d.Templates, now: time.Now, wake: d.Wake}
+	recoveryCodesHandler := &recoveryCodes{logger: d.Logger, queries: d.Queries, templates: d.Templates, now: time.Now}
+	passkeysHandler := &passkeys{logger: d.Logger, queries: d.Queries, templates: d.Templates, now: time.Now}
+	notificationsHandler := &notifications{logger: d.Logger, queries: d.Queries, templates: d.Templates, now: time.Now, pushKey: d.PushKey, wake: d.Wake, test: d.SendTest}
+	gardenHandler := &garden{logger: d.Logger, queries: d.Queries, photos: d.Photos, templates: d.Templates}
+	deleteGardenHandler := &deleteGarden{logger: d.Logger, queries: d.Queries, photos: d.Photos, templates: d.Templates, wake: d.Wake}
+	peopleHandler := &people{logger: d.Logger, queries: d.Queries, templates: d.Templates, now: time.Now, wake: d.Wake, notify: d.NotifyUser}
+	inviteHandler := &invite{logger: d.Logger, queries: d.Queries, templates: d.Templates, now: time.Now}
+	tokensHandler := &tokens{logger: d.Logger, queries: d.Queries, templates: d.Templates, now: time.Now, wake: d.Wake}
 	setupHandler := &setup{logger: d.Logger, passkeys: d.Passkeys, sessions: d.Sessions, resolver: d.Resolver, queries: d.Queries, templates: d.Templates, now: time.Now, enabled: d.SignupEnabled, wake: d.Wake, pushKey: d.PushKey}
 	invitedHandler := &invited{logger: d.Logger, passkeys: d.Passkeys, sessions: d.Sessions, resolver: d.Resolver, queries: d.Queries, templates: d.Templates, now: time.Now, wake: d.Wake, notify: d.NotifyUser}
 	recoverHandler := &recoverAccount{logger: d.Logger, passkeys: d.Passkeys, queries: d.Queries, templates: d.Templates, now: time.Now}
@@ -131,14 +141,14 @@ func routes(d Dependencies) []route {
 		{pattern: "POST /plants/{plant}/log/{event}/restore", capability: auth.CareDeleteOwn, handler: http.HandlerFunc(activityHandler.restore)},
 		{pattern: "GET " + morePath, handler: http.HandlerFunc(moreHandler.show)},
 		{pattern: "POST " + signOutPath, withoutGarden: true, handler: http.HandlerFunc(moreHandler.signOut)},
-		{pattern: "GET " + accountPath, handler: http.HandlerFunc(moreHandler.account)},
-		{pattern: "POST " + accountPath, handler: http.HandlerFunc(moreHandler.saveAccount)},
-		{pattern: "GET " + closeAccountPath, withoutGarden: true, handler: http.HandlerFunc(moreHandler.confirmCloseAccount)},
-		{pattern: "POST " + closeAccountPath, withoutGarden: true, handler: http.HandlerFunc(moreHandler.closeAccount)},
-		{pattern: "GET " + recoveryPath, handler: http.HandlerFunc(moreHandler.recovery)},
-		{pattern: "POST " + recoveryPath, handler: http.HandlerFunc(moreHandler.createCodes)},
-		{pattern: "GET " + passkeysPath, handler: http.HandlerFunc(moreHandler.passkeys)},
-		{pattern: "POST " + passkeysPath + "/{key}/remove", handler: http.HandlerFunc(moreHandler.removePasskey)},
+		{pattern: "GET " + accountPath, handler: http.HandlerFunc(accountHandler.show)},
+		{pattern: "POST " + accountPath, handler: http.HandlerFunc(accountHandler.saveAccount)},
+		{pattern: "GET " + closeAccountPath, withoutGarden: true, handler: http.HandlerFunc(closeAccountHandler.confirm)},
+		{pattern: "POST " + closeAccountPath, withoutGarden: true, handler: http.HandlerFunc(closeAccountHandler.close)},
+		{pattern: "GET " + recoveryPath, handler: http.HandlerFunc(recoveryCodesHandler.show)},
+		{pattern: "POST " + recoveryPath, handler: http.HandlerFunc(recoveryCodesHandler.createCodes)},
+		{pattern: "GET " + passkeysPath, handler: http.HandlerFunc(passkeysHandler.show)},
+		{pattern: "POST " + passkeysPath + "/{key}/remove", handler: http.HandlerFunc(passkeysHandler.removePasskey)},
 		{pattern: "POST " + registerPath, handler: http.HandlerFunc(passkeyHandler.registerChallenge)},
 		{pattern: "POST " + passkeysPath, handler: http.HandlerFunc(passkeyHandler.register)},
 		{pattern: "GET " + signInPath, handler: http.HandlerFunc(passkeyHandler.showSignIn)},
@@ -160,37 +170,37 @@ func routes(d Dependencies) []route {
 		{pattern: "POST " + recoverPasskeyPath, limits: recoverLimit.around(http.HandlerFunc(recoverHandler.tooManyCodes)), handler: http.HandlerFunc(recoverHandler.register)},
 		{pattern: "GET " + acceptPattern, withoutGarden: true, handler: http.HandlerFunc(invitedHandler.showAccept)},
 		{pattern: "POST " + acceptPattern, withoutGarden: true, handler: http.HandlerFunc(invitedHandler.accept)},
-		{pattern: "GET " + notificationsPath, handler: http.HandlerFunc(moreHandler.notifications)},
-		{pattern: "POST " + notificationsPath, handler: http.HandlerFunc(moreHandler.saveNotifications)},
-		{pattern: "POST " + subscribePath, handler: http.HandlerFunc(moreHandler.subscribeBrowser)},
-		{pattern: "POST " + sendTestPath, handler: http.HandlerFunc(moreHandler.sendTestNotification)},
-		{pattern: "POST " + notificationsPath + "/browsers/{browser}/remove", handler: http.HandlerFunc(moreHandler.removeBrowser)},
-		{pattern: "GET " + installPath, handler: http.HandlerFunc(moreHandler.install)},
-		{pattern: "GET " + appearancePath, handler: http.HandlerFunc(moreHandler.appearance)},
+		{pattern: "GET " + notificationsPath, handler: http.HandlerFunc(notificationsHandler.show)},
+		{pattern: "POST " + notificationsPath, handler: http.HandlerFunc(notificationsHandler.saveNotifications)},
+		{pattern: "POST " + subscribePath, handler: http.HandlerFunc(notificationsHandler.subscribeBrowser)},
+		{pattern: "POST " + sendTestPath, handler: http.HandlerFunc(notificationsHandler.sendTestNotification)},
+		{pattern: "POST " + notificationsPath + "/browsers/{browser}/remove", handler: http.HandlerFunc(notificationsHandler.removeBrowser)},
+		{pattern: "GET " + installPath, handler: install(d.Templates)},
+		{pattern: "GET " + appearancePath, handler: appearance(d.Templates)},
 		{pattern: "GET " + gardensPath, handler: http.HandlerFunc(todayHandler.gardenSheet)},
 		{pattern: "POST " + gardensPath, handler: http.HandlerFunc(todayHandler.switchGarden)},
-		{pattern: "GET " + gardenPath, capability: auth.GardenEdit, handler: http.HandlerFunc(moreHandler.garden)},
-		{pattern: "POST " + gardenPath, capability: auth.GardenEdit, handler: http.HandlerFunc(moreHandler.saveGardenName)},
-		{pattern: "GET " + deleteGardenPath, capability: auth.GardenDelete, handler: http.HandlerFunc(moreHandler.confirmDeleteGarden)},
-		{pattern: "POST " + deleteGardenPath, capability: auth.GardenDelete, handler: http.HandlerFunc(moreHandler.deleteGarden)},
-		{pattern: "GET " + careTypesPath, capability: auth.CareTypeManage, handler: http.HandlerFunc(moreHandler.newCareType)},
-		{pattern: "POST " + careTypesPath, capability: auth.CareTypeManage, handler: http.HandlerFunc(moreHandler.createCareType)},
-		{pattern: "GET " + careTypesPath + "/{care}", capability: auth.CareTypeManage, handler: http.HandlerFunc(moreHandler.editCareType)},
-		{pattern: "POST " + careTypesPath + "/{care}", capability: auth.CareTypeManage, handler: http.HandlerFunc(moreHandler.renameCareType)},
-		{pattern: "POST " + careTypesPath + "/{care}/off", capability: auth.CareTypeManage, handler: http.HandlerFunc(moreHandler.turnOffCareType)},
-		{pattern: "POST " + careTypesPath + "/{care}/on", capability: auth.CareTypeManage, handler: http.HandlerFunc(moreHandler.turnOnCareType)},
-		{pattern: "POST " + careTypesPath + "/{care}/delete", capability: auth.CareTypeManage, handler: http.HandlerFunc(moreHandler.deleteCareType)},
-		{pattern: "GET " + PeoplePath, capability: auth.MemberManage, handler: http.HandlerFunc(moreHandler.people)},
-		{pattern: "POST " + PeoplePath, capability: auth.MemberManage, handler: http.HandlerFunc(moreHandler.saveMembers)},
-		{pattern: "GET " + invitePath, capability: auth.MemberInvite, handler: http.HandlerFunc(moreHandler.invite)},
-		{pattern: "POST " + invitePath, capability: auth.MemberInvite, handler: http.HandlerFunc(moreHandler.createInviteLink)},
-		{pattern: "POST " + PeoplePath + "/invites/{invite}/revoke", capability: auth.MemberManage, handler: http.HandlerFunc(moreHandler.revokeInvite)},
-		{pattern: "GET " + PeoplePath + "/{member}/remove", capability: auth.MemberManage, handler: http.HandlerFunc(moreHandler.confirmRemoveMember)},
-		{pattern: "POST " + PeoplePath + "/{member}/remove", capability: auth.MemberManage, handler: http.HandlerFunc(moreHandler.removeMember)},
-		{pattern: "POST " + PeoplePath + "/{member}/reenrol", capability: auth.MemberManage, handler: http.HandlerFunc(moreHandler.reenrolMember)},
-		{pattern: "GET " + TokensPath, capability: auth.TokenManage, handler: http.HandlerFunc(moreHandler.tokens)},
-		{pattern: "POST " + TokensPath, capability: auth.TokenManage, handler: http.HandlerFunc(moreHandler.createToken)},
-		{pattern: "POST " + TokensPath + "/{token}/revoke", capability: auth.TokenManage, handler: http.HandlerFunc(moreHandler.revokeToken)},
+		{pattern: "GET " + gardenPath, capability: auth.GardenEdit, handler: http.HandlerFunc(gardenHandler.show)},
+		{pattern: "POST " + gardenPath, capability: auth.GardenEdit, handler: http.HandlerFunc(gardenHandler.saveGardenName)},
+		{pattern: "GET " + deleteGardenPath, capability: auth.GardenDelete, handler: http.HandlerFunc(deleteGardenHandler.confirm)},
+		{pattern: "POST " + deleteGardenPath, capability: auth.GardenDelete, handler: http.HandlerFunc(deleteGardenHandler.delete)},
+		{pattern: "GET " + careTypesPath, capability: auth.CareTypeManage, handler: http.HandlerFunc(gardenHandler.newCareType)},
+		{pattern: "POST " + careTypesPath, capability: auth.CareTypeManage, handler: http.HandlerFunc(gardenHandler.createCareType)},
+		{pattern: "GET " + careTypesPath + "/{care}", capability: auth.CareTypeManage, handler: http.HandlerFunc(gardenHandler.editCareType)},
+		{pattern: "POST " + careTypesPath + "/{care}", capability: auth.CareTypeManage, handler: http.HandlerFunc(gardenHandler.renameCareType)},
+		{pattern: "POST " + careTypesPath + "/{care}/off", capability: auth.CareTypeManage, handler: http.HandlerFunc(gardenHandler.turnOffCareType)},
+		{pattern: "POST " + careTypesPath + "/{care}/on", capability: auth.CareTypeManage, handler: http.HandlerFunc(gardenHandler.turnOnCareType)},
+		{pattern: "POST " + careTypesPath + "/{care}/delete", capability: auth.CareTypeManage, handler: http.HandlerFunc(gardenHandler.deleteCareType)},
+		{pattern: "GET " + PeoplePath, capability: auth.MemberManage, handler: http.HandlerFunc(peopleHandler.show)},
+		{pattern: "POST " + PeoplePath, capability: auth.MemberManage, handler: http.HandlerFunc(peopleHandler.saveMembers)},
+		{pattern: "GET " + invitePath, capability: auth.MemberInvite, handler: http.HandlerFunc(inviteHandler.show)},
+		{pattern: "POST " + invitePath, capability: auth.MemberInvite, handler: http.HandlerFunc(inviteHandler.createInviteLink)},
+		{pattern: "POST " + PeoplePath + "/invites/{invite}/revoke", capability: auth.MemberManage, handler: http.HandlerFunc(peopleHandler.revokeInvite)},
+		{pattern: "GET " + PeoplePath + "/{member}/remove", capability: auth.MemberManage, handler: http.HandlerFunc(peopleHandler.confirmRemoveMember)},
+		{pattern: "POST " + PeoplePath + "/{member}/remove", capability: auth.MemberManage, handler: http.HandlerFunc(peopleHandler.removeMember)},
+		{pattern: "POST " + PeoplePath + "/{member}/reenrol", capability: auth.MemberManage, handler: http.HandlerFunc(peopleHandler.reenrolMember)},
+		{pattern: "GET " + TokensPath, capability: auth.TokenManage, handler: http.HandlerFunc(tokensHandler.show)},
+		{pattern: "POST " + TokensPath, capability: auth.TokenManage, handler: http.HandlerFunc(tokensHandler.createToken)},
+		{pattern: "POST " + TokensPath + "/{token}/revoke", capability: auth.TokenManage, handler: http.HandlerFunc(tokensHandler.revokeToken)},
 		{pattern: "GET " + choresPath, bearer: true, limits: choresLimits(), handler: http.HandlerFunc(choresHandler.show)},
 		// Every path no other route matches.
 		{pattern: "/", withoutGarden: true, handler: http.HandlerFunc(d.Templates.notFound)},
@@ -233,7 +243,7 @@ func inviteLimits(trustedIPHeader string, refused http.Handler) []middleware {
 }
 
 // handleLimits returns the rate limiters wrapped around the handle suggestion.
-// The route is served without a session and its answer says whether a handle
+// The route is served without a session and its response says whether a handle
 // is held, so it gets budgets of its own. A form asks once each time the
 // display name is left, so 30 a minute from one address is more than a person
 // editing their name produces. The shared 300 a minute caps how fast a

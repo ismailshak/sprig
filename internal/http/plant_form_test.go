@@ -1167,7 +1167,7 @@ func TestPlantForm_AnotherGardensPlantCannotBeArchived(t *testing.T) {
 	f := plantFormOn(t)
 	fairview := uuid.MustParse("00000000-0000-7000-8000-0000000009f1")
 	stranger := uuid.MustParse("00000000-0000-7000-8000-0000000009f2")
-	f.exec(t, "INSERT INTO garden (id, name) VALUES ($1, 'Fairview')", fairview)
+	insertGarden(t, f.tx, fairview, "Fairview")
 	f.exec(t, "INSERT INTO plant (id, garden_id, nickname) VALUES ($1, $2, 'Gerald')", stranger, fairview)
 
 	if rec := f.archive(t, stranger); rec.Code != http.StatusNotFound {

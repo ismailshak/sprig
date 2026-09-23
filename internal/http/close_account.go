@@ -3,6 +3,7 @@ package http
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -43,7 +44,16 @@ type closeAccountPage struct {
 	Error string
 }
 
-func (h *more) newCloseAccountPage(ctx context.Context, principal auth.Principal) (closeAccountPage, error) {
+type closeAccount struct {
+	logger    *slog.Logger
+	sessions  *auth.Sessions
+	queries   *store.Queries
+	templates *Templates
+	now       func() time.Time
+	wake      wakeJobs
+}
+
+func (h *closeAccount) newCloseAccountPage(ctx context.Context, principal auth.Principal) (closeAccountPage, error) {
 	page := closeAccountPage{
 		Bar:      topbar{Href: accountPath, Back: "Account", Title: "Close account"},
 		Action:   closeAccountPath,
@@ -85,8 +95,8 @@ func andList(names []string) string {
 	return strings.Join(names[:len(names)-1], ", ") + " and " + names[len(names)-1]
 }
 
-// confirmCloseAccount handles GET /more/account/close.
-func (h *more) confirmCloseAccount(w http.ResponseWriter, r *http.Request) {
+// confirm handles GET /more/account/close.
+func (h *closeAccount) confirm(w http.ResponseWriter, r *http.Request) {
 	page, err := h.newCloseAccountPage(r.Context(), PrincipalFrom(r))
 	if err != nil {
 		h.templates.serverError(h.logger, w, r, "open the close account page", err)
@@ -95,10 +105,10 @@ func (h *more) confirmCloseAccount(w http.ResponseWriter, r *http.Request) {
 	h.templates.render(w, r, view{page: "close-account"}, page)
 }
 
-// closeAccount handles POST /more/account/close. A post whose typed handle is
+// close handles POST /more/account/close. A post whose typed handle is
 // not the account's is refused before anything runs. The sole-owner check runs
 // in the same transaction as the deletes. A refused close writes nothing.
-func (h *more) closeAccount(w http.ResponseWriter, r *http.Request) {
+func (h *closeAccount) close(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	if err := r.ParseForm(); err != nil {
 		h.templates.badRequest(w, r)

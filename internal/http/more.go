@@ -9,7 +9,6 @@ import (
 
 	"github.com/ismailshak/sprig/internal/auth"
 	"github.com/ismailshak/sprig/internal/build"
-	"github.com/ismailshak/sprig/internal/photo"
 	"github.com/ismailshak/sprig/internal/store"
 )
 
@@ -34,30 +33,15 @@ const (
 	TokensPath = morePath + "/tokens"
 )
 
-// more serves the fourth tab: the index of everything that is not about
-// plants, and the pages behind it.
+// more handles the More page and its Sign out button.
 type more struct {
-	logger   *slog.Logger
-	sessions *auth.Sessions
-	queries  *store.Queries
-	// photos supplies the Garden page's photo storage figure, and deletes a
-	// garden's photo files when the garden is deleted.
-	photos    *photo.Store
+	logger    *slog.Logger
+	sessions  *auth.Sessions
+	queries   *store.Queries
 	templates *Templates
 	build     build.Info
 	// now supplies the current time, so a test can fix the day.
 	now func() time.Time
-	// pushKey is the VAPID public key the Notifications page gives the browser
-	// to subscribe with. It is empty when push is off, and the page then says
-	// notifications are not enabled.
-	pushKey string
-	wake    wakeJobs
-	// notify sends one person a notification about their role, their
-	// membership or an invite they created.
-	notify notifyUser
-	// test sends the Notifications page's test message to one browser. It is
-	// nil when push is off.
-	test sendTest
 }
 
 type morePage struct {
@@ -151,7 +135,7 @@ func (h *more) state(ctx context.Context, principal auth.Principal) (moreState, 
 		}
 		state.pendingInvites = int(pending)
 
-		batch, live, err := h.recoveryBatch(ctx, principal.User.ID)
+		batch, live, err := recoveryBatch(ctx, h.queries, principal.User.ID)
 		if err != nil {
 			return moreState{}, err
 		}
@@ -180,36 +164,6 @@ func newMorePage(principal auth.Principal, state moreState, info build.Info) mor
 		rows = append(rows, linkRow{Label: "Tokens", Href: TokensPath})
 	}
 	return morePage{Rows: rows, Version: info.Version, Revision: shortRevision(info.Revision)}
-}
-
-// appearancePage is the Appearance page: three radio buttons for light, dark
-// and the system setting. The page's script stores the choice in the browser,
-// so no handler reads or writes it.
-type appearancePage struct {
-	Bar   topbar
-	Modes []appearanceMode
-}
-
-// appearanceMode is one of the three radio buttons. Value is the string the
-// page's script stores in the browser. On is set on System, because a page
-// with no script running follows the system setting.
-type appearanceMode struct {
-	Value string
-	Label string
-	Note  string
-	On    bool
-}
-
-func (h *more) appearance(w http.ResponseWriter, r *http.Request) {
-	page := appearancePage{
-		Bar: moreBar("Appearance"),
-		Modes: []appearanceMode{
-			{Value: "light", Label: "Light"},
-			{Value: "dark", Label: "Dark"},
-			{Value: "system", Label: "System", Note: "Follows your device’s setting.", On: true},
-		},
-	}
-	h.templates.render(w, r, view{page: "appearance"}, page)
 }
 
 // signOut deletes this session's row and clears the cookie. A cookie kept

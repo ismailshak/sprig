@@ -16,27 +16,46 @@ type ownedGarden struct {
 	id    uuid.UUID
 	name  string
 	owner store.AppUser
+	// ownerExists is set when the owner's account is already in the database.
+	// Only owner.ID is read then.
+	ownerExists bool
 	// membershipID is the id of the owner's membership. A zero id lets the
 	// column generate one.
 	membershipID uuid.UUID
-	// careTypes are inserted with their ID, Name and Slug. A zero ID lets the
-	// column generate one.
-	careTypes []store.CareType
+	careTypes    []store.CareType
 }
 
-// insert writes the garden, the owner's account, the owner's membership with
-// the digest at 08:00, and the care types.
+// insert writes the garden, the owner's membership with the digest at 08:00
+// and the care types. It writes the owner's account unless ownerExists is set.
 func (g ownedGarden) insert(t *testing.T, tx pgx.Tx) {
 	t.Helper()
 
-	mustExec(t, tx, "INSERT INTO garden (id, name) VALUES ($1, $2)", g.id, g.name)
-	mustExec(t, tx, "INSERT INTO app_user (id, display_name, handle, timezone) VALUES ($1, $2, $3, $4)",
-		g.owner.ID, g.owner.DisplayName, g.owner.Handle, g.owner.Timezone)
+	insertGarden(t, tx, g.id, g.name)
+	if !g.ownerExists {
+		mustExec(t, tx, "INSERT INTO app_user (id, display_name, handle, timezone) VALUES ($1, $2, $3, $4)",
+			g.owner.ID, g.owner.DisplayName, g.owner.Handle, g.owner.Timezone)
+	}
 	mustExec(t, tx, "INSERT INTO membership (id, garden_id, user_id, role, digest_hour) VALUES (coalesce($1, uuidv7()), $2, $3, 'owner', 8)",
 		generatedIfZero(g.membershipID), g.id, g.owner.ID)
-	for _, ct := range g.careTypes {
+	insertCareTypes(t, tx, g.id, g.careTypes...)
+}
+
+// insertGarden writes a garden with its care types and no members.
+func insertGarden(t *testing.T, tx pgx.Tx, id uuid.UUID, name string, careTypes ...store.CareType) {
+	t.Helper()
+
+	mustExec(t, tx, "INSERT INTO garden (id, name) VALUES ($1, $2)", id, name)
+	insertCareTypes(t, tx, id, careTypes...)
+}
+
+// insertCareTypes writes each care type's ID, Name and Slug into the garden. A
+// zero ID lets the column generate one.
+func insertCareTypes(t *testing.T, tx pgx.Tx, gardenID uuid.UUID, careTypes ...store.CareType) {
+	t.Helper()
+
+	for _, ct := range careTypes {
 		mustExec(t, tx, "INSERT INTO care_type (id, garden_id, name, slug) VALUES (coalesce($1, uuidv7()), $2, $3, $4)",
-			generatedIfZero(ct.ID), g.id, ct.Name, ct.Slug)
+			generatedIfZero(ct.ID), gardenID, ct.Name, ct.Slug)
 	}
 }
 

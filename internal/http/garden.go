@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"math"
 	"net/http"
 	"strconv"
@@ -60,6 +61,13 @@ const (
 // is still in the list and is easy to miss.
 func careTypeNameTaken(name string) string {
 	return "There is already a care type called " + name + "."
+}
+
+type garden struct {
+	logger    *slog.Logger
+	queries   *store.Queries
+	photos    *photo.Store
+	templates *Templates
 }
 
 type gardenPage struct {
@@ -149,7 +157,7 @@ type careTypeEdit struct {
 	message string
 }
 
-func (h *more) garden(w http.ResponseWriter, r *http.Request) {
+func (h *garden) show(w http.ResponseWriter, r *http.Request) {
 	h.renderGarden(w, r, gardenPage{Name: PrincipalFrom(r).Garden.Name, Saved: saved(r)}, careTypeEdit{}, 0, "")
 }
 
@@ -161,7 +169,7 @@ const gardenID = "garden"
 // again with the message under the field. With htmx the response is the page
 // under the top bar with the Saved line on it. A plain post redirects to the
 // page with Saved in the query string.
-func (h *more) saveGardenName(w http.ResponseWriter, r *http.Request) {
+func (h *garden) saveGardenName(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	if err := r.ParseForm(); err != nil {
 		h.templates.badRequest(w, r)
@@ -185,13 +193,13 @@ func (h *more) saveGardenName(w http.ResponseWriter, r *http.Request) {
 
 // newCareType handles GET /more/garden/types. It renders the page with an
 // empty row at the end of the list.
-func (h *more) newCareType(w http.ResponseWriter, r *http.Request) {
+func (h *garden) newCareType(w http.ResponseWriter, r *http.Request) {
 	h.renderGarden(w, r, gardenPage{Name: PrincipalFrom(r).Garden.Name}, careTypeEdit{adding: true}, 0, "")
 }
 
 // createCareType handles POST /more/garden/types. The slug is generated from
 // the name here and never changes again.
-func (h *more) createCareType(w http.ResponseWriter, r *http.Request) {
+func (h *garden) createCareType(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	name, ok := h.postedName(w, r)
 	if !ok {
@@ -226,7 +234,7 @@ func (h *more) createCareType(w http.ResponseWriter, r *http.Request) {
 
 // editCareType handles GET /more/garden/types/{care}. It renders the Garden
 // page with that row open as an editor.
-func (h *more) editCareType(w http.ResponseWriter, r *http.Request) {
+func (h *garden) editCareType(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	care, ok := h.careTypeFromPath(w, r, principal)
 	if !ok {
@@ -238,7 +246,7 @@ func (h *more) editCareType(w http.ResponseWriter, r *http.Request) {
 // renameCareType handles POST /more/garden/types/{care}. Only the name is
 // written, so every schedule and every event the type has keeps pointing at
 // it.
-func (h *more) renameCareType(w http.ResponseWriter, r *http.Request) {
+func (h *garden) renameCareType(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	care, ok := h.careTypeFromPath(w, r, principal)
 	if !ok {
@@ -279,7 +287,7 @@ func (h *more) renameCareType(w http.ResponseWriter, r *http.Request) {
 
 // turnOffCareType handles POST /more/garden/types/{care}/off. The type leaves
 // every schedule and the sheet, and every event logged under it is kept.
-func (h *more) turnOffCareType(w http.ResponseWriter, r *http.Request) {
+func (h *garden) turnOffCareType(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	care, ok := h.careTypeFromPath(w, r, principal)
 	if !ok {
@@ -290,7 +298,7 @@ func (h *more) turnOffCareType(w http.ResponseWriter, r *http.Request) {
 }
 
 // turnOnCareType handles POST /more/garden/types/{care}/on.
-func (h *more) turnOnCareType(w http.ResponseWriter, r *http.Request) {
+func (h *garden) turnOnCareType(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	care, ok := h.careTypeFromPath(w, r, principal)
 	if !ok {
@@ -303,7 +311,7 @@ func (h *more) turnOnCareType(w http.ResponseWriter, r *http.Request) {
 // deleteCareType handles POST /more/garden/types/{care}/delete. A care type
 // something has been logged under is a 404, because its row offers Turn off
 // instead and never offers this.
-func (h *more) deleteCareType(w http.ResponseWriter, r *http.Request) {
+func (h *garden) deleteCareType(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	care, ok := h.careTypeFromPath(w, r, principal)
 	if !ok {
@@ -324,7 +332,7 @@ func (h *more) deleteCareType(w http.ResponseWriter, r *http.Request) {
 // afterCareTypeChange finishes turning a care type off or back on. A statement
 // that matched nothing was a button the row did not offer, such as turning off
 // a type that is already off.
-func (h *more) afterCareTypeChange(w http.ResponseWriter, r *http.Request, what string, err error) {
+func (h *garden) afterCareTypeChange(w http.ResponseWriter, r *http.Request, what string, err error) {
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		h.templates.notFound(w, r)
@@ -338,7 +346,7 @@ func (h *more) afterCareTypeChange(w http.ResponseWriter, r *http.Request, what 
 // careTypesSaved finishes a write to a care type. A swap gets the Care types
 // section with every row closed, and a plain post is redirected to the Garden
 // page.
-func (h *more) careTypesSaved(w http.ResponseWriter, r *http.Request) {
+func (h *garden) careTypesSaved(w http.ResponseWriter, r *http.Request) {
 	if isHTMX(r) {
 		h.renderGarden(w, r, gardenPage{Name: PrincipalFrom(r).Garden.Name}, careTypeEdit{}, 0, "Care types saved.")
 		return
@@ -349,7 +357,7 @@ func (h *more) careTypesSaved(w http.ResponseWriter, r *http.Request) {
 // careTypeFromPath reads the care type the URL names. It writes the response
 // itself and returns false when the garden has no type with that slug, whether
 // it is on or off.
-func (h *more) careTypeFromPath(w http.ResponseWriter, r *http.Request, principal auth.Principal) (store.CareType, bool) {
+func (h *garden) careTypeFromPath(w http.ResponseWriter, r *http.Request, principal auth.Principal) (store.CareType, bool) {
 	care, err := h.queries.GetCareTypeBySlug(r.Context(), principal.Garden.ID, r.PathValue("care"))
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
@@ -363,7 +371,7 @@ func (h *more) careTypeFromPath(w http.ResponseWriter, r *http.Request, principa
 }
 
 // postedName reads the name field of one of this page's forms.
-func (h *more) postedName(w http.ResponseWriter, r *http.Request) (string, bool) {
+func (h *garden) postedName(w http.ResponseWriter, r *http.Request) (string, bool) {
 	if err := r.ParseForm(); err != nil {
 		h.templates.badRequest(w, r)
 		return "", false
@@ -373,7 +381,7 @@ func (h *more) postedName(w http.ResponseWriter, r *http.Request) (string, bool)
 
 // refuseCareType renders the page with the row still open, what was typed
 // still in the field and the reason under it.
-func (h *more) refuseCareType(w http.ResponseWriter, r *http.Request, edit careTypeEdit) {
+func (h *garden) refuseCareType(w http.ResponseWriter, r *http.Request, edit careTypeEdit) {
 	page := gardenPage{Name: PrincipalFrom(r).Garden.Name}
 	h.renderGarden(w, r, page, edit, http.StatusUnprocessableEntity, edit.message)
 }
@@ -382,7 +390,7 @@ func (h *more) refuseCareType(w http.ResponseWriter, r *http.Request, edit careT
 // empty string when no type in the garden does. A type that has been turned
 // off holds its slug as much as a live one, since its events still refer to
 // it.
-func (h *more) careTypeWithSlug(ctx context.Context, gardenID uuid.UUID, slug string) (string, error) {
+func (h *garden) careTypeWithSlug(ctx context.Context, gardenID uuid.UUID, slug string) (string, error) {
 	care, err := h.queries.GetCareTypeBySlug(ctx, gardenID, slug)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
@@ -396,7 +404,7 @@ func (h *more) careTypeWithSlug(ctx context.Context, gardenID uuid.UUID, slug st
 // renderGarden fills in the page's care types and writes it. A status of zero
 // means 200. announce is the sentence a swap puts in the live region, empty
 // for a swap that announces nothing, such as a row opening.
-func (h *more) renderGarden(w http.ResponseWriter, r *http.Request, page gardenPage, edit careTypeEdit, status int, announce string) {
+func (h *garden) renderGarden(w http.ResponseWriter, r *http.Request, page gardenPage, edit careTypeEdit, status int, announce string) {
 	principal := PrincipalFrom(r)
 	page.Bar = moreBar("Garden")
 	page.Action = gardenPath

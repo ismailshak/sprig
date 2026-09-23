@@ -8,7 +8,23 @@ import (
 	"testing"
 
 	"github.com/ismailshak/sprig/internal/auth"
+	"github.com/ismailshak/sprig/internal/store"
 )
+
+type accountFixture struct {
+	*moreFixture
+	handler *account
+}
+
+func openAccount(t *testing.T) *accountFixture {
+	t.Helper()
+
+	f := moreGarden(t)
+	return &accountFixture{
+		moreFixture: f,
+		handler:     &account{logger: testLogger, queries: store.New(f.tx), templates: testTemplates()},
+	}
+}
 
 // valueOf returns the value rendered on the input with this id. It fails the
 // test when the page has no such input.
@@ -26,7 +42,7 @@ func valueOf(t *testing.T, page, id string) string {
 }
 
 // saveAccount posts all three fields, because the page saves them together.
-func (f *moreFixture) saveAccount(t *testing.T, name, handle, zone string) *httptest.ResponseRecorder {
+func (f *accountFixture) saveAccount(t *testing.T, name, handle, zone string) *httptest.ResponseRecorder {
 	t.Helper()
 	return f.do(t, f.handler.saveAccount, accountPath, url.Values{"name": {name}, "handle": {handle}, "timezone": {zone}})
 }
@@ -59,9 +75,9 @@ func selectedZone(t *testing.T, page string) zoneChoice {
 }
 
 func TestAccount_TheFormOpensOnTheNameHandleAndZoneTheAccountHolds(t *testing.T) {
-	f := moreGarden(t)
+	f := openAccount(t)
 
-	page := f.page(t, f.handler.account, accountPath)
+	page := f.page(t, f.handler.show, accountPath)
 
 	if got := valueOf(t, page, "name"); got != "Ellie" {
 		t.Errorf("the display name field holds %q, want Ellie", got)
@@ -78,10 +94,10 @@ func TestAccount_TheFormOpensOnTheNameHandleAndZoneTheAccountHolds(t *testing.T)
 // zone.tab does not list it, so it is a zone an account can hold that the
 // select does not offer.
 func TestAccount_AZoneTheSelectDoesNotListIsStillOfferedAndSelected(t *testing.T) {
-	f := moreGarden(t)
+	f := openAccount(t)
 	f.principal.User.Timezone = "Europe/Belfast"
 
-	page := f.page(t, f.handler.account, accountPath)
+	page := f.page(t, f.handler.show, accountPath)
 
 	if got := selectedZone(t, page); got.value != "Europe/Belfast" {
 		t.Errorf("the zone selected is %q, want Europe/Belfast", got.value)
@@ -89,9 +105,9 @@ func TestAccount_AZoneTheSelectDoesNotListIsStillOfferedAndSelected(t *testing.T
 }
 
 func TestAccount_TheZoneSelectOffersAZoneFromEveryRegion(t *testing.T) {
-	f := moreGarden(t)
+	f := openAccount(t)
 
-	page := f.page(t, f.handler.account, accountPath)
+	page := f.page(t, f.handler.show, accountPath)
 
 	offered := map[string]bool{}
 	for _, zone := range zoneOptionsOf(page) {
@@ -105,9 +121,9 @@ func TestAccount_TheZoneSelectOffersAZoneFromEveryRegion(t *testing.T) {
 }
 
 func TestAccount_TheZoneSelectIsNotMarkedForTheBrowsersZone(t *testing.T) {
-	f := moreGarden(t)
+	f := openAccount(t)
 
-	page := f.page(t, f.handler.account, accountPath)
+	page := f.page(t, f.handler.show, accountPath)
 
 	zones := readHTML(page).byID("timezone")
 	if zones == nil {
@@ -119,9 +135,9 @@ func TestAccount_TheZoneSelectIsNotMarkedForTheBrowsersZone(t *testing.T) {
 }
 
 func TestAccount_AZoneReadsWithoutTheUnderscore(t *testing.T) {
-	f := moreGarden(t)
+	f := openAccount(t)
 
-	page := f.page(t, f.handler.account, accountPath)
+	page := f.page(t, f.handler.show, accountPath)
 
 	for _, zone := range zoneOptionsOf(page) {
 		if zone.value == "America/New_York" && zone.label != "America/New York" {
@@ -131,7 +147,7 @@ func TestAccount_AZoneReadsWithoutTheUnderscore(t *testing.T) {
 }
 
 func TestAccount_SavingWritesTheNameTheHandleAndTheZone(t *testing.T) {
-	f := moreGarden(t)
+	f := openAccount(t)
 
 	rec := f.saveAccount(t, "  Eleanor  ", "  eleanor  ", "Asia/Tokyo")
 
@@ -149,7 +165,7 @@ func TestAccount_SavingWritesTheNameTheHandleAndTheZone(t *testing.T) {
 }
 
 func TestAccount_SavingTheTimezoneWakesTheDigestJob(t *testing.T) {
-	f := moreGarden(t)
+	f := openAccount(t)
 	woken := 0
 	f.handler.wake = countingWake(&woken)
 
@@ -161,7 +177,7 @@ func TestAccount_SavingTheTimezoneWakesTheDigestJob(t *testing.T) {
 }
 
 func TestAccount_AnEmptyDisplayNameIsRefusedWithTheReason(t *testing.T) {
-	f := moreGarden(t)
+	f := openAccount(t)
 
 	rec := f.saveAccount(t, "   ", "ellie", "Asia/Tokyo")
 
@@ -181,7 +197,7 @@ func TestAccount_AnEmptyDisplayNameIsRefusedWithTheReason(t *testing.T) {
 }
 
 func TestAccount_TheRefusedFormComesBackWithWhatWasTyped(t *testing.T) {
-	f := moreGarden(t)
+	f := openAccount(t)
 
 	rec := f.saveAccount(t, "", "eleanor", "Asia/Tokyo")
 
@@ -195,7 +211,7 @@ func TestAccount_TheRefusedFormComesBackWithWhatWasTyped(t *testing.T) {
 }
 
 func TestAccount_AZoneTheSelectDidNotOfferIsRefused(t *testing.T) {
-	f := moreGarden(t)
+	f := openAccount(t)
 
 	rec := f.saveAccount(t, "Eleanor", "eleanor", "Mars/Olympus_Mons")
 
@@ -214,7 +230,7 @@ func TestAccount_AZoneTheSelectDidNotOfferIsRefused(t *testing.T) {
 // Another seeded account has the handle "sam". "Sam" normalises to it, so the
 // update is rejected by the unique index.
 func TestAccount_AHandleAnotherAccountHoldsIsRefusedAndTheMessageNamesIt(t *testing.T) {
-	f := moreGarden(t)
+	f := openAccount(t)
 
 	rec := f.saveAccount(t, "Ellie", "Sam", "Europe/London")
 
@@ -231,7 +247,7 @@ func TestAccount_AHandleAnotherAccountHoldsIsRefusedAndTheMessageNamesIt(t *test
 }
 
 func TestAccount_SavingWithTheHandleUnchangedRedirectsBackToAccount(t *testing.T) {
-	f := moreGarden(t)
+	f := openAccount(t)
 
 	rec := f.saveAccount(t, "Eleanor", "ellie", "Europe/London")
 
@@ -241,18 +257,18 @@ func TestAccount_SavingWithTheHandleUnchangedRedirectsBackToAccount(t *testing.T
 }
 
 func TestAccount_ThePageASaveRedirectsToSaysSavedAndAPlainVisitDoesNot(t *testing.T) {
-	f := moreGarden(t)
+	f := openAccount(t)
 
-	if page := f.page(t, f.handler.account, savedURL(accountPath)); !strings.Contains(text(page), "Saved") {
+	if page := f.page(t, f.handler.show, savedURL(accountPath)); !strings.Contains(text(page), "Saved") {
 		t.Errorf("the page after a save does not say Saved:\n%s", text(page))
 	}
-	if page := f.page(t, f.handler.account, accountPath); strings.Contains(text(page), "Saved") {
+	if page := f.page(t, f.handler.show, accountPath); strings.Contains(text(page), "Saved") {
 		t.Errorf("a plain visit says Saved:\n%s", text(page))
 	}
 }
 
 func TestAccount_AnEmptyHandleIsRefusedWithTheReason(t *testing.T) {
-	f := moreGarden(t)
+	f := openAccount(t)
 
 	rec := f.saveAccount(t, "Ellie", "   ", "Europe/London")
 
@@ -265,7 +281,7 @@ func TestAccount_AnEmptyHandleIsRefusedWithTheReason(t *testing.T) {
 }
 
 func TestAccount_AHandleTypedWithACapitalAndASpaceIsSavedAsLowerCaseWithAnUnderscore(t *testing.T) {
-	f := moreGarden(t)
+	f := openAccount(t)
 
 	rec := f.saveAccount(t, "Ellie", "Emma Fletcher", "Europe/London")
 
@@ -282,7 +298,7 @@ func TestAccount_AHandleTypedWithACapitalAndASpaceIsSavedAsLowerCaseWithAnUnders
 }
 
 func TestAccount_AHandleOfPunctuationAloneIsRefusedWithTheReason(t *testing.T) {
-	f := moreGarden(t)
+	f := openAccount(t)
 
 	rec := f.saveAccount(t, "Ellie", "!!!", "Europe/London")
 
@@ -302,7 +318,7 @@ func TestAccount_AHandleOfPunctuationAloneIsRefusedWithTheReason(t *testing.T) {
 }
 
 func TestAccount_BothMessagesAreShownWhenTheNameAndTheHandleAreBothEmpty(t *testing.T) {
-	f := moreGarden(t)
+	f := openAccount(t)
 
 	rec := f.saveAccount(t, "  ", "  ", "Europe/London")
 
@@ -315,29 +331,29 @@ func TestAccount_BothMessagesAreShownWhenTheNameAndTheHandleAreBothEmpty(t *test
 }
 
 func TestAccount_TheRecoveryCodesRowSaysNoneYetUntilABatchExists(t *testing.T) {
-	f := moreGarden(t)
+	f := openAccount(t)
 
-	if got := noteOn(t, f.page(t, f.handler.account, accountPath), "Recovery codes"); got != accountCodesNote {
+	if got := noteOn(t, f.page(t, f.handler.show, accountPath), "Recovery codes"); got != accountCodesNote {
 		t.Errorf("holding none the row says %q, want %q", got, accountCodesNote)
 	}
 
 	f.exec(t, "INSERT INTO recovery_code (user_id, code_hash) VALUES ($1, 'one')", moreUserID)
-	if got := noteOn(t, f.page(t, f.handler.account, accountPath), "Recovery codes"); got != "" {
+	if got := noteOn(t, f.page(t, f.handler.show, accountPath), "Recovery codes"); got != "" {
 		t.Errorf("holding a batch the row says %q, want nothing", got)
 	}
 }
 
 func TestAccount_TheRecoveryCodesRowSaysNoneLeftWhenEveryCodeHasBeenUsed(t *testing.T) {
-	f := moreGarden(t)
+	f := openAccount(t)
 	f.exec(t, "INSERT INTO recovery_code (user_id, code_hash, used_at) VALUES ($1, 'spent-one', $2), ($1, 'spent-two', $2)", moreUserID, thursday)
 
-	if got := noteOn(t, f.page(t, f.handler.account, accountPath), "Recovery codes"); got != accountCodesNoneLeftNote {
+	if got := noteOn(t, f.page(t, f.handler.show, accountPath), "Recovery codes"); got != accountCodesNoneLeftNote {
 		t.Errorf("with every code used the row says %q, want %q", got, accountCodesNoneLeftNote)
 	}
 }
 
 func TestAccount_ASaveShowsSavedUnderTheButtonWithoutReloadingThePage(t *testing.T) {
-	f := moreGarden(t)
+	f := openAccount(t)
 	form := url.Values{"name": {"Eleanor"}, "handle": {"eleanor"}, "timezone": {"Asia/Tokyo"}}
 
 	rec := f.swap(t, f.handler.saveAccount, accountPath, accountID, "", "", form)
@@ -353,7 +369,7 @@ func TestAccount_ASaveShowsSavedUnderTheButtonWithoutReloadingThePage(t *testing
 }
 
 func TestAccount_ASaveWithNoDisplayNameKeepsThePageAndReadsOutTheMessage(t *testing.T) {
-	f := moreGarden(t)
+	f := openAccount(t)
 	form := url.Values{"name": {""}, "handle": {"ellie"}, "timezone": {"Europe/London"}}
 
 	rec := f.swap(t, f.handler.saveAccount, accountPath, accountID, "", "", form)
@@ -372,10 +388,20 @@ func TestAccount_ASaveWithNoDisplayNameKeepsThePageAndReadsOutTheMessage(t *test
 }
 
 func TestAccount_AMemberIsNotToldTheyHaveNoRecoveryCodes(t *testing.T) {
-	f := moreGarden(t)
+	f := openAccount(t)
 	f.principal.Capabilities = auth.Capabilities{auth.TokenManage: true}
 
-	if got := noteOn(t, f.page(t, f.handler.account, accountPath), "Recovery codes"); got != "" {
+	if got := noteOn(t, f.page(t, f.handler.show, accountPath), "Recovery codes"); got != "" {
 		t.Errorf("the row says %q to a member, want nothing", got)
+	}
+}
+
+func TestAccount_ThePageLinksToCloseAccount(t *testing.T) {
+	f := openAccount(t)
+
+	page := f.page(t, f.handler.show, accountPath)
+
+	if link := readHTML(page).first(isTag("a"), attrIs("href", closeAccountPath)); link.text() != "Close account" {
+		t.Errorf("the link to %s reads %q, want Close account:\n%s", closeAccountPath, link.text(), text(page))
 	}
 }

@@ -5,10 +5,27 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 	"uuid"
 
 	"github.com/ismailshak/sprig/internal/auth"
+	"github.com/ismailshak/sprig/internal/store"
 )
+
+type recoveryCodesFixture struct {
+	*moreFixture
+	handler *recoveryCodes
+}
+
+func openRecoveryCodes(t *testing.T) *recoveryCodesFixture {
+	t.Helper()
+
+	f := moreGarden(t)
+	return &recoveryCodesFixture{
+		moreFixture: f,
+		handler:     &recoveryCodes{logger: testLogger, queries: store.New(f.tx), templates: testTemplates(), now: func() time.Time { return thursday }},
+	}
+}
 
 // batchRow returns the text of the row saying how many of the account's codes
 // are left. It is empty when the page has no such row.
@@ -27,12 +44,12 @@ func createButton(page string) string {
 }
 
 func TestRecovery_ABatchReadsAsHowManyAreLeftAndWhenItWasMade(t *testing.T) {
-	f := moreGarden(t)
+	f := openRecoveryCodes(t)
 	f.exec(t, `INSERT INTO recovery_code (user_id, code_hash, generated_at, used_at)
 		VALUES ($1, 'used', $2, $2), ($1, 'live-one', $2, NULL), ($1, 'live-two', $2, NULL)`,
 		moreUserID, thursday.AddDate(0, 0, -31))
 
-	page := f.page(t, f.handler.recovery, recoveryPath)
+	page := f.page(t, f.handler.show, recoveryPath)
 
 	if got, want := batchRow(page), "2 of 3 left Made 3 Aug"; got != want {
 		t.Errorf("the batch reads %q, want %q:\n%s", got, want, text(page))
@@ -43,9 +60,9 @@ func TestRecovery_ABatchReadsAsHowManyAreLeftAndWhenItWasMade(t *testing.T) {
 }
 
 func TestRecovery_AnAccountHoldingNoneIsToldSoAndOfferedASet(t *testing.T) {
-	f := moreGarden(t)
+	f := openRecoveryCodes(t)
 
-	page := f.page(t, f.handler.recovery, recoveryPath)
+	page := f.page(t, f.handler.show, recoveryPath)
 
 	if row := batchRow(page); row != "" {
 		t.Errorf("the page shows the batch %q for an account holding none", row)
@@ -59,10 +76,10 @@ func TestRecovery_AnAccountHoldingNoneIsToldSoAndOfferedASet(t *testing.T) {
 }
 
 func TestRecovery_AMemberIsNotToldThatOnlyAnOwnerIsPromptedForCodes(t *testing.T) {
-	f := moreGarden(t)
+	f := openRecoveryCodes(t)
 	f.principal.Capabilities = auth.Capabilities{auth.TokenManage: true}
 
-	page := f.page(t, f.handler.recovery, recoveryPath)
+	page := f.page(t, f.handler.show, recoveryPath)
 
 	if strings.Contains(text(page), "only an owner is prompted") {
 		t.Errorf("the page tells a member only an owner is prompted:\n%s", page)
@@ -73,10 +90,10 @@ func TestRecovery_AMemberIsNotToldThatOnlyAnOwnerIsPromptedForCodes(t *testing.T
 }
 
 func TestRecovery_AnotherAccountsCodesAreNotShownAsThisAccountsBatch(t *testing.T) {
-	f := moreGarden(t)
+	f := openRecoveryCodes(t)
 	f.exec(t, "INSERT INTO recovery_code (user_id, code_hash) VALUES ($1, 'someone-elses')", otherUserID)
 
-	page := f.page(t, f.handler.recovery, recoveryPath)
+	page := f.page(t, f.handler.show, recoveryPath)
 
 	if row := batchRow(page); row != "" {
 		t.Errorf("the page shows the batch %q, and it belongs to another account", row)
@@ -84,7 +101,7 @@ func TestRecovery_AnotherAccountsCodesAreNotShownAsThisAccountsBatch(t *testing.
 }
 
 func TestRecovery_CreatingCodesShowsTenOnceAndStoresOnlyTheirHashes(t *testing.T) {
-	f := moreGarden(t)
+	f := openRecoveryCodes(t)
 
 	rec := f.post(t, f.handler.createCodes, recoveryPath, url.Values{})
 
@@ -126,7 +143,7 @@ func TestRecovery_CreatingCodesShowsTenOnceAndStoresOnlyTheirHashes(t *testing.T
 		}
 	}
 
-	again := f.page(t, f.handler.recovery, recoveryPath)
+	again := f.page(t, f.handler.show, recoveryPath)
 	if strings.Contains(text(again), "These codes are shown only once") {
 		t.Errorf("the next request shows the codes again:\n%s", text(again))
 	}
@@ -136,7 +153,7 @@ func TestRecovery_CreatingCodesShowsTenOnceAndStoresOnlyTheirHashes(t *testing.T
 }
 
 func TestRecovery_CreatingANewSetDeletesTheOldOneAndLeavesAnotherAccountsAlone(t *testing.T) {
-	f := moreGarden(t)
+	f := openRecoveryCodes(t)
 	f.exec(t, `INSERT INTO recovery_code (user_id, code_hash, generated_at, used_at)
 		VALUES ($1, 'old-used', $2, $2), ($1, 'old-live', $2, NULL), ($3, 'someone-elses', $2, NULL)`,
 		moreUserID, thursday.AddDate(0, 0, -31), otherUserID)

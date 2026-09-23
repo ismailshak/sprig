@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 	"uuid"
+
+	"github.com/ismailshak/sprig/internal/store"
 )
 
 // The reader's membership of a second garden, for the check that a time set
@@ -31,7 +33,7 @@ func startsAt(t *testing.T, banner *element) string {
 	return input.attr("value")
 }
 
-// showFrom requests Today at path, which may carry a query string.
+// showFrom requests Today at path. path may include a query string.
 func (f *todayFixture) showFrom(t *testing.T, path string) string {
 	t.Helper()
 
@@ -371,9 +373,13 @@ func TestRemindAgain_TheTimeIsSetOnlyOnTheGardenTheSessionIsOn(t *testing.T) {
 	f.handler.pushKey = testPushKey
 	f.dailyDigest(t, true)
 	// The reader is in a second garden. The session is on Rosewood.
-	f.exec(t, "INSERT INTO garden (id, name) VALUES ($1, 'Fairview')", otherGardenID)
-	f.exec(t, "INSERT INTO membership (id, garden_id, user_id, role, digest_hour) VALUES ($1, $2, $3, 'owner', 8)",
-		otherMembershipID, otherGardenID, readerID)
+	ownedGarden{
+		id:           otherGardenID,
+		name:         "Fairview",
+		owner:        store.AppUser{ID: readerID},
+		ownerExists:  true,
+		membershipID: otherMembershipID,
+	}.insert(t, f.tx)
 
 	rec := f.remindAgain(t, url.Values{"delay": {"1h"}}, true)
 

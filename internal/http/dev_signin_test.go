@@ -41,11 +41,11 @@ func devStack(t *testing.T) (http.Handler, *auth.Resolver) {
 		name:  "Home",
 		owner: store.AppUser{ID: ellieID, DisplayName: "Ellie", Handle: "ellie", Timezone: "Europe/London"},
 	}.insert(t, tx)
+	insertGarden(t, tx, upstairsID, "Upstairs")
 	seed := []struct {
 		sql  string
 		args []any
 	}{
-		{"INSERT INTO garden (id, name) VALUES ($1, 'Upstairs')", []any{upstairsID}},
 		{"INSERT INTO app_user (id, display_name, handle, timezone, created_at) VALUES ($1, 'Sam', 'sam', 'Europe/London', now() - interval '2 days')", []any{samID}},
 		{"INSERT INTO app_user (id, display_name, handle, timezone, created_at) VALUES ($1, 'Robin', 'robin', 'Europe/Lisbon', now() - interval '1 day')", []any{robinID}},
 		// Clare's account is closed. The page does not list her.

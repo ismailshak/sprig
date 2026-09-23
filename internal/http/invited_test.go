@@ -90,7 +90,7 @@ func invitedGarden(t *testing.T) *invitedFixture {
 	}
 	sessions := auth.NewSessions(queries, testTTL, cookie)
 	return &invitedFixture{
-		moreFixture: f,
+		moreFixture: f.moreFixture,
 		handler: &invited{
 			logger:    testLogger,
 			passkeys:  passkeys,

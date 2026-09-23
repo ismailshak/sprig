@@ -9,12 +9,28 @@ import (
 	"time"
 
 	"github.com/ismailshak/sprig/internal/auth"
+	"github.com/ismailshak/sprig/internal/store"
 )
 
-func TestInvite_TheChipsOfferTheTwoRolesAndSaySoInTheWordsAMembersRowUses(t *testing.T) {
-	f := peopleGarden(t)
+type inviteFixture struct {
+	*peopleFixture
+	handler *invite
+}
 
-	page := f.page(t, f.handler.invite, invitePath+"?role=member")
+func openInviteSomeone(t *testing.T) *inviteFixture {
+	t.Helper()
+
+	f := peopleGarden(t)
+	return &inviteFixture{
+		peopleFixture: f,
+		handler:       &invite{logger: testLogger, queries: store.New(f.tx), templates: testTemplates(), now: func() time.Time { return thursday }},
+	}
+}
+
+func TestInvite_TheChipsOfferTheTwoRolesAndSaySoInTheWordsAMembersRowUses(t *testing.T) {
+	f := openInviteSomeone(t)
+
+	page := f.page(t, f.handler.show, invitePath+"?role=member")
 
 	if got := roleChips(page); !slices.Equal(got, []string{"Member", "Sitter"}) {
 		t.Errorf("the chips read %v, want Member and Sitter", got)
@@ -28,21 +44,21 @@ func TestInvite_TheChipsOfferTheTwoRolesAndSaySoInTheWordsAMembersRowUses(t *tes
 }
 
 func TestInvite_TheChipsStartOnSitterAndKeepTheEndDateWhenOneIsPressed(t *testing.T) {
-	f := peopleGarden(t)
+	f := openInviteSomeone(t)
 
-	page := f.page(t, f.handler.invite, invitePath)
+	page := f.page(t, f.handler.show, invitePath)
 	if pressed := chipPressed(page); pressed != "Sitter" {
 		t.Errorf("%q is pressed on a first visit, want Sitter", pressed)
 	}
 
-	page = f.page(t, f.handler.invite, invitePath+"?role=member&until=2026-09-14")
+	page = f.page(t, f.handler.show, invitePath+"?role=member&until=2026-09-14")
 	if got := endDateField(t, page); got != "2026-09-14" {
 		t.Errorf("the end date reads %q after a chip was pressed, want %q", got, "2026-09-14")
 	}
 }
 
 func TestInvite_ALinkIsShownOnceAndOnlyItsHashIsStored(t *testing.T) {
-	f := peopleGarden(t)
+	f := openInviteSomeone(t)
 
 	rec := f.do(t, f.handler.createInviteLink, invitePath, url.Values{"role": {"sitter"}})
 	if rec.Code != http.StatusOK {
@@ -64,13 +80,13 @@ func TestInvite_ALinkIsShownOnceAndOnlyItsHashIsStored(t *testing.T) {
 	if want := thursday.Add(auth.InviteLifetime); !expires.Equal(want) {
 		t.Errorf("the link runs out at %s, want %s", expires, want)
 	}
-	if strings.Contains(f.page(t, f.handler.invite, invitePath), token) {
+	if strings.Contains(f.page(t, f.handler.show, invitePath), token) {
 		t.Error("the link is on the page again on the next request, and it is shown exactly once")
 	}
 }
 
 func TestInvite_TheEndDateLandsOnTheMembershipTheLinkWillCreate(t *testing.T) {
-	f := peopleGarden(t)
+	f := openInviteSomeone(t)
 
 	rec := f.do(t, f.handler.createInviteLink, invitePath, url.Values{"role": {"sitter"}, "until": {"2026-09-14"}})
 	if rec.Code != http.StatusOK {
@@ -97,20 +113,20 @@ func TestInvite_TheEndDateLandsOnTheMembershipTheLinkWillCreate(t *testing.T) {
 }
 
 func TestInvite_ARoleTheChipsDoNotOfferIsRefusedAndNoLinkIsMade(t *testing.T) {
-	f := peopleGarden(t)
+	f := openInviteSomeone(t)
 
 	rec := f.do(t, f.handler.createInviteLink, invitePath, url.Values{"role": {"owner"}})
 
 	if rec.Code != http.StatusBadRequest {
 		t.Errorf("status = %d, want %d", rec.Code, http.StatusBadRequest)
 	}
-	if invites := invitesInGarden(t, f); invites != 3 {
+	if invites := invitesInGarden(t, f.moreFixture); invites != 3 {
 		t.Errorf("the garden holds %d invites, and a refused role writes none", invites)
 	}
 }
 
 func TestInvite_ADateTheFieldCannotHoldIsRefusedWithTheFormStillOnThePage(t *testing.T) {
-	f := peopleGarden(t)
+	f := openInviteSomeone(t)
 
 	rec := f.do(t, f.handler.createInviteLink, invitePath, url.Values{"role": {"member"}, "until": {"next Tuesday"}})
 
@@ -124,7 +140,7 @@ func TestInvite_ADateTheFieldCannotHoldIsRefusedWithTheFormStillOnThePage(t *tes
 	if pressed := chipPressed(page); pressed != "Member" {
 		t.Errorf("%q is pressed after the refusal, want the role that was chosen", pressed)
 	}
-	if invites := invitesInGarden(t, f); invites != 3 {
+	if invites := invitesInGarden(t, f.moreFixture); invites != 3 {
 		t.Errorf("the garden holds %d invites, and a refused date writes none", invites)
 	}
 }
@@ -177,12 +193,12 @@ func endDateField(t *testing.T, page string) string {
 }
 
 func TestInvite_TheEndDateFieldOffersNothingBeforeTomorrowInTheInvitersZone(t *testing.T) {
-	f := peopleGarden(t)
+	f := openInviteSomeone(t)
 	// The fixture's clock is 08:00 UTC on Thursday 3 September. In Honolulu
 	// that is still Wednesday evening, so tomorrow there is the 3rd.
 	f.principal.User.Timezone = "Pacific/Honolulu"
 
-	page := f.page(t, f.handler.invite, invitePath)
+	page := f.page(t, f.handler.show, invitePath)
 
 	if field := readHTML(page).byID("until"); field.attr("type") != "date" || field.attr("min") != "2026-09-03" {
 		t.Errorf("the end date field does not start on tomorrow in the inviter's zone:\n%s", page)
@@ -206,9 +222,9 @@ func TestInvite_AnEndDateThatHasAlreadyBegunIsRefusedAndTomorrowIsNot(t *testing
 	}
 	for _, c := range cases {
 		t.Run(c.zone+" "+c.posted, func(t *testing.T) {
-			f := peopleGarden(t)
+			f := openInviteSomeone(t)
 			f.principal.User.Timezone = c.zone
-			before := invitesInGarden(t, f)
+			before := invitesInGarden(t, f.moreFixture)
 
 			rec := f.do(t, f.handler.createInviteLink, invitePath, url.Values{"role": {"sitter"}, "until": {c.posted}})
 
@@ -228,7 +244,7 @@ func TestInvite_AnEndDateThatHasAlreadyBegunIsRefusedAndTomorrowIsNot(t *testing
 			if got := endDateField(t, page); got != c.posted {
 				t.Errorf("the field lost the date that was typed:\n%s", page)
 			}
-			if invitesInGarden(t, f) != before {
+			if invitesInGarden(t, f.moreFixture) != before {
 				t.Error("a refused date wrote an invite")
 			}
 		})

@@ -36,7 +36,7 @@ func (f *moreFixture) joinFairview(t *testing.T) {
 // ended the day before the fixture's clock.
 func (f *moreFixture) leaveThirdGarden(t *testing.T) {
 	t.Helper()
-	f.exec(t, "INSERT INTO garden (id, name) VALUES ($1, 'Allotment')", thirdGardenID)
+	insertGarden(t, f.tx, thirdGardenID, "Allotment")
 	f.exec(t, "INSERT INTO membership (garden_id, user_id, role, digest_hour, expires_at) VALUES ($1, $2, 'member', 8, $3)",
 		thirdGardenID, moreUserID, thursday.AddDate(0, 0, -1))
 }

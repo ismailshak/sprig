@@ -68,10 +68,9 @@ type moreFixture struct {
 	principal    auth.Principal
 }
 
-// moreGarden sets up the account the four pages under More read: Ellie owns
+// moreGarden sets up the account the pages under More read: Ellie owns
 // Rosewood, has two passkeys and two subscribed browsers, gets the digest and
 // not the activity messages, and has one invite out that nobody has taken up.
-// Push is on, so the Notifications page has its form.
 // Sam is a second account in a second garden, so a row that belongs to
 // somebody else is in reach of every query the pages make.
 func moreGarden(t *testing.T) *moreFixture {
@@ -110,11 +109,9 @@ func moreGarden(t *testing.T) *moreFixture {
 		handler: &more{
 			logger:    testLogger,
 			queries:   store.New(tx),
-			photos:    testPhotos(t),
 			templates: testTemplates(),
 			build:     build.Info{Version: "0.1.0", Revision: "8f2c1a4d3b29e7c05a1"},
 			now:       func() time.Time { return thursday },
-			pushKey:   testPushKey,
 		},
 		todayHandler: &today{
 			logger:    testLogger,
@@ -489,32 +486,5 @@ func TestMore_SigningOutDeletesTheSessionAndClearsTheCookie(t *testing.T) {
 	cookie := rec.Result().Cookies()[0]
 	if cookie.Value != "" || cookie.MaxAge >= 0 {
 		t.Errorf("the cookie is %q with MaxAge %d, want an empty value and a negative MaxAge", cookie.Value, cookie.MaxAge)
-	}
-}
-
-func TestMore_TheAppearancePageOffersLightDarkAndSystemWithSystemChecked(t *testing.T) {
-	f := moreGarden(t)
-
-	page := f.page(t, f.handler.appearance, appearancePath)
-
-	var values, checked []string
-	for _, radio := range readHTML(page).all(isTag("input"), attrIs("name", "mode")) {
-		values = append(values, radio.attr("value"))
-		if radio.has("checked") {
-			checked = append(checked, radio.attr("value"))
-		}
-		// The page's script enables the radios. Without it they stay disabled.
-		if !radio.has("disabled") {
-			t.Errorf("the %s radio is rendered enabled, want disabled", radio.attr("value"))
-		}
-	}
-	if want := []string{"light", "dark", "system"}; !slices.Equal(values, want) {
-		t.Errorf("the radios are %v, want %v", values, want)
-	}
-	if want := []string{"system"}; !slices.Equal(checked, want) {
-		t.Errorf("the checked radios are %v, want %v, because without a script the page follows the system", checked, want)
-	}
-	if !strings.Contains(text(page), "Without JavaScript, sprig follows your device’s light or dark setting.") {
-		t.Errorf("the page does not say what happens without JavaScript:\n%s", text(page))
 	}
 }

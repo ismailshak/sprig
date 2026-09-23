@@ -1,9 +1,11 @@
 package http
 
 import (
+	"log/slog"
 	"net/http"
 	"strings"
 
+	"github.com/ismailshak/sprig/internal/photo"
 	"github.com/ismailshak/sprig/internal/store"
 )
 
@@ -29,7 +31,15 @@ type deleteGardenPage struct {
 	Error string
 }
 
-func (h *more) newDeleteGardenPage(name string) deleteGardenPage {
+type deleteGarden struct {
+	logger    *slog.Logger
+	queries   *store.Queries
+	photos    *photo.Store
+	templates *Templates
+	wake      wakeJobs
+}
+
+func newDeleteGardenPage(name string) deleteGardenPage {
 	return deleteGardenPage{
 		Bar:    topbar{Href: gardenPath, Back: "Garden", Title: "Delete garden"},
 		Action: deleteGardenPath,
@@ -37,17 +47,17 @@ func (h *more) newDeleteGardenPage(name string) deleteGardenPage {
 	}
 }
 
-// confirmDeleteGarden handles GET /more/garden/delete.
-func (h *more) confirmDeleteGarden(w http.ResponseWriter, r *http.Request) {
-	h.templates.render(w, r, view{page: "delete-garden"}, h.newDeleteGardenPage(PrincipalFrom(r).Garden.Name))
+// confirm handles GET /more/garden/delete.
+func (h *deleteGarden) confirm(w http.ResponseWriter, r *http.Request) {
+	h.templates.render(w, r, view{page: "delete-garden"}, newDeleteGardenPage(PrincipalFrom(r).Garden.Name))
 }
 
-// deleteGarden handles POST /more/garden/delete. The rows are deleted in one
+// delete handles POST /more/garden/delete. The rows are deleted in one
 // transaction and the photo files afterwards, so a crash between the two
 // leaves files with no row rather than rows with no file. Deleting the
 // memberships sets garden_id to null on the garden's sessions. The redirect to
 // Today then opens the owner's next garden or the no-garden page.
-func (h *more) deleteGarden(w http.ResponseWriter, r *http.Request) {
+func (h *deleteGarden) delete(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	if err := r.ParseForm(); err != nil {
 		h.templates.badRequest(w, r)
@@ -55,7 +65,7 @@ func (h *more) deleteGarden(w http.ResponseWriter, r *http.Request) {
 	}
 	typed := strings.TrimSpace(r.PostForm.Get("name"))
 	if typed != principal.Garden.Name {
-		page := h.newDeleteGardenPage(principal.Garden.Name)
+		page := newDeleteGardenPage(principal.Garden.Name)
 		page.Typed = typed
 		page.Error = deleteGardenMismatch
 		h.templates.render(w, r, view{page: "delete-garden", status: http.StatusUnprocessableEntity}, page)
@@ -75,7 +85,7 @@ func (h *more) deleteGarden(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// A failure here is logged and not shown, because the rows are already
-	// deleted. The photo sweep deletes any file left behind.
+	// deleted. The photo sweep deletes any file still on disk.
 	if err := h.photos.DeleteGardenPhotos(gardenID); err != nil {
 		h.logger.WarnContext(r.Context(), "remove the deleted garden's photos", "error", err)
 	}

@@ -129,34 +129,6 @@ func selectedValue(sel *element) string {
 	return sel.first(isTag("option"), hasAttr("selected")).attr("value")
 }
 
-func TestPasskeys_AddAPasskeyPostsToTheChallengeURLAndThenToThePasskeysPage(t *testing.T) {
-	f := moreGarden(t)
-
-	page := f.page(t, f.handler.passkeys, passkeysPath)
-
-	// The form and its challenge URL are the contract the script runs on. It
-	// posts to data-challenge for a challenge, then posts this form.
-	form := formTo(page, passkeysPath)
-	if form == nil {
-		t.Fatalf("the Add a passkey form does not post to %s:\n%s", passkeysPath, page)
-	}
-	if got := form.attr("data-challenge"); got != registerPath {
-		t.Errorf("the form offers a challenge at %q, want %s", got, registerPath)
-	}
-}
-
-func TestPasskeys_AddAPasskeyIsDisabledUntilThePagesScriptRuns(t *testing.T) {
-	f := moreGarden(t)
-
-	page := f.page(t, f.handler.passkeys, passkeysPath)
-
-	// Only the browser can talk to the device, so a press with no script
-	// running would post an empty credential.
-	if !buttonIsDisabled(t, page, "Add passkey") {
-		t.Errorf("Add a passkey is not disabled:\n%s", page)
-	}
-}
-
 func TestPasskeys_TheCeremonyCookieDropsTheHostPrefixWhereCookiesAreNotSecure(t *testing.T) {
 	f := moreGarden(t)
 	// A browser drops a __Host- cookie that is not Secure, and the post that
@@ -409,7 +381,7 @@ func TestPasskeys_ARegisteredDeviceIsOnTheListAndSignsIn(t *testing.T) {
 
 	f.enrolDevice(t, h, device)
 
-	page := f.page(t, f.handler.passkeys, passkeysPath)
+	page := f.page(t, passkeysOn(f).handler.show, passkeysPath)
 	if got := len(readHTML(page).all(isTag("button"), textIs("Remove"))); got != 3 {
 		t.Errorf("the page offers Remove %d times, want 3 for the two seeded devices and the new one:\n%s", got, text(page))
 	}
@@ -509,7 +481,7 @@ func TestPasskeys_ADeviceRegisteredASecondTimeIsRefusedOnThePage(t *testing.T) {
 	f.enrolDevice(t, h, device)
 
 	// The software device ignores the exclude list, as a hand-made client
-	// would, and answers with the credential id it already registered.
+	// would, and returns the credential id it already registered.
 	rec := f.registerDevice(t, h, device)
 
 	if rec.Code != http.StatusUnprocessableEntity {
