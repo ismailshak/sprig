@@ -19,6 +19,12 @@
       matchPackageNames: ['*'],
       semanticCommitType: 'chore',
     },
+    // pnpm refuses to install a version published less than a day ago, so a
+    // pull request proposing one fails at pnpm install in CI
+    {
+      matchDatasources: ['npm'],
+      minimumReleaseAge: '1 day',
+    },
   ],
   customManagers: [
     // The htmx version pinned under [vars] in mise.toml. htmx is a vendored
