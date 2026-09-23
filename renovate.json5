@@ -19,8 +19,7 @@
       matchPackageNames: ['*'],
       semanticCommitType: 'chore',
     },
-    // pnpm refuses to install a version published less than a day ago, so a
-    // pull request proposing one fails at pnpm install in CI
+    // Matches pnpm's minimum release age rule
     {
       matchDatasources: ['npm'],
       minimumReleaseAge: '1 day',
