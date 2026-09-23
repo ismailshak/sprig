@@ -593,10 +593,8 @@ func TestSetup_APersonWhoSignsUpAndIsThenInvitedElsewhereSignsInToTheirOwnGarden
 	robin := f.principalOf(t, token).User
 	// Another garden invites Robin as a sitter, some time after their own
 	// garden was made.
-	var fairviewID uuid.UUID
-	if err := f.tx.QueryRow(t.Context(), "INSERT INTO garden (name) VALUES ('Fairview') RETURNING id").Scan(&fairviewID); err != nil {
-		t.Fatalf("seeding Fairview: %v", err)
-	}
+	fairviewID := uuid.NewV7()
+	insertGarden(t, f.tx, fairviewID, "Fairview")
 	if _, err := createMembership(t.Context(), f.queries, newMembership{GardenID: fairviewID, UserID: robin.ID, Role: "sitter"}); err != nil {
 		t.Fatalf("seeding the second membership: %v", err)
 	}

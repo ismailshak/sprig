@@ -3,6 +3,7 @@ package http
 import (
 	"cmp"
 	"context"
+	"log/slog"
 	"net/http"
 	"slices"
 	"strings"
@@ -56,7 +57,14 @@ type accountPage struct {
 	Saved bool
 }
 
-func (h *more) account(w http.ResponseWriter, r *http.Request) {
+type account struct {
+	logger    *slog.Logger
+	queries   *store.Queries
+	templates *Templates
+	wake      wakeJobs
+}
+
+func (h *account) show(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	user := principal.User
 	held := accountForm{name: user.DisplayName, handle: user.Handle, zone: user.Timezone}
@@ -75,7 +83,7 @@ const accountID = "account"
 
 // renderAccount writes the page, or the page under the top bar for a swap of
 // it. A status of zero means 200.
-func (h *more) renderAccount(w http.ResponseWriter, r *http.Request, page accountPage, status int, announce string) {
+func (h *account) renderAccount(w http.ResponseWriter, r *http.Request, page accountPage, status int, announce string) {
 	v := view{page: "account", status: status, announce: announce}
 	if r.Header.Get("HX-Target") == accountID {
 		v.fragment = accountID
@@ -83,7 +91,7 @@ func (h *more) renderAccount(w http.ResponseWriter, r *http.Request, page accoun
 	h.templates.render(w, r, v, page)
 }
 
-func (h *more) saveAccount(w http.ResponseWriter, r *http.Request) {
+func (h *account) saveAccount(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	if err := r.ParseForm(); err != nil {
 		h.templates.badRequest(w, r)
@@ -164,7 +172,7 @@ func handleErrorFor(handle string) string {
 
 // newAccountPage fills the Account page from form: the stored values when the
 // page is opened, and the posted values when a save was refused.
-func (h *more) newAccountPage(ctx context.Context, principal auth.Principal, form accountForm) (accountPage, error) {
+func (h *account) newAccountPage(ctx context.Context, principal auth.Principal, form accountForm) (accountPage, error) {
 	page := accountPage{
 		Bar:    moreBar("Account"),
 		Action: accountPath,
@@ -176,7 +184,7 @@ func (h *more) newAccountPage(ctx context.Context, principal auth.Principal, for
 	page.Zone.Zones = zoneOptions(form.zone)
 
 	if principal.Can(auth.MemberManage) {
-		batch, live, err := h.recoveryBatch(ctx, principal.User.ID)
+		batch, live, err := recoveryBatch(ctx, h.queries, principal.User.ID)
 		if err != nil {
 			return accountPage{}, err
 		}

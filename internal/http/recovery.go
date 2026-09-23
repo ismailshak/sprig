@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 	"uuid"
 
 	"github.com/jackc/pgx/v5"
@@ -44,9 +46,16 @@ func recoveryBar() topbar {
 	return topbar{Href: accountPath, Back: "Account", Title: "Recovery codes"}
 }
 
-func (h *more) recovery(w http.ResponseWriter, r *http.Request) {
+type recoveryCodes struct {
+	logger    *slog.Logger
+	queries   *store.Queries
+	templates *Templates
+	now       func() time.Time
+}
+
+func (h *recoveryCodes) show(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
-	batch, live, err := h.recoveryBatch(r.Context(), principal.User.ID)
+	batch, live, err := recoveryBatch(r.Context(), h.queries, principal.User.ID)
 	if err != nil {
 		h.templates.serverError(h.logger, w, r, "open the recovery codes", err)
 		return
@@ -67,8 +76,8 @@ func (h *more) recovery(w http.ResponseWriter, r *http.Request) {
 // recoveryBatch reads an account's recovery codes. The bool is false when
 // there are none. That is not an error: the query returns no rows for an
 // account that has never made a set.
-func (h *more) recoveryBatch(ctx context.Context, userID uuid.UUID) (store.GetRecoveryBatchRow, bool, error) {
-	batch, err := h.queries.GetRecoveryBatch(ctx, userID)
+func recoveryBatch(ctx context.Context, queries *store.Queries, userID uuid.UUID) (store.GetRecoveryBatchRow, bool, error) {
+	batch, err := queries.GetRecoveryBatch(ctx, userID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return store.GetRecoveryBatchRow{}, false, nil
 	}
@@ -82,7 +91,7 @@ func (h *more) recoveryBatch(ctx context.Context, userID uuid.UUID) (store.GetRe
 // the account holds with a batch of ten and renders the page with the new
 // codes in plaintext. The delete and the insert are one transaction, so an
 // account is never left holding two batches or none at all.
-func (h *more) createCodes(w http.ResponseWriter, r *http.Request) {
+func (h *recoveryCodes) createCodes(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	codes := make([]string, 0, auth.RecoveryBatchSize)
 	hashes := make([]string, 0, auth.RecoveryBatchSize)

@@ -15,16 +15,31 @@ import (
 
 var closeEventID = uuid.MustParse("00000000-0000-7000-8000-000000000340")
 
+type closeAccountFixture struct {
+	*moreFixture
+	handler *closeAccount
+}
+
+func openCloseAccount(t *testing.T) *closeAccountFixture {
+	t.Helper()
+
+	f := moreGarden(t)
+	return &closeAccountFixture{
+		moreFixture: f,
+		handler:     &closeAccount{logger: testLogger, queries: store.New(f.tx), templates: testTemplates(), now: func() time.Time { return thursday }},
+	}
+}
+
 // closableAccount gives Ellie one of everything closing deletes: a care event,
 // a recovery code, a session and a re-enrolment invite. It makes Sam a second
 // owner of Rosewood, because the close is refused while Ellie is the only
 // owner.
-func closableAccount(t *testing.T) *moreFixture {
+func closableAccount(t *testing.T) *closeAccountFixture {
 	t.Helper()
 
-	f := moreGarden(t)
+	f := openCloseAccount(t)
 	f.handler.sessions = testSessions()
-	f.exec(t, "INSERT INTO care_type (garden_id, name, slug) VALUES ($1, 'Water', 'water')", moreGardenID)
+	insertCareTypes(t, f.tx, moreGardenID, store.CareType{Name: "Water", Slug: "water"})
 	f.exec(t, "INSERT INTO plant (id, garden_id, nickname) VALUES ($1, $2, 'Fern')", morePlantID, moreGardenID)
 	f.exec(t, `INSERT INTO care_event (id, garden_id, plant_id, care_type_id, performed_by, performed_at, done)
 		SELECT $1, $2, $3, id, $4, now(), true FROM care_type WHERE garden_id = $2`, closeEventID, moreGardenID, morePlantID, moreUserID)
@@ -43,15 +58,15 @@ func closeAccountButton(page string) *element {
 
 // closeAccount posts the close with the account's handle typed, as the page
 // asks.
-func (f *moreFixture) closeAccount(t *testing.T) *httptest.ResponseRecorder {
+func (f *closeAccountFixture) closeAccount(t *testing.T) *httptest.ResponseRecorder {
 	t.Helper()
-	return f.do(t, f.handler.closeAccount, closeAccountPath, url.Values{"handle": {f.principal.User.Handle}})
+	return f.do(t, f.handler.close, closeAccountPath, url.Values{"handle": {f.principal.User.Handle}})
 }
 
 func TestCloseAccount_ThePageSaysWhatIsDeletedAndWhatIsKept(t *testing.T) {
 	f := closableAccount(t)
 
-	page := f.page(t, f.handler.confirmCloseAccount, closeAccountPath)
+	page := f.page(t, f.handler.confirm, closeAccountPath)
 
 	for _, want := range []string{"deletes your passkeys", "Your name stays on everything you’ve logged"} {
 		if !strings.Contains(text(page), want) {
@@ -69,7 +84,7 @@ func TestCloseAccount_ThePageSaysWhatIsDeletedAndWhatIsKept(t *testing.T) {
 func TestCloseAccount_APostWithoutTheHandleIsRefusedAndNothingIsDeleted(t *testing.T) {
 	f := closableAccount(t)
 
-	rec := f.do(t, f.handler.closeAccount, closeAccountPath, url.Values{"handle": {"elie"}})
+	rec := f.do(t, f.handler.close, closeAccountPath, url.Values{"handle": {"elie"}})
 
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusUnprocessableEntity)
@@ -91,9 +106,9 @@ func TestCloseAccount_APostWithoutTheHandleIsRefusedAndNothingIsDeleted(t *testi
 }
 
 func TestCloseAccount_TheOnlyOwnerOfAGardenIsToldToDeleteItAndGetsNoButton(t *testing.T) {
-	f := moreGarden(t)
+	f := openCloseAccount(t)
 
-	page := f.page(t, f.handler.confirmCloseAccount, closeAccountPath)
+	page := f.page(t, f.handler.confirm, closeAccountPath)
 
 	if !strings.Contains(text(page), "You’re the only owner of Rosewood. Delete it before closing your account") {
 		t.Errorf("the page does not name the garden:\n%s", text(page))
@@ -104,11 +119,15 @@ func TestCloseAccount_TheOnlyOwnerOfAGardenIsToldToDeleteItAndGetsNoButton(t *te
 }
 
 func TestCloseAccount_TheOnlyOwnerOfTwoGardensIsToldBoth(t *testing.T) {
-	f := moreGarden(t)
-	f.exec(t, "INSERT INTO garden (id, name) VALUES ($1, 'Allotment')", uuid.MustParse("00000000-0000-7000-8000-000000000341"))
-	f.exec(t, "INSERT INTO membership (garden_id, user_id, role, digest_hour) VALUES ($1, $2, 'owner', 8)", uuid.MustParse("00000000-0000-7000-8000-000000000341"), moreUserID)
+	f := openCloseAccount(t)
+	ownedGarden{
+		id:          uuid.MustParse("00000000-0000-7000-8000-000000000341"),
+		name:        "Allotment",
+		owner:       store.AppUser{ID: moreUserID},
+		ownerExists: true,
+	}.insert(t, f.tx)
 
-	page := f.page(t, f.handler.confirmCloseAccount, closeAccountPath)
+	page := f.page(t, f.handler.confirm, closeAccountPath)
 
 	if !strings.Contains(text(page), "only owner of Allotment and Rosewood. Delete them before") {
 		t.Errorf("the page does not name both gardens:\n%s", text(page))
@@ -116,7 +135,7 @@ func TestCloseAccount_TheOnlyOwnerOfTwoGardensIsToldBoth(t *testing.T) {
 }
 
 func TestCloseAccount_PostingAsTheOnlyOwnerIsRefusedAndNothingIsDeleted(t *testing.T) {
-	f := moreGarden(t)
+	f := openCloseAccount(t)
 	f.handler.sessions = testSessions()
 
 	rec := f.closeAccount(t)
@@ -148,7 +167,7 @@ func TestCloseAccount_AnOwnerWhoseMembershipEndedDoesNotCountAsAnotherOwner(t *t
 // the garden to delete it. A refusal would leave her unable to close the
 // account at all.
 func TestCloseAccount_AnOwnerWhoseOwnMembershipEndedCanClose(t *testing.T) {
-	f := moreGarden(t)
+	f := openCloseAccount(t)
 	f.handler.sessions = testSessions()
 	f.exec(t, "UPDATE membership SET expires_at = $3 WHERE garden_id = $1 AND user_id = $2", moreGardenID, moreUserID, thursday.AddDate(0, 0, -1))
 
@@ -215,22 +234,12 @@ func TestCloseAccount_AnAccountInNoGardenGetsThePageWithoutTheTabBar(t *testing.
 	f := closableAccount(t)
 	f.principal = auth.Principal{User: f.principal.User}
 
-	page := f.page(t, f.handler.confirmCloseAccount, closeAccountPath)
+	page := f.page(t, f.handler.confirm, closeAccountPath)
 
 	if readHTML(page).first(isTag("nav")) != nil {
 		t.Error("an account in no garden got the tab bar")
 	}
 	if closeAccountButton(page) == nil {
 		t.Errorf("an account in no garden is not offered the button:\n%s", text(page))
-	}
-}
-
-func TestAccount_ThePageLinksToCloseAccount(t *testing.T) {
-	f := moreGarden(t)
-
-	page := f.page(t, f.handler.account, accountPath)
-
-	if link := readHTML(page).first(isTag("a"), attrIs("href", closeAccountPath)); link.text() != "Close account" {
-		t.Errorf("the link to %s reads %q, want Close account:\n%s", closeAccountPath, link.text(), text(page))
 	}
 }

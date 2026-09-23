@@ -154,7 +154,19 @@ type browserRow struct {
 // notification swap it.
 const devicesID = "devices"
 
-func (h *more) notifications(w http.ResponseWriter, r *http.Request) {
+type notifications struct {
+	logger    *slog.Logger
+	queries   *store.Queries
+	templates *Templates
+	now       func() time.Time
+	// pushKey is the VAPID public key the browser subscribes with. It is empty
+	// when push is off.
+	pushKey string
+	wake    wakeJobs
+	test    sendTest
+}
+
+func (h *notifications) show(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	h.renderNotifications(w, r, principal, principal.Membership.DigestHour, notificationsState{
 		testResult: testResultLines[r.URL.Query().Get(testResultParam)],
@@ -180,7 +192,7 @@ type notificationsState struct {
 // renderNotifications writes the page. hour is the digest hour to show. It is
 // passed in rather than read from the principal because after a save the
 // principal on the request still holds the hour from before it.
-func (h *more) renderNotifications(w http.ResponseWriter, r *http.Request, principal auth.Principal, hour int16, state notificationsState) {
+func (h *notifications) renderNotifications(w http.ResponseWriter, r *http.Request, principal auth.Principal, hour int16, state notificationsState) {
 	preferences, err := h.queries.ListNotificationPreferences(r.Context(), principal.Membership.ID)
 	if err != nil {
 		h.templates.serverError(h.logger, w, r, "read the notification preferences", err)
@@ -215,7 +227,7 @@ func (h *more) renderNotifications(w http.ResponseWriter, r *http.Request, princ
 // Notifications page with the outcome in the query string. An endpoint that
 // is empty or another account's matches no row. The outcome is then
 // testNone.
-func (h *more) sendTestNotification(w http.ResponseWriter, r *http.Request) {
+func (h *notifications) sendTestNotification(w http.ResponseWriter, r *http.Request) {
 	// With push off no browser can be subscribed, so the route is a 404.
 	if h.pushKey == "" || h.test == nil {
 		h.templates.notFound(w, r)
@@ -257,7 +269,7 @@ func (h *more) sendTestNotification(w http.ResponseWriter, r *http.Request) {
 // device posts as a swap and gets the Subscribed devices section with the new
 // row. The Reminders page and the banner on Today post with fetch and get an
 // empty 204.
-func (h *more) subscribeBrowser(w http.ResponseWriter, r *http.Request) {
+func (h *notifications) subscribeBrowser(w http.ResponseWriter, r *http.Request) {
 	// With push off no browser can have a subscription to post, so the route
 	// is a 404.
 	if h.pushKey == "" {
@@ -335,7 +347,7 @@ func decodePushKey(v string) ([]byte, error) {
 
 // saveNotifications writes both types and the digest's hour. The hour is
 // absent from the form when the digest is off, and the stored hour is kept.
-func (h *more) saveNotifications(w http.ResponseWriter, r *http.Request) {
+func (h *notifications) saveNotifications(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	if err := r.ParseForm(); err != nil {
 		h.templates.badRequest(w, r)
@@ -388,7 +400,7 @@ func (h *more) saveNotifications(w http.ResponseWriter, r *http.Request) {
 
 // removeBrowser deletes one push subscription. Nothing is sent to that
 // browser afterwards.
-func (h *more) removeBrowser(w http.ResponseWriter, r *http.Request) {
+func (h *notifications) removeBrowser(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	subscriptionID, err := uuid.Parse(r.PathValue("browser"))
 	if err != nil {

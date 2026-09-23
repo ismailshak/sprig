@@ -10,6 +10,7 @@ import (
 	"uuid"
 
 	"github.com/ismailshak/sprig/internal/auth"
+	"github.com/ismailshak/sprig/internal/store"
 )
 
 var (
@@ -18,14 +19,29 @@ var (
 	otherTokenID   = uuid.MustParse("00000000-0000-7000-8000-000000000352")
 )
 
+type tokensFixture struct {
+	*moreFixture
+	handler *tokens
+}
+
+func openTokens(t *testing.T) *tokensFixture {
+	t.Helper()
+
+	f := moreGarden(t)
+	return &tokensFixture{
+		moreFixture: f,
+		handler:     &tokens{logger: testLogger, queries: store.New(f.tx), templates: testTemplates(), now: func() time.Time { return thursday }},
+	}
+}
+
 // tokenGarden gives Rosewood the two rows the Tokens page has to tell apart:
 // the kitchen display, which works and was used today, and the spare, which
 // ran out on its own six days ago and has never been used. Fairview holds one
 // too, so another garden's row is in reach of every query the page makes.
-func tokenGarden(t *testing.T) *moreFixture {
+func tokenGarden(t *testing.T) *tokensFixture {
 	t.Helper()
 
-	f := moreGarden(t)
+	f := openTokens(t)
 	f.exec(t, `INSERT INTO api_token (id, garden_id, name, token_hash, prefix, created_by, created_at, expires_at, last_used_at) VALUES
 		($1, $2, 'The kitchen display', 'kitchen', 'sprg_7c1f', $3, $4, $5, $6),
 		($7, $2, 'The spare display', 'spare', 'sprg_2ea8', $3, $8, $9, NULL)`,
@@ -40,7 +56,7 @@ func tokenGarden(t *testing.T) *moreFixture {
 func TestTokens_ALiveRowOffersRevokeAndAnExpiredOneOffersRemove(t *testing.T) {
 	f := tokenGarden(t)
 
-	rows := tokensShown(f.page(t, f.handler.tokens, TokensPath))
+	rows := tokensShown(f.page(t, f.handler.show, TokensPath))
 
 	// The newest row is at the top. A date inside the last week is named by its
 	// day, and the spare ran out on the Friday.
@@ -56,13 +72,13 @@ func TestTokens_ALiveRowOffersRevokeAndAnExpiredOneOffersRemove(t *testing.T) {
 func TestTokens_TheNoteUnderTheListSaysWhatHasHappenedOnceARowHasRunOut(t *testing.T) {
 	f := tokenGarden(t)
 
-	page := f.page(t, f.handler.tokens, TokensPath)
+	page := f.page(t, f.handler.show, TokensPath)
 	if !strings.Contains(text(page), "An expired token no longer works") {
 		t.Errorf("the note does not say a row has already run out:\n%s", page)
 	}
 
 	f.exec(t, "DELETE FROM api_token WHERE id = $1", spareTokenID)
-	page = f.page(t, f.handler.tokens, TokensPath)
+	page = f.page(t, f.handler.show, TokensPath)
 
 	if strings.Contains(text(page), "An expired token no longer works") {
 		t.Errorf("with every token working, the page still has the note about an expired one:\n%s", page)
@@ -97,7 +113,7 @@ func TestTokens_ANewTokenIsShownOnceAndOnlyItsHashIsStored(t *testing.T) {
 	if !strings.Contains(text(page), "It expires on 3 Oct") {
 		t.Errorf("the sentence under the token does not name the day it stops working:\n%s", page)
 	}
-	if strings.Contains(f.page(t, f.handler.tokens, TokensPath), token) {
+	if strings.Contains(f.page(t, f.handler.show, TokensPath), token) {
 		t.Error("the token is on the page again on the next request, and it is shown exactly once")
 	}
 }
@@ -127,7 +143,7 @@ func TestTokens_AnExpiryLongerThanNinetyDaysIsRefusedAndNoTokenIsWritten(t *test
 	if rec.Code != http.StatusBadRequest {
 		t.Errorf("status = %d, want %d", rec.Code, http.StatusBadRequest)
 	}
-	if got := tokensInGarden(t, f); got != 2 {
+	if got := tokensInGarden(t, f.moreFixture); got != 2 {
 		t.Errorf("the garden holds %d tokens, and a refused lifetime writes none", got)
 	}
 }
@@ -147,7 +163,7 @@ func TestTokens_ATokenWithNoNameIsRefusedWithTheChosenExpiryStillSelected(t *tes
 	if got := selectedOption(page); got != "90" {
 		t.Errorf("the expiry select reads %q after the refusal, want the 90 that was chosen", got)
 	}
-	if got := tokensInGarden(t, f); got != 2 {
+	if got := tokensInGarden(t, f.moreFixture); got != 2 {
 		t.Errorf("the garden holds %d tokens, and a token with no name writes none", got)
 	}
 }
@@ -155,7 +171,7 @@ func TestTokens_ATokenWithNoNameIsRefusedWithTheChosenExpiryStillSelected(t *tes
 func TestTokens_TheExpirySelectOffersThirtyDaysUntilSomethingElseIsChosen(t *testing.T) {
 	f := tokenGarden(t)
 
-	page := f.page(t, f.handler.tokens, TokensPath)
+	page := f.page(t, f.handler.show, TokensPath)
 
 	if got := lifeOptionsShown(page); !slices.Equal(got, []string{"7", "30", "60", "90"}) {
 		t.Errorf("the expiry select offers %v, want 7, 30, 60 and 90 days", got)
@@ -173,7 +189,7 @@ func TestTokens_RevokingATokenTakesItOutOfTheListAndLeavesTheRest(t *testing.T) 
 		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusSeeOther, rec.Body.String())
 	}
 
-	rows := tokensShown(f.page(t, f.handler.tokens, TokensPath))
+	rows := tokensShown(f.page(t, f.handler.show, TokensPath))
 	if len(rows) != 1 || !strings.HasPrefix(rows[0].says, "The spare display ") {
 		t.Errorf("the list reads %+v after revoking the kitchen display", rows)
 	}

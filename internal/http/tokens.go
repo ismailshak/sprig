@@ -1,6 +1,7 @@
 package http
 
 import (
+	"log/slog"
 	"net/http"
 	"slices"
 	"strconv"
@@ -77,14 +78,22 @@ type tokenRow struct {
 	Revoke string
 }
 
-func (h *more) tokens(w http.ResponseWriter, r *http.Request) {
+type tokens struct {
+	logger    *slog.Logger
+	queries   *store.Queries
+	templates *Templates
+	now       func() time.Time
+	wake      wakeJobs
+}
+
+func (h *tokens) show(w http.ResponseWriter, r *http.Request) {
 	h.renderTokens(w, r, tokensPage{Lives: lifeOptions(defaultTokenLife)}, 0, "")
 }
 
 // createToken handles POST /more/tokens. It renders the token rather than
 // redirecting to it, because only a hash is stored and this response is the
 // one place the token itself exists.
-func (h *more) createToken(w http.ResponseWriter, r *http.Request) {
+func (h *tokens) createToken(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	if err := r.ParseForm(); err != nil {
 		h.templates.badRequest(w, r)
@@ -140,7 +149,7 @@ func (h *more) createToken(w http.ResponseWriter, r *http.Request) {
 // revokeToken handles POST /more/tokens/{token}/revoke. Revoke and Remove are
 // the same write: both set revoked_at, and the row leaves the list either
 // way.
-func (h *more) revokeToken(w http.ResponseWriter, r *http.Request) {
+func (h *tokens) revokeToken(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	tokenID, err := uuid.Parse(r.PathValue("token"))
 	if err != nil {
@@ -170,7 +179,7 @@ func (h *more) revokeToken(w http.ResponseWriter, r *http.Request) {
 
 // renderTokens fills in the list and writes the page. A status of zero means
 // 200. announce is the sentence a swap puts in the live region.
-func (h *more) renderTokens(w http.ResponseWriter, r *http.Request, page tokensPage, status int, announce string) {
+func (h *tokens) renderTokens(w http.ResponseWriter, r *http.Request, page tokensPage, status int, announce string) {
 	principal := PrincipalFrom(r)
 	tokens, err := h.queries.ListAPITokens(r.Context(), principal.Garden.ID)
 	if err != nil {

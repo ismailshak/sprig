@@ -447,12 +447,11 @@ func routeQueries(t *testing.T) *store.Queries {
 		owner:     store.AppUser{ID: sitterPrincipal().User.ID, DisplayName: "Ellie", Handle: "ellie", Timezone: "Europe/London"},
 		careTypes: []store.CareType{{Name: "Water", Slug: "water"}, {Name: "Feed", Slug: "feed"}, {Name: "Prune", Slug: "prune"}},
 	}.insert(t, tx)
+	insertGarden(t, tx, fairviewID, "Fairview", store.CareType{Name: "Water", Slug: "water"}, store.CareType{Name: "Feed", Slug: "feed"})
 	seed := []struct {
 		sql  string
 		args []any
 	}{
-		{"INSERT INTO garden (id, name) VALUES ($1, 'Fairview')", []any{fairviewID}},
-		{"INSERT INTO care_type (garden_id, name, slug) VALUES ($1, 'Water', 'water'), ($1, 'Feed', 'feed')", []any{fairviewID}},
 		// The Garden page's other routes: a care type that is already off for the
 		// route that turns one back on, and one only Fairview has for the scope
 		// check.

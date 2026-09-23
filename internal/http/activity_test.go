@@ -369,9 +369,8 @@ func TestActivity_OnlyOnePageOfEventsIsShown(t *testing.T) {
 
 func TestActivity_AnotherGardensEventsAreNotListed(t *testing.T) {
 	f := rosewoodLog(t)
-	f.exec(t, "INSERT INTO garden (id, name) VALUES ($1, 'Fairview')", fairviewID)
+	insertGarden(t, f.tx, fairviewID, "Fairview", store.CareType{ID: fairviewWaterID, Name: "Water", Slug: "water"})
 	f.exec(t, "INSERT INTO plant (id, garden_id, nickname) VALUES ($1, $2, 'Hedge')", fairviewPlantID, fairviewID)
-	f.exec(t, "INSERT INTO care_type (id, garden_id, name, slug) VALUES ($1, $2, 'Water', 'water')", fairviewWaterID, fairviewID)
 	f.exec(t, `INSERT INTO care_event (garden_id, plant_id, care_type_id, performed_by, performed_at, recorded_at, done)
 		VALUES ($1, $2, $3, $4, $5, $5, true)`, fairviewID, fairviewPlantID, fairviewWaterID, readerID, at(time.September, 3, 8, 0))
 
@@ -692,7 +691,7 @@ func TestActivity_AFilteredLogWithNoEventsSaysNoActivityYet(t *testing.T) {
 
 func TestActivity_AFilterOnAnotherGardensPlantIsNotFound(t *testing.T) {
 	f := rosewoodLog(t)
-	f.exec(t, "INSERT INTO garden (id, name) VALUES ($1, 'Fairview')", fairviewID)
+	insertGarden(t, f.tx, fairviewID, "Fairview")
 	f.exec(t, "INSERT INTO plant (id, garden_id, nickname) VALUES ($1, $2, 'Hedge')", fairviewPlantID, fairviewID)
 
 	rec := f.request(t, plantActivityPath(fairviewPlantID))
@@ -715,7 +714,7 @@ func TestActivity_AMalformedPlantParameterIsNotFound(t *testing.T) {
 func TestActivity_ASwapAimedAtTheLogBodyGetsTheListAndNotTheWholePage(t *testing.T) {
 	f := rosewoodLog(t)
 	// The row a delete leaves fetches the log when its window ends and swaps
-	// the body with what comes back.
+	// the body with the response.
 	ctx := context.WithValue(t.Context(), principalKey, f.principal)
 	req := httptest.NewRequestWithContext(ctx, http.MethodGet, activityPath, nil)
 	req.Header.Set("HX-Request", "true")

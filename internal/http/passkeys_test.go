@@ -7,15 +7,35 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 	"uuid"
 
 	"github.com/ismailshak/sprig/internal/auth"
+	"github.com/ismailshak/sprig/internal/store"
 )
 
-func TestPasskeys_EachDeviceIsARowWithWhenItWasLastUsed(t *testing.T) {
-	f := moreGarden(t)
+type passkeysFixture struct {
+	*moreFixture
+	handler *passkeys
+}
 
-	rows := stackedRowsOf(f.page(t, f.handler.passkeys, passkeysPath))
+func openPasskeys(t *testing.T) *passkeysFixture {
+	t.Helper()
+	return passkeysOn(moreGarden(t))
+}
+
+// passkeysOn adds a Passkeys handler to a fixture a test has already set up.
+func passkeysOn(f *moreFixture) *passkeysFixture {
+	return &passkeysFixture{
+		moreFixture: f,
+		handler:     &passkeys{logger: testLogger, queries: store.New(f.tx), templates: testTemplates(), now: func() time.Time { return thursday }},
+	}
+}
+
+func TestPasskeys_EachDeviceIsARowWithWhenItWasLastUsed(t *testing.T) {
+	f := openPasskeys(t)
+
+	rows := stackedRowsOf(f.page(t, f.handler.show, passkeysPath))
 
 	want := []stackedRow{
 		{name: "iPhone", meta: "Last used today", drop: removePasskeyPath(phoneKeyID)},
@@ -27,10 +47,10 @@ func TestPasskeys_EachDeviceIsARowWithWhenItWasLastUsed(t *testing.T) {
 }
 
 func TestPasskeys_TheLastOneOffersNoRemoveAndThePageSaysWhy(t *testing.T) {
-	f := moreGarden(t)
+	f := openPasskeys(t)
 	f.exec(t, "DELETE FROM passkey_credential WHERE id = $1", laptopKeyID)
 
-	page := f.page(t, f.handler.passkeys, passkeysPath)
+	page := f.page(t, f.handler.show, passkeysPath)
 
 	rows := stackedRowsOf(page)
 	if len(rows) != 1 {
@@ -45,21 +65,21 @@ func TestPasskeys_TheLastOneOffersNoRemoveAndThePageSaysWhy(t *testing.T) {
 }
 
 func TestPasskeys_RemovingOneDeletesThatCredential(t *testing.T) {
-	f := moreGarden(t)
+	f := openPasskeys(t)
 
 	rec := f.remove(t, f.handler.removePasskey, "key", phoneKeyID, removePasskeyPath(phoneKeyID))
 
 	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != passkeysPath {
 		t.Fatalf("status = %d to %q, want %d to %s", rec.Code, rec.Header().Get("Location"), http.StatusSeeOther, passkeysPath)
 	}
-	rows := stackedRowsOf(f.page(t, f.handler.passkeys, passkeysPath))
+	rows := stackedRowsOf(f.page(t, f.handler.show, passkeysPath))
 	if len(rows) != 1 || rows[0].name != "MacBook Air" {
 		t.Errorf("the passkeys left are %v, want the MacBook Air alone", rows)
 	}
 }
 
 func TestPasskeys_TheLastCredentialIsNotRemovedEvenWhenThePostIsMadeByHand(t *testing.T) {
-	f := moreGarden(t)
+	f := openPasskeys(t)
 	f.exec(t, "DELETE FROM passkey_credential WHERE id = $1", laptopKeyID)
 
 	rec := f.remove(t, f.handler.removePasskey, "key", phoneKeyID, removePasskeyPath(phoneKeyID))
@@ -77,7 +97,7 @@ func TestPasskeys_TheLastCredentialIsNotRemovedEvenWhenThePostIsMadeByHand(t *te
 }
 
 func TestPasskeys_AnotherAccountsCredentialIsNotFound(t *testing.T) {
-	f := moreGarden(t)
+	f := openPasskeys(t)
 
 	rec := f.remove(t, f.handler.removePasskey, "key", strangerKeyID, removePasskeyPath(strangerKeyID))
 
@@ -95,7 +115,7 @@ func TestPasskeys_AnotherAccountsCredentialIsNotFound(t *testing.T) {
 
 // passkeyRowID returns the id of the passkey_credential row a device
 // registered.
-func (f *moreFixture) passkeyRowID(t *testing.T, credentialID string) uuid.UUID {
+func (f *passkeysFixture) passkeyRowID(t *testing.T, credentialID string) uuid.UUID {
 	t.Helper()
 
 	var id uuid.UUID
@@ -106,8 +126,8 @@ func (f *moreFixture) passkeyRowID(t *testing.T, credentialID string) uuid.UUID 
 }
 
 func TestPasskeys_RemovingAPasskeyEndsTheSessionsItSignedInAndNoOther(t *testing.T) {
-	f := moreGarden(t)
-	h := ceremonyOn(t, f)
+	f := openPasskeys(t)
+	h := ceremonyOn(t, f.moreFixture)
 	device := aDevice()
 	f.enrolDevice(t, h, device)
 	now := f.handler.now()
@@ -145,12 +165,12 @@ func TestPasskeys_RemovingAPasskeyEndsTheSessionsItSignedInAndNoOther(t *testing
 }
 
 func TestPasskeys_APasskeyFromAKnownProviderIsNamedAfterTheProvider(t *testing.T) {
-	f := moreGarden(t)
+	f := openPasskeys(t)
 	f.exec(t, "UPDATE passkey_credential SET aaguid = $1 WHERE id = $2", uuid.MustParse("bada5566-a7aa-401f-bd96-45619a55120d"), phoneKeyID)
 	// An AAGUID the table does not know keeps the browser's label.
 	f.exec(t, "UPDATE passkey_credential SET aaguid = $1 WHERE id = $2", uuid.MustParse("11111111-2222-4333-8444-555555555555"), laptopKeyID)
 
-	rows := stackedRowsOf(f.page(t, f.handler.passkeys, passkeysPath))
+	rows := stackedRowsOf(f.page(t, f.handler.show, passkeysPath))
 
 	want := []stackedRow{
 		{name: "1Password", meta: "Last used today", drop: removePasskeyPath(phoneKeyID)},
@@ -162,7 +182,7 @@ func TestPasskeys_APasskeyFromAKnownProviderIsNamedAfterTheProvider(t *testing.T
 }
 
 func TestPasskeys_ARemoveSentAsASwapGetsTheListWithoutThatRow(t *testing.T) {
-	f := moreGarden(t)
+	f := openPasskeys(t)
 
 	rec := f.swap(t, f.handler.removePasskey, removePasskeyPath(phoneKeyID), passkeysListID, "key", phoneKeyID.String(), url.Values{})
 
@@ -173,7 +193,7 @@ func TestPasskeys_ARemoveSentAsASwapGetsTheListWithoutThatRow(t *testing.T) {
 }
 
 func TestPasskeys_RemovingThePasskeyThisSessionSignedInWithRedirectsToSignIn(t *testing.T) {
-	f := moreGarden(t)
+	f := openPasskeys(t)
 	f.principal.Session.PasskeyCredentialID = &phoneKeyID
 
 	rec := f.remove(t, f.handler.removePasskey, "key", phoneKeyID, removePasskeyPath(phoneKeyID))
@@ -184,7 +204,7 @@ func TestPasskeys_RemovingThePasskeyThisSessionSignedInWithRedirectsToSignIn(t *
 }
 
 func TestPasskeys_RemovingAPasskeyThisSessionDidNotSignInWithGetsTheList(t *testing.T) {
-	f := moreGarden(t)
+	f := openPasskeys(t)
 	f.principal.Session.PasskeyCredentialID = &laptopKeyID
 
 	rec := f.swap(t, f.handler.removePasskey, removePasskeyPath(phoneKeyID), passkeysListID, "key", phoneKeyID.String(), url.Values{})
@@ -199,7 +219,7 @@ func TestPasskeys_RemovingAPasskeyThisSessionDidNotSignInWithGetsTheList(t *test
 }
 
 func TestPasskeys_ARemoveOfThisSessionsPasskeySentAsASwapRedirectsToSignIn(t *testing.T) {
-	f := moreGarden(t)
+	f := openPasskeys(t)
 	f.principal.Session.PasskeyCredentialID = &phoneKeyID
 
 	rec := f.swap(t, f.handler.removePasskey, removePasskeyPath(phoneKeyID), passkeysListID, "key", phoneKeyID.String(), url.Values{})
@@ -209,5 +229,33 @@ func TestPasskeys_ARemoveOfThisSessionsPasskeySentAsASwapRedirectsToSignIn(t *te
 	}
 	if rec.Body.Len() != 0 {
 		t.Errorf("the response has a body htmx would swap in:\n%s", rec.Body.String())
+	}
+}
+
+func TestPasskeys_AddAPasskeyPostsToTheChallengeURLAndThenToThePasskeysPage(t *testing.T) {
+	f := openPasskeys(t)
+
+	page := f.page(t, f.handler.show, passkeysPath)
+
+	// The page's script posts to data-challenge for a challenge, then submits
+	// this form.
+	form := formTo(page, passkeysPath)
+	if form == nil {
+		t.Fatalf("the Add a passkey form does not post to %s:\n%s", passkeysPath, page)
+	}
+	if got := form.attr("data-challenge"); got != registerPath {
+		t.Errorf("the form offers a challenge at %q, want %s", got, registerPath)
+	}
+}
+
+func TestPasskeys_AddAPasskeyIsDisabledUntilThePagesScriptRuns(t *testing.T) {
+	f := openPasskeys(t)
+
+	page := f.page(t, f.handler.show, passkeysPath)
+
+	// The page's script makes the credential, so a press with no script running
+	// would post an empty credential.
+	if !buttonIsDisabled(t, page, "Add passkey") {
+		t.Errorf("Add a passkey is not disabled:\n%s", page)
 	}
 }

@@ -45,7 +45,7 @@ func archiveTwo(t *testing.T, f *plantsFixture) {
 	t.Helper()
 	f.exec(t, "UPDATE plant SET archived_at = $2 WHERE id = $1", dorisID, thursday.AddDate(0, 0, -30))
 	f.exec(t, "UPDATE plant SET archived_at = $2 WHERE id = $1", nigelID, thursday.AddDate(0, 0, -2))
-	f.exec(t, "INSERT INTO garden (id, name) VALUES ($1, 'Fairview')", fairviewID)
+	insertGarden(t, f.tx, fairviewID, "Fairview")
 	f.exec(t, "INSERT INTO plant (garden_id, nickname, archived_at) VALUES ($1, 'Kauri', now())", fairviewID)
 }
 
@@ -201,7 +201,7 @@ func TestPlant_RestoringAPlantThatIsNotArchivedIs404(t *testing.T) {
 
 func TestPlant_RestoringAnotherGardensArchivedPlantIs404AndLeavesItArchived(t *testing.T) {
 	f := rosewoodPlants(t)
-	f.exec(t, "INSERT INTO garden (id, name) VALUES ($1, 'Fairview')", fairviewID)
+	insertGarden(t, f.tx, fairviewID, "Fairview")
 	f.exec(t, "INSERT INTO plant (id, garden_id, nickname, archived_at) VALUES ($1, $2, 'Kauri', now())", fairviewPlantID, fairviewID)
 
 	if rec := f.restore(t, fairviewPlantID); rec.Code != http.StatusNotFound {

@@ -12,6 +12,7 @@ import (
 
 	"github.com/ismailshak/sprig/internal/auth"
 	"github.com/ismailshak/sprig/internal/photo"
+	"github.com/ismailshak/sprig/internal/store"
 )
 
 var (
@@ -22,13 +23,28 @@ var (
 	otherPlantID = uuid.MustParse("00000000-0000-7000-8000-000000000324")
 )
 
-// careTypeGarden gives Ellie's garden the four care types the Garden page has
-// to tell apart: Water with two events behind it, Feed with none, Mist turned
-// off with one event still logged against it, and Prune in the other garden.
-func careTypeGarden(t *testing.T) *moreFixture {
+type gardenFixture struct {
+	*moreFixture
+	handler *garden
+}
+
+func openGarden(t *testing.T) *gardenFixture {
 	t.Helper()
 
 	f := moreGarden(t)
+	return &gardenFixture{
+		moreFixture: f,
+		handler:     &garden{logger: testLogger, queries: store.New(f.tx), photos: testPhotos(t), templates: testTemplates()},
+	}
+}
+
+// careTypeGarden gives Ellie's garden the four care types the Garden page has
+// to tell apart: Water with two events behind it, Feed with none, Mist turned
+// off with one event still logged against it, and Prune in the other garden.
+func careTypeGarden(t *testing.T) *gardenFixture {
+	t.Helper()
+
+	f := openGarden(t)
 	f.principal.Capabilities[auth.CareTypeManage] = true
 	f.exec(t, `INSERT INTO care_type (id, garden_id, name, slug, created_at, archived_at) VALUES
 		($1, $2, 'Water', 'water', '2026-01-01T00:00:00Z', NULL),
@@ -48,7 +64,7 @@ func careTypeGarden(t *testing.T) *moreFixture {
 // careType posts to one of the open row's buttons, or renders the page with
 // that row open when form is nil. These tests call the handler rather than the
 // mux, so nothing else sets the slug in the URL.
-func (f *moreFixture) careType(t *testing.T, handler http.HandlerFunc, slug, path string, form url.Values) *httptest.ResponseRecorder {
+func (f *gardenFixture) careType(t *testing.T, handler http.HandlerFunc, slug, path string, form url.Values) *httptest.ResponseRecorder {
 	t.Helper()
 
 	ctx := context.WithValue(t.Context(), principalKey, f.principal)
@@ -127,7 +143,7 @@ func editorOn(t *testing.T, page string) editor {
 	return open
 }
 
-func (f *moreFixture) careTypeRow(t *testing.T, slug string) (name string, archived bool) {
+func (f *gardenFixture) careTypeRow(t *testing.T, slug string) (name string, archived bool) {
 	t.Helper()
 
 	var archivedAt *string
@@ -139,7 +155,7 @@ func (f *moreFixture) careTypeRow(t *testing.T, slug string) (name string, archi
 	return name, archivedAt != nil
 }
 
-func (f *moreFixture) careTypeCount(t *testing.T, slug string) int {
+func (f *gardenFixture) careTypeCount(t *testing.T, slug string) int {
 	t.Helper()
 
 	var count int
@@ -208,7 +224,7 @@ func TestGarden_AnEmptyGardenNameIsRefusedWithTheReason(t *testing.T) {
 func TestGarden_TheNameFieldHoldsTheGardensName(t *testing.T) {
 	f := careTypeGarden(t)
 
-	page := f.page(t, f.handler.garden, gardenPath)
+	page := f.page(t, f.handler.show, gardenPath)
 
 	if got := valueOf(t, page, "name"); got != "Rosewood" {
 		t.Errorf("the name field holds %q, want Rosewood", got)
@@ -218,7 +234,7 @@ func TestGarden_TheNameFieldHoldsTheGardensName(t *testing.T) {
 func TestGarden_ACareTypeThatIsOffKeepsItsPlaceInTheListAndItsRowReadsOff(t *testing.T) {
 	f := careTypeGarden(t)
 
-	rows := listedTypesOf(f.page(t, f.handler.garden, gardenPath))
+	rows := listedTypesOf(f.page(t, f.handler.show, gardenPath))
 
 	if got := listedNames(rows); !slices.Equal(got, []string{"Water", "Feed", "Mist"}) {
 		t.Fatalf("the list holds %v, want Water, Feed, Mist", got)
@@ -234,7 +250,7 @@ func TestGarden_ACareTypeThatIsOffKeepsItsPlaceInTheListAndItsRowReadsOff(t *tes
 func TestGarden_AnotherGardensCareTypeIsNotListed(t *testing.T) {
 	f := careTypeGarden(t)
 
-	got := listedNames(listedTypesOf(f.page(t, f.handler.garden, gardenPath)))
+	got := listedNames(listedTypesOf(f.page(t, f.handler.show, gardenPath)))
 
 	if slices.Contains(got, "Prune") {
 		t.Errorf("the list holds %v, and Prune belongs to the other garden", got)
@@ -262,7 +278,7 @@ func TestGarden_TheCareTypesAreLeftOffForAReaderWhoCannotManageThem(t *testing.T
 	f := careTypeGarden(t)
 	delete(f.principal.Capabilities, auth.CareTypeManage)
 
-	page := f.page(t, f.handler.garden, gardenPath)
+	page := f.page(t, f.handler.show, gardenPath)
 
 	if got := listedTypesOf(page); len(got) > 0 {
 		t.Errorf("the page lists %v, and this reader cannot change a care type", listedNames(got))
@@ -339,12 +355,12 @@ func TestGarden_ACareTypeInAnotherGardenHasNoRowToOpen(t *testing.T) {
 }
 
 func TestGarden_ThePageASaveRedirectsToSaysSavedAndAPlainVisitDoesNot(t *testing.T) {
-	f := moreGarden(t)
+	f := openGarden(t)
 
-	if page := f.page(t, f.handler.garden, savedURL(gardenPath)); !strings.Contains(text(page), "Saved") {
+	if page := f.page(t, f.handler.show, savedURL(gardenPath)); !strings.Contains(text(page), "Saved") {
 		t.Errorf("the page after a save does not say Saved:\n%s", text(page))
 	}
-	if page := f.page(t, f.handler.garden, gardenPath); strings.Contains(text(page), "Saved") {
+	if page := f.page(t, f.handler.show, gardenPath); strings.Contains(text(page), "Saved") {
 		t.Errorf("a plain visit says Saved:\n%s", text(page))
 	}
 }
@@ -527,7 +543,7 @@ func TestGarden_TurningACareTypeBackOnClearsOffFromItsRow(t *testing.T) {
 	if _, off := f.careTypeRow(t, "mist"); off {
 		t.Error("the care type is still off")
 	}
-	for _, row := range listedTypesOf(f.page(t, f.handler.garden, gardenPath)) {
+	for _, row := range listedTypesOf(f.page(t, f.handler.show, gardenPath)) {
 		if row.name == "Mist" && row.note != "" {
 			t.Errorf("the Mist row says %q, want nothing", row.note)
 		}
@@ -621,7 +637,7 @@ func storageFillOf(page string) (string, bool) {
 }
 
 // photoQuota gives the Garden page a photo store with the given quota.
-func (f *moreFixture) photoQuota(t *testing.T, quota int64) {
+func (f *gardenFixture) photoQuota(t *testing.T, quota int64) {
 	t.Helper()
 
 	photos, err := photo.NewStore(t.TempDir(), quota)
@@ -633,7 +649,7 @@ func (f *moreFixture) photoQuota(t *testing.T, quota int64) {
 
 // insertPhoto records a photo of the given sizes in the garden. The row has no
 // file behind it, since the page only sums the rows.
-func (f *moreFixture) insertPhoto(t *testing.T, garden, plant uuid.UUID, bytes int64, square *int64) {
+func (f *gardenFixture) insertPhoto(t *testing.T, garden, plant uuid.UUID, bytes int64, square *int64) {
 	t.Helper()
 
 	f.exec(t, `INSERT INTO photo (garden_id, plant_id, uploaded_by, kind, path, width, height, bytes, square_bytes)
@@ -649,7 +665,7 @@ func TestGarden_ThePhotosLineSaysHowMuchOfTheGardensStorageIsUsed(t *testing.T) 
 	f.exec(t, `INSERT INTO photo (garden_id, plant_id, uploaded_by, kind, path, width, height, bytes)
 		VALUES ($1, $2, $3, 'image/jpeg', 'y', 1, 1, $4)`, otherGardenID, otherPlantID, otherUserID, int64(1<<20))
 
-	got := storageLineOf(f.page(t, f.handler.garden, gardenPath))
+	got := storageLineOf(f.page(t, f.handler.show, gardenPath))
 
 	if got != "2 MB of 4 MB of photo storage used." {
 		t.Errorf("the Photos line reads %q, want the garden's own 2 MB of 4 MB", got)
@@ -661,7 +677,7 @@ func TestGarden_NearlyFullThePhotosLineSaysToDeletePhotosToMakeRoom(t *testing.T
 	f.photoQuota(t, 4<<20)
 	f.insertPhoto(t, moreGardenID, morePlantID, 3700<<10, nil)
 
-	got := storageLineOf(f.page(t, f.handler.garden, gardenPath))
+	got := storageLineOf(f.page(t, f.handler.show, gardenPath))
 
 	want := "4 MB of 4 MB of photo storage used. When it’s full, delete photos to make room."
 	if got != want {
@@ -674,7 +690,7 @@ func TestGarden_ThePhotoStorageBarFillsToTheShareOfTheQuotaUsed(t *testing.T) {
 	f.photoQuota(t, 4<<20)
 	f.insertPhoto(t, moreGardenID, morePlantID, 1<<20, nil)
 
-	if got, _ := storageFillOf(f.page(t, f.handler.garden, gardenPath)); got != "25%" {
+	if got, _ := storageFillOf(f.page(t, f.handler.show, gardenPath)); got != "25%" {
 		t.Errorf("the bar is filled to %q, want 25%%", got)
 	}
 }
@@ -684,7 +700,7 @@ func TestGarden_OverTheQuotaThePhotoStorageBarIsFullAndNoWider(t *testing.T) {
 	f.photoQuota(t, 1<<20)
 	f.insertPhoto(t, moreGardenID, morePlantID, 3<<20, nil)
 
-	if got, _ := storageFillOf(f.page(t, f.handler.garden, gardenPath)); got != "100%" {
+	if got, _ := storageFillOf(f.page(t, f.handler.show, gardenPath)); got != "100%" {
 		t.Errorf("the bar is filled to %q, want 100%%", got)
 	}
 }
@@ -694,7 +710,7 @@ func TestGarden_OneByteOfPhotosShowsAFillInThePhotoStorageBar(t *testing.T) {
 	f.photoQuota(t, 1_000_000_000)
 	f.insertPhoto(t, moreGardenID, morePlantID, 1, nil)
 
-	if got, _ := storageFillOf(f.page(t, f.handler.garden, gardenPath)); got != "0.1%" {
+	if got, _ := storageFillOf(f.page(t, f.handler.show, gardenPath)); got != "0.1%" {
 		t.Errorf("the bar is filled to %q, want 0.1%%", got)
 	}
 }
@@ -702,7 +718,7 @@ func TestGarden_OneByteOfPhotosShowsAFillInThePhotoStorageBar(t *testing.T) {
 func TestGarden_WithNoPhotosThePhotoStorageBarHasNoFill(t *testing.T) {
 	f := careTypeGarden(t)
 
-	if got, filled := storageFillOf(f.page(t, f.handler.garden, gardenPath)); filled {
+	if got, filled := storageFillOf(f.page(t, f.handler.show, gardenPath)); filled {
 		t.Errorf("a garden with no photos has a fill of %q", got)
 	}
 }
@@ -792,5 +808,21 @@ func TestGarden_ARowOpenedBySwapGetsTheCareTypesWithThatRowAsAForm(t *testing.T)
 	body := fragment(t, rec, careTypesID)
 	if got := editorOn(t, body); got.name != "Feed" {
 		t.Errorf("the open row holds %q, want Feed", got.name)
+	}
+}
+
+func TestGarden_DeleteGardenIsLinkedOnlyForAReaderWithGardenDelete(t *testing.T) {
+	f := openGarden(t)
+
+	deleteLink := func() *element {
+		return readHTML(f.page(t, f.handler.show, gardenPath)).first(isTag("a"), attrIs("href", deleteGardenPath))
+	}
+
+	if deleteLink() != nil {
+		t.Error("a reader without garden.delete is offered Delete garden")
+	}
+	f.principal.Capabilities[auth.GardenDelete] = true
+	if link := deleteLink(); link.text() != "Delete garden" {
+		t.Errorf("the link to %s reads %q, want Delete garden", deleteGardenPath, link.text())
 	}
 }

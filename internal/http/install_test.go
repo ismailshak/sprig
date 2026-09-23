@@ -36,7 +36,7 @@ func pressedChip(t *testing.T, page string) platformChip {
 func TestInstall_OffersThreePlatformsAndOpensOnTheIPhone(t *testing.T) {
 	f := moreGarden(t)
 
-	page := f.page(t, f.handler.install, installPath)
+	page := f.page(t, install(testTemplates()), installPath)
 
 	var labels []string
 	for _, c := range chipsOf(page) {
@@ -56,7 +56,7 @@ func TestInstall_OffersThreePlatformsAndOpensOnTheIPhone(t *testing.T) {
 func TestInstall_ThePlatformInTheQueryStringIsTheOneShown(t *testing.T) {
 	f := moreGarden(t)
 
-	page := f.page(t, f.handler.install, installPath+"?platform=android")
+	page := f.page(t, install(testTemplates()), installPath+"?platform=android")
 
 	if got := pressedChip(t, page); got.value != "android" {
 		t.Errorf("the platform pressed is %q, want android", got.value)
@@ -73,7 +73,7 @@ func TestInstall_ThePlatformInTheQueryStringIsTheOneShown(t *testing.T) {
 func TestInstall_APlatformTheChipsDoNotOfferFallsBackToTheIPhone(t *testing.T) {
 	f := moreGarden(t)
 
-	page := f.page(t, f.handler.install, installPath+"?platform=blackberry")
+	page := f.page(t, install(testTemplates()), installPath+"?platform=blackberry")
 
 	if got := pressedChip(t, page); got.value != "iphone" {
 		t.Errorf("the platform pressed is %q, want iphone", got.value)
@@ -83,7 +83,7 @@ func TestInstall_APlatformTheChipsDoNotOfferFallsBackToTheIPhone(t *testing.T) {
 func TestInstall_HasTheTabBar(t *testing.T) {
 	f := moreGarden(t)
 
-	page := f.page(t, f.handler.install, installPath)
+	page := f.page(t, install(testTemplates()), installPath)
 
 	if readHTML(page).first(isTag("nav")) == nil {
 		t.Error("the page has no tab bar, and it is reached from More")

@@ -65,11 +65,12 @@ type installPage struct {
 	Why    string
 }
 
-// install renders the steps for the platform in the query string, and the
-// iPhone's for anything else, including a first visit with no query string at
-// all.
-func (h *more) install(w http.ResponseWriter, r *http.Request) {
-	h.templates.render(w, r, view{page: "install"}, newInstallPage(r.URL.Query().Get("platform")))
+// install renders the Install sprig page with the steps for the platform in
+// the query string. Any other value, or none, gets the iPhone's steps.
+func install(templates *Templates) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		templates.render(w, r, view{page: "install"}, newInstallPage(r.URL.Query().Get("platform")))
+	}
 }
 
 func newInstallPage(chosen string) installPage {

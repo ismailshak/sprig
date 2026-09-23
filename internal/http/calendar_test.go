@@ -275,9 +275,8 @@ func TestCalendar_ADayOutsideTheMonthOpensNoSheet(t *testing.T) {
 
 func TestCalendar_AnotherGardensCareIsNotCounted(t *testing.T) {
 	f := rosewoodCalendar(t)
-	f.exec(t, "INSERT INTO garden (id, name) VALUES ($1, 'Fairview')", fairviewID)
+	insertGarden(t, f.tx, fairviewID, "Fairview", store.CareType{ID: fairviewWaterID, Name: "Water", Slug: "water"})
 	f.exec(t, "INSERT INTO plant (id, garden_id, nickname) VALUES ($1, $2, 'Hedge')", fairviewPlantID, fairviewID)
-	f.exec(t, "INSERT INTO care_type (id, garden_id, name, slug) VALUES ($1, $2, 'Water', 'water')", fairviewWaterID, fairviewID)
 	f.exec(t, "INSERT INTO care_event (garden_id, plant_id, care_type_id, performed_by, performed_at, recorded_at, done) VALUES ($1, $2, $3, $4, $5, $5, true)",
 		fairviewID, fairviewPlantID, fairviewWaterID, readerID, day(time.August, 22))
 

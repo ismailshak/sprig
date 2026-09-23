@@ -154,9 +154,8 @@ func TestChores_APlantInAnotherGardenIsNotInTheList(t *testing.T) {
 	f, handler, principal := choresGarden(t)
 	// Fairview's Hedge is further past due than any of Rosewood's plants, so
 	// a query that stopped filtering on the garden would put it at the top.
-	f.exec(t, "INSERT INTO garden (id, name) VALUES ($1, 'Fairview')", fairviewID)
+	insertGarden(t, f.tx, fairviewID, "Fairview", store.CareType{ID: fairviewWaterID, Name: "Water", Slug: "water"})
 	f.exec(t, "INSERT INTO plant (id, garden_id, nickname) VALUES ($1, $2, 'Hedge')", fairviewPlantID, fairviewID)
-	f.exec(t, "INSERT INTO care_type (id, garden_id, name, slug) VALUES ($1, $2, 'Water', 'water')", fairviewWaterID, fairviewID)
 	f.exec(t, "INSERT INTO care_schedule (garden_id, plant_id, care_type_id, interval_count, interval_unit, set_at) VALUES ($1, $2, $3, 7, 'day', $4)",
 		fairviewID, fairviewPlantID, fairviewWaterID, day(time.July, 1))
 

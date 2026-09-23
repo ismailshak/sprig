@@ -26,6 +26,29 @@ const (
 	chromeOnMac    = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36"
 )
 
+// notificationsFixture's handler has a VAPID public key set, so the page
+// renders its form.
+type notificationsFixture struct {
+	*moreFixture
+	handler *notifications
+}
+
+func openNotifications(t *testing.T) *notificationsFixture {
+	t.Helper()
+
+	f := moreGarden(t)
+	return &notificationsFixture{
+		moreFixture: f,
+		handler: &notifications{
+			logger:    testLogger,
+			queries:   store.New(f.tx),
+			templates: testTemplates(),
+			now:       func() time.Time { return thursday },
+			pushKey:   testPushKey,
+		},
+	}
+}
+
 type stackedRow struct {
 	name string
 	meta string
@@ -79,9 +102,9 @@ func hourSelectOf(page string) *element {
 }
 
 func TestNotifications_TheTwoTypesAreCheckedAsTheyAreStored(t *testing.T) {
-	f := moreGarden(t)
+	f := openNotifications(t)
 
-	page := f.page(t, f.handler.notifications, notificationsPath)
+	page := f.page(t, f.handler.show, notificationsPath)
 
 	if !checkedOn(t, page, "digest") {
 		t.Error("the digest is stored on and its box is not checked")
@@ -92,9 +115,9 @@ func TestNotifications_TheTwoTypesAreCheckedAsTheyAreStored(t *testing.T) {
 }
 
 func TestNotifications_TheHourIsOnThePageOnlyWhileTheDigestIsOn(t *testing.T) {
-	f := moreGarden(t)
+	f := openNotifications(t)
 
-	hour := hourSelectOf(f.page(t, f.handler.notifications, notificationsPath))
+	hour := hourSelectOf(f.page(t, f.handler.show, notificationsPath))
 	if hour == nil {
 		t.Fatal("the digest is on and the page offers no hour")
 	}
@@ -103,7 +126,7 @@ func TestNotifications_TheHourIsOnThePageOnlyWhileTheDigestIsOn(t *testing.T) {
 	}
 
 	f.exec(t, "UPDATE notification_preference SET enabled = false WHERE membership_id = $1 AND kind = 'digest'", moreMembershipID)
-	if hourSelectOf(f.page(t, f.handler.notifications, notificationsPath)) != nil {
+	if hourSelectOf(f.page(t, f.handler.show, notificationsPath)) != nil {
 		t.Error("the digest is off and the page still offers an hour")
 	}
 }
@@ -120,9 +143,9 @@ func hourLabelOf(t *testing.T, page, value string) string {
 }
 
 func TestNotifications_TheDigestSelectReadsMidnightAndNoonAsTwelve(t *testing.T) {
-	f := moreGarden(t)
+	f := openNotifications(t)
 
-	page := f.page(t, f.handler.notifications, notificationsPath)
+	page := f.page(t, f.handler.show, notificationsPath)
 
 	if got := hourLabelOf(t, page, "0"); got != "12:00am" {
 		t.Errorf("midnight reads %q, want %q", got, "12:00am")
@@ -133,10 +156,10 @@ func TestNotifications_TheDigestSelectReadsMidnightAndNoonAsTwelve(t *testing.T)
 }
 
 func TestNotifications_TheHoursNoteNamesTheAccountsTimezone(t *testing.T) {
-	f := moreGarden(t)
+	f := openNotifications(t)
 	f.principal.User.Timezone = "America/New_York"
 
-	page := text(f.page(t, f.handler.notifications, notificationsPath))
+	page := text(f.page(t, f.handler.show, notificationsPath))
 
 	if !strings.Contains(page, "America/New York time") {
 		t.Errorf("the note does not name the account's timezone:\n%s", page)
@@ -144,9 +167,9 @@ func TestNotifications_TheHoursNoteNamesTheAccountsTimezone(t *testing.T) {
 }
 
 func TestNotifications_EachSubscribedBrowserIsARowWithWhenItLastReceivedOne(t *testing.T) {
-	f := moreGarden(t)
+	f := openNotifications(t)
 
-	rows := stackedRowsOf(f.page(t, f.handler.notifications, notificationsPath))
+	rows := stackedRowsOf(f.page(t, f.handler.show, notificationsPath))
 
 	want := []stackedRow{
 		{name: "iPhone · Safari", meta: "Last used today", drop: removeBrowserPath(phonePushID)},
@@ -158,10 +181,10 @@ func TestNotifications_EachSubscribedBrowserIsARowWithWhenItLastReceivedOne(t *t
 }
 
 func TestNotifications_AnAccountWithNoSubscriptionSaysNothingIsBeingDelivered(t *testing.T) {
-	f := moreGarden(t)
+	f := openNotifications(t)
 	f.exec(t, "DELETE FROM push_subscription WHERE user_id = $1", moreUserID)
 
-	page := text(f.page(t, f.handler.notifications, notificationsPath))
+	page := text(f.page(t, f.handler.show, notificationsPath))
 
 	if !strings.Contains(page, "No devices are subscribed") {
 		t.Errorf("the page does not say nothing is being delivered:\n%s", page)
@@ -169,7 +192,7 @@ func TestNotifications_AnAccountWithNoSubscriptionSaysNothingIsBeingDelivered(t 
 }
 
 func TestNotifications_ASaveShowsTheHourJustSavedWithoutReloadingThePage(t *testing.T) {
-	f := moreGarden(t)
+	f := openNotifications(t)
 	form := url.Values{"digest": {"on"}, "hour": {"19"}}
 
 	rec := f.swap(t, f.handler.saveNotifications, notificationsPath, notificationsID, "", "", form)
@@ -187,7 +210,7 @@ func TestNotifications_ASaveShowsTheHourJustSavedWithoutReloadingThePage(t *test
 }
 
 func TestNotifications_SavingWritesBothTypesAndTheHour(t *testing.T) {
-	f := moreGarden(t)
+	f := openNotifications(t)
 
 	rec := f.do(t, f.handler.saveNotifications, notificationsPath, url.Values{
 		"activity": {"on"},
@@ -197,10 +220,10 @@ func TestNotifications_SavingWritesBothTypesAndTheHour(t *testing.T) {
 	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != savedURL(notificationsPath) {
 		t.Fatalf("status = %d to %q, want %d to %s", rec.Code, rec.Header().Get("Location"), http.StatusSeeOther, savedURL(notificationsPath))
 	}
-	if page := f.page(t, f.handler.notifications, savedURL(notificationsPath)); !strings.Contains(text(page), "Saved") {
+	if page := f.page(t, f.handler.show, savedURL(notificationsPath)); !strings.Contains(text(page), "Saved") {
 		t.Errorf("the page after a save does not say Saved:\n%s", text(page))
 	}
-	if got, want := settingsOf(t, f, moreMembershipID), (notificationSettings{digest: false, activity: true, hour: 19}); got != want {
+	if got, want := settingsOf(t, f.moreFixture, moreMembershipID), (notificationSettings{digest: false, activity: true, hour: 19}); got != want {
 		t.Errorf("the membership holds %+v, want %+v", got, want)
 	}
 }
@@ -210,7 +233,7 @@ func countingWake(calls *int) wakeJobs {
 }
 
 func TestNotifications_SavingTheSettingsWakesTheDigestJob(t *testing.T) {
-	f := moreGarden(t)
+	f := openNotifications(t)
 	woken := 0
 	f.handler.wake = countingWake(&woken)
 
@@ -222,7 +245,7 @@ func TestNotifications_SavingTheSettingsWakesTheDigestJob(t *testing.T) {
 }
 
 func TestNotifications_SavingWithTheDigestOffKeepsTheHourItArrivedAt(t *testing.T) {
-	f := moreGarden(t)
+	f := openNotifications(t)
 
 	// The select is not on the page while the digest is off, so the form that
 	// turns it back on posts no hour.
@@ -238,7 +261,7 @@ func TestNotifications_SavingWithTheDigestOffKeepsTheHourItArrivedAt(t *testing.
 }
 
 func TestNotifications_AnHourTheSelectDoesNotOfferIsRefused(t *testing.T) {
-	f := moreGarden(t)
+	f := openNotifications(t)
 
 	rec := f.do(t, f.handler.saveNotifications, notificationsPath, url.Values{"digest": {"on"}, "hour": {"24"}})
 
@@ -256,7 +279,7 @@ func TestNotifications_AnHourTheSelectDoesNotOfferIsRefused(t *testing.T) {
 }
 
 func TestNotifications_SubscribingABrowserWakesTheDigestJob(t *testing.T) {
-	f := moreGarden(t)
+	f := openNotifications(t)
 	woken := 0
 	f.handler.wake = countingWake(&woken)
 	p256dh, secret := browserKeys(t)
@@ -269,7 +292,7 @@ func TestNotifications_SubscribingABrowserWakesTheDigestJob(t *testing.T) {
 }
 
 func TestNotifications_RemovingABrowserDeletesTheSubscription(t *testing.T) {
-	f := moreGarden(t)
+	f := openNotifications(t)
 
 	rec := f.remove(t, f.handler.removeBrowser, "browser", phonePushID, removeBrowserPath(phonePushID))
 
@@ -286,7 +309,7 @@ func TestNotifications_RemovingABrowserDeletesTheSubscription(t *testing.T) {
 }
 
 func TestNotifications_AnotherAccountsBrowserIsNotFound(t *testing.T) {
-	f := moreGarden(t)
+	f := openNotifications(t)
 
 	rec := f.remove(t, f.handler.removeBrowser, "browser", strangerPushID, removeBrowserPath(strangerPushID))
 
@@ -327,9 +350,9 @@ func TestBrowserName_NamesTheDeviceAndTheBrowserTheSubscriptionCameFrom(t *testi
 // The form is found by its action because a subscription posted to the page's
 // own action would be saved as settings with both types off.
 func TestNotifications_AddThisDevicePostsToTheSubscribeURLWithThePublicKey(t *testing.T) {
-	f := moreGarden(t)
+	f := openNotifications(t)
 
-	page := f.page(t, f.handler.notifications, notificationsPath)
+	page := f.page(t, f.handler.show, notificationsPath)
 
 	form := readHTML(page).first(isTag("form"), attrIs("action", subscribePath))
 	if got := form.attr("data-key"); got != testPushKey {
@@ -338,10 +361,10 @@ func TestNotifications_AddThisDevicePostsToTheSubscribeURLWithThePublicKey(t *te
 }
 
 func TestNotifications_WithPushOffThePageSaysNotificationsAreNotSetUpAndOffersNoSwitches(t *testing.T) {
-	f := moreGarden(t)
+	f := openNotifications(t)
 	f.handler.pushKey = ""
 
-	page := f.page(t, f.handler.notifications, notificationsPath)
+	page := f.page(t, f.handler.show, notificationsPath)
 
 	if !strings.Contains(text(page), "Notifications aren’t enabled on this server") {
 		t.Errorf("the page does not say notifications are not set up:\n%s", page)
@@ -371,7 +394,7 @@ func browserKeys(t *testing.T) (p256dh, auth string) {
 	return base64.RawURLEncoding.EncodeToString(key.PublicKey().Bytes()), base64.RawURLEncoding.EncodeToString(secret)
 }
 
-func (f *moreFixture) subscribe(t *testing.T, endpoint, userAgent, p256dh, auth string) *httptest.ResponseRecorder {
+func (f *notificationsFixture) subscribe(t *testing.T, endpoint, userAgent, p256dh, auth string) *httptest.ResponseRecorder {
 	t.Helper()
 
 	form := url.Values{"endpoint": {endpoint}, "p256dh": {p256dh}, "auth": {auth}}
@@ -414,7 +437,7 @@ func subscriptionOf(t *testing.T, f *moreFixture, endpoint string) subscriptionR
 }
 
 func TestSubscribe_WritesTheBrowsersSubscriptionForTheSignedInAccount(t *testing.T) {
-	f := moreGarden(t)
+	f := openNotifications(t)
 	p256dh, auth := browserKeys(t)
 
 	rec := f.subscribe(t, "https://push.example.com/send/new", chromeOnMac, p256dh, auth)
@@ -422,7 +445,7 @@ func TestSubscribe_WritesTheBrowsersSubscriptionForTheSignedInAccount(t *testing
 	if rec.Code != http.StatusNoContent {
 		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusNoContent, rec.Body.String())
 	}
-	got := subscriptionOf(t, f, "https://push.example.com/send/new")
+	got := subscriptionOf(t, f.moreFixture, "https://push.example.com/send/new")
 	want := subscriptionRow{userID: moreUserID, userAgent: chromeOnMac, p256dh: p256dh, neverSent: true}
 	if got != want {
 		t.Errorf("the row holds %+v, want %+v", got, want)
@@ -430,7 +453,7 @@ func TestSubscribe_WritesTheBrowsersSubscriptionForTheSignedInAccount(t *testing
 }
 
 func TestSubscribe_TheSameBrowserAgainKeepsOneRowAndItsDatesAndTakesItsNewKeys(t *testing.T) {
-	f := moreGarden(t)
+	f := openNotifications(t)
 	// A browser makes new keys when it subscribes again. A message encrypted
 	// to the old ones cannot be decrypted, so the row has to take the new
 	// pair.
@@ -450,7 +473,7 @@ func TestSubscribe_TheSameBrowserAgainKeepsOneRowAndItsDatesAndTakesItsNewKeys(t
 	if count != 2 {
 		t.Errorf("the account has %d subscriptions, want the 2 it had", count)
 	}
-	got := subscriptionOf(t, f, "https://push.invalid/phone")
+	got := subscriptionOf(t, f.moreFixture, "https://push.invalid/phone")
 	if got.neverSent {
 		t.Error("subscribing the same browser again forgot when it was last sent to")
 	}
@@ -460,7 +483,7 @@ func TestSubscribe_TheSameBrowserAgainKeepsOneRowAndItsDatesAndTakesItsNewKeys(t
 }
 
 func TestSubscribe_ABrowserAnotherAccountSubscribedInMovesToTheSignedInAccount(t *testing.T) {
-	f := moreGarden(t)
+	f := openNotifications(t)
 	f.exec(t, "UPDATE push_subscription SET last_sent_at = now() WHERE id = $1", strangerPushID)
 	p256dh, auth := browserKeys(t)
 
@@ -469,7 +492,7 @@ func TestSubscribe_ABrowserAnotherAccountSubscribedInMovesToTheSignedInAccount(t
 	if rec.Code != http.StatusNoContent {
 		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusNoContent, rec.Body.String())
 	}
-	got := subscriptionOf(t, f, "https://push.invalid/stranger")
+	got := subscriptionOf(t, f.moreFixture, "https://push.invalid/stranger")
 	if got.userID != moreUserID {
 		t.Errorf("the browser still belongs to %s, want the account signed in", got.userID)
 	}
@@ -486,7 +509,7 @@ func TestSubscribe_ABrowserAnotherAccountSubscribedInMovesToTheSignedInAccount(t
 }
 
 func TestSubscribe_AnEndpointOrKeyOfTheWrongFormIsRefusedAndWritesNoRow(t *testing.T) {
-	f := moreGarden(t)
+	f := openNotifications(t)
 	p256dh, auth := browserKeys(t)
 	cases := []struct {
 		name string
@@ -515,7 +538,7 @@ func TestSubscribe_AnEndpointOrKeyOfTheWrongFormIsRefusedAndWritesNoRow(t *testi
 }
 
 func TestSubscribe_WithPushOffTheRouteIsNotFound(t *testing.T) {
-	f := moreGarden(t)
+	f := openNotifications(t)
 	f.handler.pushKey = ""
 	p256dh, auth := browserKeys(t)
 
@@ -541,10 +564,10 @@ func (r *recordedSends) send(_ context.Context, subscription store.PushSubscript
 }
 
 func TestNotifications_SendATestIsOfferedOnlyWhileABrowserIsSubscribed(t *testing.T) {
-	f := moreGarden(t)
+	f := openNotifications(t)
 
 	sendTest := func() *element {
-		return readHTML(f.page(t, f.handler.notifications, notificationsPath)).first(isTag("form"), attrIs("action", sendTestPath))
+		return readHTML(f.page(t, f.handler.show, notificationsPath)).first(isTag("form"), attrIs("action", sendTestPath))
 	}
 
 	if sendTest() == nil {
@@ -559,7 +582,7 @@ func TestNotifications_SendATestIsOfferedOnlyWhileABrowserIsSubscribed(t *testin
 
 // testOutcome posts the Send test notification form with endpoint and returns
 // the value of the test parameter on the redirect.
-func (f *moreFixture) testOutcome(t *testing.T, endpoint string) string {
+func (f *notificationsFixture) testOutcome(t *testing.T, endpoint string) string {
 	t.Helper()
 
 	rec := f.do(t, f.handler.sendTestNotification, sendTestPath, url.Values{"endpoint": {endpoint}})
@@ -573,14 +596,14 @@ func (f *moreFixture) testOutcome(t *testing.T, endpoint string) string {
 // resultPage renders the Notifications page with outcome in the query string,
 // the way the redirect after a test does. It returns the text with the tags
 // taken out.
-func (f *moreFixture) resultPage(t *testing.T, outcome string) string {
+func (f *notificationsFixture) resultPage(t *testing.T, outcome string) string {
 	t.Helper()
 
-	return text(f.page(t, f.handler.notifications, notificationsPath+"?"+testResultParam+"="+outcome))
+	return text(f.page(t, f.handler.show, notificationsPath+"?"+testResultParam+"="+outcome))
 }
 
 func TestSendTest_OnlyTheBrowserWhoseEndpointWasPostedIsSentTheTest(t *testing.T) {
-	f := moreGarden(t)
+	f := openNotifications(t)
 	recorder := &recordedSends{}
 	f.handler.test = recorder.send
 
@@ -601,7 +624,7 @@ func TestSendTest_OnlyTheBrowserWhoseEndpointWasPostedIsSentTheTest(t *testing.T
 }
 
 func TestSendTest_ABrowserThePushServiceHasDroppedSaysItHasBeenRemoved(t *testing.T) {
-	f := moreGarden(t)
+	f := openNotifications(t)
 	f.handler.test = (&recordedSends{err: push.ErrGone}).send
 
 	if outcome := f.testOutcome(t, phoneEndpoint); outcome != testGone {
@@ -613,7 +636,7 @@ func TestSendTest_ABrowserThePushServiceHasDroppedSaysItHasBeenRemoved(t *testin
 }
 
 func TestSendTest_ARefusedSendSaysTheTestCouldNotBeSent(t *testing.T) {
-	f := moreGarden(t)
+	f := openNotifications(t)
 	f.handler.test = (&recordedSends{err: errors.New("the push service answered 500")}).send
 
 	if outcome := f.testOutcome(t, phoneEndpoint); outcome != testFailed {
@@ -625,7 +648,7 @@ func TestSendTest_ARefusedSendSaysTheTestCouldNotBeSent(t *testing.T) {
 }
 
 func TestSendTest_AnEmptyOrAnotherAccountsEndpointSendsNothingAndSaysThisBrowserIsNotSubscribed(t *testing.T) {
-	f := moreGarden(t)
+	f := openNotifications(t)
 	recorder := &recordedSends{}
 	f.handler.test = recorder.send
 
@@ -643,7 +666,7 @@ func TestSendTest_AnEmptyOrAnotherAccountsEndpointSendsNothingAndSaysThisBrowser
 }
 
 func TestSendTest_AnUnknownOutcomeInTheQueryShowsNoLine(t *testing.T) {
-	f := moreGarden(t)
+	f := openNotifications(t)
 
 	page := f.resultPage(t, "anything")
 	for outcome, line := range testResultLines {
@@ -654,7 +677,7 @@ func TestSendTest_AnUnknownOutcomeInTheQueryShowsNoLine(t *testing.T) {
 }
 
 func TestSendTest_WithPushOffTheRouteIsNotFound(t *testing.T) {
-	f := moreGarden(t)
+	f := openNotifications(t)
 	f.handler.pushKey = ""
 
 	if rec := f.do(t, f.handler.sendTestNotification, sendTestPath, url.Values{"endpoint": {phoneEndpoint}}); rec.Code != http.StatusNotFound {
@@ -663,7 +686,7 @@ func TestSendTest_WithPushOffTheRouteIsNotFound(t *testing.T) {
 }
 
 func TestNotifications_ATestSentAsASwapGetsTheDevicesWithTheOutcomeUnderTheButton(t *testing.T) {
-	f := moreGarden(t)
+	f := openNotifications(t)
 	f.handler.test = (&recordedSends{}).send
 
 	rec := f.swap(t, f.handler.sendTestNotification, sendTestPath, devicesID, "", "", url.Values{"endpoint": {""}})
@@ -675,7 +698,7 @@ func TestNotifications_ATestSentAsASwapGetsTheDevicesWithTheOutcomeUnderTheButto
 }
 
 func TestNotifications_ARemoveSentAsASwapGetsTheDevicesWithoutThatRow(t *testing.T) {
-	f := moreGarden(t)
+	f := openNotifications(t)
 
 	rec := f.swap(t, f.handler.removeBrowser, removeBrowserPath(phonePushID), devicesID, "browser", phonePushID.String(), url.Values{})
 
@@ -686,7 +709,7 @@ func TestNotifications_ARemoveSentAsASwapGetsTheDevicesWithoutThatRow(t *testing
 }
 
 // addDevice posts a new subscription the way Add this device sends it.
-func (f *moreFixture) addDevice(t *testing.T) *httptest.ResponseRecorder {
+func (f *notificationsFixture) addDevice(t *testing.T) *httptest.ResponseRecorder {
 	t.Helper()
 
 	p256dh, auth := browserKeys(t)
@@ -695,7 +718,7 @@ func (f *moreFixture) addDevice(t *testing.T) *httptest.ResponseRecorder {
 }
 
 func TestSubscribe_AddThisDeviceGetsTheDevicesWithTheNewRow(t *testing.T) {
-	f := moreGarden(t)
+	f := openNotifications(t)
 
 	body := fragment(t, f.addDevice(t), devicesID)
 
@@ -708,7 +731,7 @@ func TestSubscribe_AddThisDeviceGetsTheDevicesWithTheNewRow(t *testing.T) {
 }
 
 func TestNotifications_SendTestNotificationIsMarkedAutofocusOnlyInTheResponseToAddThisDevice(t *testing.T) {
-	f := moreGarden(t)
+	f := openNotifications(t)
 
 	sendTest := func(body string) *element {
 		return readHTML(body).first(isTag("button"), textIs("Send test notification"))
@@ -717,7 +740,7 @@ func TestNotifications_SendTestNotificationIsMarkedAutofocusOnlyInTheResponseToA
 	if !sendTest(fragment(t, f.addDevice(t), devicesID)).has("autofocus") {
 		t.Error("the response to Add this device does not put focus on Send test notification")
 	}
-	page := f.page(t, f.handler.notifications, notificationsPath)
+	page := f.page(t, f.handler.show, notificationsPath)
 	if button := sendTest(page); button == nil || button.has("autofocus") {
 		t.Errorf("the page opened on its own has Send test notification as %v, want it without autofocus", button)
 	}

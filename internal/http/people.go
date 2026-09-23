@@ -2,6 +2,7 @@ package http
 
 import (
 	"errors"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"slices"
@@ -193,13 +194,22 @@ type peopleState struct {
 	announce string
 }
 
-func (h *more) people(w http.ResponseWriter, r *http.Request) {
+type people struct {
+	logger    *slog.Logger
+	queries   *store.Queries
+	templates *Templates
+	now       func() time.Time
+	wake      wakeJobs
+	notify    notifyUser
+}
+
+func (h *people) show(w http.ResponseWriter, r *http.Request) {
 	h.renderPeople(w, r, peopleState{})
 }
 
 // saveMembers handles POST /more/people. It writes the role and the end date
 // of every row that changed one.
-func (h *more) saveMembers(w http.ResponseWriter, r *http.Request) {
+func (h *people) saveMembers(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	if err := r.ParseForm(); err != nil {
 		h.templates.badRequest(w, r)
@@ -262,7 +272,7 @@ func (h *more) saveMembers(w http.ResponseWriter, r *http.Request) {
 // peopleSaved finishes a write from the People page. With htmx it renders the
 // page under the top bar and puts announce in the live region. A plain post
 // redirects to People.
-func (h *more) peopleSaved(w http.ResponseWriter, r *http.Request, announce string) {
+func (h *people) peopleSaved(w http.ResponseWriter, r *http.Request, announce string) {
 	if isHTMX(r) {
 		h.renderPeople(w, r, peopleState{announce: announce})
 		return
@@ -316,7 +326,7 @@ func postedChanges(members []store.ListMembersRow, principal auth.Principal, pos
 // confirmRemoveMember handles GET /more/people/{member}/remove. It renders
 // People with that member's row replaced by "Remove Ellie?" and its two
 // buttons.
-func (h *more) confirmRemoveMember(w http.ResponseWriter, r *http.Request) {
+func (h *people) confirmRemoveMember(w http.ResponseWriter, r *http.Request) {
 	member, ok := h.memberFromPath(w, r)
 	if !ok {
 		return
@@ -329,7 +339,7 @@ func (h *more) confirmRemoveMember(w http.ResponseWriter, r *http.Request) {
 // removeMember handles POST /more/people/{member}/remove. It deletes the
 // membership. The person's sessions on this garden go with it through a
 // foreign key, and the care events they logged keep their name.
-func (h *more) removeMember(w http.ResponseWriter, r *http.Request) {
+func (h *people) removeMember(w http.ResponseWriter, r *http.Request) {
 	member, ok := h.memberFromPath(w, r)
 	if !ok {
 		return
@@ -358,12 +368,12 @@ func (h *more) removeMember(w http.ResponseWriter, r *http.Request) {
 //
 // It renders the link rather than redirecting to it, because only a hash is
 // stored and this response is the one place the link itself exists.
-func (h *more) reenrolMember(w http.ResponseWriter, r *http.Request) {
+func (h *people) reenrolMember(w http.ResponseWriter, r *http.Request) {
 	member, ok := h.memberFromPath(w, r)
 	if !ok {
 		return
 	}
-	token, err := h.createInvite(r, member.Membership.Role, &member.AppUser.ID, nil)
+	token, err := createInvite(r, h.queries, h.now(), member.Membership.Role, &member.AppUser.ID, nil)
 	if err != nil {
 		h.templates.serverError(h.logger, w, r, "make the re-enrolment link", err)
 		return
@@ -375,7 +385,7 @@ func (h *more) reenrolMember(w http.ResponseWriter, r *http.Request) {
 
 // revokeInvite handles POST /more/people/invites/{invite}/revoke. Deleting the
 // row is what makes the link stop working.
-func (h *more) revokeInvite(w http.ResponseWriter, r *http.Request) {
+func (h *people) revokeInvite(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	inviteID, err := uuid.Parse(r.PathValue("invite"))
 	if err != nil {
@@ -397,7 +407,7 @@ func (h *more) revokeInvite(w http.ResponseWriter, r *http.Request) {
 // memberFromPath reads the member the URL names. It writes a 404 and returns
 // false for a handle nobody in this garden holds, and for the reader's own
 // handle, because their row has no Remove and no Sign-in link button.
-func (h *more) memberFromPath(w http.ResponseWriter, r *http.Request) (store.GetMemberByHandleRow, bool) {
+func (h *people) memberFromPath(w http.ResponseWriter, r *http.Request) (store.GetMemberByHandleRow, bool) {
 	principal := PrincipalFrom(r)
 	member, err := h.queries.GetMemberByHandle(r.Context(), principal.Garden.ID, r.PathValue("member"))
 	switch {
@@ -423,7 +433,7 @@ func (h *more) memberFromPath(w http.ResponseWriter, r *http.Request) (store.Get
 // A re-enrolment deletes any unredeemed link for the same person first. Those
 // rows are not under Pending invites, so a second press would otherwise leave
 // a working link that no page can revoke.
-func (h *more) createInvite(r *http.Request, role string, userID *uuid.UUID, ends *time.Time) (string, error) {
+func createInvite(r *http.Request, queries *store.Queries, now time.Time, role string, userID *uuid.UUID, ends *time.Time) (string, error) {
 	principal := PrincipalFrom(r)
 	token := auth.NewInviteToken()
 	params := store.CreateInviteParams{
@@ -432,10 +442,10 @@ func (h *more) createInvite(r *http.Request, role string, userID *uuid.UUID, end
 		Role:                role,
 		UserID:              userID,
 		CreatedBy:           principal.User.ID,
-		ExpiresAt:           h.now().Add(auth.InviteLifetime),
+		ExpiresAt:           now.Add(auth.InviteLifetime),
 		MembershipExpiresAt: ends,
 	}
-	err := h.queries.InTx(r.Context(), func(q *store.Queries) error {
+	err := queries.InTx(r.Context(), func(q *store.Queries) error {
 		if userID != nil {
 			if _, err := q.DeleteReenrolmentInvites(r.Context(), principal.Garden.ID, userID); err != nil {
 				return err
@@ -457,7 +467,7 @@ func inviteLink(r *http.Request, token string) string {
 	return r.Host + InvitedPath(token)
 }
 
-func (h *more) renderPeople(w http.ResponseWriter, r *http.Request, state peopleState) {
+func (h *people) renderPeople(w http.ResponseWriter, r *http.Request, state peopleState) {
 	principal := PrincipalFrom(r)
 	members, err := h.queries.ListMembers(r.Context(), principal.Garden.ID)
 	if err != nil {

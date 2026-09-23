@@ -12,6 +12,7 @@ import (
 
 	"github.com/ismailshak/sprig/internal/auth"
 	"github.com/ismailshak/sprig/internal/photo"
+	"github.com/ismailshak/sprig/internal/store"
 )
 
 var (
@@ -21,14 +22,29 @@ var (
 	deleteOtherPhotoID = uuid.MustParse("00000000-0000-7000-8000-000000000333")
 )
 
+type deleteGardenFixture struct {
+	*moreFixture
+	handler *deleteGarden
+}
+
+func openDeleteGarden(t *testing.T) *deleteGardenFixture {
+	t.Helper()
+
+	f := moreGarden(t)
+	return &deleteGardenFixture{
+		moreFixture: f,
+		handler:     &deleteGarden{logger: testLogger, queries: store.New(f.tx), photos: testPhotos(t), templates: testTemplates()},
+	}
+}
+
 // deletableGarden gives Rosewood and Fairview each a plant with a care type, a
 // schedule, a care event, a token and a photo whose file is on disk. The delete
 // has one of everything to delete in Rosewood and one of everything to keep in
 // Fairview. It returns the directory the photo files are under.
-func deletableGarden(t *testing.T) (*moreFixture, string) {
+func deletableGarden(t *testing.T) (*deleteGardenFixture, string) {
 	t.Helper()
 
-	f := moreGarden(t)
+	f := openDeleteGarden(t)
 	f.principal.Capabilities[auth.GardenDelete] = true
 	dir := t.TempDir()
 	photos, err := photo.NewStore(dir, testPhotoQuota)
@@ -43,7 +59,7 @@ func deletableGarden(t *testing.T) (*moreFixture, string) {
 		{moreGardenID, moreUserID, deletePlantID, deletePhotoID},
 		{otherGardenID, otherUserID, deleteOtherPlantID, deleteOtherPhotoID},
 	} {
-		f.exec(t, "INSERT INTO care_type (garden_id, name, slug) VALUES ($1, 'Water', 'water')", g.garden)
+		insertCareTypes(t, f.tx, g.garden, store.CareType{Name: "Water", Slug: "water"})
 		f.exec(t, "INSERT INTO plant (id, garden_id, nickname) VALUES ($1, $2, 'Fern')", g.plant, g.garden)
 		f.exec(t, `INSERT INTO care_schedule (garden_id, plant_id, care_type_id, interval_count, interval_unit)
 			SELECT $1, $2, id, 7, 'day' FROM care_type WHERE garden_id = $1`, g.garden, g.plant)
@@ -67,15 +83,15 @@ func deletableGarden(t *testing.T) (*moreFixture, string) {
 	return f, dir
 }
 
-func (f *moreFixture) deleteGarden(t *testing.T, typed string) *httptest.ResponseRecorder {
+func (f *deleteGardenFixture) deleteGarden(t *testing.T, typed string) *httptest.ResponseRecorder {
 	t.Helper()
-	return f.do(t, f.handler.deleteGarden, deleteGardenPath, url.Values{"name": {typed}})
+	return f.do(t, f.handler.delete, deleteGardenPath, url.Values{"name": {typed}})
 }
 
 func TestDeleteGarden_ThePageNamesTheGardenAndAsksForItsName(t *testing.T) {
 	f, _ := deletableGarden(t)
 
-	page := f.page(t, f.handler.confirmDeleteGarden, deleteGardenPath)
+	page := f.page(t, f.handler.confirm, deleteGardenPath)
 
 	if !strings.Contains(text(page), "Type Rosewood to confirm") {
 		t.Errorf("the page does not ask for the garden's name:\n%s", text(page))
@@ -87,7 +103,7 @@ func TestDeleteGarden_ThePageNamesTheGardenAndAsksForItsName(t *testing.T) {
 
 func TestDeleteGarden_ANameThatIsNotTheGardensIsRefusedAndNothingIsDeleted(t *testing.T) {
 	f, dir := deletableGarden(t)
-	rec := f.do(t, f.handler.deleteGarden, deleteGardenPath, url.Values{"name": {"Rosewod"}})
+	rec := f.do(t, f.handler.delete, deleteGardenPath, url.Values{"name": {"Rosewod"}})
 
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusUnprocessableEntity)
@@ -111,10 +127,10 @@ func TestDeleteGarden_ANameThatIsNotTheGardensIsRefusedAndNothingIsDeleted(t *te
 func TestDeleteGarden_TheNameIsComparedAsTyped(t *testing.T) {
 	f, _ := deletableGarden(t)
 
-	if rec := f.do(t, f.handler.deleteGarden, deleteGardenPath, url.Values{"name": {"rosewood"}}); rec.Code != http.StatusUnprocessableEntity {
+	if rec := f.do(t, f.handler.delete, deleteGardenPath, url.Values{"name": {"rosewood"}}); rec.Code != http.StatusUnprocessableEntity {
 		t.Errorf("a lower-case name returned %d, want %d", rec.Code, http.StatusUnprocessableEntity)
 	}
-	if rec := f.do(t, f.handler.deleteGarden, deleteGardenPath, url.Values{"name": {"  Rosewood "}}); rec.Code != http.StatusSeeOther {
+	if rec := f.do(t, f.handler.delete, deleteGardenPath, url.Values{"name": {"  Rosewood "}}); rec.Code != http.StatusSeeOther {
 		t.Errorf("the name with spaces around it returned %d, want %d", rec.Code, http.StatusSeeOther)
 	}
 }
@@ -164,7 +180,7 @@ func TestDeleteGarden_TheGardensRowsAndPhotoFilesAreDeletedAndAnotherGardensAreK
 }
 
 func TestDeleteGarden_AGardenWithNoPhotosHasNoDirectoryAndDeletesAnyway(t *testing.T) {
-	f := moreGarden(t)
+	f := openDeleteGarden(t)
 	f.principal.Capabilities[auth.GardenDelete] = true
 
 	if rec := f.deleteGarden(t, "Rosewood"); rec.Code != http.StatusSeeOther {
@@ -172,21 +188,5 @@ func TestDeleteGarden_AGardenWithNoPhotosHasNoDirectoryAndDeletesAnyway(t *testi
 	}
 	if n := countRows(t, f.tx, "garden"); n != 1 {
 		t.Errorf("%d gardens remain, want Fairview alone", n)
-	}
-}
-
-func TestGarden_DeleteGardenIsLinkedOnlyForAReaderWithGardenDelete(t *testing.T) {
-	f := moreGarden(t)
-
-	deleteLink := func() *element {
-		return readHTML(f.page(t, f.handler.garden, gardenPath)).first(isTag("a"), attrIs("href", deleteGardenPath))
-	}
-
-	if deleteLink() != nil {
-		t.Error("a reader without garden.delete is offered Delete garden")
-	}
-	f.principal.Capabilities[auth.GardenDelete] = true
-	if link := deleteLink(); link.text() != "Delete garden" {
-		t.Errorf("the link to %s reads %q, want Delete garden", deleteGardenPath, link.text())
 	}
 }
