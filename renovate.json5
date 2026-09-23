@@ -19,6 +19,11 @@
       matchPackageNames: ['*'],
       semanticCommitType: 'chore',
     },
+    // Matches pnpm's minimum release age rule
+    {
+      matchDatasources: ['npm'],
+      minimumReleaseAge: '1 day',
+    },
   ],
   customManagers: [
     // The htmx version pinned under [vars] in mise.toml. htmx is a vendored
