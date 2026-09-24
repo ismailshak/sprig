@@ -12,6 +12,10 @@
    any class below that sets display. */
 [hidden] { display: none !important; }
 
+/* Hidden when JavaScript is on. A script in the head sets data-js on the html
+   element before the first paint. */
+[data-js] .without-js { display: none; }
+
 html, body {
   margin: 0;
   height: 100%;
@@ -2418,6 +2422,10 @@ a.wide-action {
   min-height: var(--tap);
   cursor: pointer;
 }
+
+.saved-beside { flex: none; font-size: 13px; font-weight: 600; color: var(--good); }
+.row--check .saved-beside { padding-right: 14px; }
+.field .saved-beside { margin-left: 10px; }
 
 .check input[type="checkbox"],
 .check input[type="radio"] {

@@ -1,5 +1,6 @@
 /* The Notifications page's script. Add this device subscribes this browser to
-   push. The checkboxes and the hour are saved by an ordinary form post.
+   push. After a save, the Saved beside the control that changed is shown for
+   two seconds.
 
    The Add this device form has data-key, the VAPID public key to subscribe
    with, and hidden fields for the subscription. Each Remove form has
@@ -23,6 +24,24 @@
     document.getElementById('push-unavailable').hidden = false;
     return;
   }
+
+  // shown is the Saved beside a control that is on screen, or null. hide is
+  // the timer that hides it. A second save hides the first one's Saved at
+  // once, because the hour's save swaps nothing and would leave it showing.
+  let shown = null;
+  let hide = 0;
+  document.addEventListener('htmx:afterRequest', (event) => {
+    const { successful, requestConfig } = event.detail;
+    const control = requestConfig.triggeringEvent && requestConfig.triggeringEvent.target;
+    if (!successful || !(control instanceof Element) || !control.id) return;
+    const saved = document.getElementById(control.id + '-saved');
+    if (!saved) return;
+    clearTimeout(hide);
+    if (shown) shown.hidden = true;
+    shown = saved;
+    saved.hidden = false;
+    hide = setTimeout(() => (saved.hidden = true), 2000);
+  });
 
   // endpoint is this browser's push subscription URL, null when it has none
   // and undefined until the push API returns. It is read once and kept,

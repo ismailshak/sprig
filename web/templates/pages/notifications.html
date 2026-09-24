@@ -1,14 +1,11 @@
 {{define "title"}}Notifications · sprig{{end}}
 
-{{/* With JavaScript, Save changes swaps the page under the top bar with the
-     Saved line on it. Without JavaScript the post redirects to this page with
-     Saved in the query string. */}}
+{{/* With JavaScript, Save changes is hidden and each control saves when it
+     changes. Without JavaScript, Save changes posts the form and the server
+     redirects to this page with Saved in the query string. */}}
 {{define "main"}}
 {{template "more-topbar" .Bar}}
-{{template "notifications" .}}
-{{end}}
-
-{{define "notifications"}}<div class="app__body app__body--sub" id="notifications">
+<div class="app__body app__body--sub">
 {{if not .Key}}
 <p class="lead">Notifications aren’t enabled on this server.</p>
 {{else}}
@@ -19,7 +16,18 @@
 <p class="lead">On iPhone, notifications only work once sprig is added to your Home Screen.</p>
 <a class="wide-action" href="{{.Install}}">Install sprig</a>
 </div>
-<form method="post" action="{{.Action}}" novalidate id="push-form" hx-post="{{.Action}}" hx-target="#notifications" hx-swap="outerHTML settle:0ms">
+{{template "push-form" .}}
+{{template "devices" .}}
+{{end}}
+</div>
+{{end}}
+
+{{/* The Send me checkboxes and the hour. A checkbox swaps the whole form,
+     because the hour is added or removed with the digest. hx-sync cancels a
+     post still in flight when another starts, because its response would
+     replace the form and undo the later change on the page. Each post holds
+     every field. The later post saves everything the cancelled one held. */}}
+{{define "push-form"}}<form method="post" action="{{.Action}}" novalidate id="push-form" hx-post="{{.Action}}" hx-trigger="submit, change target:input" hx-sync="this:replace" hx-target="#push-form" hx-swap="outerHTML settle:0ms">
 <div class="section">
 <div class="section__head"><h2 class="section__title">Send me</h2></div>
 <ul class="list">
@@ -31,6 +39,7 @@
 <span class="row__meta"><span class="row__part">One a day, listing what’s due. Skipped on days with nothing due.</span></span>
 </span>
 </label>
+{{template "saved-beside" "digest"}}
 </li>
 <li class="row row--check">
 <label class="check" for="activity">
@@ -39,6 +48,7 @@
 <span class="row__name">When someone else logs care</span>
 </span>
 </label>
+{{template "saved-beside" "activity"}}
 </li>
 </ul>
 </div>
@@ -48,18 +58,26 @@
 <div class="section">
 <div class="field">
 <label class="field__label" for="hour">Send the digest at</label>
-<select class="input input--narrow" id="hour" name="hour">{{template "options" .}}</select>
+{{/* The select posts the whole form with its own hx-post and swaps nothing
+     but the live region. Typing into a select fires a change at each letter
+     that moves the selection. A swap between two letters would replace the
+     select and lose the letters typed. The form's trigger is limited to inputs
+     so that a change to the select does not post the form a second time. */}}
+<select class="input input--narrow" id="hour" name="hour" hx-post="{{$.Action}}" hx-trigger="change" hx-swap="none">{{template "options" .}}</select>
+{{template "saved-beside" "hour"}}
 </div>
 <p class="note">{{$.Zone}} time. Change it in <a href="{{$.Account}}">Account</a>.</p>
 </div>
 {{end}}
-{{/* The button has an id so htmx puts focus back on it after the swap. */}}
-<button class="wide-action" type="submit" id="save">Save changes</button>
+<button class="wide-action without-js" type="submit">Save changes</button>
 {{if .Saved}}{{template "saved"}}{{end}}
-</form>
-{{template "devices" .}}
-{{end}}
-</div>{{end}}
+</form>{{end}}
+
+{{/* The Saved shown beside a control for two seconds after the control saves.
+     The argument is the control's id. The page's script finds this element by
+     that id with -saved after it. It is hidden from screen readers, because
+     the live region reads Saved. out. */}}
+{{define "saved-beside"}}<span class="saved-beside" id="{{.}}-saved" aria-hidden="true" hidden>Saved</span>{{end}}
 
 {{/* The Subscribed devices section. Add this device, Remove and Send test
      notification swap it, because adding and removing change the list and a
