@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#MISE description="Print true when a file changed since a base ref can change what the e2e suite runs against, and false otherwise"
+#MISE description="Print true when a file changed since a base ref can change what the e2e suite runs against, and false otherwise. The changed files that make e2e needed are listed on stderr."
 #USAGE arg "<base>" help="The ref HEAD is compared with, such as origin/main"
 set -euo pipefail
 
@@ -15,6 +15,7 @@ skipped=(
   '.github/workflows/vendor-htmx.yml'
   '.github/workflows/vulncheck.yml'
   '.githooks/*'
+  '.vscode/*'
   '.gitignore'
   '.golangci.yml'
   'renovate.json5'
@@ -27,7 +28,7 @@ skipped=(
 # to a skipped path would otherwise be listed under the skipped path alone.
 changed=$(git diff --name-only --no-renames "${usage_base:?}...HEAD")
 
-needed=false
+needed=()
 while IFS= read -r file; do
   if [ -z "$file" ]; then
     continue
@@ -42,9 +43,29 @@ while IFS= read -r file; do
     fi
   done
   if [ "$covered" = false ]; then
-    needed=true
-    break
+    needed+=("$file")
   fi
 done <<<"$changed"
 
-echo "$needed"
+# Messages go to stderr, because CI reads stdout as true or false.
+if [ ${#needed[@]} -eq 0 ]; then
+  echo "e2e is not needed." >&2
+  echo false
+  exit 0
+fi
+
+# Files with the same parent directory are printed once as that directory,
+# with the count. A file at the root is printed on its own.
+echo "e2e is needed for these changed files:" >&2
+printf '%s\n' "${needed[@]}" | awk '
+  {
+    dir = $0
+    if (match($0, /.*\//)) dir = substr($0, 1, RLENGTH - 1)
+    count[dir]++
+    only[dir] = $0
+  }
+  END {
+    for (dir in count) print "  " (count[dir] == 1 ? only[dir] : dir "/ (" count[dir] " files)")
+  }
+' | LC_ALL=C sort >&2
+echo true

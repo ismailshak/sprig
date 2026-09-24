@@ -19,7 +19,7 @@ mise run e2e       # Playwright suite, with a throwaway app and Postgres stack p
 mise run ci:e2e-needed <base> # true when a file changed since <base> can change what e2e runs against
 mise run lint
 mise run vulncheck
-mise run format    # prettier over e2e, the app's scripts in web/static and the root markdown. --check writes nothing
+mise run format    # prettier. --check writes nothing
 mise run hooks     # point git at .githooks, once per clone
 mise run migrate
 mise run migrate:new <name>
@@ -29,7 +29,7 @@ mise run release   # <bump> is patch, minor or major. Tag main with the next ver
 
 A command you would type twice becomes a task in `mise.toml`.
 
-The pre-commit hook in `.githooks` runs prettier over the staged files under `e2e/` and the staged scripts under `web/static/`, and stages what it rewrites. The vendored htmx in `web/static/vendor/` is left alone. If a file is only partially staged the hook stops instead, because staging the formatted file would pull the rest of it into the commit. Git only finds the hook after `mise run hooks`, because `core.hooksPath` is a per-clone setting.
+The pre-commit hook in `.githooks` runs prettier over the staged files that `mise run format` covers, reading its patterns from `mise run format --pathspecs`. It stages the files it rewrites. If a file is only partially staged the hook stops instead, because staging the formatted file would pull the rest of it into the commit. Git only finds the hook after `mise run hooks`, because `core.hooksPath` is a per-clone setting.
 
 ## Invariants
 
