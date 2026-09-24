@@ -93,6 +93,31 @@ func TestPhotos_TheGridListsThePlantsPhotosNewestFirst(t *testing.T) {
 	}
 }
 
+func TestPhotos_ATileShowsThePhotosSquare(t *testing.T) {
+	f := plantFormOn(t)
+	photoID := givePhoto(t, f.tx, bigFellaID, readerID, thursday)
+
+	rec := f.grid(t, bigFellaID, "", false)
+
+	if got, want := images(rec.Body.String()), []string{photoSquarePath(bigFellaID, photoID)}; !slices.Equal(got, want) {
+		t.Errorf("the grid's images are %v, want %v", got, want)
+	}
+}
+
+func TestPhotos_APhotoWithNoSquareIsShownAtFullSize(t *testing.T) {
+	f := plantFormOn(t)
+	photoID := givePhoto(t, f.tx, bigFellaID, readerID, thursday)
+	if _, err := f.tx.Exec(t.Context(), "UPDATE photo SET square_bytes = NULL WHERE id = $1", photoID); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := f.grid(t, bigFellaID, "", false)
+
+	if got, want := images(rec.Body.String()), []string{photoFullPath(bigFellaID, photoID)}; !slices.Equal(got, want) {
+		t.Errorf("the grid's images are %v, want %v", got, want)
+	}
+}
+
 func TestPhotos_TheGridShowsTwentyFourPhotosAndTheOlderTileFetchesTheRest(t *testing.T) {
 	f := plantFormOn(t)
 	var ids []uuid.UUID

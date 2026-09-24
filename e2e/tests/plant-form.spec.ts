@@ -295,14 +295,14 @@ test('a photo stored sideways with an orientation tag is upright after the resiz
   expect(dimensions(await heldFile(plantForm.photoInput('photo')))).toEqual({ width: 800, height: 1200 });
 });
 
-test('a chosen photo puts a 192 pixel square in the photo-square input @js', async ({ plantForm }) => {
+test('a chosen photo puts a 320 pixel square in the photo-square input @js', async ({ plantForm }) => {
   await plantForm.openNew();
 
   await plantForm.choosePhoto('Add photo', photos.gpsTagged);
 
   await expect(plantForm.photoPreview()).toBeVisible();
   const square = await heldFile(plantForm.photoInput('photo-square'));
-  expect(dimensions(square)).toEqual({ width: 192, height: 192 });
+  expect(dimensions(square)).toEqual({ width: 320, height: 320 });
   expect(hasExif(square)).toBe(false);
 });
 
@@ -339,7 +339,7 @@ test('a second photo chosen through Replace is the one the form posts @js', asyn
 
   await expect(plantForm.photoPreview()).toBeVisible();
   expect(dimensions(await heldFile(plantForm.photoInput('photo')))).toEqual({ width: 800, height: 1200 });
-  expect(dimensions(await heldFile(plantForm.photoInput('photo-square')))).toEqual({ width: 192, height: 192 });
+  expect(dimensions(await heldFile(plantForm.photoInput('photo-square')))).toEqual({ width: 320, height: 320 });
 });
 
 test('a file that is not a photo reads "This file couldn’t be opened as a photo." @js', async ({ page, plantForm }) => {

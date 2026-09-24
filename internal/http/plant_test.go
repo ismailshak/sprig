@@ -667,8 +667,6 @@ func TestPlant_APlantWithAPictureShowsItAtTheTop(t *testing.T) {
 
 	page := f.page(t, bigFellaID)
 
-	// The strip below shows the same photo again, so only the first image is
-	// the picture.
 	if got := images(page); len(got) == 0 || got[0] != photoFullPath(bigFellaID, photoID) {
 		t.Errorf("the page's images are %v, want the picture at %s first", got, photoFullPath(bigFellaID, photoID))
 	}
@@ -772,6 +770,21 @@ func TestPlant_TheStripShowsTheNewestPhotosFirstAfterTheAddTile(t *testing.T) {
 	}
 	if got, want := photosSection(page).text(), "Photos Add yesterday 4 Aug"; got != want {
 		t.Errorf("the Photos section reads %q, want %q", got, want)
+	}
+}
+
+func TestPlant_TheStripShowsEachPhotosSquare(t *testing.T) {
+	f := rosewoodPlant(t)
+	photoID := givePicture(t, f.tx, bigFellaID)
+
+	page := f.page(t, bigFellaID)
+
+	var got []string
+	for _, img := range photosSection(page).all(isTag("img"), hasAttr("src")) {
+		got = append(got, img.attr("src"))
+	}
+	if want := []string{photoSquarePath(bigFellaID, photoID)}; !slices.Equal(got, want) {
+		t.Errorf("the strip's images are %v, want %v", got, want)
 	}
 }
 

@@ -1,13 +1,16 @@
-/* The log-care sheet and the garden sheet. The server renders each with the
-   open attribute. That is a non-modal dialog, and the page behind it stays in
-   the tab order. This script reopens it as a modal, so Tab stays inside
-   the sheet, Escape closes it and focus goes back to the control that opened
-   it. It also lets the sheet be dragged down to close, by its grip or its
-   plant heading, the same as Cancel.
+/* The log-care sheet, the garden sheet on Today and the day sheet on the
+   calendar. The server renders each with the open attribute. That is a
+   non-modal dialog, and the page behind it stays in the tab order. This script
+   reopens it as a modal, so Tab stays inside the sheet, Escape closes it and
+   focus goes back to the control that opened it.
+
+   A sheet can be dragged down to close it, the same as Cancel or Close. The
+   log-care sheet is dragged by its grip or its plant heading. The garden sheet
+   and the day sheet are dragged by their grip or their title.
 
    A sheet is swapped into the page by htmx, so the listeners are on the
-   document and find the sheet from the event. Dragging from the panel's body
-   is left alone, because that is how the panel scrolls. */
+   document and find the sheet from the event. A drag that starts in the
+   panel's body is ignored, because that is how the panel scrolls. */
 (function () {
   // modals is the dialogs already reopened as modals. Reopening one a second
   // time would close it.
@@ -90,23 +93,21 @@
   // closeAfter is how many pixels the panel has to be dragged down for the
   // release to close it. A shorter drag puts the panel back.
   const closeAfter = 80;
-  // tapUnder is the movement in pixels under which a press and release on the
-  // heading is a tap on its link. From there on it is a drag, and the link's
-  // click is cancelled.
+  // tapUnder is how many pixels the pointer has to move down before a press is
+  // a drag. A shorter press on the plant heading is a tap on its link.
   const tapUnder = 8;
-  // drag is the drag in progress: the pointer's starting y, the panel being
-  // moved and the grip or heading it is held by. Null between drags.
+  // drag is the drag in progress. Null between drags.
   let drag = null;
-  // dragged is the heading a drag was just released from, so the click the
+  // dragged is the element a drag was just released from, so the click the
   // release fires can be cancelled. Null otherwise.
   let dragged = null;
 
   document.addEventListener('pointerdown', (event) => {
-    const handle = event.target.closest('.sheet__grip, .sheet__plant');
+    const handle = event.target.closest('.sheet__grip, .sheet__plant, .sheet__title');
     if (!handle) return;
-    // Above 900px the sheet is a centred dialog, where a mouse drag on the
-    // heading is a text selection.
-    if (handle.classList.contains('sheet__plant') && event.pointerType === 'mouse') return;
+    // A mouse press on the plant heading or the title is ignored, because
+    // above 900px the sheet is a centred dialog and a mouse drag selects text.
+    if (!handle.classList.contains('sheet__grip') && event.pointerType === 'mouse') return;
     const panel = handle.closest('.sheet__panel');
     if (!panel) return;
     handle.setPointerCapture(event.pointerId);

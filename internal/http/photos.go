@@ -122,9 +122,15 @@ func (h *plants) photoGrid(w http.ResponseWriter, r *http.Request) {
 
 func newPhotoTile(plant store.Plant, p store.Photo, now time.Time) photoTile {
 	day := photoDateWord(p, now)
+	// A tile is a small square, so it shows the square variant. A photo
+	// uploaded without one is shown from its full-size file instead.
+	src := photoFullPath(plant.ID, p.ID)
+	if p.SquareBytes != nil {
+		src = photoSquarePath(plant.ID, p.ID)
+	}
 	return photoTile{
 		Href: photoPath(plant.ID, p.ID),
-		Src:  photoFullPath(plant.ID, p.ID),
+		Src:  src,
 		Alt:  "Photo of " + plant.DisplayName() + ", " + day,
 		When: day,
 	}

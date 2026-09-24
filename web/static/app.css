@@ -126,16 +126,6 @@ button {
 
 .topbar__icon svg { width: 22px; height: 22px; }
 
-/* The garden sheet's heading. The log-care sheet has a plant's row here
-   instead, so this is the one sheet with a title. */
-.sheet__title {
-  margin: 4px 0 8px;
-  font-family: var(--font-display);
-  font-weight: var(--display-weight);
-  letter-spacing: var(--display-tracking);
-  font-size: 22px;
-}
-
 /* -------------------------------------------------------------------- summary */
 
 .summary {
@@ -512,7 +502,8 @@ a.empty__action { display: inline-flex; align-items: center; }
   background: var(--surface);
   border-top-left-radius: 18px;
   border-top-right-radius: 18px;
-  padding: 0 20px calc(20px + env(safe-area-inset-bottom));
+  --sheet-pad: 20px;
+  padding: 0 var(--sheet-pad) calc(20px + env(safe-area-inset-bottom));
   max-height: 92%;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -527,12 +518,12 @@ body:has(dialog[open]) { overscroll-behavior: none; }
 @keyframes fade { from { opacity: 0 } }
 @keyframes rise { from { transform: translateY(14px); opacity: 0 } }
 
-/* The grip and the plant heading can be dragged down to close the sheet. The
-   grip is a box the height of a finger with the bar drawn inside it, because
-   iOS applies touch-action only to an element's own box. A touch on a
+/* The grip, the plant heading and the title can be dragged down to close the
+   sheet. The grip is a box the height of a finger with the bar inside it,
+   because iOS applies touch-action only to an element's own box. A touch on a
    pseudo-element reaching outside that box scrolled the panel instead of
-   starting the drag. touch-action: none on both stops the panel scrolling
-   while they are dragged. */
+   starting the drag. touch-action: none on each stops the panel scrolling
+   while it is dragged. */
 .sheet__grip {
   position: relative;
   width: 156px;
@@ -557,6 +548,20 @@ body:has(dialog[open]) { overscroll-behavior: none; }
   padding: 8px 8px 14px; margin: 0 -8px; text-align: left;
   border-bottom: var(--row-divider);
   touch-action: none;
+}
+
+/* The heading of the garden sheet and the day sheet. The log-care sheet has
+   the plant heading here instead. The side margins are negative so that a
+   drag can start anywhere across the panel's width. */
+.sheet__title {
+  margin: 0 calc(-1 * var(--sheet-pad));
+  padding: 4px var(--sheet-pad) 8px;
+  min-height: var(--tap);
+  touch-action: none;
+  font-family: var(--font-display);
+  font-weight: var(--display-weight);
+  letter-spacing: var(--display-tracking);
+  font-size: 22px;
 }
 
 .sheet__chevron { color: var(--ink-3); flex: none; display: grid; }
@@ -842,12 +847,13 @@ legend.field__label + * { clear: both; }
 @media (min-width: 900px) {
   .sheet { justify-content: center; align-items: center; }
   .sheet__grip { display: none; }
-  .sheet__plant { touch-action: auto; }
+  .sheet__plant, .sheet__title { touch-action: auto; }
   .sheet__panel {
     width: 420px;
     max-height: 84%;
     border-radius: 14px;
-    padding: 8px 22px 22px;
+    --sheet-pad: 22px;
+    padding: 8px var(--sheet-pad) 22px;
     box-shadow: 0 24px 60px rgba(0, 0, 0, .4);
   }
 }
