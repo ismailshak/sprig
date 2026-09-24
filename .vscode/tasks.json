@@ -1,0 +1,14 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      // The launch configurations that use the dev database run this first.
+      // It leaves the container running, as mise run dev does.
+      "label": "Start Postgres",
+      "type": "shell",
+      "command": "docker compose up -d --wait db",
+      "presentation": { "reveal": "silent" },
+      "problemMatcher": []
+    }
+  ]
+}

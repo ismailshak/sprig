@@ -15,6 +15,7 @@ skipped=(
   '.github/workflows/vendor-htmx.yml'
   '.github/workflows/vulncheck.yml'
   '.githooks/*'
+  '.vscode/*'
   '.gitignore'
   '.golangci.yml'
   'renovate.json5'

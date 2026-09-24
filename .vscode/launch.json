@@ -1,0 +1,102 @@
+{
+  "version": "0.2.0",
+  // Every configuration sets cwd to the repository root, because the Go
+  // extension otherwise runs a program in its package directory. The default
+  // SPRIG_PHOTO_DIR of ./photos is then the directory the mise tasks use.
+  "configurations": [
+    {
+      "type": "go",
+      "request": "launch",
+      "name": "sprig server",
+      "program": "${workspaceFolder}/cmd/sprig",
+      "cwd": "${workspaceFolder}",
+      "outputMode": "remote",
+      "preLaunchTask": "Start Postgres",
+      // The dev tag adds the development sign-in, as in mise run dev
+      "buildFlags": "-tags=dev",
+      // These match the environment mise run dev sets and change with it.
+      "env": {
+        "SPRIG_DATABASE_URL": "postgres://sprig:sprig@localhost:5432/sprig?sslmode=disable",
+        "SPRIG_LOG_FORMAT": "text",
+        "SPRIG_COOKIE_SECURE": "false",
+        "SPRIG_COOKIE_NAME": "sprig_session",
+        "SPRIG_SIGNUP_ENABLED": "true",
+        "SPRIG_TEMPLATE_DIR": "${workspaceFolder}/web/templates",
+        "SPRIG_PUSH_ENABLED": "true",
+        "SPRIG_VAPID_PUBLIC_KEY": "BIKy0ljeIkYXaxRwCtYWzL6mcXZ1uQRljQ9HlisKJLJiAWkvTHx6QKQNtjbZeP5AvsVqD6-lKh6RDeyszC8lu3A",
+        "SPRIG_VAPID_PRIVATE_KEY": "NYvCfU2w94nee-zA8CqDtHNwV7z9nKVjO3JyESW9mcs",
+        "SPRIG_VAPID_SUBJECT": "mailto:sprig@example.com"
+      }
+    },
+    {
+      "type": "go",
+      "request": "launch",
+      "name": "sprig health",
+      "program": "${workspaceFolder}/cmd/sprig",
+      "cwd": "${workspaceFolder}",
+      "outputMode": "remote",
+      "args": ["health"]
+    },
+    {
+      "type": "go",
+      "request": "launch",
+      "name": "sprig vapid",
+      "program": "${workspaceFolder}/cmd/sprig",
+      "cwd": "${workspaceFolder}",
+      "outputMode": "remote",
+      "args": ["vapid"]
+    },
+    {
+      "type": "go",
+      "request": "launch",
+      "name": "sprig sweep",
+      "program": "${workspaceFolder}/cmd/sprig",
+      "cwd": "${workspaceFolder}",
+      "outputMode": "remote",
+      "preLaunchTask": "Start Postgres",
+      "args": ["sweep"],
+      // The server config the sweep loads refuses a Secure cookie with the
+      // default http base URL. It also refuses the default __Host- name on a
+      // cookie that is not Secure.
+      "env": {
+        "SPRIG_DATABASE_URL": "postgres://sprig:sprig@localhost:5432/sprig?sslmode=disable",
+        "SPRIG_COOKIE_SECURE": "false",
+        "SPRIG_COOKIE_NAME": "sprig_session"
+      }
+    },
+    {
+      "type": "go",
+      "request": "launch",
+      "name": "sprig admin invite",
+      "program": "${workspaceFolder}/cmd/sprig",
+      "cwd": "${workspaceFolder}",
+      "outputMode": "remote",
+      "preLaunchTask": "Start Postgres",
+      "args": ["admin", "invite", "--user", "${input:handle}"],
+      "env": {
+        "SPRIG_DATABASE_URL": "postgres://sprig:sprig@localhost:5432/sprig?sslmode=disable",
+        "SPRIG_COOKIE_SECURE": "false",
+        "SPRIG_COOKIE_NAME": "sprig_session"
+      }
+    },
+    {
+      "type": "go",
+      "request": "launch",
+      "name": "seed",
+      "program": "${workspaceFolder}/cmd/seed",
+      "cwd": "${workspaceFolder}",
+      "outputMode": "remote",
+      "preLaunchTask": "Start Postgres",
+      "env": {
+        "SPRIG_DATABASE_URL": "postgres://sprig:sprig@localhost:5432/sprig?sslmode=disable"
+      }
+    }
+  ],
+  "inputs": [
+    {
+      "id": "handle",
+      "type": "promptString",
+      "description": "Handle of the account to invite"
+    }
+  ]
+}
