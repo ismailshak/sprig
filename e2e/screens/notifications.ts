@@ -26,12 +26,25 @@ export class NotificationsScreen {
     return this.page.getByRole('button', { name: 'Save changes' });
   }
 
-  // saveChanges clicks Save changes and waits for the Saved line. With
-  // JavaScript the save is a swap and without it a post and a redirect. The
-  // line is on the page once either has finished.
+  // saveChanges clicks Save changes and waits for the Saved line under it on
+  // the page the post redirects to. Save changes is shown only without
+  // JavaScript. The wait skips the hidden Saved beside each control.
   async saveChanges(): Promise<void> {
     await this.save().click();
-    await this.page.getByText('Saved', { exact: true }).waitFor();
+    await this.page.getByText('Saved', { exact: true }).filter({ visible: true }).waitFor();
+  }
+
+  // The Saved beside a control. Its id is the control's id with -saved after
+  // it. The server renders it hidden and the page's script shows it after a
+  // save.
+  savedBeside(control: 'digest' | 'activity' | 'hour'): Locator {
+    return this.page.locator(`#${control}-saved`);
+  }
+
+  // The live region a swap writes its announcement into. The layout renders it
+  // on every page.
+  announcement(): Locator {
+    return this.page.locator('#status');
   }
 
   // The button under Subscribed devices that subscribes this browser. The

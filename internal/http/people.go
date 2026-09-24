@@ -307,9 +307,11 @@ func postedChanges(members []store.ListMembersRow, principal auth.Principal, pos
 			}
 			change.role = role
 		}
-		// An empty field leaves the date alone. A membership with no end date
-		// has no date field, so a date posted for one is ignored.
-		if until := posted.Get(untilField(member.AppUser.Handle)); until != "" && member.Membership.ExpiresAt != nil {
+		// An empty field, or one holding the date it was rendered with, leaves
+		// the date alone. Parsing an unchanged date would move a stored end date
+		// to the start of its day. A membership with no end date has no date
+		// field, so a date posted for one is ignored.
+		if until := posted.Get(untilField(member.AppUser.Handle)); until != "" && member.Membership.ExpiresAt != nil && until != accessEndValue(member) {
 			ends, err := parseAccessEnd(until, locationFor(member.AppUser))
 			if err != nil {
 				return nil, false
@@ -559,7 +561,7 @@ func newMemberRow(member store.ListMembersRow, principal auth.Principal, collide
 		} else {
 			row.Until = "until " + dateWord(at, location)
 		}
-		row.UntilValue = at.Format(accessEndLayout)
+		row.UntilValue = accessEndValue(member)
 	} else {
 		row.What = roleWhat[member.Membership.Role]
 	}
@@ -621,6 +623,12 @@ func untilField(handle string) string { return "until." + handle }
 
 // accessEndLayout is how a date input writes and reads a date.
 const accessEndLayout = "2006-01-02"
+
+// accessEndValue is the value of a member's access-ends date field: the end
+// date in the member's timezone. The membership must have an end date.
+func accessEndValue(member store.ListMembersRow) string {
+	return member.Membership.ExpiresAt.In(locationFor(member.AppUser)).Format(accessEndLayout)
+}
 
 // parseAccessEnd turns a posted date into the instant access stops: the start
 // of that day in the given zone. A row reading "until 14 Sep" has ended once

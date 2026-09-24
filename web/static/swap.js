@@ -13,6 +13,10 @@
    not be reached, is written into the live region. The region is fixed to the
    top of the window until the next swap.
 
+   Announcements. A swap's sentence is taken out of the live region and put
+   back 100ms later. Without the empty region in between, a screen reader
+   would not read out a second Saved. in a row, because the text is unchanged.
+
    The undo window. A logged row sends a request of its own when its window
    ends. On Today that request removes the row and on Activity it replaces it.
    The stylesheet pauses the row's drain bar while Undo has a focus ring, and
@@ -69,7 +73,19 @@
     status.classList.remove('status--shown');
   });
 
+  // putBack is the timer that puts the sentence back. say cancels it so that a
+  // failure written before it fires is not overwritten.
+  let putBack = 0;
+  document.addEventListener('htmx:oobAfterSwap', (event) => {
+    if (event.detail.target !== status || !status.hasChildNodes()) return;
+    clearTimeout(putBack);
+    const sentence = Array.from(status.childNodes);
+    status.replaceChildren();
+    putBack = setTimeout(() => status.replaceChildren(...sentence), 100);
+  });
+
   function say(text) {
+    clearTimeout(putBack);
     status.textContent = text;
     status.classList.add('status--shown');
   }

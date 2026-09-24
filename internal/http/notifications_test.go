@@ -191,21 +191,32 @@ func TestNotifications_AnAccountWithNoSubscriptionSaysNothingIsBeingDelivered(t 
 	}
 }
 
-func TestNotifications_ASaveShowsTheHourJustSavedWithoutReloadingThePage(t *testing.T) {
+func TestNotifications_ASaveSentAsASwapShowsTheHourJustSaved(t *testing.T) {
 	f := openNotifications(t)
 	form := url.Values{"digest": {"on"}, "hour": {"19"}}
 
-	rec := f.swap(t, f.handler.saveNotifications, notificationsPath, notificationsID, "", "", form)
+	rec := f.swap(t, f.handler.saveNotifications, notificationsPath, pushFormID, "", "", form)
 
-	body := fragment(t, rec, notificationsID)
+	body := fragment(t, rec, pushFormID)
 	if got := hourSelectOf(body).first(isTag("option"), hasAttr("selected")).attr("value"); got != "19" {
 		t.Errorf("the swap shows the hour %q selected, want the 19 just saved", got)
 	}
-	if !strings.Contains(readHTML(body).byID(notificationsID).text(), "Saved") {
-		t.Errorf("the swap has no Saved line:\n%s", text(body))
-	}
 	if got := announcement(body); got != savedAnnouncement {
 		t.Errorf("the swap announces %q, want %q", got, savedAnnouncement)
+	}
+	if savedLine(body) != nil {
+		t.Errorf("the swap shows a Saved line under Save changes, want only the announcement:\n%s", body)
+	}
+}
+
+func TestNotifications_ASaveSentAsASwapGetsTheFormWithoutTheSubscribedDevices(t *testing.T) {
+	f := openNotifications(t)
+	form := url.Values{"activity": {"on"}}
+
+	rec := f.swap(t, f.handler.saveNotifications, notificationsPath, pushFormID, "", "", form)
+
+	if readHTML(fragment(t, rec, pushFormID)).byID(devicesID) != nil {
+		t.Errorf("the swap holds the Subscribed devices section, want the form alone:\n%s", rec.Body.String())
 	}
 }
 
@@ -220,12 +231,18 @@ func TestNotifications_SavingWritesBothTypesAndTheHour(t *testing.T) {
 	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != savedURL(notificationsPath) {
 		t.Fatalf("status = %d to %q, want %d to %s", rec.Code, rec.Header().Get("Location"), http.StatusSeeOther, savedURL(notificationsPath))
 	}
-	if page := f.page(t, f.handler.show, savedURL(notificationsPath)); !strings.Contains(text(page), "Saved") {
+	if page := f.page(t, f.handler.show, savedURL(notificationsPath)); savedLine(page) == nil {
 		t.Errorf("the page after a save does not say Saved:\n%s", text(page))
 	}
 	if got, want := settingsOf(t, f.moreFixture, moreMembershipID), (notificationSettings{digest: false, activity: true, hour: 19}); got != want {
 		t.Errorf("the membership holds %+v, want %+v", got, want)
 	}
+}
+
+// savedLine returns the Saved line under Save changes, or nil when the page has
+// none. It skips the hidden Saved beside each control.
+func savedLine(markup string) *element {
+	return readHTML(markup).first(textIs("Saved"), func(e *element) bool { return !e.has("hidden") })
 }
 
 func countingWake(calls *int) wakeJobs {

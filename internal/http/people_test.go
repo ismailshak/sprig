@@ -683,6 +683,29 @@ func withoutTags(e *element, tags []string) *element {
 	return kept
 }
 
+func TestPeople_AnEndDatePostedUnchangedIsNotWritten(t *testing.T) {
+	f := peopleGarden(t)
+	woken := 0
+	f.handler.wake = countingWake(&woken)
+	shown := memberNamed(t, f.page(t, f.handler.show, PeoplePath), "Jo").until
+	if shown == "" {
+		t.Fatal("Jo's row has no access-ends date field")
+	}
+
+	f.do(t, f.handler.saveMembers, PeoplePath, url.Values{"until.jo": {shown}})
+
+	var ends time.Time
+	if err := f.tx.QueryRow(t.Context(), "SELECT expires_at FROM membership WHERE user_id = $1", peopleJoID).Scan(&ends); err != nil {
+		t.Fatalf("reading Jo's end date: %v", err)
+	}
+	if !ends.Equal(thursday.AddDate(0, 0, 8)) {
+		t.Errorf("Jo's access ends at %s after posting the date shown, want it left at %s", ends, thursday.AddDate(0, 0, 8))
+	}
+	if woken != 0 {
+		t.Errorf("an unchanged end date woke the jobs %d times, want 0", woken)
+	}
+}
+
 func TestPeople_ARemoveSentAsASwapGetsThePageUnderTheBarWithoutThatMember(t *testing.T) {
 	f := peopleGarden(t)
 

@@ -127,8 +127,8 @@ type notificationsPage struct {
 	// TestResult is the line under the Send test notification button saying how
 	// it went. It is empty unless the query string holds a known outcome.
 	TestResult string
-	// Saved is true on the page a save redirects to. "Saved" is shown beside
-	// the button.
+	// Saved is true on the page a plain post redirects to after a save. "Saved"
+	// is shown under Save changes.
 	Saved bool
 	// FocusSendTest is true on the response to Add this device. Send test
 	// notification is marked autofocus.
@@ -174,19 +174,18 @@ func (h *notifications) show(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// notificationsID is both the HTML id of the page under the top bar and the
-// name of the template that renders it. Save changes swaps it.
-const notificationsID = "notifications"
+// pushFormID is the HTML id of the form holding the Send me checkboxes and the
+// hour. It is also the name of the template that renders the form. A changed
+// checkbox swaps it.
+const pushFormID = "push-form"
 
-// notificationsState is what one response adds to the saved settings: the
-// line under Send test notification, whether Saved is shown under Save
-// changes, whether Send test notification takes focus, and the sentence a
-// swap puts in the live region.
+// notificationsState holds what a response shows besides the saved settings.
 type notificationsState struct {
 	testResult    string
 	saved         bool
 	focusSendTest bool
-	announce      string
+	// announce is the sentence a swap puts in the live region.
+	announce string
 }
 
 // renderNotifications writes the page. hour is the digest hour to show. It is
@@ -215,8 +214,8 @@ func (h *notifications) renderNotifications(w http.ResponseWriter, r *http.Reque
 	switch r.Header.Get("HX-Target") {
 	case devicesID:
 		v.fragment = devicesID
-	case notificationsID:
-		v.fragment = notificationsID
+	case pushFormID:
+		v.fragment = pushFormID
 	}
 	h.templates.render(w, r, v, page)
 }
@@ -388,11 +387,11 @@ func (h *notifications) saveNotifications(w http.ResponseWriter, r *http.Request
 		return
 	}
 	h.wake.call()
-	// With htmx the response is the page under the top bar with the Saved
-	// line on it. A plain post redirects to the page with Saved in the query
-	// string.
+	// With htmx the response is the form and a Saved. announcement. The page's
+	// script shows Saved beside the control that changed. A plain post
+	// redirects to the page with Saved in the query string.
 	if isHTMX(r) {
-		h.renderNotifications(w, r, principal, hour, notificationsState{saved: true, announce: savedAnnouncement})
+		h.renderNotifications(w, r, principal, hour, notificationsState{announce: savedAnnouncement})
 		return
 	}
 	http.Redirect(w, r, savedURL(notificationsPath), http.StatusSeeOther)
