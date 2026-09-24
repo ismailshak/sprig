@@ -6,7 +6,7 @@
    from that browser.
 
    A chosen photo is re-encoded into two JPEGs and put in the form's file
-   inputs: one bounded to 2048 pixels on its long edge under photo, and a 192
+   inputs: one bounded to 2048 pixels on its long edge under photo, and a 320
    pixel square cut from its middle under photo-square. Re-encoding drops the
    EXIF block the camera wrote, including the GPS position. */
 (function () {
@@ -56,7 +56,7 @@
   if (unsupported) unsupported.hidden = true;
 
   const longEdge = 2048;
-  const squareEdge = 192;
+  const squareEdge = 320;
   // 0.85 puts a 2048 pixel photo at around 350KB.
   const quality = 0.85;
 

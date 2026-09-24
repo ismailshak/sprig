@@ -126,7 +126,7 @@ export class PlantFormScreen {
   }
 
   // The hidden file input the form posts under that name. photo holds the
-  // resized photo and photo-square its 192 pixel square.
+  // resized photo and photo-square its square.
   photoInput(name: 'photo' | 'photo-square'): Locator {
     return this.page.locator(`input[name="${name}"]`);
   }

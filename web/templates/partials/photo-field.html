@@ -1,8 +1,8 @@
 {{/* The photo field, on the plant form and on Add a photo. It starts hidden
      and the page's script shows it once it has checked the browser can resize
      an image, then fills the two file inputs: the resized photo under photo
-     and its 192 pixel square under photo-square. The script finds every
-     element by id, so both pages render this one template. */}}
+     and a square cut from its middle under photo-square. The script finds
+     every element by id, so both pages render this one template. */}}
 {{define "photo-field"}}<div class="photo-field" id="photo-field" hidden>
 <input id="photo" name="photo" type="file" accept="image/*" hidden>
 <input id="photo-square" name="photo-square" type="file" hidden>
