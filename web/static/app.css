@@ -1920,7 +1920,7 @@ a.plant__keep { text-decoration: none; }
   color: var(--ink-3);
 }
 
-.month__grid td { padding: 0; vertical-align: top; border-top: var(--row-divider); }
+.month__grid td { position: relative; padding: 0; vertical-align: top; border-top: var(--row-divider); }
 
 .month__day {
   display: flex;
@@ -1929,14 +1929,21 @@ a.plant__keep { text-decoration: none; }
   gap: 3px;
   min-height: 64px;
   padding: 5px 1px;
-  border-radius: 6px;
   color: inherit;
   text-decoration: none;
 }
 
+/* The hover colour, the focus ring and the .month__sitting tint are set on the
+   td because the link is only as tall as the cares it lists. The td is as tall
+   as the row. */
 @media (hover: hover) {
-  a.month__day:hover { background: var(--surface-2); }
+  .month__grid td:has(> a.month__day):hover { background: var(--surface-2); }
 }
+.month__grid td:has(> a.month__day:focus-visible) { outline: 2px solid var(--accent); outline-offset: -2px; }
+a.month__day:focus-visible { outline: none; }
+
+/* Stretches the link's click area over the whole td. */
+a.month__day::after { content: ""; position: absolute; inset: 0; }
 
 .month__number {
   display: grid;
@@ -1973,6 +1980,22 @@ a.plant__keep { text-decoration: none; }
 .month__name { display: none; }
 .month__more { font-size: 10px; line-height: 12px; color: var(--ink-3); }
 
+/* A day the reader's own access covers, for a reader who sees no other
+   member's days. */
+.month__sitting { background: var(--accent-soft); }
+
+/* The bands under a day's number, one per member with an end date. The
+   negative margin undoes the day's horizontal padding so the bands on
+   neighbouring days join. An uncovered day keeps an empty band so each
+   member's band stays at the same height. */
+.month__bands { display: flex; flex-direction: column; gap: 2px; align-self: stretch; margin: 0 -1px; }
+.month__band { height: 4px; }
+.month__band--1 { background: var(--band-1); }
+.month__band--2 { background: var(--band-2); }
+.month__band--3 { background: var(--band-3); }
+.month__band--start { margin-left: 3px; border-radius: 2px 0 0 2px; }
+.month__band--end { margin-right: 3px; border-radius: 0 2px 2px 0; }
+
 /* From this width a day has room for the plants' names in place of the icons. */
 @media (min-width: 600px) {
   .month__day { align-items: stretch; min-height: 96px; padding: 5px 4px; }
@@ -1983,6 +2006,7 @@ a.plant__keep { text-decoration: none; }
   .month__icon { display: none; }
   .month__name { display: block; overflow: hidden; font-size: 12px; white-space: nowrap; text-overflow: ellipsis; }
   .month__more { font-size: 11px; line-height: 1.4; }
+  .month__bands { margin: 0 -4px; }
 }
 
 /* The Logged and Due headings in a day's sheet. */

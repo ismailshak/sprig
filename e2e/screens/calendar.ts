@@ -28,10 +28,10 @@ export class CalendarScreen {
   }
 
   // A day with care on it is a link named like "Monday 14 September, 1 logged,
-  // 2 due". In the current month the first day with care due is today when
-  // anything is overdue or due today.
+  // 2 due, Jo sitting". In the current month the first day with care due is
+  // today when anything is overdue or due today.
   firstDayWithCareDue(): Locator {
-    return this.page.getByRole('link', { name: /\d+ due$/ }).first();
+    return this.page.getByRole('link', { name: /\d+ due(,|$)/ }).first();
   }
 
   // With JavaScript the click swaps the day's sheet in. Without it the click
@@ -49,5 +49,14 @@ export class CalendarScreen {
   // plant's name.
   plantIn(plant: Plant): Locator {
     return this.daySheet().getByRole('link', { name: plant.name });
+  }
+
+  // A row under Sitting in the day's sheet. The signed-in person's own row is
+  // named "You". A care row can contain the same name, as in "Jo watered", but
+  // a care row is a link and a Sitting row is not.
+  sitterIn(name: string): Locator {
+    return this.daySheet()
+      .getByRole('listitem')
+      .filter({ hasText: name, hasNot: this.page.getByRole('link') });
   }
 }

@@ -21,12 +21,12 @@ var wantCapabilities = map[string][]string{
 		"care.log", "care_type.manage", "garden.delete", "garden.edit", "member.invite",
 		"member.manage", "photo.add", "photo.delete_any", "photo.delete_own",
 		"photo.set_profile", "plant.archive", "plant.create", "plant.edit",
-		"schedule.edit", "token.manage",
+		"schedule.edit", "sitting.view", "token.manage",
 	},
 	"member": {
 		"care.delete_own", "care.edit_own", "care.log", "photo.add",
 		"photo.delete_own", "photo.set_profile", "plant.archive",
-		"plant.create", "plant.edit", "schedule.edit", "token.manage",
+		"plant.create", "plant.edit", "schedule.edit", "sitting.view", "token.manage",
 	},
 	"sitter": {"care.delete_own", "care.edit_own", "care.log"},
 }

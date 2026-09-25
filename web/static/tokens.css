@@ -33,6 +33,9 @@
   --accent-ink: var(--light-accent-ink);
   --alert: var(--light-alert);
   --good: var(--light-good);
+  --band-1: var(--light-band-1);
+  --band-2: var(--light-band-2);
+  --band-3: var(--light-band-3);
   --card-bg: var(--light-card-bg);
   --card-border-color: var(--light-card-border-color);
   --shadow-color: var(--light-shadow-color);
@@ -61,6 +64,9 @@
     --accent-ink: var(--dark-accent-ink);
     --alert: var(--dark-alert);
     --good: var(--dark-good);
+    --band-1: var(--dark-band-1);
+    --band-2: var(--dark-band-2);
+    --band-3: var(--dark-band-3);
     --card-bg: var(--dark-card-bg);
     --card-border-color: var(--dark-card-border-color);
     --shadow-color: var(--dark-shadow-color);
@@ -91,6 +97,9 @@
   --accent-ink: var(--dark-accent-ink);
   --alert: var(--dark-alert);
   --good: var(--dark-good);
+  --band-1: var(--dark-band-1);
+  --band-2: var(--dark-band-2);
+  --band-3: var(--dark-band-3);
   --card-bg: var(--dark-card-bg);
   --card-border-color: var(--dark-card-border-color);
   --shadow-color: var(--dark-shadow-color);
