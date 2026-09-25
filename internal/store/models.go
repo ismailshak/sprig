@@ -33,6 +33,16 @@ type AppUser struct {
 	ClosedAt     *time.Time
 }
 
+type CalendarNote struct {
+	ID        uuid.UUID
+	GardenID  uuid.UUID
+	StartsOn  time.Time
+	EndsOn    time.Time
+	Text      string
+	CreatedBy uuid.UUID
+	CreatedAt time.Time
+}
+
 type Capability struct {
 	Name string
 }

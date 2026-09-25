@@ -1984,6 +1984,16 @@ a.month__day::after { content: ""; position: absolute; inset: 0; }
    member's days. */
 .month__sitting { background: var(--accent-soft); }
 
+/* A day with a note has a ring round its number, in the text colour so it
+   differs from the coloured bands and the tint. Today's number is filled, so
+   its ring has a gap in the background colour. */
+.month__number--noted { box-shadow: 0 0 0 1.5px var(--ink-2); }
+[aria-current="date"] .month__number--noted { box-shadow: 0 0 0 1.5px var(--bg), 0 0 0 3px var(--ink-2); }
+
+/* The notes on a day, hidden below 600px because the cell only has room
+   for the ring. */
+.month__notes { display: none; margin: 0; padding: 0; list-style: none; }
+
 /* The bands under a day's number, one per member with an end date. The
    negative margin undoes the day's horizontal padding so the bands on
    neighbouring days join. An uncovered day keeps an empty band so each
@@ -2007,6 +2017,18 @@ a.month__day::after { content: ""; position: absolute; inset: 0; }
   .month__name { display: block; overflow: hidden; font-size: 12px; white-space: nowrap; text-overflow: ellipsis; }
   .month__more { font-size: 11px; line-height: 1.4; }
   .month__bands { margin: 0 -4px; }
+  .month__notes { display: block; }
+  .month__note { overflow: hidden; font-size: 12px; font-weight: 600; line-height: 1.4; white-space: nowrap; text-overflow: ellipsis; }
+}
+
+/* The Add note link at the bottom of a day's sheet. */
+.sheet__add {
+  display: grid; place-items: center;
+  width: 100%; margin-top: 18px; min-height: var(--tap);
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--line-strong);
+  color: var(--ink-2); font-size: 15px; font-weight: 600;
+  text-decoration: none;
 }
 
 /* The Logged and Due headings in a day's sheet. */
@@ -2035,11 +2057,11 @@ a.month__day::after { content: ""; position: absolute; inset: 0; }
 
 .topbar--stack .backlink { margin-left: -4px; }
 
-/* Save and Delete side by side, because correcting an event and removing it are
-   done from the same sheet. Delete is outlined, not rose. Rose in this app
-   means overdue, and a delete can be undone for four seconds afterwards, like a
-   logged row on Today, so it needs neither a warning colour nor a confirmation
-   step. */
+/* Save and Delete side by side, on the sheet that corrects an event and on a
+   note's sheet. Delete is outlined, not rose, because rose in this app means
+   overdue. A deleted event can be undone for four seconds afterwards, like a
+   logged row on Today, so it has no confirmation step. A deleted note has no
+   undo and no confirmation either, because a note is one line and its days. */
 .sheet__foot {
   display: flex;
   align-items: center;

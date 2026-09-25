@@ -37,21 +37,25 @@
 <ul class="list">{{range .}}{{template "calendar-row" .}}
 {{end}}</ul>
 </section>{{end}}
-<table class="month__grid">
+{{template "calendar-grid" .}}{{end}}
+
+{{/* Adding, saving and deleting a note swap the grid. */}}
+{{define "calendar-grid"}}<table class="month__grid" id="calendar-grid">
 <thead><tr>{{range .Weekdays}}<th scope="col">{{.}}</th>{{end}}</tr></thead>
 <tbody>
 {{range .Weeks}}<tr>{{range .}}{{template "calendar-day" .}}{{end}}</tr>
 {{end}}</tbody>
 </table>{{end}}
 
-{{/* The link's aria-label counts the care on the day and names the members
-     whose access covers it, so the list and the bands inside it are hidden
-     from screen readers. The stylesheet shows each care's icon below 600px and
-     the plant's name from 600px. */}}
-{{define "calendar-day"}}<td{{if .Sitting}} class="month__sitting"{{end}}{{if .Today}} aria-current="date"{{end}}>{{if .Number}}
+{{/* The link's aria-label names each note, counts the care and names the
+     members whose access covers the day, so the lists and the bands inside
+     the link are hidden from screen readers. The stylesheet shows each care's
+     icon below 600px, and each note's text and plant's name from 600px. */}}
+{{define "calendar-day"}}<td{{with .ID}} id="{{.}}"{{end}}{{if .Sitting}} class="month__sitting"{{end}}{{if .Today}} aria-current="date"{{end}}>{{if .Number}}
 {{if .Href}}<a class="month__day" href="{{.Href}}" hx-get="{{.Href}}" hx-target="#sheet" hx-swap="outerHTML" aria-label="{{.Label}}">{{else}}<span class="month__day">{{end}}
-<span class="month__number">{{.Number}}</span>
+<span class="month__number{{if .Notes}} month__number--noted{{end}}">{{.Number}}</span>
 {{if .Bands}}<span class="month__bands" aria-hidden="true">{{range .Bands}}<span class="month__band{{if .Covered}} month__band--{{.Colour}}{{if .Starts}} month__band--start{{end}}{{if .Ends}} month__band--end{{end}}{{end}}"></span>{{end}}</span>{{end}}
+{{if .Notes}}<ul class="month__notes" aria-hidden="true">{{range .Notes}}<li class="month__note">{{.Text}}</li>{{end}}</ul>{{end}}
 {{if .Shown}}<ul class="month__cares" aria-hidden="true">{{range .Shown}}<li class="month__care{{if .Skipped}} month__care--skipped{{else if .Logged}} month__care--logged{{end}}"><span class="month__icon">{{template "care-icon" .Slug}}</span><span class="month__name">{{.Name}}</span></li>{{end}}{{with .More}}<li class="month__more">+{{.}}</li>{{end}}</ul>{{end}}
 {{if .Href}}</a>{{else}}</span>{{end}}
 {{end}}</td>{{end}}
@@ -73,6 +77,9 @@
 <div class="sheet__panel">
 <div class="sheet__grip"></div>
 <h2 class="sheet__title" id="day-sheet-title">{{.Title}}</h2>
+{{with .Notes}}<h3 class="section__title sheet__group" id="day-sheet-notes">Notes</h3>
+<ul class="list" aria-labelledby="day-sheet-notes">{{range .}}<li>{{if .Href}}<a class="row row--link" href="{{.Href}}" hx-get="{{.Href}}" hx-target="#sheet" hx-swap="outerHTML settle:0ms">{{else}}<span class="row">{{end}}<span class="row__text"><span class="row__name">{{.Text}}</span>{{with .Span}}<span class="row__meta"><span class="row__part">{{.}}</span></span>{{end}}</span>{{if .Href}}</a>{{else}}</span>{{end}}</li>
+{{end}}</ul>{{end}}
 {{with .Logged}}<h3 class="section__title sheet__group">Logged</h3>
 <ul class="list">{{range .}}{{template "calendar-row" .}}
 {{end}}</ul>{{end}}
@@ -82,13 +89,51 @@
 {{with .Sitting}}<h3 class="section__title sheet__group">Sitting</h3>
 <ul class="list">{{range .}}<li class="row"><span class="row__text"><span class="row__name">{{.Name}}</span><span class="row__meta"><span class="row__part">{{.Until}}</span></span></span></li>
 {{end}}</ul>{{end}}
+{{with .AddNote}}<a class="sheet__add" href="{{.}}" hx-get="{{.}}" hx-target="#sheet" hx-swap="outerHTML settle:0ms">Add note</a>{{end}}
 <form method="dialog"><button class="sheet__cancel">Close</button></form>
 </div>
 </dialog>{{else}}<div id="sheet"></div>{{end}}{{end}}
 
+{{/* The Add note and Edit note sheet, rendered in place of the day's sheet.
+     The form swaps #calendar-grid, because a note changes nothing else on the
+     page. The server retargets a refused note at #sheet. Delete posts the same
+     form to its own URL so it works without JavaScript. */}}
+{{define "note-sheet"}}{{with .NoteSheet}}<dialog open class="sheet" id="sheet" aria-labelledby="note-sheet-title" tabindex="-1">
+<form method="dialog"><button class="sheet__scrim" tabindex="-1" aria-hidden="true"></button></form>
+<div class="sheet__panel">
+<div class="sheet__grip"></div>
+<h2 class="sheet__title" id="note-sheet-title">{{.Title}}</h2>
+<form class="sheet__form" method="post" action="{{.Path}}" hx-post="{{.Path}}" hx-target="#calendar-grid" hx-swap="outerHTML settle:0ms">
+<div class="field">
+<label class="field__label" for="note-text">Note</label>
+<input class="input" id="note-text" name="text" type="text" placeholder="Ellie away" value="{{.Text}}">
+</div>
+<div class="field">
+<label class="field__label" for="note-first">First day</label>
+<input class="input input--unit" id="note-first" name="first" type="date" max="{{.Max}}" value="{{.First}}">
+</div>
+<div class="field">
+<label class="field__label" for="note-last">Last day <span class="field__hint">optional</span></label>
+<input class="input input--unit" id="note-last" name="last" type="date" max="{{.Max}}" value="{{.Last}}">
+</div>
+{{with .Error}}<p class="field__error">{{.}}</p>{{end}}
+<div class="sheet__foot">
+<button class="sheet__go">{{.Button}}</button>
+{{with .Delete}}<button class="sheet__delete" formaction="{{.}}" hx-post="{{.}}">Delete</button>{{end}}
+</div>
+</form>
+<form method="dialog"><button class="sheet__cancel">Cancel</button></form>
+</div>
+</dialog>{{else}}<div id="sheet"></div>{{end}}{{end}}
+
+{{/* The response to an added, saved or deleted note: the grid, and an empty
+     #sheet that closes the dialog. */}}
+{{define "note-changed"}}{{template "calendar-grid" .}}
+<div id="sheet" hx-swap-oob="true"></div>{{end}}
+
 {{define "nav"}}{{template "tabs" "Under Activity"}}{{end}}
 
-{{define "overlay"}}{{template "day-sheet" .}}{{end}}
+{{define "overlay"}}{{if .NoteSheet}}{{template "note-sheet" .}}{{else}}{{template "day-sheet" .}}{{end}}{{end}}
 
 {{define "script"}}<script src="{{asset "sheet.js"}}" defer></script>
 <script src="{{asset "history.js"}}" defer></script>{{end}}

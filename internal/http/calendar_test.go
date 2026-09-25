@@ -541,7 +541,7 @@ func TestCalendar_TwoSittersOnOneDayHaveTwoBandsInDifferentColours(t *testing.T)
 	}
 	owner := auth.Principal{Capabilities: auth.Capabilities{auth.SittingView: true}}
 
-	page := newCalendarPage(owner, calendarQuery{month: startOfMonth(now)}, nil, nil, sittings, now)
+	page := newCalendarPage(owner, calendarQuery{month: startOfMonth(now)}, nil, nil, sittings, nil, now)
 
 	for d, want := range map[int][]calendarBand{
 		4:  {{Covered: true, Colour: 1}, {}},
@@ -567,7 +567,7 @@ func TestCalendar_ASitterHasTheirOwnDaysMarkedAndNoBands(t *testing.T) {
 	sittings := []sitting{{Name: "You", You: true, First: at(time.August, 25, 0, 0), Last: at(time.September, 9, 0, 0)}}
 	sitter := auth.Principal{Capabilities: auth.Capabilities{auth.CareLog: true}}
 
-	page := newCalendarPage(sitter, calendarQuery{month: startOfMonth(now)}, nil, nil, sittings, now)
+	page := newCalendarPage(sitter, calendarQuery{month: startOfMonth(now)}, nil, nil, sittings, nil, now)
 
 	for d, want := range map[int]bool{1: true, 9: true, 10: false} {
 		day := calendarDayOn(t, page, d)

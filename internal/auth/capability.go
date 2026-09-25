@@ -28,6 +28,9 @@ const (
 	// SittingView shows on the calendar the days of access of every member
 	// with an end date. Without it a person sees only their own.
 	SittingView Capability = "sitting.view"
+	// CalendarNoteManage adds, edits and deletes the garden's calendar notes.
+	// Every member reads them.
+	CalendarNoteManage Capability = "calendar_note.manage"
 )
 
 // A test compares allCapabilities against the capability table row for row.
@@ -36,6 +39,7 @@ var allCapabilities = []Capability{
 	CareLog, CareEditOwn, CareDeleteOwn, CareEditAny, CareDeleteAny,
 	PhotoAdd, PhotoSetProfile, PhotoDeleteOwn, PhotoDeleteAny,
 	GardenEdit, GardenDelete, CareTypeManage, MemberInvite, MemberManage, TokenManage, SittingView,
+	CalendarNoteManage,
 }
 
 // Capabilities is the set of capabilities a role grants. A nil set grants nothing.

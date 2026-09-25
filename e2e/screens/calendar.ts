@@ -51,6 +51,64 @@ export class CalendarScreen {
     return this.daySheet().getByRole('link', { name: plant.name });
   }
 
+  // Each day with the note is a link whose accessible name has the note's text
+  // after the date, "Monday 14 September, Ellie away, 2 due".
+  daysWithNote(text: string): Locator {
+    return this.page.getByRole('link', { name: text });
+  }
+
+  // A row under Notes in the day's sheet. It is a link to the Edit note sheet
+  // for a member who may edit notes and plain text for anyone else.
+  noteIn(text: string): Locator {
+    return this.daySheet().getByRole('listitem').filter({ hasText: text });
+  }
+
+  addNote(): Locator {
+    return this.daySheet().getByRole('link', { name: 'Add note' });
+  }
+
+  // With JavaScript the click swaps the note's sheet in place of the day's.
+  // Without it the click loads the calendar with the note's sheet open.
+  async openNote(row: Locator): Promise<void> {
+    await row.click();
+    await this.noteSheet().waitFor();
+  }
+
+  // The note's sheet is the dialog holding the Note field.
+  noteSheet(): Locator {
+    return this.page.getByRole('dialog').filter({ has: this.page.getByLabel('Note', { exact: true }) });
+  }
+
+  noteText(): Locator {
+    return this.noteSheet().getByLabel('Note', { exact: true });
+  }
+
+  noteFirstDay(): Locator {
+    return this.noteSheet().getByLabel('First day');
+  }
+
+  noteLastDay(): Locator {
+    return this.noteSheet().getByLabel('Last day');
+  }
+
+  // The primary button reads "Add note" on a new note and "Save changes" on
+  // one being edited.
+  noteButton(label: string): Locator {
+    return this.noteSheet().getByRole('button', { name: label, exact: true });
+  }
+
+  // A saved note closes the sheet, with JavaScript by a swap and without it by
+  // the redirect to the month.
+  async saveNote(label: string): Promise<void> {
+    await this.noteButton(label).click();
+    await this.noteSheet().waitFor({ state: 'detached' });
+  }
+
+  async deleteNote(): Promise<void> {
+    await this.noteButton('Delete').click();
+    await this.noteSheet().waitFor({ state: 'detached' });
+  }
+
   // A row under Sitting in the day's sheet. The signed-in person's own row is
   // named "You". A care row can contain the same name, as in "Jo watered", but
   // a care row is a link and a Sitting row is not.

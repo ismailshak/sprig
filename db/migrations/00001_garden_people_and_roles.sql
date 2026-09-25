@@ -75,7 +75,10 @@ INSERT INTO capability (name) VALUES
     ('token.manage'),
     -- Shows on the calendar the days of access of every member with an end
     -- date. Without it a person sees only their own.
-    ('sitting.view');
+    ('sitting.view'),
+    -- Adds, edits and deletes the garden's calendar notes. Every member reads
+    -- them.
+    ('calendar_note.manage');
 
 -- Neither foreign key cascades. Deleting a capability a role still grants is
 -- rejected rather than silently removing the grant.
@@ -101,7 +104,8 @@ INSERT INTO role_capability (role, capability) VALUES
     ('member', 'photo.set_profile'),
     ('member', 'photo.delete_own'),
     ('member', 'token.manage'),
-    ('member', 'sitting.view');
+    ('member', 'sitting.view'),
+    ('member', 'calendar_note.manage');
 
 INSERT INTO role_capability (role, capability) VALUES
     ('sitter', 'care.log'),
