@@ -106,14 +106,14 @@
 <form class="sheet__form" method="post" action="{{.Path}}" hx-post="{{.Path}}" hx-target="#calendar-grid" hx-swap="outerHTML settle:0ms">
 <div class="field">
 <label class="field__label" for="note-text">Note</label>
-<input class="input" id="note-text" name="text" type="text" placeholder="Ellie away" value="{{.Text}}">
+<input class="input" id="note-text" name="text" type="text" value="{{.Text}}">
 </div>
 <div class="field">
 <label class="field__label" for="note-first">First day</label>
 <input class="input input--unit" id="note-first" name="first" type="date" max="{{.Max}}" value="{{.First}}">
 </div>
 <div class="field">
-<label class="field__label" for="note-last">Last day</label>
+<label class="field__label" for="note-last">Last day <span class="field__hint">optional</span></label>
 <input class="input input--unit" id="note-last" name="last" type="date" max="{{.Max}}" value="{{.Last}}">
 </div>
 {{with .Error}}<p class="field__error">{{.}}</p>{{end}}
