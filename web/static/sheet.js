@@ -1,12 +1,13 @@
-/* The log-care sheet, the garden sheet on Today, and the day sheet and the
-   note sheet on the calendar. The server renders each with the open
-   attribute. That is a non-modal dialog, and the page behind it stays in the
-   tab order. This script reopens it as a modal, so Tab stays inside the sheet,
-   Escape closes it and focus goes back to the control that opened it.
+/* The log-care sheet, the garden sheet and the Remind me later sheet on
+   Today, and the day sheet and the note sheet on the calendar. The server
+   renders each with the open attribute. That is a non-modal dialog, and the
+   page behind it stays in the tab order. This script reopens it as a modal,
+   so Tab stays inside the sheet, Escape closes it and focus goes back to the
+   control that opened it.
 
    A sheet can be dragged down to close it, the same as Cancel or Close. The
-   log-care sheet is dragged by its grip or its plant heading. The garden sheet,
-   the day sheet and the note sheet are dragged by their grip or their title.
+   log-care sheet is dragged by its grip or its plant heading. Every other sheet
+   is dragged by its grip or its title.
 
    A sheet is swapped into the page by htmx, so the listeners are on the
    document and find the sheet from the event. A drag that starts in the

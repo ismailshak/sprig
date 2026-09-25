@@ -181,6 +181,24 @@ button {
   letter-spacing: var(--label-tracking);
 }
 
+/* On Today the count is next to the title instead of at the right end. The
+   Remind me later link goes at the right end. */
+.section__head--day { justify-content: flex-start; gap: 8px; }
+
+/* The Remind me later link. The negative margin cancels the padding that
+   enlarges its tap target. */
+.section__action {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin: -8px 0 -8px auto;
+  padding: 8px 0;
+  font-size: 13px;
+  color: var(--ink-2);
+  text-decoration: none;
+}
+.section__action svg { width: 14px; height: 14px; color: var(--ink-3); }
+
 /* ----------------------------------------------------------------------- list */
 
 .list {
@@ -554,9 +572,9 @@ body:has(dialog[open]) { overscroll-behavior: none; }
   touch-action: none;
 }
 
-/* The heading of the garden sheet and the day sheet. The log-care sheet has
-   the plant heading here instead. The side margins are negative so that a
-   drag can start anywhere across the panel's width. */
+/* The heading of every sheet but the log-care sheet. The log-care sheet has
+   the plant heading here. The side margins are negative so that a drag can
+   start anywhere across the panel's width. */
 .sheet__title {
   margin: 0 calc(-1 * var(--sheet-pad));
   padding: 4px var(--sheet-pad) 8px;
@@ -732,6 +750,10 @@ legend.field__label + * { clear: both; }
 .sheet__form:not(:has([name="outcome"][value="skipped"]:checked)) .sheet__skipped,
 .sheet__form:not(:has([name="when"][value="today"]:checked, [name="when"][value="yesterday"]:checked)) .sheet__clock,
 .sheet__form:not(:has([name="when"][value="other"]:checked)) .sheet__at { display: none; }
+
+/* On the Remind me later sheet the time input is shown only while At a
+   time is chosen. */
+.sheet__form:not(:has([name="when"][value="time"]:checked)) .sheet__remind-at { display: none; }
 
 /* The Care chips decide which Remind me in chips and which Log button show.
    Each care type's are the nth sheet__for in their box, where its chip is the
@@ -2781,19 +2803,7 @@ a.wide-action {
   font-weight: 600;
 }
 
-/* A bordered button beside the primary one, such as Remind me. */
-.banner__secondary {
-  height: 36px;
-  padding: 0 14px;
-  border-radius: var(--radius-pill);
-  border: 1px solid var(--line);
-  background: var(--bg);
-  color: var(--ink);
-  font-size: 14px;
-  font-weight: 600;
-}
-
-/* A plain text button or link, such as Not now and Dismiss. */
+/* A plain text button, such as Not now. */
 .banner__plain {
   display: inline-flex;
   align-items: center;
@@ -2802,13 +2812,6 @@ a.wide-action {
   font-size: 14px;
   color: var(--ink-2);
   text-decoration: none;
-}
-
-/* The Remind me again banner's time input, on a row with its button. */
-.banner__time {
-  width: auto;
-  margin-top: 0;
-  padding: 7px 10px;
 }
 
 /* ------------------------------------------------------------------ offline */

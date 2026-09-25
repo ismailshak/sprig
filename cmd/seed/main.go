@@ -33,6 +33,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/ismailshak/sprig/db"
+	"github.com/ismailshak/sprig/internal/push"
 	"github.com/ismailshak/sprig/internal/store"
 )
 
@@ -211,6 +212,9 @@ func writePeople(ctx context.Context, tx pgx.Tx, people []*person, ref time.Time
 	return nil
 }
 
+// digestHour is the hour every seeded membership's digest arrives.
+const digestHour = 8
+
 // writeGarden writes the garden and everything in it and returns the number of
 // plants. events is the running count of care events across gardens, used to
 // derive the next event id.
@@ -237,13 +241,21 @@ func writeGarden(ctx context.Context, tx pgx.Tx, g *garden, ref time.Time, event
 		}
 		if _, err := tx.Exec(ctx,
 			`INSERT INTO membership (id, garden_id, user_id, role, invited_by, created_at, expires_at, digest_hour)
-				VALUES ($1, $2, $3, $4, $5, $6, $7, 8)`,
-			m.id, g.id, m.person.id, m.role, invitedBy, ref.AddDate(0, 0, -m.daysOld), expires,
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+			m.id, g.id, m.person.id, m.role, invitedBy, ref.AddDate(0, 0, -m.daysOld), expires, digestHour,
 		); err != nil {
 			return 0, fmt.Errorf("writing %s's membership of %s: %w", m.person.handle, g.name, err)
 		}
 		if err := writePreferences(ctx, tx, g, m); err != nil {
 			return 0, err
+		}
+		if m.digestSent {
+			if _, err := tx.Exec(ctx,
+				"INSERT INTO notification_send (membership_id, kind, send_key, sent_at) VALUES ($1, 'digest', $2, $3)",
+				m.id, push.DigestKey(ref), ref.Add(digestHour*time.Hour),
+			); err != nil {
+				return 0, fmt.Errorf("writing %s's digest for %s: %w", m.person.handle, g.name, err)
+			}
 		}
 	}
 

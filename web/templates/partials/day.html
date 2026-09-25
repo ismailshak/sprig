@@ -34,11 +34,16 @@
 </div>{{end}}
 {{- end}}
 
+{{/* The link opens the Remind me later sheet. htmx swaps the sheet into
+     #sheet. */}}
+{{define "remind-later-link"}}{{with .}}<a class="section__action" id="{{.ID}}" href="{{.Href}}" hx-get="{{.Href}}" hx-target="#sheet" hx-swap="outerHTML">{{if .At}}Reminder at {{.At}}{{else}}Remind me later{{end}}{{template "icon-chevron"}}</a>{{end}}{{end}}
+
 {{define "today-section"}}
 <section class="section" aria-labelledby="{{.ID}}">
-<div class="section__head">
+<div class="section__head section__head--day">
 <h2 class="section__title{{if .Alert}} section__title--alert{{end}}" id="{{.ID}}">{{.Title}}</h2>
 <span class="section__count">{{len .Rows}}</span>
+{{template "remind-later-link" .RemindLater}}
 </div>
 <ul class="list">
 {{range .Rows}}{{template "care-row" .}}

@@ -23,7 +23,7 @@ var seededTables = []string{
 	"garden", "app_user", "membership",
 	"care_type", "plant", "care_schedule", "care_event",
 	"passkey_credential", "invite", "recovery_code", "api_token",
-	"push_subscription", "notification_preference",
+	"push_subscription", "notification_preference", "notification_send",
 }
 
 func TestMain(m *testing.M) {

@@ -187,7 +187,7 @@ func run(ctx context.Context, getenv func(string) string, stdout io.Writer) erro
 	if cfg.pushEnabled {
 		pushKey = cfg.push.Public
 		sender := push.NewSender(cfg.push, nil)
-		digest = push.NewDigest(logger, queries, sender, cfg.baseURL.String(), sprighttp.DigestPath, sprighttp.RemindAgainPath)
+		digest = push.NewDigest(logger, queries, sender, cfg.baseURL.String(), sprighttp.DigestPath)
 		deadlines = push.NewDeadlines(logger, queries, sender, cfg.baseURL.String(), sprighttp.TokensPath, sprighttp.PeoplePath)
 		notifier = push.NewNotifier(logger, queries, sender, cfg.baseURL.String())
 		// One wake for both jobs, so a handler need not know which job its
