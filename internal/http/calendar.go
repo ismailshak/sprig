@@ -48,6 +48,10 @@ const daySheetTemplate = "day-sheet"
 // as "+2".
 const shownCares = 3
 
+// bandColours is how many colours the stylesheet has for the bands that show
+// each member's days on the grid. Bands take them in turn.
+const bandColours = 3
+
 // calendarQuery is the query string of a request for the calendar.
 type calendarQuery struct {
 	// month is midnight on the first of the month in the reader's timezone.
@@ -141,7 +145,85 @@ func (h *activity) calendarPage(ctx context.Context, principal auth.Principal, q
 	if err != nil {
 		return calendarPage{}, fmt.Errorf("list the month's care: %w", err)
 	}
-	return newCalendarPage(principal, q, schedule.Resolve(schedules, latest, now), events, now), nil
+	members, err := h.queries.ListMembers(ctx, principal.Garden.ID)
+	if err != nil {
+		return calendarPage{}, fmt.Errorf("list the members: %w", err)
+	}
+	return newCalendarPage(principal, q, schedule.Resolve(schedules, latest, now), events, sittings(principal, members, now), now), nil
+}
+
+// sitting is a membership with an end date, as the calendar shows it. It
+// covers the days from the one the membership was made on to the last one with
+// any access.
+type sitting struct {
+	// Name is the member's display name, or "You" for the reader's own
+	// membership.
+	Name string
+	You  bool
+	// First and Last are midnight in the reader's timezone on the first and
+	// last covered days.
+	First, Last time.Time
+	// Until is the second line of the member's row in a day's sheet, "until 14
+	// Sep" or "Access ended 14 Sep".
+	Until string
+}
+
+// covers reports whether date, midnight in the reader's timezone, is one of
+// the sitting's days.
+func (s sitting) covers(date time.Time) bool {
+	return !date.Before(s.First) && !date.After(s.Last)
+}
+
+// sittings returns the memberships with an end date the reader may see, in
+// the order they were made. A reader with the sitting.view capability sees
+// every one. Any other reader sees their own membership alone. A membership
+// whose end date is on or before the day it was made covers no day and is
+// left out.
+//
+// The dates are read in the member's timezone, because People shows and sets
+// the end date there. The calendar marks the same dates in the reader's
+// timezone.
+func sittings(principal auth.Principal, members []store.ListMembersRow, now time.Time) []sitting {
+	loc := now.Location()
+	var out []sitting
+	for _, m := range members {
+		if m.Membership.ExpiresAt == nil {
+			continue
+		}
+		you := m.Membership.ID == principal.Membership.ID
+		if !you && !principal.Can(auth.SittingView) {
+			continue
+		}
+		memberLoc := locationFor(m.AppUser)
+		// An end date set on People or an invite is midnight. Access is gone
+		// for the whole of that day. Any other instant still covers the day it
+		// falls in.
+		ends := m.Membership.ExpiresAt.In(memberLoc)
+		last := midnightOn(ends, memberLoc)
+		if last.Equal(ends) {
+			last = last.AddDate(0, 0, -1)
+		}
+		s := sitting{
+			Name:  m.AppUser.DisplayName,
+			You:   you,
+			First: midnightOn(m.Membership.CreatedAt.In(memberLoc), loc),
+			Last:  midnightOn(last, loc),
+			Until: accessUntilWord(m, now),
+		}
+		if s.Last.Before(s.First) {
+			continue
+		}
+		if you {
+			s.Name = "You"
+		}
+		out = append(out, s)
+	}
+	return out
+}
+
+// midnightOn is midnight in loc on the date t has in its own location.
+func midnightOn(t time.Time, loc *time.Location) time.Time {
+	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, loc)
 }
 
 type calendarPage struct {
@@ -174,7 +256,7 @@ type calendarDay struct {
 	// after the month's last day.
 	Number int
 	// Href is the URL that opens the day's sheet. A day with nothing logged or
-	// due has no Href and is not a link.
+	// due, and no sitting the reader can see, has no Href and is not a link.
 	Href string
 	// Label is the link's accessible name, "Thursday 3 September, 1 logged, 2
 	// due".
@@ -184,6 +266,26 @@ type calendarDay struct {
 	// More counts the rest.
 	Shown []calendarRow
 	More  int
+	// Sitting is true on a day the reader's own access covers, for a reader
+	// who sees no other member's days. The stylesheet tints the whole cell.
+	Sitting bool
+	// Bands is one band per member with an end date whose days fall in the
+	// month, in the order the memberships were made. Bands is empty for a
+	// reader who sees only their own days.
+	Bands []calendarBand
+}
+
+// calendarBand is one member's band on a day in the grid. A day the member
+// does not cover still renders the band, empty, so the bands below it stay at
+// the same height.
+type calendarBand struct {
+	Covered bool
+	// Colour is 1 to bandColours and picks the band's colour in the
+	// stylesheet.
+	Colour int
+	// Starts and Ends are true on the member's first and last covered day.
+	// The stylesheet rounds those ends of the band.
+	Starts, Ends bool
 }
 
 // calendarRow is one care on the calendar, in a day's sheet or in the cares
@@ -221,6 +323,8 @@ type daySheet struct {
 	Title  string
 	Logged []calendarRow
 	Due    []calendarRow
+	// Sitting is the members with an end date whose days include this one.
+	Sitting []sitting
 }
 
 // dueCare is a schedule and one date in the month it falls due on.
@@ -229,7 +333,7 @@ type dueCare struct {
 	date schedule.Projected
 }
 
-func newCalendarPage(principal auth.Principal, q calendarQuery, lines []schedule.Line, events []store.ListCareEventsBetweenRow, now time.Time) calendarPage {
+func newCalendarPage(principal auth.Principal, q calendarQuery, lines []schedule.Line, events []store.ListCareEventsBetweenRow, sittings []sitting, now time.Time) calendarPage {
 	loc := now.Location()
 	page := calendarPage{
 		Back:          activityPath,
@@ -269,19 +373,43 @@ func newCalendarPage(principal auth.Principal, q calendarQuery, lines []schedule
 	}
 	page.MonthDue = dueRows(monthDue, now)
 
-	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc)
+	// inMonth is the sittings with a day in the month, one band each.
+	lastDay := q.month.AddDate(0, 1, -1)
+	var inMonth []sitting
+	for _, s := range sittings {
+		if !s.Last.Before(q.month) && !s.First.After(lastDay) {
+			inMonth = append(inMonth, s)
+		}
+	}
+	showBands := principal.Can(auth.SittingView)
+
+	today := midnightOn(now, loc)
 	week := make([]calendarDay, mondayIndex(q.month))
 	for d := 1; d <= days; d++ {
 		date := time.Date(q.month.Year(), q.month.Month(), d, 0, 0, 0, 0, loc)
 		day := calendarDay{Number: d, Today: date.Equal(today)}
+		var covering []sitting
+		for i, s := range inMonth {
+			band := calendarBand{Covered: s.covers(date)}
+			if band.Covered {
+				band.Colour = i%bandColours + 1
+				band.Starts, band.Ends = date.Equal(s.First), date.Equal(s.Last)
+				covering = append(covering, s)
+			}
+			if showBands {
+				day.Bands = append(day.Bands, band)
+			}
+		}
+		day.Sitting = !showBands && len(covering) > 0
 		dueOnDay := dueRows(due[d], now)
-		if cares := slices.Concat(logged[d], dueOnDay); len(cares) > 0 {
+		cares := slices.Concat(logged[d], dueOnDay)
+		if len(cares) > 0 || len(covering) > 0 {
 			day.Href = calendarHref(q.month, &date)
-			day.Label = dayLabel(date, len(logged[d]), len(dueOnDay))
+			day.Label = dayLabel(date, len(logged[d]), len(dueOnDay), covering)
 			day.Shown = cares[:min(len(cares), shownCares)]
 			day.More = len(cares) - len(day.Shown)
 			if q.day != nil && q.day.Equal(date) {
-				page.Sheet = &daySheet{Title: dayTitle(date, now), Logged: logged[d], Due: dueOnDay}
+				page.Sheet = &daySheet{Title: dayTitle(date, now), Logged: logged[d], Due: dueOnDay, Sitting: covering}
 			}
 		}
 		week = append(week, day)
@@ -367,7 +495,7 @@ func overdueFirst(a, b dueCare) int {
 	}
 }
 
-func dayLabel(date time.Time, logged, due int) string {
+func dayLabel(date time.Time, logged, due int, covering []sitting) string {
 	parts := []string{date.Format("Monday 2 January")}
 	if logged > 0 {
 		parts = append(parts, strconv.Itoa(logged)+" logged")
@@ -375,7 +503,27 @@ func dayLabel(date time.Time, logged, due int) string {
 	if due > 0 {
 		parts = append(parts, strconv.Itoa(due)+" due")
 	}
+	if len(covering) > 0 {
+		parts = append(parts, sittingWords(covering))
+	}
 	return strings.Join(parts, ", ")
+}
+
+// sittingWords names the members covering a day, "Jo sitting" or "Jo and
+// Clare sitting". It is "you’re sitting" when the reader's own membership is
+// the only one.
+func sittingWords(covering []sitting) string {
+	if len(covering) == 1 && covering[0].You {
+		return "you’re sitting"
+	}
+	names := make([]string, len(covering))
+	for i, s := range covering {
+		names[i] = s.Name
+		if s.You {
+			names[i] = "you"
+		}
+	}
+	return andList(names) + " sitting"
 }
 
 func dayTitle(date, now time.Time) string {

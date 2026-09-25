@@ -552,15 +552,9 @@ func newMemberRow(member store.ListMembersRow, principal auth.Principal, collide
 	// of the sentence about what the person can do, because nothing else on the
 	// page gives the date.
 	if member.Membership.ExpiresAt != nil {
-		location := locationFor(member.AppUser)
-		at := member.Membership.ExpiresAt.In(location)
 		row.Ended = auth.MembershipEnded(member.Membership, now)
 		row.Role = roleWord(member.Membership.Role)
-		if row.Ended {
-			row.Until = "Access ended " + agoWord(at, now.In(location))
-		} else {
-			row.Until = "until " + dateWord(at, location)
-		}
+		row.Until = accessUntilWord(member, now)
 		row.UntilValue = accessEndValue(member)
 	} else {
 		row.What = roleWhat[member.Membership.Role]
@@ -628,6 +622,19 @@ const accessEndLayout = "2006-01-02"
 // date in the member's timezone. The membership must have an end date.
 func accessEndValue(member store.ListMembersRow) string {
 	return member.Membership.ExpiresAt.In(locationFor(member.AppUser)).Format(accessEndLayout)
+}
+
+// accessUntilWord is the line giving a member's end date, "until 14 Sep" before
+// that day and "Access ended 14 Sep" from it. The date is read in the member's
+// timezone, because People sets it there. The membership must have an end
+// date.
+func accessUntilWord(member store.ListMembersRow, now time.Time) string {
+	location := locationFor(member.AppUser)
+	at := member.Membership.ExpiresAt.In(location)
+	if auth.MembershipEnded(member.Membership, now) {
+		return "Access ended " + agoWord(at, now.In(location))
+	}
+	return "until " + dateWord(at, location)
 }
 
 // parseAccessEnd turns a posted date into the instant access stops: the start

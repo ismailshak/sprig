@@ -75,3 +75,21 @@ test("overdue care in today's sheet links to the plant @swap", async ({ page, ca
 
   await expect(page).toHaveURL(`/plants/${seeded.bigFella.id}`);
 });
+
+// The seed made Jo's membership 20 days ago and ends it in 8 days.
+test("an owner's day sheet names the sitter whose access covers the day @swap", async ({ calendar }) => {
+  await calendar.open();
+
+  await calendar.openDay(calendar.firstDayWithCareDue());
+
+  await expect(calendar.sitterIn(people.jo.name)).toContainText('until');
+});
+
+test("a sitter's day sheet says when their own access ends @swap", async ({ page, calendar }) => {
+  await signIn(page, people.jo.handle);
+  await calendar.open();
+
+  await calendar.openDay(calendar.firstDayWithCareDue());
+
+  await expect(calendar.sitterIn('You')).toContainText('until');
+});

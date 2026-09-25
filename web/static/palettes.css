@@ -34,6 +34,10 @@
   --light-accent-ink: #f4fbf8;
   --light-alert: #a33a5c;
   --light-good: #52722b;
+  /* The bands on the calendar that mark each member's days of access. */
+  --light-band-1: #3d8f7f;
+  --light-band-2: #a3711c;
+  --light-band-3: #7a5c9e;
   /* A list is a bordered panel in both modes. Light used to leave these three
      transparent, so a list was a run of hairlines with nothing to show where one
      section stopped and the next began, while dark had a visible box. The card
@@ -63,6 +67,9 @@
   --dark-accent-ink: #0b1a17;
   --dark-alert: #f08aa2;
   --dark-good: #9dbd63;
+  --dark-band-1: #5cb8a3;
+  --dark-band-2: #d9a856;
+  --dark-band-3: #b39ddb;
   --dark-card-bg: #1c211f;
   --dark-card-border-color: #262c29;
   --dark-shadow-color: rgba(0, 0, 0, .45);

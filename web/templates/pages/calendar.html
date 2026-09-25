@@ -44,12 +44,14 @@
 {{end}}</tbody>
 </table>{{end}}
 
-{{/* The link's aria-label counts the care on the day, so the list inside it is
-     hidden from screen readers. The stylesheet shows each care's icon on a
-     phone and the plant's name from 600px. */}}
-{{define "calendar-day"}}<td{{if .Today}} aria-current="date"{{end}}>{{if .Number}}
+{{/* The link's aria-label counts the care on the day and names the members
+     whose access covers it, so the list and the bands inside it are hidden
+     from screen readers. The stylesheet shows each care's icon below 600px and
+     the plant's name from 600px. */}}
+{{define "calendar-day"}}<td{{if .Sitting}} class="month__sitting"{{end}}{{if .Today}} aria-current="date"{{end}}>{{if .Number}}
 {{if .Href}}<a class="month__day" href="{{.Href}}" hx-get="{{.Href}}" hx-target="#sheet" hx-swap="outerHTML" aria-label="{{.Label}}">{{else}}<span class="month__day">{{end}}
 <span class="month__number">{{.Number}}</span>
+{{if .Bands}}<span class="month__bands" aria-hidden="true">{{range .Bands}}<span class="month__band{{if .Covered}} month__band--{{.Colour}}{{if .Starts}} month__band--start{{end}}{{if .Ends}} month__band--end{{end}}{{end}}"></span>{{end}}</span>{{end}}
 {{if .Shown}}<ul class="month__cares" aria-hidden="true">{{range .Shown}}<li class="month__care{{if .Skipped}} month__care--skipped{{else if .Logged}} month__care--logged{{end}}"><span class="month__icon">{{template "care-icon" .Slug}}</span><span class="month__name">{{.Name}}</span></li>{{end}}{{with .More}}<li class="month__more">+{{.}}</li>{{end}}</ul>{{end}}
 {{if .Href}}</a>{{else}}</span>{{end}}
 {{end}}</td>{{end}}
@@ -76,6 +78,9 @@
 {{end}}</ul>{{end}}
 {{with .Due}}<h3 class="section__title sheet__group">Due</h3>
 <ul class="list">{{range .}}{{template "calendar-row" .}}
+{{end}}</ul>{{end}}
+{{with .Sitting}}<h3 class="section__title sheet__group">Sitting</h3>
+<ul class="list">{{range .}}<li class="row"><span class="row__text"><span class="row__name">{{.Name}}</span><span class="row__meta"><span class="row__part">{{.Until}}</span></span></span></li>
 {{end}}</ul>{{end}}
 <form method="dialog"><button class="sheet__cancel">Close</button></form>
 </div>
