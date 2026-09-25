@@ -73,6 +73,12 @@ export const careTypes = {
   mist: 'Mist',
 } as const;
 
+// The one note on the Home garden's calendar. It starts today and lasts six
+// days, so today's sheet lists it for every member.
+export const notes = {
+  away: { text: 'Ellie away' },
+} as const;
+
 export const plants = {
   bigFella: { id: '00000000-0000-7000-8000-050000000001', name: 'Big Fella' },
   doris: { id: '00000000-0000-7000-8000-050000000003', name: 'Doris' },

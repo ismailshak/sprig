@@ -17,14 +17,14 @@ import (
 // so granting a capability takes a deliberate edit in two places.
 var wantCapabilities = map[string][]string{
 	"owner": {
-		"care.delete_any", "care.delete_own", "care.edit_any", "care.edit_own",
+		"calendar_note.manage", "care.delete_any", "care.delete_own", "care.edit_any", "care.edit_own",
 		"care.log", "care_type.manage", "garden.delete", "garden.edit", "member.invite",
 		"member.manage", "photo.add", "photo.delete_any", "photo.delete_own",
 		"photo.set_profile", "plant.archive", "plant.create", "plant.edit",
 		"schedule.edit", "sitting.view", "token.manage",
 	},
 	"member": {
-		"care.delete_own", "care.edit_own", "care.log", "photo.add",
+		"calendar_note.manage", "care.delete_own", "care.edit_own", "care.log", "photo.add",
 		"photo.delete_own", "photo.set_profile", "plant.archive",
 		"plant.create", "plant.edit", "schedule.edit", "sitting.view", "token.manage",
 	},

@@ -185,8 +185,8 @@ func clear(ctx context.Context, tx pgx.Tx, gardens []garden, people []*person) e
 		"DELETE FROM plant WHERE garden_id = ANY($1)",
 		"DELETE FROM care_type WHERE garden_id = ANY($1)",
 		// The cascade from garden deletes memberships, sessions, preferences,
-		// invites and tokens. The cascade from app_user below deletes passkeys,
-		// recovery codes and subscriptions.
+		// invites, tokens and calendar notes. The cascade from app_user below
+		// deletes passkeys, recovery codes and subscriptions.
 		"DELETE FROM garden WHERE id = ANY($1)",
 	}
 	for _, sql := range byGarden {
@@ -253,6 +253,9 @@ func writeGarden(ctx context.Context, tx pgx.Tx, g *garden, ref time.Time, event
 	if err := writeTokens(ctx, tx, g, ref); err != nil {
 		return 0, err
 	}
+	if err := writeNotes(ctx, tx, g, ref); err != nil {
+		return 0, err
+	}
 
 	// Care types are listed in creation order, so each is written a second
 	// after the last rather than all at the same instant.
@@ -286,6 +289,19 @@ func writeGarden(ctx context.Context, tx pgx.Tx, g *garden, ref time.Time, event
 		return 0, err
 	}
 	return len(g.plants), nil
+}
+
+func writeNotes(ctx context.Context, tx pgx.Tx, g *garden, ref time.Time) error {
+	for _, n := range g.notes {
+		first := ref.AddDate(0, 0, n.daysAhead)
+		if _, err := tx.Exec(ctx,
+			"INSERT INTO calendar_note (id, garden_id, starts_on, ends_on, text, created_by) VALUES ($1, $2, $3, $4, $5, $6)",
+			n.id, g.id, first, first.AddDate(0, 0, n.days-1), n.text, n.createdBy.id,
+		); err != nil {
+			return fmt.Errorf("writing the note %q to %s: %w", n.text, g.name, err)
+		}
+	}
+	return nil
 }
 
 func writePlant(ctx context.Context, tx pgx.Tx, g *garden, p *plant, careTypeID map[string]uuid.UUID, ref, created time.Time) error {

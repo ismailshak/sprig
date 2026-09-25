@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"uuid"
 
 	"github.com/ismailshak/sprig/internal/auth"
 	"github.com/ismailshak/sprig/internal/schedule"
@@ -34,6 +35,11 @@ const calendarMonths = 12
 // calendarID is the HTML id of the element holding the month's heading, the
 // cares due in the month and the grid. Previous and Next swap it.
 const calendarID = "calendar"
+
+// calendarGridID is the HTML id of the month's grid. Adding, saving and
+// deleting a note swap it, because a note changes the marks on the grid and
+// nothing else in #calendar.
+const calendarGridID = "calendar-grid"
 
 // calendarContents is the template that renders the inside of #calendar. It is
 // the response to a Back or Forward that misses htmx's history cache, because
@@ -149,7 +155,80 @@ func (h *activity) calendarPage(ctx context.Context, principal auth.Principal, q
 	if err != nil {
 		return calendarPage{}, fmt.Errorf("list the members: %w", err)
 	}
-	return newCalendarPage(principal, q, schedule.Resolve(schedules, latest, now), events, sittings(principal, members, now), now), nil
+	notes, err := h.queries.ListCalendarNotesBetween(ctx, store.ListCalendarNotesBetweenParams{
+		GardenID: principal.Garden.ID,
+		Since:    q.month,
+		Until:    q.month.AddDate(0, 1, -1),
+	})
+	if err != nil {
+		return calendarPage{}, fmt.Errorf("list the month's notes: %w", err)
+	}
+	return newCalendarPage(principal, q, schedule.Resolve(schedules, latest, now), events, sittings(principal, members, now), calendarNotes(principal, q, notes, now), now), nil
+}
+
+// calendarNote is one note on the calendar, a line of text over a run of
+// days.
+type calendarNote struct {
+	ID   uuid.UUID
+	Text string
+	// First and Last are midnight in the reader's timezone on the note's
+	// first and last days.
+	First, Last time.Time
+	// Span is the second line of the note's row in a day's sheet, "3–17 Oct".
+	// It is empty for a note on one day.
+	Span string
+	// Href is the URL of the Edit note sheet. It is empty for a reader who may
+	// not edit notes. Their row is plain text.
+	Href string
+}
+
+// covers reports whether date, midnight in the reader's timezone, is one of
+// the note's days.
+func (n calendarNote) covers(date time.Time) bool {
+	return !date.Before(n.First) && !date.After(n.Last)
+}
+
+// calendarNotes returns the month's notes as the calendar shows them. A
+// note's days are calendar dates with no timezone, so they are read as the
+// same dates in the reader's timezone.
+func calendarNotes(principal auth.Principal, q calendarQuery, notes []store.CalendarNote, now time.Time) []calendarNote {
+	loc := now.Location()
+	out := make([]calendarNote, 0, len(notes))
+	for _, n := range notes {
+		note := calendarNote{
+			ID:    n.ID,
+			Text:  n.Text,
+			First: midnightOn(n.StartsOn, loc),
+			Last:  midnightOn(n.EndsOn, loc),
+		}
+		note.Span = dayRange(note.First, note.Last, now)
+		if principal.Can(auth.CalendarNoteManage) {
+			note.Href = notePath(n.ID, q.month)
+		}
+		out = append(out, note)
+	}
+	return out
+}
+
+// dayRange is the days a note covers, "3–17 Oct" or "28 Sep–3 Oct". A year
+// is added to a date that is not in now's year, once for both dates when they
+// share it.
+func dayRange(first, last, now time.Time) string {
+	if first.Equal(last) {
+		return ""
+	}
+	end := last.Format("2 Jan")
+	if last.Year() != now.Year() {
+		end = last.Format("2 Jan 2006")
+	}
+	switch {
+	case first.Year() != last.Year() && first.Year() != now.Year():
+		return first.Format("2 Jan 2006") + "–" + end
+	case first.Year() != last.Year() || first.Month() != last.Month():
+		return first.Format("2 Jan") + "–" + end
+	default:
+		return first.Format("2") + "–" + end
+	}
 }
 
 // sitting is a membership with an end date, as the calendar shows it. It
@@ -248,6 +327,9 @@ type calendarPage struct {
 	Weeks [][]calendarDay
 	// Sheet is the open day's sheet, or nil.
 	Sheet *daySheet
+	// NoteSheet is the Add note or Edit note sheet, open in place of the day's
+	// sheet, or nil.
+	NoteSheet *noteSheet
 }
 
 // calendarDay is one cell of the grid.
@@ -255,11 +337,16 @@ type calendarDay struct {
 	// Number is the day of the month. It is zero for a cell before the 1st or
 	// after the month's last day.
 	Number int
-	// Href is the URL that opens the day's sheet. A day with nothing logged or
-	// due, and no sitting the reader can see, has no Href and is not a link.
+	// ID is the HTML id of the cell, "day-2026-09-03". After a saved or
+	// deleted note swaps the grid, the sheet's script puts focus back on the
+	// link inside the cell with the id the opener's cell had.
+	ID string
+	// Href is the URL that opens the day's sheet. Every day is a link for a
+	// reader who may add a note. For anyone else, a day with nothing logged or
+	// due, no note and no sitting they can see has no Href and is not a link.
 	Href string
-	// Label is the link's accessible name, "Thursday 3 September, 1 logged, 2
-	// due".
+	// Label is the link's accessible name, "Thursday 3 September, Ellie away,
+	// 1 logged, 2 due".
 	Label string
 	Today bool
 	// Shown is the first shownCares cares on the day, the logged ones first.
@@ -273,6 +360,7 @@ type calendarDay struct {
 	// month, in the order the memberships were made. Bands is empty for a
 	// reader who sees only their own days.
 	Bands []calendarBand
+	Notes []calendarNote
 }
 
 // calendarBand is one member's band on a day in the grid. A day the member
@@ -321,10 +409,14 @@ type daySheet struct {
 	// Title is the day, "Thursday 3 September", with the year added when it is
 	// not the current year.
 	Title  string
+	Notes  []calendarNote
 	Logged []calendarRow
 	Due    []calendarRow
 	// Sitting is the members with an end date whose days include this one.
 	Sitting []sitting
+	// AddNote is the URL of the Add note link. It is empty for a reader who
+	// may not add a note.
+	AddNote string
 }
 
 // dueCare is a schedule and one date in the month it falls due on.
@@ -333,7 +425,7 @@ type dueCare struct {
 	date schedule.Projected
 }
 
-func newCalendarPage(principal auth.Principal, q calendarQuery, lines []schedule.Line, events []store.ListCareEventsBetweenRow, sittings []sitting, now time.Time) calendarPage {
+func newCalendarPage(principal auth.Principal, q calendarQuery, lines []schedule.Line, events []store.ListCareEventsBetweenRow, sittings []sitting, notes []calendarNote, now time.Time) calendarPage {
 	loc := now.Location()
 	page := calendarPage{
 		Back:          activityPath,
@@ -382,12 +474,18 @@ func newCalendarPage(principal auth.Principal, q calendarQuery, lines []schedule
 		}
 	}
 	showBands := principal.Can(auth.SittingView)
+	mayManageNotes := principal.Can(auth.CalendarNoteManage)
 
 	today := midnightOn(now, loc)
 	week := make([]calendarDay, mondayIndex(q.month))
 	for d := 1; d <= days; d++ {
 		date := time.Date(q.month.Year(), q.month.Month(), d, 0, 0, 0, 0, loc)
-		day := calendarDay{Number: d, Today: date.Equal(today)}
+		day := calendarDay{ID: dayID(date), Number: d, Today: date.Equal(today)}
+		for _, n := range notes {
+			if n.covers(date) {
+				day.Notes = append(day.Notes, n)
+			}
+		}
 		var covering []sitting
 		for i, s := range inMonth {
 			band := calendarBand{Covered: s.covers(date)}
@@ -403,13 +501,16 @@ func newCalendarPage(principal auth.Principal, q calendarQuery, lines []schedule
 		day.Sitting = !showBands && len(covering) > 0
 		dueOnDay := dueRows(due[d], now)
 		cares := slices.Concat(logged[d], dueOnDay)
-		if len(cares) > 0 || len(covering) > 0 {
+		if len(cares) > 0 || len(covering) > 0 || len(day.Notes) > 0 || mayManageNotes {
 			day.Href = calendarHref(q.month, &date)
-			day.Label = dayLabel(date, len(logged[d]), len(dueOnDay), covering)
+			day.Label = dayLabel(date, day.Notes, len(logged[d]), len(dueOnDay), covering)
 			day.Shown = cares[:min(len(cares), shownCares)]
 			day.More = len(cares) - len(day.Shown)
 			if q.day != nil && q.day.Equal(date) {
-				page.Sheet = &daySheet{Title: dayTitle(date, now), Logged: logged[d], Due: dueOnDay, Sitting: covering}
+				page.Sheet = &daySheet{Title: dayTitle(date, now), Notes: day.Notes, Logged: logged[d], Due: dueOnDay, Sitting: covering}
+				if mayManageNotes {
+					page.Sheet.AddNote = newNotePath(q.month, date)
+				}
 			}
 		}
 		week = append(week, day)
@@ -495,8 +596,15 @@ func overdueFirst(a, b dueCare) int {
 	}
 }
 
-func dayLabel(date time.Time, logged, due int, covering []sitting) string {
+func dayID(date time.Time) string {
+	return "day-" + date.Format(time.DateOnly)
+}
+
+func dayLabel(date time.Time, notes []calendarNote, logged, due int, covering []sitting) string {
 	parts := []string{date.Format("Monday 2 January")}
+	for _, n := range notes {
+		parts = append(parts, n.Text)
+	}
 	if logged > 0 {
 		parts = append(parts, strconv.Itoa(logged)+" logged")
 	}

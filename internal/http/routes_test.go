@@ -59,6 +59,28 @@ var routeAccess = map[string]access{
 	"GET /plants/new":        {capability: auth.PlantCreate},
 	"POST /plants/new":       {capability: auth.PlantCreate},
 	"GET /plants/{plant}":    {path: plantPath(rosewoodPlantID), foreign: plantPath(fairviewPlantID)},
+	"GET /activity/calendar/notes/new": {
+		capability: auth.CalendarNoteManage,
+	},
+	"POST /activity/calendar/notes": {
+		capability: auth.CalendarNoteManage,
+	},
+	"GET /activity/calendar/notes/{note}": {
+		capability: auth.CalendarNoteManage,
+		path:       notePath(rosewoodNoteID, routeMonth),
+		foreign:    notePath(fairviewNoteID, routeMonth),
+	},
+	"POST /activity/calendar/notes/{note}": {
+		capability: auth.CalendarNoteManage,
+		path:       notePath(rosewoodNoteID, routeMonth),
+		foreign:    notePath(fairviewNoteID, routeMonth),
+	},
+	// Delete deletes the note, so it gets its own pair of notes.
+	"POST /activity/calendar/notes/{note}/delete": {
+		capability: auth.CalendarNoteManage,
+		path:       notesPath + "/" + rosewoodDeleteNoteID.String() + "/delete",
+		foreign:    notesPath + "/" + fairviewDeleteNoteID.String() + "/delete",
+	},
 	"GET /plants/{plant}/edit": {
 		capability: auth.PlantEdit,
 		path:       editPlantPath(rosewoodPlantID),
@@ -379,6 +401,9 @@ var routeAccess = map[string]access{
 	"/": {anyMember: true, withoutGarden: true, path: "/nope"},
 }
 
+// routeMonth is the month the note routes' URLs name.
+var routeMonth = time.Date(2026, time.September, 1, 0, 0, 0, 0, time.UTC)
+
 var (
 	fairviewID      = uuid.MustParse("00000000-0000-7000-8000-000000000201")
 	rosewoodPlantID = uuid.MustParse("00000000-0000-7000-8000-000000000211")
@@ -418,6 +443,12 @@ var (
 	readerBrowserID   = uuid.MustParse("00000000-0000-7000-8000-000000000244")
 	strangerBrowserID = uuid.MustParse("00000000-0000-7000-8000-000000000245")
 	secondPasskeyID   = uuid.MustParse("00000000-0000-7000-8000-000000000246")
+
+	// The note routes read one pair and Delete deletes the other.
+	rosewoodNoteID       = uuid.MustParse("00000000-0000-7000-8000-000000000251")
+	fairviewNoteID       = uuid.MustParse("00000000-0000-7000-8000-000000000252")
+	rosewoodDeleteNoteID = uuid.MustParse("00000000-0000-7000-8000-000000000253")
+	fairviewDeleteNoteID = uuid.MustParse("00000000-0000-7000-8000-000000000254")
 	// The rows People and Tokens act on. Sam and Jo are in Rosewood and Robin
 	// is in Fairview, so the handle in a foreign path is one that exists and
 	// the reader's garden does not hold.
@@ -480,6 +511,10 @@ func routeQueries(t *testing.T) *store.Queries {
 			SELECT $1, garden_id, $2, id, $3, now(), true FROM care_type WHERE garden_id = $4 AND slug = 'water'`, []any{rosewoodCorrectEventID, rosewoodPlantID, sitterPrincipal().User.ID, rosewoodID}},
 		{`INSERT INTO care_event (id, garden_id, plant_id, care_type_id, performed_by, performed_at, done)
 			SELECT $1, garden_id, $2, id, $3, now(), true FROM care_type WHERE garden_id = $4 AND slug = 'water'`, []any{fairviewCorrectEventID, fairviewPlantID, sitterPrincipal().User.ID, fairviewID}},
+		{`INSERT INTO calendar_note (id, garden_id, starts_on, ends_on, text, created_by)
+			VALUES ($1, $2, '2026-09-03', '2026-09-05', 'Away', $3), ($4, $5, '2026-09-03', '2026-09-05', 'Away', $3),
+			       ($6, $2, '2026-09-10', '2026-09-10', 'Party', $3), ($7, $5, '2026-09-10', '2026-09-10', 'Party', $3)`,
+			[]any{rosewoodNoteID, rosewoodID, sitterPrincipal().User.ID, fairviewNoteID, fairviewID, rosewoodDeleteNoteID, fairviewDeleteNoteID}},
 		// The rows the routes under More read: a second account, and passkeys
 		// and push subscriptions on both accounts.
 		{"INSERT INTO app_user (id, display_name, handle, timezone) VALUES ($1, 'Sam', 'sam', 'Europe/London')", []any{strangerID}},

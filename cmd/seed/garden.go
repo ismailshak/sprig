@@ -25,6 +25,7 @@ const (
 	tableRecoveryCode
 	tableAPIToken
 	tablePushSubscription
+	tableCalendarNote
 )
 
 func seedID(table, n int) uuid.UUID {
@@ -177,6 +178,18 @@ type garden struct {
 	plants    []plant
 	invites   []invite
 	tokens    []apiToken
+	notes     []calendarNote
+}
+
+// calendarNote is a line of text on the calendar over a run of days.
+// daysAhead is how many days after the reference day the note starts. days is
+// how many days it covers.
+type calendarNote struct {
+	id        uuid.UUID
+	text      string
+	createdBy *person
+	daysAhead int
+	days      int
 }
 
 // home is the first of the two seed gardens: its plants, rooms, names, people
@@ -211,6 +224,11 @@ func home() garden {
 		plants: append(livingPlants(), archivedPlants()...),
 		invites: []invite{
 			{id: seedID(tableInvite, 1), token: sitterInviteToken, role: "sitter", createdBy: &ellie, daysOld: 2, expiresInDays: 5},
+		},
+		// Ellie is away from today, while Jo is still sitting, so the calendar
+		// has a day with a note and a sitter's band on it.
+		notes: []calendarNote{
+			{id: seedID(tableCalendarNote, 1), text: "Ellie away", createdBy: &ellie, daysAhead: 0, days: 6},
 		},
 		// Both tokens have the full 90-day lifetime auth.MaxTokenLifetime allows.
 		tokens: []apiToken{
