@@ -2066,9 +2066,14 @@ a.month__day::after { content: ""; position: absolute; inset: 0; }
   display: flex;
   align-items: center;
   gap: 8px;
+  margin-top: 24px;
 }
 
 .sheet__foot .sheet__go { flex: 1; margin-top: 0; }
+
+/* On the log-care sheet the line saying who logged the event is above the
+   buttons and keeps its own gap to them. */
+.sheet__logged + .sheet__foot { margin-top: 10px; }
 
 .sheet__delete {
   flex: none;
