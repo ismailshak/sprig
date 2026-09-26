@@ -289,8 +289,11 @@ var routeAccess = map[string]access{
 	},
 	"GET /more/notifications":  {},
 	"POST /more/notifications": {anyMember: true},
-	// Remind me again sets a time on the reader's own membership.
-	"POST /remind-again": {anyMember: true},
+	// Remind me later sets, reschedules and removes the reminder on the
+	// reader's own membership.
+	"GET /remind-later":         {},
+	"POST /remind-later":        {anyMember: true},
+	"POST /remind-later/remove": {anyMember: true},
 	// A subscription belongs to the account, so any member may post one and
 	// send their own browser a test.
 	"POST /more/notifications/browsers": {anyMember: true},

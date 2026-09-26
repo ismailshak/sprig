@@ -28,16 +28,43 @@ ORDER BY membership.garden_id = app_user.last_garden_id DESC NULLS LAST, members
 UPDATE membership SET digest_hour = @digest_hour
 WHERE garden_id = @garden_id AND user_id = @user_id;
 
--- The instant the Remind me again banner on Today asked for the digest to be
--- sent again. It replaces any earlier one still waiting.
--- name: SetRemindAgain :exec
+-- Sets the time of a reminder from Remind me later on Today. It returns 0 rows
+-- when an earlier reminder is still waiting after @now, because a member has
+-- one waiting reminder at a time.
+-- name: SetReminder :execrows
 UPDATE membership SET remind_again_at = @remind_again_at
-WHERE garden_id = @garden_id AND user_id = @user_id;
+WHERE garden_id = @garden_id AND user_id = @user_id
+  AND (remind_again_at IS NULL OR remind_again_at <= @now::timestamptz);
 
--- Clears the resend the digest job is sending, in the transaction that sends
--- it. The instant is matched so a later one the member set while the job was
--- sending is kept.
--- name: ClearRemindAgain :exec
+-- Moves the waiting reminder to a new time. It returns 0 rows when no reminder
+-- is waiting after @now, because the job has already sent it.
+-- name: RescheduleReminder :execrows
+UPDATE membership SET remind_again_at = @remind_again_at
+WHERE garden_id = @garden_id AND user_id = @user_id
+  AND remind_again_at > @now::timestamptz;
+
+-- Removes the waiting reminder. It returns 0 rows when no reminder is waiting
+-- after @now, because the job has already sent it.
+-- name: RemoveReminder :execrows
+UPDATE membership SET remind_again_at = NULL
+WHERE garden_id = @garden_id AND user_id = @user_id
+  AND remind_again_at > @now::timestamptz;
+
+-- Returns whether the member has a subscribed browser, and whether
+-- notification_send has their digest for @send_key, today's date in their
+-- timezone. Today offers Remind me later only when these allow it.
+-- name: GetRemindLaterState :one
+SELECT
+    EXISTS (SELECT 1 FROM push_subscription WHERE push_subscription.user_id = @user_id) AS has_browser,
+    EXISTS (SELECT 1 FROM notification_send
+        JOIN membership ON membership.id = notification_send.membership_id
+        WHERE membership.garden_id = @garden_id AND membership.id = @membership_id
+          AND notification_send.kind = 'digest' AND notification_send.send_key = @send_key) AS digest_sent;
+
+-- Clears the reminder the digest job is sending, in the transaction that
+-- sends it. The time is matched so that a later one the member set while the
+-- job was sending is kept.
+-- name: ClearReminder :exec
 UPDATE membership SET remind_again_at = NULL
 WHERE garden_id = @garden_id AND id = @membership_id AND remind_again_at = @remind_again_at;
 

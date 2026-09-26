@@ -479,10 +479,10 @@ func TestQueries_EveryQueryOnAGardenScopedTableBindsTheGarden(t *testing.T) {
 		if slices.Equal(touched, []string{"membership"}) && strings.Contains(query.sql, "@user_id") {
 			continue
 		}
-		// The two push jobs run across every garden rather than for one
-		// request. Each row they return names one membership, and every read
-		// the send then makes binds that membership's user.
-		if query.name == "ListDigestMembers" && slices.Equal(touched, []string{"membership"}) {
+		// The push jobs run across every garden rather than for one request.
+		// Each row they return names one membership, and every read the send
+		// then makes binds that membership's user.
+		if (query.name == "ListDigestMembers" || query.name == "ListWaitingReminders") && slices.Equal(touched, []string{"membership"}) {
 			continue
 		}
 		if query.name == "ListSittingDeadlines" && slices.Equal(touched, []string{"membership"}) {

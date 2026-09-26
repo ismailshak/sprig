@@ -7,8 +7,11 @@ set -euo pipefail
 
 cd "${MISE_PROJECT_ROOT:?}"
 
-# One stack per worker
-workers="${SPRIG_E2E_WORKERS:-6}"
+if [[ -n "${CI:-}" ]]; then
+  workers="${SPRIG_E2E_WORKERS:-6}"
+else
+  workers="${SPRIG_E2E_WORKERS:-4}"
+fi
 
 # An empty host port has Docker pick a free one for each container
 export DB_PORTS=127.0.0.1::5432
@@ -22,7 +25,7 @@ app_port_base="${SPRIG_E2E_PORT_BASE:-18080}"
 export COMPOSE_PROJECT_NAME="sprig-e2e-$$"
 export COMPOSE_PROFILES=app
 
-# stack runs a compose command in worker $1's project. Progress is off because six stacks starting at once print
+# stack runs a compose command in worker $1's project. Progress is off because several stacks starting at once print
 # several screens of it
 stack() {
   local port=$((app_port_base + $1))

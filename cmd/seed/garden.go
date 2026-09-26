@@ -71,6 +71,10 @@ type membership struct {
 	// are what the app gives a new membership: the digest on, activity off.
 	digestOff bool
 	activity  bool
+	// digestSent writes the notification_send row the digest job writes after
+	// sending today's digest. With the digest on, Today offers Remind me later
+	// only once that row exists.
+	digestSent bool
 }
 
 type careType struct {
@@ -205,7 +209,7 @@ func home() garden {
 		name:    "Home",
 		daysOld: 730,
 		members: []membership{
-			{id: seedID(tableMembership, 1), person: &ellie, role: "owner", daysOld: 730},
+			{id: seedID(tableMembership, 1), person: &ellie, role: "owner", daysOld: 730, digestSent: true},
 			{id: seedID(tableMembership, 2), person: &sam, role: "member", invitedBy: &ellie, daysOld: 700, digestOff: true},
 			{id: seedID(tableMembership, 5), person: &jo, role: "sitter", invitedBy: &ellie, daysOld: 20, expiresInDays: 8, digestOff: true},
 			// A membership that has already ended. The row stays on People and

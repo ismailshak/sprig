@@ -12,22 +12,22 @@ import (
 	"uuid"
 )
 
-const clearRemindAgain = `-- name: ClearRemindAgain :exec
+const clearReminder = `-- name: ClearReminder :exec
 UPDATE membership SET remind_again_at = NULL
 WHERE garden_id = $1 AND id = $2 AND remind_again_at = $3
 `
 
-type ClearRemindAgainParams struct {
+type ClearReminderParams struct {
 	GardenID      uuid.UUID
 	MembershipID  uuid.UUID
 	RemindAgainAt *time.Time
 }
 
-// Clears the resend the digest job is sending, in the transaction that sends
-// it. The instant is matched so a later one the member set while the job was
-// sending is kept.
-func (q *Queries) ClearRemindAgain(ctx context.Context, arg ClearRemindAgainParams) error {
-	_, err := q.db.Exec(ctx, clearRemindAgain, arg.GardenID, arg.MembershipID, arg.RemindAgainAt)
+// Clears the reminder the digest job is sending, in the transaction that
+// sends it. The time is matched so that a later one the member set while the
+// job was sending is kept.
+func (q *Queries) ClearReminder(ctx context.Context, arg ClearReminderParams) error {
+	_, err := q.db.Exec(ctx, clearReminder, arg.GardenID, arg.MembershipID, arg.RemindAgainAt)
 	return err
 }
 
@@ -185,6 +185,42 @@ func (q *Queries) GetMembershipWithUserAndGarden(ctx context.Context, gardenID u
 		&i.Garden.CreatedAt,
 		&i.Capabilities,
 	)
+	return i, err
+}
+
+const getRemindLaterState = `-- name: GetRemindLaterState :one
+SELECT
+    EXISTS (SELECT 1 FROM push_subscription WHERE push_subscription.user_id = $1) AS has_browser,
+    EXISTS (SELECT 1 FROM notification_send
+        JOIN membership ON membership.id = notification_send.membership_id
+        WHERE membership.garden_id = $2 AND membership.id = $3
+          AND notification_send.kind = 'digest' AND notification_send.send_key = $4) AS digest_sent
+`
+
+type GetRemindLaterStateParams struct {
+	UserID       uuid.UUID
+	GardenID     uuid.UUID
+	MembershipID uuid.UUID
+	SendKey      string
+}
+
+type GetRemindLaterStateRow struct {
+	HasBrowser bool
+	DigestSent bool
+}
+
+// Returns whether the member has a subscribed browser, and whether
+// notification_send has their digest for @send_key, today's date in their
+// timezone. Today offers Remind me later only when these allow it.
+func (q *Queries) GetRemindLaterState(ctx context.Context, arg GetRemindLaterStateParams) (GetRemindLaterStateRow, error) {
+	row := q.db.QueryRow(ctx, getRemindLaterState,
+		arg.UserID,
+		arg.GardenID,
+		arg.MembershipID,
+		arg.SendKey,
+	)
+	var i GetRemindLaterStateRow
+	err := row.Scan(&i.HasBrowser, &i.DigestSent)
 	return i, err
 }
 
@@ -485,6 +521,28 @@ func (q *Queries) ListSittingDeadlines(ctx context.Context, now time.Time, since
 	return items, nil
 }
 
+const removeReminder = `-- name: RemoveReminder :execrows
+UPDATE membership SET remind_again_at = NULL
+WHERE garden_id = $1 AND user_id = $2
+  AND remind_again_at > $3::timestamptz
+`
+
+type RemoveReminderParams struct {
+	GardenID uuid.UUID
+	UserID   uuid.UUID
+	Now      time.Time
+}
+
+// Removes the waiting reminder. It returns 0 rows when no reminder is waiting
+// after @now, because the job has already sent it.
+func (q *Queries) RemoveReminder(ctx context.Context, arg RemoveReminderParams) (int64, error) {
+	result, err := q.db.Exec(ctx, removeReminder, arg.GardenID, arg.UserID, arg.Now)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const renewMembership = `-- name: RenewMembership :one
 UPDATE membership
 SET role = $1, invited_by = $2, expires_at = $3
@@ -525,6 +583,34 @@ func (q *Queries) RenewMembership(ctx context.Context, arg RenewMembershipParams
 		&i.RemindAgainAt,
 	)
 	return i, err
+}
+
+const rescheduleReminder = `-- name: RescheduleReminder :execrows
+UPDATE membership SET remind_again_at = $1
+WHERE garden_id = $2 AND user_id = $3
+  AND remind_again_at > $4::timestamptz
+`
+
+type RescheduleReminderParams struct {
+	RemindAgainAt *time.Time
+	GardenID      uuid.UUID
+	UserID        uuid.UUID
+	Now           time.Time
+}
+
+// Moves the waiting reminder to a new time. It returns 0 rows when no reminder
+// is waiting after @now, because the job has already sent it.
+func (q *Queries) RescheduleReminder(ctx context.Context, arg RescheduleReminderParams) (int64, error) {
+	result, err := q.db.Exec(ctx, rescheduleReminder,
+		arg.RemindAgainAt,
+		arg.GardenID,
+		arg.UserID,
+		arg.Now,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const setDigestHour = `-- name: SetDigestHour :exec
@@ -583,20 +669,31 @@ func (q *Queries) SetMembershipEnd(ctx context.Context, arg SetMembershipEndPara
 	return result.RowsAffected(), nil
 }
 
-const setRemindAgain = `-- name: SetRemindAgain :exec
+const setReminder = `-- name: SetReminder :execrows
 UPDATE membership SET remind_again_at = $1
 WHERE garden_id = $2 AND user_id = $3
+  AND (remind_again_at IS NULL OR remind_again_at <= $4::timestamptz)
 `
 
-type SetRemindAgainParams struct {
+type SetReminderParams struct {
 	RemindAgainAt *time.Time
 	GardenID      uuid.UUID
 	UserID        uuid.UUID
+	Now           time.Time
 }
 
-// The instant the Remind me again banner on Today asked for the digest to be
-// sent again. It replaces any earlier one still waiting.
-func (q *Queries) SetRemindAgain(ctx context.Context, arg SetRemindAgainParams) error {
-	_, err := q.db.Exec(ctx, setRemindAgain, arg.RemindAgainAt, arg.GardenID, arg.UserID)
-	return err
+// Sets the time of a reminder from Remind me later on Today. It returns 0 rows
+// when an earlier reminder is still waiting after @now, because a member has
+// one waiting reminder at a time.
+func (q *Queries) SetReminder(ctx context.Context, arg SetReminderParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setReminder,
+		arg.RemindAgainAt,
+		arg.GardenID,
+		arg.UserID,
+		arg.Now,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }

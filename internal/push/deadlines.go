@@ -203,9 +203,11 @@ func sittingKey(membershipID uuid.UUID, endsAt time.Time) string {
 }
 
 // recipient is the member one notification goes to. handle and garden appear
-// in the log line.
+// in the log line. gardenID is set only for a digest or a reminder. Both list
+// what is due in that garden.
 type recipient struct {
 	membershipID uuid.UUID
+	gardenID     uuid.UUID
 	userID       uuid.UUID
 	handle       string
 	garden       string

@@ -11,11 +11,15 @@ import (
 	"uuid"
 
 	"github.com/ismailshak/sprig/internal/auth"
+	"github.com/ismailshak/sprig/internal/push"
 	"github.com/ismailshak/sprig/internal/schedule"
 	"github.com/ismailshak/sprig/internal/store"
 )
 
 const todayPath = "/"
+
+// DigestPath is the URL a digest notification or a reminder opens.
+const DigestPath = todayPath
 
 type today struct {
 	logger    *slog.Logger
@@ -24,12 +28,12 @@ type today struct {
 	// now supplies the current time, so a test can fix the day.
 	now    func() time.Time
 	notify notifyActivity
-	// wake has the digest job work out its next send again. remindAgain
-	// calls it after setting the time.
+	// wake has the digest job work out its next send again. The reminder
+	// handlers call it after changing the reader's reminder.
 	wake wakeJobs
 	// pushKey is the VAPID public key the reminders banner gives the browser
-	// to subscribe with. It is empty when push is off, and neither the
-	// reminders banner nor the Remind me again banner is rendered then.
+	// to subscribe with. It is empty when push is off. Neither the reminders
+	// banner nor the Remind me later link is rendered then.
 	pushKey string
 }
 
@@ -44,9 +48,7 @@ func (h *today) show(w http.ResponseWriter, r *http.Request) {
 		h.templates.render(w, r, view{page: "today", fragment: "care-settled"}, newCareSettled(principal, g))
 		return
 	}
-	page := newTodayPage(principal, g)
-	page.RemindAgain = h.remindAgainFor(r, g)
-	h.templates.render(w, r, view{page: "today"}, page)
+	h.templates.render(w, r, view{page: "today"}, newTodayPage(principal, g))
 }
 
 // todayBar holds the parts of Today's top bar that come from the account's
@@ -117,9 +119,8 @@ type gardenDay struct {
 	// notification type off, because subscribing a browser then sends it
 	// nothing.
 	reminders *remindersOffer
-	// digestOn is true when the reader has the daily digest switched on. It
-	// is false with push off.
-	digestOn bool
+	// remindLater is nil with push off.
+	remindLater *remindLaterFacts
 }
 
 func (h *today) load(ctx context.Context, principal auth.Principal) (gardenDay, error) {
@@ -156,7 +157,20 @@ func (h *today) load(ctx context.Context, principal auth.Principal) (gardenDay, 
 		if anyNotificationOn(preferences) {
 			g.reminders = &remindersOffer{Key: h.pushKey, Subscribe: subscribePath}
 		}
-		g.digestOn = notificationOn(preferences, digestKind)
+		state, err := h.queries.GetRemindLaterState(ctx, store.GetRemindLaterStateParams{
+			UserID:       principal.User.ID,
+			GardenID:     principal.Garden.ID,
+			MembershipID: principal.Membership.ID,
+			SendKey:      push.DigestKey(g.now),
+		})
+		if err != nil {
+			return g, fmt.Errorf("read whether today's digest was sent: %w", err)
+		}
+		g.remindLater = &remindLaterFacts{
+			hasBrowser: state.HasBrowser,
+			digestOn:   notificationOn(preferences, digestKind),
+			digestSent: state.DigestSent,
+		}
 	}
 
 	g.lines = schedule.Resolve(schedules, g.latest, g.now)
@@ -205,15 +219,15 @@ type todayPage struct {
 	Field       string
 	GardenSheet bool
 	Sheet       *sheet
+	// RemindLaterSheet is nil unless the page is rendered with the Remind me
+	// later sheet open.
+	RemindLaterSheet *remindLaterSheet
 	// Reminders is the banner offering to turn on reminders in this browser.
 	// It is nil when the page does not offer it.
 	Reminders *remindersOffer
-	// RemindAgain is the banner offering to send today's notification again
-	// later. It is nil when the page does not show it.
-	RemindAgain *remindAgainBanner
-	Head        todayHead
-	Sections    []todaySection
-	Feed        todayFeed
+	Head      todayHead
+	Sections  []todaySection
+	Feed      todayFeed
 	// OOB is true when the body is rendered as an out-of-band swap, so a
 	// response to one row can also replace the rest of the page.
 	OOB bool
@@ -242,6 +256,9 @@ type todaySection struct {
 	// Alert colours the title. Only Overdue has it.
 	Alert bool
 	Rows  []careRow
+	// RemindLater is the Remind me later link beside the section's title. It
+	// is nil except on the first section when that is Overdue or Due today.
+	RemindLater *remindLaterLink
 	// Calendar is the URL of the link under the rows. Only Coming up has it,
 	// because that section stops a week out and the calendar shows the
 	// months after.
@@ -351,6 +368,11 @@ func newTodayPage(principal auth.Principal, g gardenDay) todayPage {
 	}
 	if rows := day.DueToday; len(rows) > 0 {
 		page.Sections = append(page.Sections, todaySection{ID: "due-today", Title: "Due today", Rows: careRows(rows, now)})
+	}
+	// remindLaterState returns nil unless something is overdue or due today.
+	// Sections[0] is one of those two here.
+	if link := g.remindLaterState(principal.Membership.RemindAgainAt).link(); link != nil && len(page.Sections) > 0 {
+		page.Sections[0].RemindLater = link
 	}
 	if rows := day.ComingUp; len(rows) > 0 {
 		page.Sections = append(page.Sections, todaySection{ID: "coming-up", Title: "Coming up", Rows: careRows(rows, now), Calendar: calendarPath})

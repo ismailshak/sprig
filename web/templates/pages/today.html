@@ -18,7 +18,6 @@
 </div>
 </header>
 {{template "reminders-banner" .Reminders}}
-{{template "remind-again" .RemindAgain}}
 {{template "day-body" .}}
 {{end}}
 
@@ -42,51 +41,48 @@
 </div>
 </div>{{end}}{{end}}
 
-{{/* The banner offering to send today's notification again later, shown
-     when Today is opened from that notification. It shows two delay buttons,
-     a time input and Remind me while no resend is waiting, and the time
-     already set once one is. The delay buttons and Remind me submit one
-     form: a delay button posts its delay, Remind me posts the time input
-     alone. With JavaScript the form swaps this element. Without it the post
-     redirects back to Today.
-
-     The page's script reads data-param and data-dismiss. It removes that
-     query parameter from the URL, and hides the banner when Dismiss is
-     clicked. */}}
-{{define "remind-again"}}{{with .}}<div class="app__body banner" id="{{.ID}}" data-param="{{.Param}}">
-<div class="banner__card">
-{{if .Set}}<p class="banner__line">{{template "remind-again-words" .Set}}</p>
-<div class="banner__actions">
-<a class="banner__plain" href="{{.Dismiss}}" data-dismiss>Dismiss</a>
-</div>
-{{else}}<form method="post" action="{{.Action}}" novalidate hx-post="{{.Action}}" hx-target="#{{.ID}}" hx-swap="outerHTML settle:0ms">
-<p class="banner__line">Get this notification again later.</p>
-<div class="banner__actions">
-{{range .Delays}}<button class="banner__primary" name="{{$.Field}}" value="{{.Value}}">{{.Label}}</button>
-{{end}}<a class="banner__plain" href="{{.Dismiss}}" data-dismiss>Dismiss</a>
-</div>
-<div class="banner__actions">
-<label class="visually-hidden" for="remind-again-at">Time</label>
-<input class="input banner__time" id="remind-again-at" name="{{.At}}" type="time" value="{{.Now}}" required>
-<button class="banner__secondary" type="submit">Remind me</button>
-</div>
+{{/* The Remind me later sheet. With a reminder waiting, the form has the
+     hidden reschedule field. Remove reminder posts to its own URL. */}}
+{{define "remind-later-sheet"}}{{with .RemindLaterSheet}}<dialog open class="sheet" id="sheet" aria-labelledby="remind-later-title" tabindex="-1">
+<form method="dialog"><button class="sheet__scrim" tabindex="-1" aria-hidden="true"></button></form>
+<div class="sheet__panel">
+<div class="sheet__grip"></div>
+<h2 class="sheet__title" id="remind-later-title">Remind me later</h2>
+<p class="lead">{{if .Set}}{{template "remind-later-words" .Set}}{{else}}Get a notification of what’s still due.{{end}}</p>
+<form class="sheet__form" method="post" action="{{.Path}}" hx-post="{{.Path}}" hx-target="#{{.Target}}" hx-swap="outerHTML settle:0ms">
+{{if .Set}}<input type="hidden" name="reschedule" value="1">
+{{end}}<fieldset class="field">
+<legend class="field__label">When</legend>
+<div class="chips">{{range .Whens}}<label class="chip"><input type="radio" name="when" value="{{.Value}}"{{if .On}} checked{{end}}>{{.Label}}</label>{{end}}</div>
+<input class="input input--narrow sheet__remind-at" type="time" name="time" value="{{.Time}}" aria-label="Time">
 {{with .Error}}<p class="field__error">{{.}}</p>{{end}}
+</fieldset>
+<div class="sheet__foot">
+<button class="sheet__go">{{if .Set}}Reschedule{{else}}Remind me{{end}}</button>
+{{with .Remove}}<button class="sheet__delete" formaction="{{.}}" hx-post="{{.}}">Remove reminder</button>{{end}}
+</div>
 </form>
-{{end}}</div>
-</div>{{end}}{{end}}
+<form method="dialog"><button class="sheet__cancel">Cancel</button></form>
+</div>
+</dialog>{{else}}<div id="sheet"></div>{{end}}{{end}}
 
-{{/* The banner's line once a time is set. The swap's announcement renders
-     it too. */}}
-{{define "remind-again-words"}}You’ll get this notification again at {{.}}.{{end}}
+{{/* The sheet's line while a reminder is waiting. The announcement after a
+     reminder is set renders it too. */}}
+{{define "remind-later-words"}}You’ll get a reminder at {{.}}.{{end}}
+
+{{/* The response to a reminder set, rescheduled or removed: the link, and
+     an empty #sheet that closes the dialog. With no link the swap removes the
+     old one, because Today no longer offers Remind me later. */}}
+{{define "remind-later-changed"}}{{template "remind-later-link" .}}
+<div id="sheet" hx-swap-oob="true"></div>{{end}}
 
 {{define "nav"}}{{template "tabs" "Today"}}{{end}}
 
 {{define "script"}}<script src="{{asset "sheet.js"}}" defer></script>
 {{if .Reminders}}<script src="{{asset "push.js"}}" defer></script>
-<script src="{{asset "reminders.js"}}" defer></script>{{end}}
-{{if .RemindAgain}}<script src="{{asset "remind-again.js"}}" defer></script>{{end}}{{end}}
+<script src="{{asset "reminders.js"}}" defer></script>{{end}}{{end}}
 
-{{define "overlay"}}{{if .GardenSheet}}{{template "garden-sheet" .}}{{else}}{{template "sheet" .}}{{end}}{{end}}
+{{define "overlay"}}{{if .GardenSheet}}{{template "garden-sheet" .}}{{else if .RemindLaterSheet}}{{template "remind-later-sheet" .}}{{else}}{{template "sheet" .}}{{end}}{{end}}
 
 {{/* One row per garden the account is in, with whose garden it is and the
      reader's role in it. The dialog has the log-care sheet's id, so a swap

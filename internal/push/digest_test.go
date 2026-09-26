@@ -176,7 +176,7 @@ func seedFairview(t *testing.T, db store.DBTX) {
 func newDigest(t *testing.T, db store.DBTX, service *pushService, now func() time.Time) *Digest {
 	t.Helper()
 
-	digest := NewDigest(slog.New(slog.DiscardHandler), store.New(db), NewSender(testKeys(t), service.Client()), "https://sprig.example.com", "/?from=digest", "/remind-again")
+	digest := NewDigest(slog.New(slog.DiscardHandler), store.New(db), NewSender(testKeys(t), service.Client()), "https://sprig.example.com", "/")
 	digest.now = now
 	return digest
 }
@@ -627,21 +627,21 @@ func TestRun_AnHourChangedTakesEffectWithoutWaitingForTheTimer(t *testing.T) {
 	}
 }
 
-// remindAgain sets when Ellie asked for Rosewood's digest again.
-func remindAgain(t *testing.T, db store.DBTX, at time.Time) {
+// remindAt sets the time of Ellie's reminder on Rosewood.
+func remindAt(t *testing.T, db store.DBTX, at time.Time) {
 	t.Helper()
 	if _, err := db.Exec(t.Context(), "UPDATE membership SET remind_again_at = $1 WHERE id = $2", at, ellieMembershipID); err != nil {
-		t.Fatalf("setting Ellie's Remind me again time: %v", err)
+		t.Fatalf("setting Ellie's reminder: %v", err)
 	}
 }
 
-// remindAgainAt returns Ellie's Remind me again time on Rosewood, or the zero
+// reminderAt returns the time of Ellie's reminder on Rosewood, or the zero
 // time when none is waiting.
-func remindAgainAt(t *testing.T, db store.DBTX) time.Time {
+func reminderAt(t *testing.T, db store.DBTX) time.Time {
 	t.Helper()
 	var at *time.Time
 	if err := db.QueryRow(t.Context(), "SELECT remind_again_at FROM membership WHERE id = $1", ellieMembershipID).Scan(&at); err != nil {
-		t.Fatalf("reading Ellie's Remind me again time: %v", err)
+		t.Fatalf("reading Ellie's reminder: %v", err)
 	}
 	if at == nil {
 		return time.Time{}
@@ -649,9 +649,9 @@ func remindAgainAt(t *testing.T, db store.DBTX) time.Time {
 	return *at
 }
 
-// againLedger returns every resend in the send ledger as "handle garden
+// reminderLedger returns every reminder in the send ledger as "handle garden
 // instant", sorted.
-func againLedger(t *testing.T, db store.DBTX) []string {
+func reminderLedger(t *testing.T, db store.DBTX) []string {
 	t.Helper()
 
 	rows, err := db.Query(t.Context(), `SELECT app_user.handle || ' ' || garden.name || ' ' || notification_send.send_key
@@ -676,7 +676,7 @@ func againLedger(t *testing.T, db store.DBTX) []string {
 	return out
 }
 
-func TestSendDue_TheNextSendIsTheEarlierOfTheHourAndTheRemindMeAgainTime(t *testing.T) {
+func TestSendDue_TheNextSendIsTheEarlierOfTheHourAndTheReminder(t *testing.T) {
 	cases := []struct {
 		name  string
 		again time.Time
@@ -690,7 +690,7 @@ func TestSendDue_TheNextSendIsTheEarlierOfTheHourAndTheRemindMeAgainTime(t *test
 			tx := pgtest.Tx(t, migrateSchema)
 			service := newPushService(t, http.StatusCreated)
 			seedRosewood(t, tx, service)
-			remindAgain(t, tx, c.again)
+			remindAt(t, tx, c.again)
 			digest := newDigest(t, tx, service, fixed(noon.Add(-3*time.Hour)))
 
 			next, err := digest.sendDue(t.Context())
@@ -708,17 +708,17 @@ func TestSendDue_TheNextSendIsTheEarlierOfTheHourAndTheRemindMeAgainTime(t *test
 	}
 }
 
-func TestSendDue_TheDigestIsSentAgainOnceAtTheChosenTimeAcrossARestart(t *testing.T) {
+func TestSendDue_AReminderIsSentOnceAtItsTimeAcrossARestart(t *testing.T) {
 	tx := pgtest.Tx(t, migrateSchema)
 	service := newPushService(t, http.StatusCreated)
 	seedRosewood(t, tx, service)
-	// The morning digest has gone out and Ellie asked for it again at 15:00
-	// in London.
+	// The morning digest has gone out and Ellie set a reminder for 15:00 in
+	// London.
 	if _, err := tx.Exec(t.Context(), "INSERT INTO notification_send (membership_id, kind, send_key) VALUES ($1, 'digest', '2026-09-03'), ($2, 'digest', '2026-09-03')", ellieMembershipID, samMembershipID); err != nil {
 		t.Fatalf("writing the morning's ledger rows: %v", err)
 	}
 	again := noon.Add(2 * time.Hour)
-	remindAgain(t, tx, again)
+	remindAt(t, tx, again)
 
 	digest := newDigest(t, tx, service, fixed(again.Add(time.Second)))
 	next, err := digest.sendDue(t.Context())
@@ -729,11 +729,11 @@ func TestSendDue_TheDigestIsSentAgainOnceAtTheChosenTimeAcrossARestart(t *testin
 	if got, want := service.received(), []string{"/ellie-mac", "/ellie-phone"}; !slices.Equal(got, want) {
 		t.Errorf("the push service received %q, want %q", got, want)
 	}
-	if got, want := againLedger(t, tx), []string{"ellie Rosewood 2026-09-03T14:00:00Z"}; !slices.Equal(got, want) {
+	if got, want := reminderLedger(t, tx), []string{"ellie Rosewood 2026-09-03T14:00:00Z"}; !slices.Equal(got, want) {
 		t.Errorf("the ledger holds %q, want %q", got, want)
 	}
-	if got := remindAgainAt(t, tx); !got.IsZero() {
-		t.Errorf("Ellie's Remind me again time is still %s, want it cleared", got.UTC())
+	if got := reminderAt(t, tx); !got.IsZero() {
+		t.Errorf("Ellie's reminder is still at %s, want it cleared", got.UTC())
 	}
 	if want := noon.AddDate(0, 0, 1); !next.Equal(want) {
 		t.Errorf("the next send is %s, want tomorrow's %s", next.UTC(), want)
@@ -741,7 +741,7 @@ func TestSendDue_TheDigestIsSentAgainOnceAtTheChosenTimeAcrossARestart(t *testin
 
 	// The same time set again after a restart sends nothing, because the
 	// ledger row for that instant is already written.
-	remindAgain(t, tx, again)
+	remindAt(t, tx, again)
 	restarted := newDigest(t, tx, service, fixed(again.Add(time.Minute)))
 	if _, err := restarted.sendDue(t.Context()); err != nil {
 		t.Fatalf("the look after the restart: %v", err)
@@ -749,17 +749,45 @@ func TestSendDue_TheDigestIsSentAgainOnceAtTheChosenTimeAcrossARestart(t *testin
 	if got := service.received(); len(got) != 2 {
 		t.Errorf("the push service received %q, want the two from the first look and nothing more", got)
 	}
-	if got := remindAgainAt(t, tx); !got.IsZero() {
-		t.Errorf("Ellie's Remind me again time is still %s after the restart, want it cleared", got.UTC())
+	if got := reminderAt(t, tx); !got.IsZero() {
+		t.Errorf("Ellie's reminder is still at %s after the restart, want it cleared", got.UTC())
 	}
 }
 
-func TestSendDue_TheDigestIsNotSentAgainWhenNothingIsLeftDue(t *testing.T) {
+func TestSendDue_AReminderIsSentWithTheDailyDigestSwitchedOff(t *testing.T) {
+	tx := pgtest.Tx(t, migrateSchema)
+	service := newPushService(t, http.StatusCreated)
+	seedRosewood(t, tx, service)
+	if _, err := tx.Exec(t.Context(), "UPDATE notification_preference SET enabled = false WHERE membership_id = $1 AND kind = 'digest'", ellieMembershipID); err != nil {
+		t.Fatalf("switching Ellie's digest off: %v", err)
+	}
+	// Two hours after noon, Sam's digest is too late to send, so the only
+	// send is Ellie's reminder.
+	at := noon.Add(2 * time.Hour)
+	remindAt(t, tx, at)
+	digest := newDigest(t, tx, service, fixed(at))
+
+	if _, err := digest.sendDue(t.Context()); err != nil {
+		t.Fatalf("sendDue: %v", err)
+	}
+
+	if got, want := service.received(), []string{"/ellie-mac", "/ellie-phone"}; !slices.Equal(got, want) {
+		t.Errorf("the push service received %q, want %q", got, want)
+	}
+	if got, want := reminderLedger(t, tx), []string{"ellie Rosewood 2026-09-03T14:00:00Z"}; !slices.Equal(got, want) {
+		t.Errorf("the ledger holds %q, want %q", got, want)
+	}
+	if got := ledger(t, tx); slices.Contains(got, "ellie Rosewood 2026-09-03") {
+		t.Errorf("the ledger holds %q, want no digest for Ellie with hers switched off", got)
+	}
+}
+
+func TestSendDue_AReminderIsNotSentWhenNothingIsLeftDue(t *testing.T) {
 	tx := pgtest.Tx(t, migrateSchema)
 	service := newPushService(t, http.StatusCreated)
 	seedRosewood(t, tx, service)
 	again := noon.Add(2 * time.Hour)
-	remindAgain(t, tx, again)
+	remindAt(t, tx, again)
 	// Everything was watered after the morning digest.
 	if _, err := tx.Exec(t.Context(), "UPDATE care_event SET performed_at = $1, recorded_at = $1", noon.Add(time.Hour)); err != nil {
 		t.Fatalf("watering everything: %v", err)
@@ -773,12 +801,12 @@ func TestSendDue_TheDigestIsNotSentAgainWhenNothingIsLeftDue(t *testing.T) {
 	if got := service.received(); len(got) != 0 {
 		t.Errorf("the push service received %q, want nothing with nothing left due", got)
 	}
-	if got := remindAgainAt(t, tx); !got.IsZero() {
-		t.Errorf("Ellie's Remind me again time is still %s, want it cleared", got.UTC())
+	if got := reminderAt(t, tx); !got.IsZero() {
+		t.Errorf("Ellie's reminder is still at %s, want it cleared", got.UTC())
 	}
 }
 
-func TestSendDue_ARemindMeAgainTimeAnHourOrMorePastIsClearedAndNotSent(t *testing.T) {
+func TestSendDue_AReminderAnHourOrMorePastIsClearedAndNotSent(t *testing.T) {
 	tx := pgtest.Tx(t, migrateSchema)
 	service := newPushService(t, http.StatusCreated)
 	seedRosewood(t, tx, service)
@@ -786,7 +814,7 @@ func TestSendDue_ARemindMeAgainTimeAnHourOrMorePastIsClearedAndNotSent(t *testin
 		t.Fatalf("writing the morning's ledger rows: %v", err)
 	}
 	again := noon.Add(2 * time.Hour)
-	remindAgain(t, tx, again)
+	remindAt(t, tx, again)
 	digest := newDigest(t, tx, service, fixed(again.Add(time.Hour)))
 
 	if _, err := digest.sendDue(t.Context()); err != nil {
@@ -796,12 +824,12 @@ func TestSendDue_ARemindMeAgainTimeAnHourOrMorePastIsClearedAndNotSent(t *testin
 	if got := service.received(); len(got) != 0 {
 		t.Errorf("the push service received %q, want nothing an hour late", got)
 	}
-	if got := remindAgainAt(t, tx); !got.IsZero() {
-		t.Errorf("Ellie's Remind me again time is still %s, want it cleared so the job stops looking at it", got.UTC())
+	if got := reminderAt(t, tx); !got.IsZero() {
+		t.Errorf("Ellie's reminder is still at %s, want it cleared so the job stops looking at it", got.UTC())
 	}
 }
 
-func TestSendDue_AResendAfterMidnightSendsTheNewDaysDigest(t *testing.T) {
+func TestSendDue_AReminderSentLateAfterMidnightListsTheNewDaysCares(t *testing.T) {
 	tx := pgtest.Tx(t, migrateSchema)
 	service := newPushService(t, http.StatusCreated)
 	seedRosewood(t, tx, service)
@@ -822,46 +850,39 @@ func TestSendDue_AResendAfterMidnightSendsTheNewDaysDigest(t *testing.T) {
 		rosewoodID, sproutID, waterID, ellieID, watered); err != nil {
 		t.Fatalf("watering Sprout: %v", err)
 	}
-	// Ellie pressed In 1 hour at 23:30 in London, so the resend is due at
-	// 00:30 the next morning.
-	again := utc(2026, time.September, 3, 23, 30, 0)
-	remindAgain(t, tx, again)
-	digest := newDigest(t, tx, service, fixed(again))
+	// The reminder is at 23:58 in London on the 3rd. The job sends it at
+	// 00:10 on the 4th, inside the hour a late reminder is still sent.
+	at := utc(2026, time.September, 3, 22, 58, 0)
+	remindAt(t, tx, at)
+	digest := newDigest(t, tx, service, fixed(utc(2026, time.September, 3, 23, 10, 0)))
 
 	next, err := digest.sendDue(t.Context())
 
 	if err != nil {
 		t.Fatalf("sendDue: %v", err)
 	}
-	// Nothing was due on the 3rd, so a send at all is a digest built on the
+	// Nothing was due on the 3rd, so a send at all is a list built on the
 	// 4th, the day Sprout is due.
 	if got, want := service.received(), []string{"/ellie-mac", "/ellie-phone"}; !slices.Equal(got, want) {
 		t.Errorf("the push service received %q, want %q", got, want)
 	}
-	if got, want := againLedger(t, tx), []string{"ellie Rosewood 2026-09-03T23:30:00Z"}; !slices.Equal(got, want) {
+	if got, want := reminderLedger(t, tx), []string{"ellie Rosewood 2026-09-03T22:58:00Z"}; !slices.Equal(got, want) {
 		t.Errorf("the ledger holds %q, want %q", got, want)
 	}
-	if got := remindAgainAt(t, tx); !got.IsZero() {
-		t.Errorf("Ellie's Remind me again time is still %s, want it cleared", got.UTC())
+	if got := reminderAt(t, tx); !got.IsZero() {
+		t.Errorf("Ellie's reminder is still at %s, want it cleared", got.UTC())
 	}
 	if want := noon.AddDate(0, 0, 1); !next.Equal(want) {
 		t.Errorf("the next send is %s, want the 4th's own digest at %s", next.UTC(), want)
 	}
 }
 
-func TestBuild_TheDigestHasTheGardensTagAndTheTwoDelayButtons(t *testing.T) {
+func TestBuild_TheDigestHasTheGardensTagAndOpensToday(t *testing.T) {
 	tx := pgtest.Tx(t, migrateSchema)
 	service := newPushService(t, http.StatusCreated)
 	seedRosewood(t, tx, service)
 	digest := newDigest(t, tx, service, fixed(noon))
-	members, err := digest.queries.ListDigestMembers(t.Context(), noon)
-	if err != nil {
-		t.Fatalf("listing the members: %v", err)
-	}
-	ellie := members[0]
-	if ellie.MembershipID != ellieMembershipID {
-		t.Fatalf("the first member is %s, want Ellie", ellie.Handle)
-	}
+	ellie := recipient{membershipID: ellieMembershipID, gardenID: rosewoodID, userID: ellieID, handle: "ellie", garden: "Rosewood"}
 
 	got, items, err := digest.build(t.Context(), digest.queries, ellie, zone(t, "Europe/London"), noon)
 
@@ -874,29 +895,12 @@ func TestBuild_TheDigestHasTheGardensTagAndTheTwoDelayButtons(t *testing.T) {
 	if want := "digest-" + rosewoodID.String(); got.Tag != want {
 		t.Errorf("the tag is %q, want %q", got.Tag, want)
 	}
-	if want := "https://sprig.example.com/?from=digest"; got.URL != want {
+	if want := "https://sprig.example.com/"; got.URL != want {
 		t.Errorf("the URL is %q, want %q", got.URL, want)
-	}
-	if got.Again == nil {
-		t.Fatal("the digest has no Remind me again form")
-	}
-	if want := "https://sprig.example.com/remind-again"; got.Again.URL != want {
-		t.Errorf("the form posts to %q, want %q", got.Again.URL, want)
-	}
-	var labels, actions []string
-	for _, delay := range got.Again.Delays {
-		labels = append(labels, delay.Label)
-		actions = append(actions, delay.Action)
-	}
-	if want := []string{"In 1 hour", "In 2 hours"}; !slices.Equal(labels, want) {
-		t.Errorf("the banner offers %q, want %q", labels, want)
-	}
-	if want := []string{"Remind me again in 1 hour", "Remind me again in 2 hours"}; !slices.Equal(actions, want) {
-		t.Errorf("the notification offers %q, want %q", actions, want)
 	}
 }
 
-func TestRun_ARemindMeAgainTimeSetTakesEffectWithoutWaitingForTheTimer(t *testing.T) {
+func TestRun_AReminderSetTakesEffectWithoutWaitingForTheTimer(t *testing.T) {
 	service := newPushService(t, http.StatusCreated)
 	pool := freshRosewood(t, service)
 	ctx := t.Context()
@@ -912,8 +916,8 @@ func TestRun_ARemindMeAgainTimeSetTakesEffectWithoutWaitingForTheTimer(t *testin
 		t.Fatalf("the push service received %q before anybody's hour", got)
 	}
 
-	// Ellie asks for the digest again half a second from now.
-	remindAgain(t, pool, noon.Add(time.Since(started)).Add(500*time.Millisecond))
+	// Ellie sets a reminder for half a second from now.
+	remindAt(t, pool, noon.Add(time.Since(started)).Add(500*time.Millisecond))
 	digest.Wake()
 
 	waitForSends(t, service, 2, 5*time.Second)

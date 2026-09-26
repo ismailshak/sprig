@@ -3,12 +3,10 @@
 -- member with no browser is left out rather than having their day claimed with
 -- nothing sent, so a browser subscribed within the hour after their hour still
 -- gets that day's digest. sent_through is the latest send key in the ledger for
--- the membership, or empty. remind_again_at is the instant the member asked for
--- today's digest again, or NULL. There is no @garden_id because the job runs
--- across every garden.
+-- the membership, or empty. There is no @garden_id because the job runs across
+-- every garden.
 -- name: ListDigestMembers :many
 SELECT membership.id AS membership_id, membership.garden_id, membership.user_id, membership.digest_hour,
-    membership.remind_again_at,
     app_user.handle, app_user.timezone, garden.name AS garden_name,
     coalesce((SELECT max(send_key) FROM notification_send
         WHERE notification_send.membership_id = membership.id AND notification_send.kind = 'digest'), '')::text AS sent_through
@@ -20,6 +18,22 @@ JOIN notification_preference ON notification_preference.membership_id = membersh
 WHERE (membership.expires_at IS NULL OR membership.expires_at > @now::timestamptz)
   AND EXISTS (SELECT 1 FROM push_subscription WHERE push_subscription.user_id = membership.user_id)
 ORDER BY membership.created_at, membership.id;
+
+-- Every membership with a reminder waiting from Remind me later on Today,
+-- whether or not it has the digest switched on. A membership that has ended or
+-- has no subscribed browser is left out, the same as for the digest. There is
+-- no @garden_id because the job runs across every garden.
+-- name: ListWaitingReminders :many
+SELECT membership.id AS membership_id, membership.garden_id, membership.user_id,
+    membership.remind_again_at::timestamptz AS remind_again_at,
+    app_user.handle, app_user.timezone, garden.name AS garden_name
+FROM membership
+JOIN app_user ON app_user.id = membership.user_id
+JOIN garden ON garden.id = membership.garden_id
+WHERE membership.remind_again_at IS NOT NULL
+  AND (membership.expires_at IS NULL OR membership.expires_at > @now::timestamptz)
+  AND EXISTS (SELECT 1 FROM push_subscription WHERE push_subscription.user_id = membership.user_id)
+ORDER BY membership.remind_again_at, membership.id;
 
 -- Returns 0 rows when the send is already in the ledger, so the caller sends
 -- nothing a second time.
