@@ -6,7 +6,9 @@ import (
 	"encoding/base64"
 	"errors"
 	"log/slog"
+	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"strconv"
 	"strings"
@@ -164,7 +166,12 @@ type notifications struct {
 	pushKey string
 	wake    wakeJobs
 	test    sendTest
+	lookup  lookupHost
 }
+
+// lookupHost returns the addresses a host name resolves to. It has the
+// signature of net.Resolver.LookupNetIP.
+type lookupHost func(ctx context.Context, network, host string) ([]netip.Addr, error)
 
 func (h *notifications) show(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
@@ -282,7 +289,21 @@ func (h *notifications) subscribeBrowser(w http.ResponseWriter, r *http.Request)
 	}
 	endpoint := r.PostForm.Get("endpoint")
 	p256dh, auth := r.PostForm.Get("p256dh"), r.PostForm.Get("auth")
-	if !isPushEndpoint(endpoint) || !isPushPoint(p256dh) || !isPushKey(auth, authLength) {
+	host, ok := pushEndpointHost(endpoint)
+	if !ok || !isPushPoint(p256dh) || !isPushKey(auth, authLength) {
+		h.templates.badRequest(w, r)
+		return
+	}
+	public, err := h.publicHost(r.Context(), host)
+	if err != nil {
+		h.templates.serverError(h.logger, w, r, "look up the push endpoint's host", err)
+		return
+	}
+	// A browser's push API never produces one of these hosts, so the post was
+	// written by hand. The host is logged and the endpoint is not, because
+	// anyone holding the whole endpoint URL can push to that browser.
+	if !public {
+		h.logger.WarnContext(r.Context(), "refuse the push endpoint's host", slog.String("user", principal.User.Handle), slog.String("host", host))
 		h.templates.badRequest(w, r)
 		return
 	}
@@ -290,7 +311,7 @@ func (h *notifications) subscribeBrowser(w http.ResponseWriter, r *http.Request)
 	if ua := r.UserAgent(); ua != "" {
 		userAgent = &ua
 	}
-	err := h.queries.UpsertPushSubscription(r.Context(), store.UpsertPushSubscriptionParams{
+	err = h.queries.UpsertPushSubscription(r.Context(), store.UpsertPushSubscriptionParams{
 		UserID:    principal.User.ID,
 		Endpoint:  endpoint,
 		P256dhKey: p256dh,
@@ -313,11 +334,44 @@ func (h *notifications) subscribeBrowser(w http.ResponseWriter, r *http.Request)
 // authLength is the length in bytes of a subscription's auth secret.
 const authLength = 16
 
-// isPushEndpoint reports whether v is an absolute https URL. Every push
-// service is reached over https.
-func isPushEndpoint(v string) bool {
+// pushEndpointHost returns the host of v, without a port, and whether v is an
+// absolute https URL. Every push service is reached over https.
+func pushEndpointHost(v string) (string, bool) {
 	parsed, err := url.Parse(v)
-	return err == nil && parsed.Scheme == "https" && parsed.Host != ""
+	if err != nil || parsed.Scheme != "https" || parsed.Hostname() == "" {
+		return "", false
+	}
+	return parsed.Hostname(), true
+}
+
+// publicHost reports whether host is an address push.RefusedAddress accepts or
+// a name whose every address it accepts. The sender checks again on each send.
+// Checking here as well refuses the subscription while the person adding the
+// device is still on the page.
+func (h *notifications) publicHost(ctx context.Context, host string) (bool, error) {
+	addrs, err := h.addressesOf(ctx, host)
+	var dnsErr *net.DNSError
+	if errors.As(err, &dnsErr) && dnsErr.IsNotFound {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	for _, addr := range addrs {
+		if push.RefusedAddress(addr) {
+			return false, nil
+		}
+	}
+	return len(addrs) > 0, nil
+}
+
+// addressesOf returns host as it is when it is an address, and looks it up
+// when it is a name.
+func (h *notifications) addressesOf(ctx context.Context, host string) ([]netip.Addr, error) {
+	if addr, err := netip.ParseAddr(host); err == nil {
+		return []netip.Addr{addr}, nil
+	}
+	return h.lookup(ctx, "ip", host)
 }
 
 // isPushPoint reports whether v is base64url for a point on P-256. A

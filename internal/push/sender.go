@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"time"
 
 	webpush "github.com/SherClockHolmes/webpush-go"
 
@@ -49,10 +48,11 @@ type Sender struct {
 }
 
 // NewSender returns a Sender that signs with keys. A nil client means a new
-// http.Client with a 10-second timeout.
+// http.Client with a 10-second timeout that refuses to connect to an address
+// RefusedAddress refuses.
 func NewSender(keys Keys, client *http.Client) *Sender {
 	if client == nil {
-		client = &http.Client{Timeout: 10 * time.Second}
+		client = guardedClient(RefusedAddress)
 	}
 	return &Sender{keys: keys, client: client}
 }
@@ -79,7 +79,10 @@ func sendError(endpoint string, err error) error {
 
 // Send delivers n to one subscription. It returns ErrGone when the push
 // service no longer has the subscription, and another error when the service
-// refused the message or could not be reached.
+// refused the message or could not be reached. When the client refuses to
+// connect to the endpoint's address, the error wraps ErrRefusedAddress. It is
+// not ErrGone, because a resolver on the server's side giving a wrong answer
+// would then delete every browser's row.
 func (s *Sender) Send(ctx context.Context, subscription store.PushSubscription, n Notification) error {
 	body, err := json.Marshal(n)
 	if err != nil {

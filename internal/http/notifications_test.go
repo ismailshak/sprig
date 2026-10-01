@@ -6,8 +6,10 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"net/url"
 	"slices"
 	"strings"
@@ -45,7 +47,26 @@ func openNotifications(t *testing.T) *notificationsFixture {
 			templates: testTemplates(),
 			now:       func() time.Time { return thursday },
 			pushKey:   testPushKey,
+			lookup:    resolvesTo("142.250.80.42"),
 		},
+	}
+}
+
+// resolvesTo is a lookupHost that returns addrs for every name.
+func resolvesTo(addrs ...string) lookupHost {
+	return func(context.Context, string, string) ([]netip.Addr, error) {
+		out := make([]netip.Addr, 0, len(addrs))
+		for _, addr := range addrs {
+			out = append(out, netip.MustParseAddr(addr))
+		}
+		return out, nil
+	}
+}
+
+// failsWith is a lookupHost that returns err for every name.
+func failsWith(err error) lookupHost {
+	return func(context.Context, string, string) ([]netip.Addr, error) {
+		return nil, err
 	}
 }
 
@@ -545,12 +566,103 @@ func TestSubscribe_AnEndpointOrKeyOfTheWrongFormIsRefusedAndWritesNoRow(t *testi
 			t.Errorf("%s got %d, want %d", c.name, rec.Code, http.StatusBadRequest)
 		}
 	}
+	if count := subscriptionCount(t, f); count != 2 {
+		t.Errorf("a refused post wrote a row: the account has %d, want 2", count)
+	}
+}
+
+// subscriptionCount returns how many push subscriptions the signed-in account
+// has.
+func subscriptionCount(t *testing.T, f *notificationsFixture) int {
+	t.Helper()
+
 	var count int
 	if err := f.tx.QueryRow(t.Context(), "SELECT count(*) FROM push_subscription WHERE user_id = $1", moreUserID).Scan(&count); err != nil {
 		t.Fatalf("counting the subscriptions: %v", err)
 	}
-	if count != 2 {
+	return count
+}
+
+func TestSubscribe_AnEndpointOnAPrivateNetworkIsRefusedAndWritesNoRow(t *testing.T) {
+	f := openNotifications(t)
+	p256dh, auth := browserKeys(t)
+	endpoints := []string{
+		"https://127.0.0.1/send",
+		"https://[::1]/send",
+		"https://10.0.0.1/send",
+		"https://172.16.0.1:8443/send",
+		"https://192.168.1.1/send",
+		"https://169.254.169.254/send",
+		"https://[fe80::1]/send",
+		"https://0.0.0.0/send",
+		"https://224.0.0.1/send",
+		"https://100.64.0.0/send",
+		"https://100.127.255.255/send",
+		"https://[::ffff:10.0.0.1]/send",
+	}
+	for _, endpoint := range endpoints {
+		if rec := f.subscribe(t, endpoint, chromeOnMac, p256dh, auth); rec.Code != http.StatusBadRequest {
+			t.Errorf("%s got %d, want %d", endpoint, rec.Code, http.StatusBadRequest)
+		}
+	}
+	if count := subscriptionCount(t, f); count != 2 {
 		t.Errorf("a refused post wrote a row: the account has %d, want 2", count)
+	}
+}
+
+func TestSubscribe_AnEndpointWhoseNameResolvesToAPublicAndAPrivateAddressIsRefusedAndWritesNoRow(t *testing.T) {
+	f := openNotifications(t)
+	f.handler.lookup = resolvesTo("142.250.80.42", "10.0.0.1")
+	p256dh, auth := browserKeys(t)
+
+	rec := f.subscribe(t, "https://push.example.com/send/new", chromeOnMac, p256dh, auth)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusBadRequest)
+	}
+	if count := subscriptionCount(t, f); count != 2 {
+		t.Errorf("a refused post wrote a row: the account has %d, want 2", count)
+	}
+}
+
+func TestSubscribe_AnEndpointJustOutsideTheSharedAddressSpaceIsWritten(t *testing.T) {
+	f := openNotifications(t)
+	p256dh, auth := browserKeys(t)
+
+	for _, endpoint := range []string{"https://100.63.255.255/send", "https://100.128.0.0/send"} {
+		if rec := f.subscribe(t, endpoint, chromeOnMac, p256dh, auth); rec.Code != http.StatusNoContent {
+			t.Errorf("%s got %d, want %d", endpoint, rec.Code, http.StatusNoContent)
+		}
+	}
+	if count := subscriptionCount(t, f); count != 4 {
+		t.Errorf("the account has %d subscriptions, want the two seeded and the two posted", count)
+	}
+}
+
+func TestSubscribe_AnEndpointWhoseNameDoesNotExistIsRefused(t *testing.T) {
+	f := openNotifications(t)
+	f.handler.lookup = failsWith(&net.DNSError{Err: "no such host", Name: "push.example.com", IsNotFound: true})
+	p256dh, auth := browserKeys(t)
+
+	rec := f.subscribe(t, "https://push.example.com/send/new", chromeOnMac, p256dh, auth)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusBadRequest)
+	}
+}
+
+func TestSubscribe_ALookupThatFailsIsAServerErrorAndWritesNoRow(t *testing.T) {
+	f := openNotifications(t)
+	f.handler.lookup = failsWith(&net.DNSError{Err: "server misbehaving", Name: "push.example.com", IsTemporary: true})
+	p256dh, auth := browserKeys(t)
+
+	rec := f.subscribe(t, "https://push.example.com/send/new", chromeOnMac, p256dh, auth)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusInternalServerError)
+	}
+	if count := subscriptionCount(t, f); count != 2 {
+		t.Errorf("a failed post wrote a row: the account has %d, want 2", count)
 	}
 }
 

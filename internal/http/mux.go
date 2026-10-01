@@ -3,6 +3,7 @@ package http
 import (
 	"context"
 	"log/slog"
+	"net"
 	"net/http"
 	"time"
 	"uuid"
@@ -89,7 +90,7 @@ func routes(d Dependencies) []route {
 	closeAccountHandler := &closeAccount{logger: d.Logger, sessions: d.Sessions, queries: d.Queries, templates: d.Templates, now: time.Now, wake: d.Wake}
 	recoveryCodesHandler := &recoveryCodes{logger: d.Logger, queries: d.Queries, templates: d.Templates, now: time.Now}
 	passkeysHandler := &passkeys{logger: d.Logger, queries: d.Queries, templates: d.Templates, now: time.Now}
-	notificationsHandler := &notifications{logger: d.Logger, queries: d.Queries, templates: d.Templates, now: time.Now, pushKey: d.PushKey, wake: d.Wake, test: d.SendTest}
+	notificationsHandler := &notifications{logger: d.Logger, queries: d.Queries, templates: d.Templates, now: time.Now, pushKey: d.PushKey, wake: d.Wake, test: d.SendTest, lookup: net.DefaultResolver.LookupNetIP}
 	gardenHandler := &garden{logger: d.Logger, queries: d.Queries, photos: d.Photos, templates: d.Templates}
 	deleteGardenHandler := &deleteGarden{logger: d.Logger, queries: d.Queries, photos: d.Photos, templates: d.Templates, wake: d.Wake}
 	peopleHandler := &people{logger: d.Logger, queries: d.Queries, templates: d.Templates, now: time.Now, wake: d.Wake, notify: d.NotifyUser}
