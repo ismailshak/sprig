@@ -2,6 +2,7 @@ package http
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 	"runtime/debug"
@@ -45,6 +46,10 @@ func Logging(logger *slog.Logger) func(http.Handler) http.Handler {
 			start := time.Now()
 			next.ServeHTTP(rec, r)
 
+			status := rec.status
+			if !rec.wroteHeader && errors.Is(r.Context().Err(), context.Canceled) {
+				status = statusClientClosed
+			}
 			pattern := patternFrom(r)
 			level := slog.LevelInfo
 			if pattern == healthzPattern {
@@ -53,12 +58,17 @@ func Logging(logger *slog.Logger) func(http.Handler) http.Handler {
 			logger.LogAttrs(r.Context(), level, "request",
 				slog.String("method", r.Method),
 				slog.String("pattern", pattern),
-				slog.Int("status", rec.status),
+				slog.Int("status", status),
 				slog.Duration("duration", time.Since(start)),
 			)
 		})
 	}
 }
+
+// statusClientClosed is the status logged when the client closed the connection
+// and the handler wrote nothing. It is never sent. nginx logs 499 for the same
+// case.
+const statusClientClosed = 499
 
 // statusRecorder captures the status code a handler wrote, defaulting to
 // 200 for a handler that never calls WriteHeader.

@@ -102,6 +102,50 @@ func TestLogging_AHealthCheckRequestIsLoggedAtDebugLevel(t *testing.T) {
 	}
 }
 
+func TestLogging_ACancelledRequestWhoseHandlerWroteNothingIsLoggedWithStatus499(t *testing.T) {
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&buf, nil))
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /plants", func(http.ResponseWriter, *http.Request) {})
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	handler := MatchPattern(mux)(Logging(logger)(mux))
+	handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequestWithContext(ctx, http.MethodGet, "/plants", nil))
+
+	var entry map[string]any
+	if err := json.Unmarshal(buf.Bytes(), &entry); err != nil {
+		t.Fatalf("log line was not JSON: %v", err)
+	}
+	if entry["status"] != float64(statusClientClosed) {
+		t.Errorf("status = %v, want %d", entry["status"], statusClientClosed)
+	}
+}
+
+func TestLogging_ACancelledRequestWhoseHandlerWroteAStatusIsLoggedWithThatStatus(t *testing.T) {
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&buf, nil))
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /plants", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	handler := MatchPattern(mux)(Logging(logger)(mux))
+	handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequestWithContext(ctx, http.MethodGet, "/plants", nil))
+
+	var entry map[string]any
+	if err := json.Unmarshal(buf.Bytes(), &entry); err != nil {
+		t.Fatalf("log line was not JSON: %v", err)
+	}
+	if entry["status"] != float64(http.StatusOK) {
+		t.Errorf("status = %v, want %d", entry["status"], http.StatusOK)
+	}
+}
+
 func TestRecover_ConvertsPanicToInternalServerError(t *testing.T) {
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&buf, nil))

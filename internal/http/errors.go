@@ -2,6 +2,8 @@ package http
 
 import (
 	"bytes"
+	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -74,7 +76,16 @@ func wantsPage(r *http.Request) bool {
 
 // serverError responds with a 500 and logs err to logger, so a handler that
 // calls it does not log the error again. what names the step that failed.
+//
+// When the request's context is cancelled, err is logged at info and nothing is
+// written. The client has closed the connection and cannot read a response.
+// The check is on the context and not on err. A step can fail after the cancel
+// with an error that does not wrap context.Canceled.
 func (t *Templates) serverError(logger *slog.Logger, w http.ResponseWriter, r *http.Request, what string, err error) {
+	if errors.Is(r.Context().Err(), context.Canceled) {
+		logger.InfoContext(r.Context(), what, slog.Any("error", err))
+		return
+	}
 	logger.ErrorContext(r.Context(), what, slog.Any("error", err))
 	t.refuse(w, r, http.StatusInternalServerError, serverErrorTitle, serverErrorLine)
 }
