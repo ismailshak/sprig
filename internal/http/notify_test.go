@@ -81,3 +81,34 @@ func TestStorageKey_ChangesWhenTheQuotaDoes(t *testing.T) {
 		t.Errorf("the key is %q under both quotas, so a raised quota would never be sent for", before)
 	}
 }
+
+func TestStorageNotification_IsSentAndClearedAfterTheClientClosesTheConnection(t *testing.T) {
+	f := plantFormOn(t)
+	got := captureUserNotifications(&f.handler.notify)
+	plant, err := store.New(f.tx).GetPlant(t.Context(), rosewoodID, bigFellaID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.exec(t, "DELETE FROM photo WHERE garden_id = $1", rosewoodID)
+	givePhoto(t, f.tx, bigFellaID, readerID, thursday)
+	usage, err := f.handler.photos.Usage(t.Context(), store.New(f.tx), rosewoodID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.photosWithRoomFor(t, int(usage.Used))
+	cancelled, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	f.handler.notifyStorage(cancelled, f.principal, plant)
+	if len(*got) != 1 {
+		t.Fatalf("notified %+v, want Ellie once with the garden full", *got)
+	}
+
+	f.exec(t, "DELETE FROM photo WHERE garden_id = $1", rosewoodID)
+	f.handler.clearStorageNotification(cancelled, f.principal)
+	givePhoto(t, f.tx, bigFellaID, readerID, thursday)
+	f.handler.notifyStorage(t.Context(), f.principal, plant)
+	if len(*got) != 2 {
+		t.Errorf("notified %+v, want Ellie a second time after the garden was emptied and filled again", *got)
+	}
+}

@@ -89,6 +89,9 @@ func storageNotification(garden string, usage photo.Usage, plant store.Plant) pu
 // is logged and nothing else happens, because the photo is saved and the
 // response is not about the notification.
 func (h *plants) notifyStorage(ctx context.Context, principal auth.Principal, plant store.Plant) {
+	// The photo is already saved. A client closing the connection does not
+	// cancel the queries or the push sends below.
+	ctx = context.WithoutCancel(ctx)
 	usage, err := h.photos.Usage(ctx, h.queries, principal.Garden.ID)
 	if err != nil {
 		h.logger.Error("storage not checked", "garden", principal.Garden.Name, "err", err)
@@ -130,9 +133,14 @@ func (h *plants) notifyStorage(ctx context.Context, principal auth.Principal, pl
 
 // clearStorageNotification runs after a photo is deleted. Once the garden's
 // photos are back under nearlyFull of the quota it deletes the ledger rows the
-// storage notification claimed, so the next crossing is sent for again. A
-// database error is logged and nothing else happens.
+// storage notification claimed. The next time the photos reach nearlyFull, the
+// notification is sent again. A database error is logged and nothing else
+// happens.
 func (h *plants) clearStorageNotification(ctx context.Context, principal auth.Principal) {
+	// The photo is already deleted. A client closing the connection does not
+	// cancel the ledger delete below. Without that delete, no notification is
+	// sent the next time the photos reach nearlyFull of the quota.
+	ctx = context.WithoutCancel(ctx)
 	usage, err := h.photos.Usage(ctx, h.queries, principal.Garden.ID)
 	if err != nil {
 		h.logger.Error("storage not checked", "garden", principal.Garden.Name, "err", err)

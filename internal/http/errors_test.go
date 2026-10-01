@@ -2,6 +2,9 @@ package http
 
 import (
 	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -132,5 +135,32 @@ func TestServerError_AnHTMXRequestGetsOneLineOfText(t *testing.T) {
 	}
 	if got := strings.TrimSpace(rec.Body.String()); got != serverErrorText {
 		t.Errorf("body = %q, want %q", got, serverErrorText)
+	}
+}
+
+func TestServerError_ACancelledRequestWritesNothingAndLogsTheErrorAtInfo(t *testing.T) {
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	req := browsing(httptest.NewRequestWithContext(ctx, http.MethodGet, "/plants", nil))
+	rec := httptest.NewRecorder()
+	// The error does not wrap context.Canceled. A serverError that checks err
+	// instead of the request's context fails this test.
+	testTemplates().serverError(logger, rec, req, "resolve the session", errors.New("conn closed"))
+
+	if rec.Code == http.StatusInternalServerError || rec.Body.Len() > 0 || len(rec.Header()) > 0 {
+		t.Errorf("wrote status %d, headers %v and body %q, want nothing written", rec.Code, rec.Header(), rec.Body.String())
+	}
+	lines := strings.Split(strings.TrimSpace(buf.String()), "\n")
+	if len(lines) != 1 {
+		t.Fatalf("logged %d lines, want 1: %v", len(lines), lines)
+	}
+	var entry struct{ Level, Msg string }
+	if err := json.Unmarshal([]byte(lines[0]), &entry); err != nil {
+		t.Fatalf("log line %q is not JSON: %v", lines[0], err)
+	}
+	if entry.Level != slog.LevelInfo.String() || entry.Msg != "resolve the session" {
+		t.Errorf("logged %s %q, want INFO \"resolve the session\"", entry.Level, entry.Msg)
 	}
 }
