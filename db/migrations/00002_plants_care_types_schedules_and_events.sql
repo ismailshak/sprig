@@ -128,6 +128,9 @@ CREATE INDEX care_event_plant_id_care_type_id_performed_at_idx
 -- The Activity page lists a garden's events newest first.
 CREATE INDEX care_event_garden_id_performed_at_idx ON care_event (garden_id, performed_at DESC);
 
+-- The feed at the bottom of Today lists a garden's latest entered events.
+CREATE INDEX care_event_garden_id_recorded_at_idx ON care_event (garden_id, recorded_at DESC);
+
 -- Checking whether a care type has events, and so can only be archived.
 CREATE INDEX care_event_care_type_id_idx ON care_event (care_type_id);
 
