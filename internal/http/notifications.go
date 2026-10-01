@@ -84,14 +84,6 @@ var testResultLines = map[string]string{
 	testNone:   "This device isn’t subscribed.",
 }
 
-// testMessage is the notification Send test notification delivers. Its URL is
-// this page's path, made absolute before it is sent.
-var testMessage = push.Notification{
-	Title: "Test notification",
-	Body:  "Notifications are working.",
-	URL:   notificationsPath,
-}
-
 func removeBrowserPath(subscriptionID uuid.UUID) string {
 	return notificationsPath + "/browsers/" + subscriptionID.String() + "/remove"
 }
@@ -253,7 +245,7 @@ func (h *notifications) sendTestNotification(w http.ResponseWriter, r *http.Requ
 		h.templates.serverError(h.logger, w, r, "find the browser to test", err)
 		return
 	default:
-		switch err := h.test(r.Context(), subscription, testMessage); {
+		switch err := h.test(r.Context(), subscription, push.TestNotification(notificationsPath)); {
 		case errors.Is(err, push.ErrGone):
 			result = testGone
 		case err != nil:

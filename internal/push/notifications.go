@@ -66,3 +66,9 @@ func StorageNotification(garden string, usage photo.Usage, photosPath string) No
 		URL:   photosPath,
 	}
 }
+
+// TestNotification is sent to one browser by the Notifications page's
+// Send test notification button.
+func TestNotification(notificationsPath string) Notification {
+	return Notification{Title: "Test notification", Body: "Notifications are working.", URL: notificationsPath}
+}

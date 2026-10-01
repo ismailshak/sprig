@@ -31,15 +31,13 @@ func subscriptionAt(t *testing.T, db store.DBTX, service *pushService, path stri
 	return subscription
 }
 
-var notificationsAreWorking = Notification{Title: "Notifications are working", Body: "This is a test.", URL: "/more/notifications"}
-
 func TestTestMessage_SendsToTheBrowserAndRecordsTheSend(t *testing.T) {
 	service := newPushService(t, http.StatusCreated)
 	tx := pgtest.Tx(t, migrateSchema)
 	seedRosewood(t, tx, service)
 	message := newTestMessage(t, tx, service)
 
-	err := message.Send(t.Context(), subscriptionAt(t, tx, service, "/ellie-phone"), notificationsAreWorking)
+	err := message.Send(t.Context(), subscriptionAt(t, tx, service, "/ellie-phone"), TestNotification("/more/notifications"))
 
 	if err != nil {
 		t.Fatalf("Send: %v", err)
@@ -58,7 +56,7 @@ func TestTestMessage_ABrowserThePushServiceReportsGoneIsDeleted(t *testing.T) {
 	seedRosewood(t, tx, service)
 	message := newTestMessage(t, tx, service)
 
-	err := message.Send(t.Context(), subscriptionAt(t, tx, service, "/ellie-phone"), notificationsAreWorking)
+	err := message.Send(t.Context(), subscriptionAt(t, tx, service, "/ellie-phone"), TestNotification("/more/notifications"))
 
 	if !errors.Is(err, ErrGone) {
 		t.Fatalf("Send: %v, want ErrGone", err)
@@ -78,7 +76,7 @@ func TestTestMessage_ARefusalIsReturnedAndTheBrowserIsKept(t *testing.T) {
 	seedRosewood(t, tx, service)
 	message := newTestMessage(t, tx, service)
 
-	err := message.Send(t.Context(), subscriptionAt(t, tx, service, "/ellie-phone"), notificationsAreWorking)
+	err := message.Send(t.Context(), subscriptionAt(t, tx, service, "/ellie-phone"), TestNotification("/more/notifications"))
 
 	if err == nil || errors.Is(err, ErrGone) {
 		t.Fatalf("Send: %v, want the push service's refusal", err)
@@ -95,7 +93,7 @@ func TestTestMessage_ASendRefusedForItsAddressKeepsTheBrowserRow(t *testing.T) {
 	message := newTestMessage(t, tx, service)
 	message.sender = NewSender(testKeys(t), nil)
 
-	err := message.Send(t.Context(), subscriptionAt(t, tx, service, "/ellie-phone"), notificationsAreWorking)
+	err := message.Send(t.Context(), subscriptionAt(t, tx, service, "/ellie-phone"), TestNotification("/more/notifications"))
 
 	if !errors.Is(err, ErrRefusedAddress) || errors.Is(err, ErrGone) {
 		t.Fatalf("Send: %v, want ErrRefusedAddress and not ErrGone", err)
