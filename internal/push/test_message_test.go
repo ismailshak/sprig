@@ -87,3 +87,27 @@ func TestTestMessage_ARefusalIsReturnedAndTheBrowserIsKept(t *testing.T) {
 		t.Error("a refused send was recorded as a send")
 	}
 }
+
+func TestTestMessage_ASendRefusedForItsAddressKeepsTheBrowserRow(t *testing.T) {
+	service := newPushService(t, http.StatusCreated)
+	tx := pgtest.Tx(t, migrateSchema)
+	seedRosewood(t, tx, service)
+	message := newTestMessage(t, tx, service)
+	message.sender = NewSender(testKeys(t), nil)
+
+	err := message.Send(t.Context(), subscriptionAt(t, tx, service, "/ellie-phone"), notificationsAreWorking)
+
+	if !errors.Is(err, ErrRefusedAddress) || errors.Is(err, ErrGone) {
+		t.Fatalf("Send: %v, want ErrRefusedAddress and not ErrGone", err)
+	}
+	var remaining int
+	if err := tx.QueryRow(t.Context(), "SELECT count(*) FROM push_subscription WHERE endpoint = $1", service.URL+"/ellie-phone").Scan(&remaining); err != nil {
+		t.Fatal(err)
+	}
+	if remaining != 1 {
+		t.Error("the browser's row was deleted after a send refused for its address")
+	}
+	if _, ok := lastSentAt(t, tx, service, "/ellie-phone"); ok {
+		t.Error("a send refused for its address was recorded as a send")
+	}
+}
