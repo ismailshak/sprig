@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/ismailshak/sprig/internal/auth"
+	"github.com/ismailshak/sprig/internal/push"
 	"github.com/ismailshak/sprig/internal/store"
 )
 
@@ -146,7 +147,7 @@ func (h *invited) accept(w http.ResponseWriter, r *http.Request) {
 		h.templates.serverError(h.logger, w, r, "accept the invite", err)
 		return
 	}
-	h.notify.call(r.Context(), open.row.AppUser, inviteAcceptedNotification(gardenNamed(open.row.AppUser.ID), principal.User, invite.Role))
+	h.notify.call(r.Context(), open.row.AppUser, push.InviteAcceptedNotification(gardenNamed(open.row.AppUser.ID), principal.User, invite.Role, PeoplePath))
 	// The account may already have a subscribed browser, so the new membership
 	// can be due a digest at once. The deadlines job sends when the
 	// membership's end date passes.

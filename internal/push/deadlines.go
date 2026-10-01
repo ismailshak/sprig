@@ -163,38 +163,6 @@ func (d *Deadlines) sendDue(ctx context.Context) (time.Time, error) {
 	return next, nil
 }
 
-// tokenNamed is the token's name followed by its prefix in brackets, the two
-// things the Tokens list shows for it.
-func tokenNamed(token store.APIToken) string {
-	return token.Name + " (" + token.Prefix + "…)"
-}
-
-// tokenExpiringNotification reads "The kitchen display (sprg_7c1f…) in
-// Ellie’s Rosewood expires on 10 Sep." with the date in the recipient's
-// timezone, and opens Tokens.
-func tokenExpiringNotification(garden string, token store.APIToken, loc *time.Location, tokensURL string) Notification {
-	return Notification{Title: "Token expires soon", Body: tokenNamed(token) + " in " + garden + " expires on " + token.ExpiresAt.In(loc).Format("2 Jan") + ".", URL: tokensURL}
-}
-
-// tokenExpiredNotification reads "The kitchen display (sprg_7c1f…) in Ellie’s
-// Rosewood has expired." and opens Tokens.
-func tokenExpiredNotification(garden string, token store.APIToken, tokensURL string) Notification {
-	return Notification{Title: "Token expired", Body: tokenNamed(token) + " in " + garden + " has expired.", URL: tokensURL}
-}
-
-// sittingEndedNotification is what one recipient is told when a sitter's
-// access to a garden ends. The sitter's reads "Your access to Ellie’s Rosewood
-// has ended." and opens nothing, because every page would send them to sign
-// in. The inviter's reads "Sam no longer has access to Rosewood." and opens
-// People. That line avoids two possessives in a row.
-func sittingEndedNotification(row store.ListSittingDeadlinesRow, peopleURL string) Notification {
-	garden := GardenNamed(row.GardenName, row.OwnerName, row.RecipientOwns)
-	if row.IsSitter {
-		return Notification{Title: "Access ended", Body: "Your access to " + garden + " has ended."}
-	}
-	return Notification{Title: "Access ended", Body: row.SitterName + " no longer has access to " + garden + ".", URL: peopleURL}
-}
-
 // sittingKey is the send key of a sitting's notification: the membership id
 // and its end date. A membership renewed past a date already sent for gets a
 // new key, so its next end is sent for too.

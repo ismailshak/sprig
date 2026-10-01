@@ -50,38 +50,6 @@ func gardenNamer(ctx context.Context, queries *store.Queries, garden store.Garde
 	}, nil
 }
 
-// inviteAcceptedNotification is what the person who created an invite gets
-// when it is accepted. It reads "Robin joined Ellie’s Rosewood as a sitter."
-// and opens People.
-func inviteAcceptedNotification(garden string, joined store.AppUser, role string) push.Notification {
-	return push.Notification{Title: "Invite accepted", Body: joined.DisplayName + " joined " + garden + " as a " + role + ".", URL: PeoplePath}
-}
-
-// roleChangedNotification is what a member gets when their role is changed
-// on People. It reads "You’re now a sitter in Ellie’s Rosewood." and opens
-// Today.
-func roleChangedNotification(garden, role string) push.Notification {
-	return push.Notification{Title: "Role changed", Body: "You’re now a " + role + " in " + garden + ".", URL: todayPath}
-}
-
-// membershipRemovedNotification is what a member gets when they are removed
-// on People. It opens nothing, because they can no longer open the garden.
-func membershipRemovedNotification(garden string) push.Notification {
-	return push.Notification{Title: "Removed from a garden", Body: "You’ve been removed from " + garden + "."}
-}
-
-// storageNotification is what the people who can delete any photo get when
-// an upload takes the garden to nearlyFull of the quota. It reads "920 MB of
-// 1 GB used in Rosewood. Delete photos to make room." and opens the photos of
-// the plant the upload was for.
-func storageNotification(garden string, usage photo.Usage, plant store.Plant) push.Notification {
-	return push.Notification{
-		Title: "Photo storage nearly full",
-		Body:  storageFigure(usage.Used) + " of " + storageFigure(usage.Quota) + " used in " + garden + ". Delete photos to make room.",
-		URL:   photosPath(plant.ID),
-	}
-}
-
 // notifyStorage runs after a photo is saved. When the garden's photos have
 // reached nearlyFull of the quota it sends the storage notification to each
 // member whose role can delete any photo. Each member's ledger row is claimed
@@ -127,7 +95,7 @@ func (h *plants) notifyStorage(ctx context.Context, principal auth.Principal, pl
 		if claimed == 0 {
 			continue
 		}
-		h.notify.call(ctx, member.AppUser, storageNotification(gardenNamed(member.AppUser.ID), usage, plant))
+		h.notify.call(ctx, member.AppUser, push.StorageNotification(gardenNamed(member.AppUser.ID), usage, photosPath(plant.ID)))
 	}
 }
 

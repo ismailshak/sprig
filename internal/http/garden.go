@@ -444,11 +444,11 @@ func (h *garden) renderGarden(w http.ResponseWriter, r *http.Request, page garde
 // because 0 MB reads as nothing stored. From nearlyFull of the quota up it
 // adds that deleting photos makes room.
 func storageLine(usage photo.Usage) string {
-	used := storageFigure(usage.Used)
+	used := photo.FormatSize(usage.Used)
 	if usage.Used > 0 && used == "0 MB" {
 		used = "Under 1 MB"
 	}
-	line := used + " of " + storageFigure(usage.Quota) + " of photo storage used."
+	line := used + " of " + photo.FormatSize(usage.Quota) + " of photo storage used."
 	if !nearlyFullReached(usage) {
 		return line
 	}
@@ -464,23 +464,6 @@ func storageUsed(usage photo.Usage) float64 {
 		return 0
 	}
 	return max(0.1, min(100, math.Round(float64(usage.Used)/float64(usage.Quota)*1000)/10))
-}
-
-// storageFigure formats a byte count as whole megabytes, or as gigabytes from
-// 1000 MB up. A gigabyte figure keeps one decimal place unless the number of
-// gigabytes is whole. A megabyte is 1,000,000 bytes here whatever suffix
-// SPRIG_PHOTO_QUOTA was written with, so a quota of 4GiB reads as
-// 4.3 GB, the figure a disk tool shows for the same bytes.
-func storageFigure(bytes int64) string {
-	mb := math.Round(float64(bytes) / 1_000_000)
-	if mb < 1000 {
-		return strconv.FormatFloat(mb, 'f', 0, 64) + " MB"
-	}
-	decimals := 1
-	if math.Mod(mb, 1000) == 0 {
-		decimals = 0
-	}
-	return strconv.FormatFloat(mb/1000, 'f', decimals, 64) + " GB"
 }
 
 // careTypeRows builds the list. The one row edit names is open, and a row

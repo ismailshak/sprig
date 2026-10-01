@@ -20,8 +20,6 @@ var (
 	spareTokenID   = uuid.MustParse("00000000-0000-7000-8000-000000000232")
 )
 
-var kitchenToken = store.APIToken{ID: kitchenTokenID, Name: "The kitchen display", Prefix: "sprg_7c1f", ExpiresAt: utc(2026, time.September, 10, 12, 0, 0)}
-
 // giveToken writes a token of the garden, created by Ellie. A nil revokedAt
 // leaves the token working.
 func giveToken(t *testing.T, db store.DBTX, gardenID, id uuid.UUID, createdAt, expiresAt time.Time, revokedAt *time.Time) {
@@ -493,47 +491,6 @@ func TestListSittingDeadlines_EachRowNamesTheGardensOwnerAndWhetherTheRecipientI
 	want := []string{"sam Rosewood Ellie false", "ellie Rosewood Ellie true", "sam Upstairs Robin false"}
 	if !slices.Equal(got, want) {
 		t.Errorf("the rows are %q, want %q", got, want)
-	}
-}
-
-func TestTokenExpiringNotification_NamesTheTokenByNameAndPrefixWithTheDateInTheRecipientsZone(t *testing.T) {
-	// Noon UTC on the 10th is the small hours of the 11th in Auckland.
-	auckland, err := time.LoadLocation("Pacific/Auckland")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	got := tokenExpiringNotification("Ellie’s Rosewood", kitchenToken, auckland, "https://sprig.example.com/more/tokens")
-
-	want := Notification{Title: "Token expires soon", Body: "The kitchen display (sprg_7c1f…) in Ellie’s Rosewood expires on 11 Sep.", URL: "https://sprig.example.com/more/tokens"}
-	if got != want {
-		t.Errorf("the notification is %+v, want %+v", got, want)
-	}
-}
-
-func TestTokenExpiredNotification_SaysTheTokenHasExpiredAndOpensTokens(t *testing.T) {
-	got := tokenExpiredNotification("Rosewood", kitchenToken, "https://sprig.example.com/more/tokens")
-
-	want := Notification{Title: "Token expired", Body: "The kitchen display (sprg_7c1f…) in Rosewood has expired.", URL: "https://sprig.example.com/more/tokens"}
-	if got != want {
-		t.Errorf("the notification is %+v, want %+v", got, want)
-	}
-}
-
-func TestSittingEndedNotification_TheSittersOpensNothingAndTheInvitersOpensPeople(t *testing.T) {
-	// The inviter here is Ellie, the owner, and the sitter is not.
-	row := store.ListSittingDeadlinesRow{SitterName: "Sam", GardenName: "Rosewood", OwnerName: "Ellie", IsSitter: true}
-	people := "https://sprig.example.com/more/people"
-
-	sitter := sittingEndedNotification(row, people)
-	row.IsSitter, row.RecipientOwns = false, true
-	inviter := sittingEndedNotification(row, people)
-
-	if want := (Notification{Title: "Access ended", Body: "Your access to Ellie’s Rosewood has ended."}); sitter != want {
-		t.Errorf("the sitter's notification is %+v, want %+v", sitter, want)
-	}
-	if want := (Notification{Title: "Access ended", Body: "Sam no longer has access to Rosewood.", URL: people}); inviter != want {
-		t.Errorf("the inviter's notification is %+v, want %+v", inviter, want)
 	}
 }
 

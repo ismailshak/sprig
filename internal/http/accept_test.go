@@ -10,6 +10,7 @@ import (
 	"uuid"
 
 	"github.com/ismailshak/sprig/internal/auth"
+	"github.com/ismailshak/sprig/internal/push"
 	"github.com/ismailshak/sprig/internal/store"
 )
 
@@ -533,7 +534,7 @@ func TestAccept_TheInviterIsToldWhoJoinedAndAsWhat(t *testing.T) {
 
 	f.accept(t, sitterLink, sam)
 
-	want := inviteAcceptedNotification("Rosewood", sam.User, "sitter")
+	want := push.InviteAcceptedNotification("Rosewood", sam.User, "sitter", PeoplePath)
 	if len(*got) != 1 || (*got)[0].user.ID != moreUserID || (*got)[0].n != want {
 		t.Errorf("notified %+v, want Ellie alone, sent %+v", *got, want)
 	}

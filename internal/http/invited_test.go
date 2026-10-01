@@ -14,6 +14,7 @@ import (
 
 	"github.com/ismailshak/sprig/internal/auth"
 	"github.com/ismailshak/sprig/internal/auth/passkeytest"
+	"github.com/ismailshak/sprig/internal/push"
 	"github.com/ismailshak/sprig/internal/store"
 )
 
@@ -822,8 +823,9 @@ func TestInvited_JoiningTellsTheInviterAndWakesTheJobs(t *testing.T) {
 	}
 	// Ellie owns Rosewood, so her notification names the garden without her
 	// own name in front of it.
-	if len(*got) != 1 || (*got)[0].user.ID != moreUserID || (*got)[0].n.Body != "Robin joined Rosewood as a sitter." {
-		t.Errorf("notified %+v, want Ellie told that Robin joined Rosewood as a sitter", *got)
+	want := push.InviteAcceptedNotification("Rosewood", store.AppUser{DisplayName: "Robin"}, "sitter", PeoplePath)
+	if len(*got) != 1 || (*got)[0].user.ID != moreUserID || (*got)[0].n != want {
+		t.Errorf("notified %+v, want Ellie alone, sent %+v", *got, want)
 	}
 	if woken != 1 {
 		t.Errorf("the jobs were woken %d times, want 1: the sitting's end date is an instant the deadlines job sends at", woken)
