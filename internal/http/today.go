@@ -178,10 +178,12 @@ func (h *today) load(ctx context.Context, principal auth.Principal) (gardenDay, 
 	return g, nil
 }
 
-// windows reports whether any care is still inside its grace window.
+// windows reports whether any care in the feed was recorded within the grace
+// window. It reads the feed rather than latest because the Log care sheet on a
+// row can log a care type the plant has no schedule for.
 func (g gardenDay) windows() bool {
-	for _, e := range g.latest {
-		if g.now.Sub(e.RecordedAt) < graceWindow {
+	for _, e := range g.recent {
+		if g.now.Sub(e.CareEvent.RecordedAt) < graceWindow {
 			return true
 		}
 	}
@@ -458,9 +460,10 @@ func newTodayEmpty(principal auth.Principal, day schedule.Day, latest []store.Ca
 	return empty
 }
 
-// caredForOn reports whether any care was performed on now's date in now's
-// timezone. A skip counts, since it dealt with the row as much as a watering
-// did.
+// caredForOn reports whether any event in latest was performed on now's date
+// in now's timezone. latest leaves out care with no schedule because that care
+// never had a row on Today. A skip counts because it clears its row as a
+// watering does.
 func caredForOn(latest []store.CareEvent, now time.Time) bool {
 	y, m, d := now.Date()
 	for _, e := range latest {

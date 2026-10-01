@@ -275,7 +275,7 @@ func TestListCareSchedules_ReturnsEachScheduleWithItsPlantAndCareType(t *testing
 	}
 }
 
-func TestListLatestCareEvents_ReturnsOneRowPerPlantAndCareType(t *testing.T) {
+func TestListLatestCareEvents_ReturnsTheNewestEventOfEachSchedule(t *testing.T) {
 	queries, _ := seedTwoGardens(t)
 
 	events, err := queries.ListLatestCareEvents(t.Context(), testGardenID)
@@ -307,37 +307,63 @@ func TestListLatestCareEvents_ReturnsOneRowPerPlantAndCareType(t *testing.T) {
 	}
 }
 
-// The events query has no joins, so a plant or care type archived after its
-// last event still has a row here. ListCareSchedules excludes both, and the
-// caller pairing the two results drops events it cannot match.
-func TestListLatestCareEvents_KeepsTheEventsOfAnArchivedPlantAndCareType(t *testing.T) {
+func TestListLatestCareEvents_LeavesOutCareThePlantHasNoScheduleFor(t *testing.T) {
 	ctx := t.Context()
 	queries, tx := seedTwoGardens(t)
 
+	// Aloe has no schedules, and Fern has none for feed.
 	_, err := tx.Exec(ctx, `
 		INSERT INTO care_event (garden_id, plant_id, care_type_id, performed_by, performed_at, done) VALUES
 			($1, $2, $3, $4, $5, true),
 			($1, $6, $7, $4, $5, true)`,
-		testGardenID, departedID, waterTypeID, testUserID, lastWatering, fernID, mistTypeID)
+		testGardenID, sprigID, waterTypeID, testUserID, lastWatering, fernID, feedTypeID)
 	if err != nil {
-		t.Fatalf("seeding events on the archived plant and the archived care type: %v", err)
+		t.Fatalf("seeding care with no schedule: %v", err)
 	}
 
 	events, err := queries.ListLatestCareEvents(ctx, testGardenID)
 	if err != nil {
 		t.Fatalf("listing Rosewood's latest events: %v", err)
 	}
-
-	type pair struct{ plant, careType uuid.UUID }
-	got := map[pair]bool{}
 	for _, e := range events {
-		got[pair{e.PlantID, e.CareTypeID}] = true
+		if e.PlantID == sprigID {
+			t.Error("Aloe's watering is listed, and Aloe has no watering schedule")
+		}
+		if e.PlantID == fernID && e.CareTypeID == feedTypeID {
+			t.Error("Fern's feed is listed, and Fern has no feed schedule")
+		}
 	}
-	if !got[pair{departedID, waterTypeID}] {
-		t.Error("the archived plant's last watering is missing")
+}
+
+// Two events can share a performed_at to the minute when one is backdated.
+// The lower id is inserted first, because without a tie-break the query
+// returns the first row inserted.
+func TestListLatestCareEvents_ReturnsTheHigherIDWhenTwoEventsSharePerformedAt(t *testing.T) {
+	ctx := t.Context()
+	queries, tx := seedTwoGardens(t)
+
+	higher := uuid.MustParse("00000000-0000-7000-8000-000000000032")
+	lower := uuid.MustParse("00000000-0000-7000-8000-000000000031")
+	tied := lastWatering.Add(24 * time.Hour)
+	_, err := tx.Exec(ctx, `
+		INSERT INTO care_event (id, garden_id, plant_id, care_type_id, performed_by, performed_at, done) VALUES
+			($2, $3, $4, $5, $6, $7, false),
+			($1, $3, $4, $5, $6, $7, true)`,
+		higher, lower, testGardenID, fernID, waterTypeID, testUserID, tied)
+	if err != nil {
+		t.Fatalf("seeding two waterings at the same time: %v", err)
 	}
-	if !got[pair{fernID, mistTypeID}] {
-		t.Error("the archived care type's last event is missing")
+
+	events, err := queries.ListLatestCareEvents(ctx, testGardenID)
+	if err != nil {
+		t.Fatalf("listing Rosewood's latest events: %v", err)
+	}
+	i := slices.IndexFunc(events, func(e CareEvent) bool { return e.PlantID == fernID && e.CareTypeID == waterTypeID })
+	if i < 0 {
+		t.Fatal("Fern has no latest watering")
+	}
+	if got := events[i].ID; got != higher {
+		t.Errorf("Fern's latest watering is %v, want %v, the higher id of the two at %v", got, higher, tied)
 	}
 }
 

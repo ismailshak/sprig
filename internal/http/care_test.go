@@ -839,6 +839,20 @@ func TestWindow_AClosedGraceWindowRefreshesWhatTheRowsRemovalChanged(t *testing.
 		}
 	})
 
+	t.Run("only the heading while care with no schedule is inside its window", func(t *testing.T) {
+		f := rosewood(t)
+		f.water(t, bigFellaID)
+		f.exec(t, "UPDATE care_event SET recorded_at = recorded_at - interval '1 minute' WHERE plant_id = $1", bigFellaID)
+		// Doris has no feed schedule.
+		f.exec(t, "INSERT INTO care_event (garden_id, plant_id, care_type_id, performed_by, performed_at, recorded_at, done) VALUES ($1, $2, $3, $4, $5, $5, true)",
+			rosewoodID, dorisID, feedID, readerID, thursday)
+
+		body := f.settled(t, rowID(bigFellaID)).Body.String()
+		if readHTML(body).byID("day") != nil {
+			t.Errorf("the response holds #day while a care is inside its grace window:\n%s", body)
+		}
+	})
+
 	t.Run("the whole body once no window is open", func(t *testing.T) {
 		f := rosewood(t)
 		f.water(t, bigFellaID)
