@@ -1,11 +1,27 @@
--- A skip counts as the latest event, so this does not filter on done. Events
--- of archived plants and care types are included, because the caller matches
--- these rows against ListCareSchedules, which already excludes both.
+-- ListLatestCareEvents returns the newest event of each schedule in the
+-- garden, skips included. Care on a plant with no schedule for that care type
+-- is left out.
+--
+-- The lateral subquery reads the (plant_id, care_type_id, performed_at) index
+-- once per schedule. A DISTINCT ON over care_event would read every event in
+-- the garden. id DESC breaks a tie between two events performed in the same
+-- minute, in the order Activity uses.
+--
+-- This is a separate query from ListCareSchedules because sqlc cannot embed a
+-- row that may be NULL.
 -- name: ListLatestCareEvents :many
-SELECT DISTINCT ON (plant_id, care_type_id) *
-FROM care_event
-WHERE garden_id = @garden_id
-ORDER BY plant_id, care_type_id, performed_at DESC;
+SELECT latest.*
+FROM care_schedule
+CROSS JOIN LATERAL (
+  SELECT *
+  FROM care_event
+  WHERE care_event.garden_id = care_schedule.garden_id
+    AND care_event.plant_id = care_schedule.plant_id
+    AND care_event.care_type_id = care_schedule.care_type_id
+  ORDER BY care_event.performed_at DESC, care_event.id DESC
+  LIMIT 1
+) AS latest
+WHERE care_schedule.garden_id = @garden_id;
 
 -- recorded_at comes from the handler's clock rather than now(), so the row and
 -- the handler agree on the time.

@@ -307,11 +307,16 @@ func TestToday_TheEmptyStateDependsOnWhyTheListIsEmpty(t *testing.T) {
 
 	t.Run("a finished day with nothing coming up shows done and names the next care", func(t *testing.T) {
 		f := rosewood(t)
-		for _, plant := range []uuid.UUID{bigFellaID, dorisID, nigelID} {
+		watered := []uuid.UUID{bigFellaID, dorisID, nigelID}
+		for _, plant := range watered {
 			f.water(t, plant)
 		}
-		// Watering Nigel would put his four-day schedule back into Coming up.
-		clearTheWeek(t, f)
+		// The watered plants keep their watering schedules because a watering
+		// counts toward All done for today only while the plant has a schedule
+		// for it. Sixty days puts their next watering after Spike's. The other
+		// schedules due this week are deleted so Coming up is empty.
+		f.exec(t, "UPDATE care_schedule SET interval_count = 60 WHERE plant_id = ANY($1) AND care_type_id = $2", watered, waterID)
+		f.exec(t, "DELETE FROM care_schedule WHERE plant_id = ANY($1) OR care_type_id = $2", []uuid.UUID{trailMixID, opuntiaID, sproutID}, feedID)
 
 		page := readHTML(f.show(t))
 		for _, want := range []string{"All done for today", "Spike is next, in 12 days."} {
