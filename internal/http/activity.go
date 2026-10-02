@@ -313,7 +313,7 @@ func (h *activity) page(ctx context.Context, principal auth.Principal, q logQuer
 	// The select lists every care type, the ones turned off included, because
 	// their events are still in the log. A slug matching none of them is a
 	// 404.
-	types, err := h.queries.ListCareTypesWithEvents(ctx, principal.Garden.ID)
+	types, err := h.queries.ListAllCareTypes(ctx, principal.Garden.ID)
 	if err != nil {
 		return activityPage{}, fmt.Errorf("list the care types: %w", err)
 	}
@@ -325,11 +325,11 @@ func (h *activity) page(ctx context.Context, principal auth.Principal, q logQuer
 		Count: logPageSize + 1,
 	}
 	if q.care != "" {
-		i := slices.IndexFunc(types, func(t store.ListCareTypesWithEventsRow) bool { return t.CareType.Slug == q.care })
+		i := slices.IndexFunc(types, func(t store.CareType) bool { return t.Slug == q.care })
 		if i < 0 {
 			return activityPage{}, errUnknownCare
 		}
-		params.CareTypeID = &types[i].CareType.ID
+		params.CareTypeID = &types[i].ID
 	}
 	params.Since, params.Until = q.span(now.Location())
 	if q.before != nil {
@@ -376,7 +376,7 @@ type logFilters struct {
 
 const everyCareType = "Every care type"
 
-func newLogFilters(q logQuery, types []store.ListCareTypesWithEventsRow, now time.Time) logFilters {
+func newLogFilters(q logQuery, types []store.CareType, now time.Time) logFilters {
 	f := logFilters{Action: activityPath, From: q.from, To: q.to}
 	if q.plant != nil {
 		f.Plant = q.plant.String()
@@ -384,9 +384,9 @@ func newLogFilters(q logQuery, types []store.ListCareTypesWithEventsRow, now tim
 	f.Cares = append(f.Cares, option{Value: "", Label: everyCareType, On: q.care == ""})
 	var parts []string
 	for _, t := range types {
-		f.Cares = append(f.Cares, option{Value: t.CareType.Slug, Label: t.CareType.Name, On: t.CareType.Slug == q.care})
-		if t.CareType.Slug == q.care {
-			parts = append(parts, t.CareType.Name)
+		f.Cares = append(f.Cares, option{Value: t.Slug, Label: t.Name, On: t.Slug == q.care})
+		if t.Slug == q.care {
+			parts = append(parts, t.Name)
 		}
 	}
 	if q.from != "" {

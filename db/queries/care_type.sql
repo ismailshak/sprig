@@ -5,10 +5,16 @@ SELECT * FROM care_type
 WHERE garden_id = @garden_id AND archived_at IS NULL
 ORDER BY created_at, id;
 
--- The only list that includes the types that have been turned off. The Garden
--- page uses the count to decide whether a row offers Turn it off or Delete.
--- The Activity page fills its care filter from the same list, because a type
--- that is off still has events in the log.
+-- ListAllCareTypes lists the garden's care types, the turned-off ones included.
+-- It has no event count, because counting joins every event in the garden.
+-- name: ListAllCareTypes :many
+SELECT * FROM care_type
+WHERE garden_id = @garden_id
+ORDER BY created_at, id;
+
+-- ListCareTypesWithEvents lists the garden's care types, the turned-off ones
+-- included, each with the number of events logged against it. A type with no
+-- events can be deleted. One with events can only be turned off.
 -- name: ListCareTypesWithEvents :many
 SELECT sqlc.embed(care_type), count(care_event.id) AS events
 FROM care_type

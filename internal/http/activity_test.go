@@ -1042,6 +1042,22 @@ func TestActivity_ACareTypeTurnedOffStillFiltersItsEvents(t *testing.T) {
 	}
 }
 
+func TestActivity_ACareTypeTurnedOffIsStillOfferedInTheCareSelect(t *testing.T) {
+	f := rosewoodLog(t)
+	f.exec(t, "UPDATE care_type SET archived_at = now() WHERE id = $1", feedID)
+
+	page := f.get(t, activityPath)
+
+	form := readHTML(page).first(isTag("form"), attrIs("action", activityPath))
+	if form == nil {
+		t.Fatalf("the page has no filter form:\n%s", page)
+	}
+	care := form.first(attrIs("name", "care"))
+	if feed := care.first(isTag("option"), attrIs("value", "feed")); feed.text() != "Feed" {
+		t.Errorf("Care's feed option is %s, want Feed offered", feed)
+	}
+}
+
 func TestActivity_AHistoryRestoreGetsTheInsideOfTheLogAndNotTheElementItself(t *testing.T) {
 	f := rosewoodLog(t)
 	// htmx fetches this for a Back or Forward whose page is no longer in its
