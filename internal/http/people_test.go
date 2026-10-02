@@ -12,6 +12,7 @@ import (
 	"uuid"
 
 	"github.com/ismailshak/sprig/internal/auth"
+	"github.com/ismailshak/sprig/internal/push"
 	"github.com/ismailshak/sprig/internal/store"
 )
 
@@ -743,7 +744,7 @@ func TestPeople_AMemberWhoseRoleChangedIsToldTheNewRole(t *testing.T) {
 
 	// Jo is a sitter already, so their row changed nothing and they are not
 	// told. Sam is not the owner, so the garden is named after Ellie.
-	if len(*got) != 1 || (*got)[0].user.ID != otherUserID || (*got)[0].n != roleChangedNotification("Ellie’s Rosewood", "sitter") {
+	if len(*got) != 1 || (*got)[0].user.ID != otherUserID || (*got)[0].n != push.RoleChangedNotification("Ellie’s Rosewood", "sitter", todayPath) {
 		t.Errorf("notified %+v, want Sam alone, told he is now a sitter in Ellie’s Rosewood", *got)
 	}
 }
@@ -770,7 +771,7 @@ func TestPeople_ARemovedMemberIsToldAndTheNotificationOpensNothing(t *testing.T)
 
 	f.member(t, http.MethodPost, f.handler.removeMember, "sam", removeMemberPath("sam"))
 
-	if len(*got) != 1 || (*got)[0].user.ID != otherUserID || (*got)[0].n != membershipRemovedNotification("Ellie’s Rosewood") {
+	if len(*got) != 1 || (*got)[0].user.ID != otherUserID || (*got)[0].n != push.MemberRemovedNotification("Ellie’s Rosewood") {
 		t.Errorf("notified %+v, want Sam told he was removed from Ellie’s Rosewood", *got)
 	}
 }

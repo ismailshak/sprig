@@ -32,7 +32,7 @@ var (
 	serverErrorText = plainText(serverErrorTitle, serverErrorLine)
 )
 
-var tooLargeLine = "Choose a photo of " + storageFigure(photo.MaxBytes) + " or less."
+var tooLargeLine = "Choose a photo of " + photo.FormatSize(photo.MaxBytes) + " or less."
 
 func plainText(title, line string) string {
 	return title + ". " + line

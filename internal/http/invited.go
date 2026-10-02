@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/ismailshak/sprig/internal/auth"
+	"github.com/ismailshak/sprig/internal/push"
 	"github.com/ismailshak/sprig/internal/store"
 )
 
@@ -406,7 +407,7 @@ func (h *invited) redeem(w http.ResponseWriter, r *http.Request) {
 	}
 	user, passkey, err := h.join(r, open, form)
 	if err == nil {
-		h.notify.call(r.Context(), open.row.AppUser, inviteAcceptedNotification(gardenNamed(open.row.AppUser.ID), user, open.row.Invite.Role))
+		h.notify.call(r.Context(), open.row.AppUser, push.InviteAcceptedNotification(gardenNamed(open.row.AppUser.ID), user, open.row.Invite.Role, PeoplePath))
 		// The deadlines job sends when the new membership's end date passes.
 		h.wake.call()
 	}

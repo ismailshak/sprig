@@ -5,10 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"os"
 	"path"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 	"uuid"
@@ -62,6 +64,21 @@ type Usage struct {
 // or over the quota.
 func (u Usage) Remaining() int64 {
 	return max(u.Quota-u.Used, 0)
+}
+
+// FormatSize formats a byte count as whole megabytes, or as gigabytes from
+// 1000 MB up. It counts 1,000,000 bytes to the megabyte, as a disk tool does,
+// so a SPRIG_PHOTO_QUOTA of 4GiB reads as 4.3 GB.
+func FormatSize(bytes int64) string {
+	mb := math.Round(float64(bytes) / 1_000_000)
+	if mb < 1000 {
+		return strconv.FormatFloat(mb, 'f', 0, 64) + " MB"
+	}
+	decimals := 1
+	if math.Mod(mb, 1000) == 0 {
+		decimals = 0
+	}
+	return strconv.FormatFloat(mb/1000, 'f', decimals, 64) + " GB"
 }
 
 // Usage sums the garden's photo rows, main files and square variants alike.

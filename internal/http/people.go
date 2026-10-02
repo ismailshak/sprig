@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/ismailshak/sprig/internal/auth"
+	"github.com/ismailshak/sprig/internal/push"
 	"github.com/ismailshak/sprig/internal/store"
 )
 
@@ -258,7 +259,7 @@ func (h *people) saveMembers(w http.ResponseWriter, r *http.Request) {
 	ended := false
 	for _, change := range changes {
 		if change.role != "" {
-			h.notify.call(r.Context(), change.user, roleChangedNotification(gardenNamed(change.user.ID), change.role))
+			h.notify.call(r.Context(), change.user, push.RoleChangedNotification(gardenNamed(change.user.ID), change.role, todayPath))
 		}
 		ended = ended || change.ends != nil
 	}
@@ -360,7 +361,7 @@ func (h *people) removeMember(w http.ResponseWriter, r *http.Request) {
 		h.templates.notFound(w, r)
 		return
 	}
-	h.notify.call(r.Context(), member.AppUser, membershipRemovedNotification(gardenNamed(member.AppUser.ID)))
+	h.notify.call(r.Context(), member.AppUser, push.MemberRemovedNotification(gardenNamed(member.AppUser.ID)))
 	h.peopleSaved(w, r, member.AppUser.DisplayName+" removed.")
 }
 
