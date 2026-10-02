@@ -124,6 +124,41 @@ func (q *Queries) GetCareTypeBySlug(ctx context.Context, gardenID uuid.UUID, slu
 	return i, err
 }
 
+const listAllCareTypes = `-- name: ListAllCareTypes :many
+SELECT id, garden_id, name, slug, created_at, archived_at FROM care_type
+WHERE garden_id = $1
+ORDER BY created_at, id
+`
+
+// ListAllCareTypes lists the garden's care types, the turned-off ones included.
+// It has no event count, because counting joins every event in the garden.
+func (q *Queries) ListAllCareTypes(ctx context.Context, gardenID uuid.UUID) ([]CareType, error) {
+	rows, err := q.db.Query(ctx, listAllCareTypes, gardenID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []CareType
+	for rows.Next() {
+		var i CareType
+		if err := rows.Scan(
+			&i.ID,
+			&i.GardenID,
+			&i.Name,
+			&i.Slug,
+			&i.CreatedAt,
+			&i.ArchivedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listCareTypes = `-- name: ListCareTypes :many
 SELECT id, garden_id, name, slug, created_at, archived_at FROM care_type
 WHERE garden_id = $1 AND archived_at IS NULL
@@ -175,10 +210,9 @@ type ListCareTypesWithEventsRow struct {
 	Events   int64
 }
 
-// The only list that includes the types that have been turned off. The Garden
-// page uses the count to decide whether a row offers Turn it off or Delete.
-// The Activity page fills its care filter from the same list, because a type
-// that is off still has events in the log.
+// ListCareTypesWithEvents lists the garden's care types, the turned-off ones
+// included, each with the number of events logged against it. A type with no
+// events can be deleted. One with events can only be turned off.
 func (q *Queries) ListCareTypesWithEvents(ctx context.Context, gardenID uuid.UUID) ([]ListCareTypesWithEventsRow, error) {
 	rows, err := q.db.Query(ctx, listCareTypesWithEvents, gardenID)
 	if err != nil {

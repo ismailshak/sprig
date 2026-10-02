@@ -245,6 +245,23 @@ func TestListCareTypes_OmitsArchivedTypes(t *testing.T) {
 	}
 }
 
+func TestListAllCareTypes_ReturnsTheGardensTypesIncludingTurnedOffOnes(t *testing.T) {
+	queries, _ := seedTwoGardens(t)
+
+	types, err := queries.ListAllCareTypes(t.Context(), testGardenID)
+	if err != nil {
+		t.Fatalf("listing Rosewood's care types: %v", err)
+	}
+
+	got := make([]string, len(types))
+	for i, ct := range types {
+		got[i] = ct.Slug
+	}
+	if want := []string{"water", "feed", "mist"}; !slices.Equal(got, want) {
+		t.Errorf("listed %v, want %v in the order they were created", got, want)
+	}
+}
+
 func TestListCareSchedules_ReturnsEachScheduleWithItsPlantAndCareType(t *testing.T) {
 	queries, _ := seedTwoGardens(t)
 
