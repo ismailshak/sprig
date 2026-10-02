@@ -280,6 +280,23 @@ func TestPeople_ANewDateOnAMembershipThatEndedGivesTheRowItsRoleSelectBack(t *te
 	}
 }
 
+func TestPeople_ARolePostedForAMemberWhoseAccessEndedIsIgnored(t *testing.T) {
+	f := peopleGarden(t)
+	got := captureUserNotifications(&f.handler.notify)
+
+	rec := f.do(t, f.handler.saveMembers, PeoplePath, url.Values{"role.clare": {"member"}})
+
+	if rec.Code != http.StatusSeeOther {
+		t.Errorf("status = %d, want %d:\n%s", rec.Code, http.StatusSeeOther, rec.Body.String())
+	}
+	if role := roleOf(t, f.moreFixture, peopleClareID); role != "sitter" {
+		t.Errorf("Clare's role is %q, and a member whose access has ended has no role select to post from", role)
+	}
+	if len(*got) != 0 {
+		t.Errorf("notified %+v, want nobody", *got)
+	}
+}
+
 func TestPeople_AnEndDatePostedForAPermanentMembershipIsNotWritten(t *testing.T) {
 	f := peopleGarden(t)
 
