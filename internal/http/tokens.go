@@ -114,6 +114,9 @@ func (h *tokens) createToken(w http.ResponseWriter, r *http.Request) {
 
 	name := strings.TrimSpace(r.PostForm.Get("name"))
 	if name == "" {
+		// This replaces the form's hx-swap with one that does not scroll to the
+		// top, so the message under the Name field stays in view.
+		w.Header().Set("HX-Reswap", "outerHTML settle:0ms")
 		page := tokensPage{Name: name, NameError: tokenNameMissing, Lives: lifeOptions(days)}
 		h.renderTokens(w, r, page, http.StatusUnprocessableEntity, tokenNameMissing)
 		return

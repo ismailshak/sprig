@@ -53,7 +53,10 @@
      centres its column. Sign in is the only one so far. */}}
 <div class="{{block "app-class" .}}app{{end}}">
 {{/* The column that scrolls, and the page's main landmark. The Activity
-     page's script keeps its position across Back and Forward. */}}
+     page's script keeps its position across Back and Forward.
+
+     A swap that scrolls to the top of the page uses scroll:#main:top, because
+     show:…:top scrolls its target under the sticky top bar. */}}
 <main class="app__main" id="main">
 {{/* offline.js unhides this line when the service worker serves the page from
      its cache, and fills the time in from the copy's Date header. */}}

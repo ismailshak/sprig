@@ -10,8 +10,9 @@
 
 {{/* The page under the top bar. Create token and each Revoke swap all of it,
      because a new token changes the top of the page, the list and the form,
-     and a revoke changes the list and the note under it. show scrolls the new
-     token into view, since it is above the form that made it. */}}
+     and a revoke changes the list and the note under it. Create token scrolls
+     the page to the top, because the new token renders above the form. An
+     empty name leaves the scroll position where it was. */}}
 {{define "tokens"}}<div class="app__body app__body--sub" id="tokens">
 {{if .Secret}}
 {{template "secret" .Secret}}
@@ -39,7 +40,7 @@
 {{else}}
 <p class="note">No tokens yet.</p>
 {{end}}
-<form class="section" method="post" action="{{.Action}}" novalidate hx-post="{{.Action}}" hx-target="#tokens" hx-swap="outerHTML settle:0ms show:#tokens:top">
+<form class="section" method="post" action="{{.Action}}" novalidate hx-post="{{.Action}}" hx-target="#tokens" hx-swap="outerHTML settle:0ms scroll:#main:top">
 <div class="section__head"><h2 class="section__title">New token</h2></div>
 <div class="field">
 <label class="field__label" for="name">Name <span class="field__hint">e.g. Kitchen display</span></label>

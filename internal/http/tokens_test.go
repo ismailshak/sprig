@@ -275,6 +275,23 @@ func TestTokens_ACreateSentAsASwapGetsThePageUnderTheBarWithTheNewToken(t *testi
 	}
 }
 
+func TestTokens_ACreateSentAsASwapScrollsBackToTheTopOnlyWhenATokenIsCreated(t *testing.T) {
+	f := tokenGarden(t)
+
+	refused := f.swap(t, f.handler.createToken, TokensPath, tokensID, "", "", url.Values{"name": {""}, "expiry": {"30"}})
+	if refused.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want %d", refused.Code, http.StatusUnprocessableEntity)
+	}
+	if got, want := refused.Header().Get("HX-Reswap"), "outerHTML settle:0ms"; got != want {
+		t.Errorf("a refused create sets HX-Reswap to %q, want %q", got, want)
+	}
+
+	created := f.swap(t, f.handler.createToken, TokensPath, tokensID, "", "", url.Values{"name": {"The greenhouse pi"}, "expiry": {"30"}})
+	if got := created.Header().Get("HX-Reswap"); got != "" {
+		t.Errorf("a created token sets HX-Reswap to %q, want none so the form's scroll applies", got)
+	}
+}
+
 func TestTokens_CreatingAndRevokingATokenEachWakeTheJobs(t *testing.T) {
 	f := tokenGarden(t)
 	woken := 0

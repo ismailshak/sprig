@@ -10,7 +10,7 @@
 
      With JavaScript every form and link here swaps the page under the top
      bar, because each changes the list, and a sign-in link adds a box above
-     it. show scrolls that box into view. */}}
+     it. Sign-in link scrolls the page to the top so that box is in view. */}}
 {{define "main"}}
 {{template "more-topbar" .Bar}}
 {{template "people" .}}
@@ -35,7 +35,7 @@
 {{/* The forms a row's own buttons submit. Each is empty apart from its action,
      because the button that submits it is in the row above. */}}
 {{range .Members}}
-{{if .ReenrolForm}}<form id="{{.ReenrolForm}}" method="post" action="{{.Reenrol}}" hx-post="{{.Reenrol}}" hx-target="#people" hx-swap="outerHTML settle:0ms show:#people:top"></form>{{end}}
+{{if .ReenrolForm}}<form id="{{.ReenrolForm}}" method="post" action="{{.Reenrol}}" hx-post="{{.Reenrol}}" hx-target="#people" hx-swap="outerHTML settle:0ms scroll:#main:top"></form>{{end}}
 {{with .Asking}}<form id="{{.Form}}" method="post" action="{{.Action}}" hx-post="{{.Action}}" hx-target="#people" hx-swap="outerHTML settle:0ms"></form>{{end}}
 {{end}}
 </div>
