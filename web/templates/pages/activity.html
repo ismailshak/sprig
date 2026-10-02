@@ -78,8 +78,8 @@
 {{end}}
 {{with .Pager}}
 <div class="pager">
-{{with .Older}}<a class="foot-link" href="{{.}}" hx-get="{{.}}" hx-target="#log-body" hx-swap="outerHTML settle:0ms show:#log:top" hx-push-url="true">Older activity{{template "icon-chevron"}}</a>{{end}}
-{{with .Latest}}<a class="foot-link" href="{{.}}" hx-get="{{.}}" hx-target="#log-body" hx-swap="outerHTML settle:0ms show:#log:top" hx-push-url="true">Latest activity</a>{{end}}
+{{with .Older}}<a class="foot-link" href="{{.}}" hx-get="{{.}}" hx-target="#log-body" hx-swap="outerHTML settle:0ms scroll:#main:top" hx-push-url="true">Older activity{{template "icon-chevron"}}</a>{{end}}
+{{with .Latest}}<a class="foot-link" href="{{.}}" hx-get="{{.}}" hx-target="#log-body" hx-swap="outerHTML settle:0ms scroll:#main:top" hx-push-url="true">Latest activity</a>{{end}}
 </div>
 {{end}}
 {{with .Empty}}
