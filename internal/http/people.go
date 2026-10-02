@@ -221,7 +221,7 @@ func (h *people) saveMembers(w http.ResponseWriter, r *http.Request) {
 		h.templates.serverError(h.logger, w, r, "list the members", err)
 		return
 	}
-	changes, ok := postedChanges(members, principal, r.PostForm)
+	changes, ok := postedChanges(members, principal, r.PostForm, h.now())
 	if !ok {
 		h.templates.badRequest(w, r)
 		return
@@ -291,9 +291,11 @@ type memberChange struct {
 
 // postedChanges reads the role and the end date each member's row posted. It
 // returns false, before anything is written, for a role that is not one the
-// select offers and for a date that will not parse. It walks the members read
-// from the database, so a field name matching no row is ignored.
-func postedChanges(members []store.ListMembersRow, principal auth.Principal, posted url.Values) ([]memberChange, bool) {
+// select offers and for a date that will not parse. A role posted for a member
+// whose access has ended is ignored, because that row has no role select. It
+// walks the members read from the database, so a field name matching no row is
+// ignored.
+func postedChanges(members []store.ListMembersRow, principal auth.Principal, posted url.Values, now time.Time) ([]memberChange, bool) {
 	var changes []memberChange
 	for _, member := range members {
 		// The reader's own row has no select and no date field, so anything
@@ -302,7 +304,7 @@ func postedChanges(members []store.ListMembersRow, principal auth.Principal, pos
 			continue
 		}
 		change := memberChange{user: member.AppUser}
-		if role := posted.Get(roleField(member.AppUser.Handle)); role != "" && role != member.Membership.Role {
+		if role := posted.Get(roleField(member.AppUser.Handle)); role != "" && role != member.Membership.Role && !auth.MembershipEnded(member.Membership, now) {
 			if !slices.Contains(offeredRoles, role) {
 				return nil, false
 			}
