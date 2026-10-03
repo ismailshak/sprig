@@ -29,20 +29,21 @@
 </div>
 </dialog>{{else}}<div id="sheet"></div>{{end}}{{end}}
 
-{{/* Every choice on the form is a radio group, and the stylesheet shows the
-     parts that depend on a choice: the fieldset for the selected outcome,
-     sheet__done or sheet__skipped, and for the selected care type its Remind
-     me in chips and its Log button, each marked sheet__for. Every care type's
-     parts are rendered because the usual interval on the reminder chip is
-     that type's own, and rendering them all is what lets a care type be
-     chosen without a request. The post uses settle:0ms because it replaces a
-     care row. */}}
+{{/* Every choice on the form is a radio group. The stylesheet shows the
+     elements marked sheet__done or sheet__skipped for the selected outcome.
+     The post uses settle:0ms because it replaces a care row.
+
+     A change under Care swaps in the Remind me in chips and the Log button
+     for the chosen care type. The Care chips are not replaced, so focus and
+     arrow-key movement stay on them. hx-sync aborts the request of an
+     earlier change that is still in flight. */}}
 {{define "sheet-form"}}{{with .Sheet}}{{$s := .}}<form class="sheet__form" method="post" action="{{.Path}}"{{with .Target}} hx-post="{{$s.Path}}" hx-target="#{{.}}" hx-swap="outerHTML settle:0ms"{{end}}>
 {{with .Row}}<input type="hidden" name="row" value="{{.}}">{{end}}
 {{with .Over}}<input type="hidden" name="over" value="{{.}}">{{end}}
 {{if gt (len .Cares) 1}}<fieldset class="field">
 <legend class="field__label">Care</legend>
-<div class="chips sheet__cares">{{range .Cares}}<label class="chip"><input type="radio" name="care" value="{{.Value}}"{{if .On}} checked{{end}}>{{.Label}}</label>{{end}}</div>
+<div class="chips" hx-get="{{.Fetch}}" hx-trigger="change" hx-include="closest form" hx-target="#sheet-again" hx-swap="outerHTML settle:0ms" hx-sync="this:replace">{{range .Cares}}<label class="chip"><input type="radio" name="care" value="{{.Value}}"{{if .On}} checked{{end}}>{{.Label}}</label>{{end}}</div>
+{{with .CareError}}<p class="field__error">{{.}}</p>{{end}}
 </fieldset>{{else}}<input type="hidden" name="care" value="{{.Care}}">{{end}}
 <fieldset class="field">
 <legend class="field__label">Outcome</legend>
@@ -58,10 +59,7 @@
 <input class="input input--narrow sheet__at" type="datetime-local" name="at" value="{{.At}}" aria-label="Day and time">
 {{with .WhenError}}<p class="field__error">{{.}}</p>{{end}}
 </fieldset>
-<div class="sheet__skipped">{{range .Cares}}<fieldset class="field sheet__for">
-<legend class="field__label">Remind me in</legend>
-<div class="chips">{{$again := print "again-" .Value}}{{range .Reminders}}<label class="chip"><input type="radio" name="{{$again}}" value="{{.Value}}"{{if .On}} checked{{end}}>{{.Label}}</label>{{end}}</div>
-</fieldset>{{end}}</div>
+{{template "sheet-again" .}}
 <div class="field">
 <label class="field__label" for="sheet-note">Note <span class="field__hint">optional</span></label>
 <input class="input" id="sheet-note" name="note" type="text" placeholder="{{if .Skipped}}Soil still damp{{else}}Add a note{{end}}" value="{{.Note}}">
@@ -77,9 +75,24 @@
 {{with .Delete}}<button class="sheet__delete" formaction="{{.}}" hx-post="{{.}}" hx-target="#{{$s.DeleteTarget}}" hx-swap="outerHTML settle:0ms">Delete</button>{{end}}
 </div>
 {{else}}
-{{/* Every Log button is rendered. The stylesheet shows the one for the
-     selected outcome and care type. */}}
-<div class="sheet__done">{{range .Cares}}<button class="sheet__go sheet__for">Log {{.Noun}}</button>{{end}}</div>
+{{template "sheet-log" .}}
 <button class="sheet__go sheet__skipped">Log skip</button>
 {{end}}
 </form>{{end}}{{end}}
+
+{{/* The Remind me in chips for the selected care type. The hidden shown
+     field holds that care type's slug. A post compares it with care to tell
+     whether these chips and the Log button belong to the care type it names. */}}
+{{define "sheet-again"}}<div class="sheet__skipped" id="sheet-again">
+<input type="hidden" name="shown" value="{{.Care}}">
+<fieldset class="field">
+<legend class="field__label">Remind me in</legend>
+<div class="chips">{{range .Reminders}}<label class="chip"><input type="radio" name="again" value="{{.Value}}"{{if .On}} checked{{end}}>{{.Label}}</label>{{end}}</div>
+</fieldset>
+</div>{{end}}
+
+{{define "sheet-log"}}<button class="sheet__go sheet__done" id="sheet-log"{{if .OOB}} hx-swap-oob="true"{{end}}>Log {{.Noun}}</button>{{end}}
+
+{{/* The response to a change under Care. A correction has no Log button. */}}
+{{define "sheet-care"}}{{with .Sheet}}{{template "sheet-again" .}}{{if not .Correcting}}
+{{template "sheet-log" .}}{{end}}{{end}}{{end}}

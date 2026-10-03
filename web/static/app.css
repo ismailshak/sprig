@@ -755,24 +755,6 @@ legend.field__label + * { clear: both; }
    time is chosen. */
 .sheet__form:not(:has([name="when"][value="time"]:checked)) .sheet__remind-at { display: none; }
 
-/* The Care chips decide which Remind me in chips and which Log button show.
-   Each care type's are the nth sheet__for in their box, where its chip is the
-   nth under Care. CSS can pair the checked chip with its box only by position,
-   so there is one line per position. A garden with more than 12 care types
-   shows every care type's. */
-.sheet__form:has(.sheet__cares > :nth-child(1) > :checked) .sheet__for:not(:nth-child(1)),
-.sheet__form:has(.sheet__cares > :nth-child(2) > :checked) .sheet__for:not(:nth-child(2)),
-.sheet__form:has(.sheet__cares > :nth-child(3) > :checked) .sheet__for:not(:nth-child(3)),
-.sheet__form:has(.sheet__cares > :nth-child(4) > :checked) .sheet__for:not(:nth-child(4)),
-.sheet__form:has(.sheet__cares > :nth-child(5) > :checked) .sheet__for:not(:nth-child(5)),
-.sheet__form:has(.sheet__cares > :nth-child(6) > :checked) .sheet__for:not(:nth-child(6)),
-.sheet__form:has(.sheet__cares > :nth-child(7) > :checked) .sheet__for:not(:nth-child(7)),
-.sheet__form:has(.sheet__cares > :nth-child(8) > :checked) .sheet__for:not(:nth-child(8)),
-.sheet__form:has(.sheet__cares > :nth-child(9) > :checked) .sheet__for:not(:nth-child(9)),
-.sheet__form:has(.sheet__cares > :nth-child(10) > :checked) .sheet__for:not(:nth-child(10)),
-.sheet__form:has(.sheet__cares > :nth-child(11) > :checked) .sheet__for:not(:nth-child(11)),
-.sheet__form:has(.sheet__cares > :nth-child(12) > :checked) .sheet__for:not(:nth-child(12)) { display: none; }
-
 /* ================================================================== desktop */
 
 /* The tab bar becomes a rail. Same markup, same items, same order. A tab that

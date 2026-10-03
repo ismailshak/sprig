@@ -139,16 +139,17 @@ func checkedValue(fieldset *element) string {
 	return fieldset.first(isTag("input"), hasAttr("checked")).attr("value")
 }
 
-// remindMeIn returns the Remind me in fieldset for one care type. The form
-// holds one for every care type it offers and the stylesheet shows the chosen
-// type's.
-func remindMeIn(sheet *element, care string) *element {
-	for _, fieldset := range sheet.all(isTag("fieldset")) {
-		if fieldset.first(attrIs("name", againField(care))) != nil {
-			return fieldset
-		}
-	}
-	return nil
+// careChange requests the sheet the way a change under Care does: an htmx GET
+// targeting the Remind me in chips, with the form's fields in the query.
+func (f *todayFixture) careChange(t *testing.T, plantID uuid.UUID, form url.Values) *httptest.ResponseRecorder {
+	t.Helper()
+
+	req := f.sheetRequest(t, logPath(plantID)+"?"+form.Encode())
+	req.Header.Set("HX-Request", "true")
+	req.Header.Set("HX-Target", sheetAgainID)
+	rec := httptest.NewRecorder()
+	f.handler.sheet(rec, req)
+	return rec
 }
 
 func TestSheet_OpensOnTheCareOfTheRowItWasOpenedFrom(t *testing.T) {
@@ -189,14 +190,24 @@ func TestSheet_OpensOnTheCareOfTheRowItWasOpenedFrom(t *testing.T) {
 	if got := checkedValue(by["When"]); got != "now" {
 		t.Errorf("When starts on %q, want now", got)
 	}
-	if got := chipLabels(remindMeIn(sheet, "water")); strings.Join(got, "|") != "1 day|2 days|3 days|4 days (usual)" {
+	if got := chipLabels(sheetFields(sheet)["Remind me in"]); strings.Join(got, "|") != "1 day|2 days|3 days|4 days (usual)" {
 		t.Errorf("Remind me in offers %v, want three short re-checks and Nigel's own four days", got)
 	}
-	if got := checkedValue(remindMeIn(sheet, "water")); got != "2" {
+	if got := checkedValue(sheetFields(sheet)["Remind me in"]); got != "2" {
 		t.Errorf("Remind me in starts on %q days, want 2", got)
 	}
 	if sheet.first(isTag("button"), textIs("Log watering")) == nil {
 		t.Error("the sheet has no Log watering button")
+	}
+	if sheet.first(isTag("button"), textIs("Log feeding")) != nil {
+		t.Error("the sheet has a Log feeding button while watering is chosen")
+	}
+	cares := by["Care"].first(hasAttr("hx-get"))
+	if cares.attr("hx-get") != logPath(nigelID) || cares.attr("hx-target") != "#"+sheetAgainID || cares.attr("hx-trigger") != "change" {
+		t.Errorf("a change under Care sends %q to %q, want a GET for the sheet targeting the Remind me in chips", cares.attr("hx-get"), cares.attr("hx-target"))
+	}
+	if got := sheet.first(attrIs("name", "shown")).attr("value"); got != "water" {
+		t.Errorf("the shown field holds %q, want water", got)
 	}
 	if got := sheet.first(isTag("form"), hasAttr("hx-post")).attr("hx-target"); got != "#"+rowID(nigelID) {
 		t.Errorf("the post targets %q, want the row the sheet was opened from", got)
@@ -218,21 +229,58 @@ func TestSheet_APlantWithOneCareHasNoCareTypeChoice(t *testing.T) {
 	}
 }
 
-func TestSheet_HoldsEveryCareTypesReminderChipsAndLogButton(t *testing.T) {
+func TestSheet_ACareChangeGetsThatCaresReminderChipsAndLogButton(t *testing.T) {
 	f := rosewood(t)
-	sheet := sheetIn(f.sheet(t, sheetPath(nigelID, "water"), false).Body.String())
+	rec := f.careChange(t, nigelID, url.Values{"row": {"water"}, "care": {"feed"}, "shown": {"water"}, "outcome": {"skipped"}, "when": {"now"}, "again": {"3"}})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d:\n%s", rec.Code, rec.Body.String())
+	}
+	doc := readHTML(rec.Body.String())
+	if doc.first(isTag("dialog")) != nil {
+		t.Errorf("the response holds the whole dialog, want the Remind me in chips and the Log button:\n%s", rec.Body.String())
+	}
 
-	if got := chipLabels(remindMeIn(sheet, "feed")); strings.Join(got, "|") != "1 day|2 days|3 days|21 days (usual)" {
-		t.Errorf("Remind me in for feeding offers %v, want its three weeks as the usual", got)
+	again := doc.byID(sheetAgainID)
+	if again == nil {
+		t.Fatalf("the response has no element with the Remind me in chips' id:\n%s", rec.Body.String())
 	}
-	if got := checkedValue(remindMeIn(sheet, "feed")); got != "2" {
-		t.Errorf("Remind me in for feeding starts on %q days, want 2", got)
+	if got := chipLabels(again); strings.Join(got, "|") != "1 day|2 days|3 days|21 days (usual)" {
+		t.Errorf("Remind me in offers %v, want feeding's three weeks as the usual", got)
 	}
-	if sheet.first(isTag("button"), textIs("Log feeding")) == nil {
-		t.Error("there is no Log feeding button for the stylesheet to show")
+	if got := checkedValue(again); got != "3" {
+		t.Errorf("Remind me in has %q days checked, want the 3 the form sent", got)
 	}
-	if sheet.first(isTag("button"), textIs("Log skip")) == nil {
-		t.Error("there is no Log skip button")
+	if got := again.first(attrIs("name", "shown")).attr("value"); got != "feed" {
+		t.Errorf("the shown field holds %q, want feed", got)
+	}
+	button := doc.byID(sheetLogID)
+	if button.text() != "Log feeding" || button.attr("hx-swap-oob") != "true" {
+		t.Errorf("the Log button reads %q with hx-swap-oob %q, want Log feeding swapped out of band", button.text(), button.attr("hx-swap-oob"))
+	}
+}
+
+func TestSheet_ACareChangeFromAUsualIntervalTheNewCareDoesNotOfferChecksTwoDays(t *testing.T) {
+	f := rosewood(t)
+	// Four days is Nigel's usual watering. Feeding's chips are 1, 2, 3 and 21.
+	rec := f.careChange(t, nigelID, url.Values{"row": {"water"}, "care": {"feed"}, "shown": {"water"}, "outcome": {"skipped"}, "when": {"now"}, "again": {"4"}})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d:\n%s", rec.Code, rec.Body.String())
+	}
+	if got := checkedValue(readHTML(rec.Body.String()).byID(sheetAgainID)); got != "2" {
+		t.Errorf("Remind me in has %q days checked, want 2", got)
+	}
+}
+
+func TestSheet_ACareChangeOnThePlantPageReturnsTheLogButtonForACareThePlantHasNoScheduleFor(t *testing.T) {
+	f := rosewood(t)
+	// Doris is scheduled for watering alone. The plant's page offers every care
+	// type in the garden.
+	rec := f.careChange(t, dorisID, url.Values{"over": {overPlant}, "care": {"feed"}, "outcome": {"done"}, "when": {"now"}})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d:\n%s", rec.Code, rec.Body.String())
+	}
+	if got := readHTML(rec.Body.String()).byID(sheetLogID).text(); got != "Log feeding" {
+		t.Errorf("the Log button reads %q, want Log feeding", got)
 	}
 }
 
@@ -240,13 +288,13 @@ func TestSheet_ACareWithNoIntervalInDaysOffersSevenDays(t *testing.T) {
 	f := rosewood(t)
 	f.exec(t, "UPDATE care_schedule SET interval_count = 1, interval_unit = 'month' WHERE plant_id = $1", spikeID)
 	sheet := sheetIn(f.sheet(t, sheetPath(spikeID, "water"), false).Body.String())
-	if got := chipLabels(remindMeIn(sheet, "water")); strings.Join(got, "|") != "1 day|2 days|3 days|7 days" {
+	if got := chipLabels(sheetFields(sheet)["Remind me in"]); strings.Join(got, "|") != "1 day|2 days|3 days|7 days" {
 		t.Errorf("Remind me in offers %v, want a plain week where a month is not a number of days", got)
 	}
 
 	f.exec(t, "UPDATE care_schedule SET interval_count = 2, interval_unit = 'day' WHERE plant_id = $1", spikeID)
 	sheet = sheetIn(f.sheet(t, sheetPath(spikeID, "water"), false).Body.String())
-	if got := chipLabels(remindMeIn(sheet, "water")); strings.Join(got, "|") != "1 day|2 days (usual)|3 days" {
+	if got := chipLabels(sheetFields(sheet)["Remind me in"]); strings.Join(got, "|") != "1 day|2 days (usual)|3 days" {
 		t.Errorf("Remind me in offers %v, want the usual to take the short chip's place", got)
 	}
 }
@@ -472,10 +520,74 @@ func TestLog_ATimeInTheFutureIsRefused(t *testing.T) {
 	})
 }
 
+func TestLog_APostWhoseCareDiffersFromItsShownFieldIsRefusedWithThePostedCaresChips(t *testing.T) {
+	for _, outcome := range []string{"done", "skipped"} {
+		t.Run(outcome, func(t *testing.T) {
+			f := rosewood(t)
+			rec := f.post(t, nigelID.String(), url.Values{"row": {"water"}, "care": {"feed"}, "shown": {"water"}, "outcome": {outcome}, "again": {"4"}, "note": {"Half strength"}}, true)
+			if rec.Code != http.StatusUnprocessableEntity {
+				t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusUnprocessableEntity, rec.Body.String())
+			}
+			if rec.Header().Get("HX-Retarget") != "#sheet" {
+				t.Error("the response is not aimed back at the sheet")
+			}
+			if n := len(f.events(t, nigelID)); n != 1 {
+				t.Errorf("the plant has %d events, want the post to have written none", n)
+			}
+			sheet := sheetIn(rec.Body.String())
+			by := sheetFields(sheet)
+			if !strings.Contains(by["Care"].text(), "Not logged yet. Check the options below for feeding.") {
+				t.Errorf("the sheet does not say what happened under Care:\n%s", text(rec.Body.String()))
+			}
+			if got := checkedValue(by["Care"]); got != "feed" {
+				t.Errorf("Care came back on %q, want feed", got)
+			}
+			if got := checkedValue(by["Outcome"]); got != outcome {
+				t.Errorf("Outcome came back on %q, want %q", got, outcome)
+			}
+			if got := chipLabels(by["Remind me in"]); strings.Join(got, "|") != "1 day|2 days|3 days|21 days (usual)" {
+				t.Errorf("Remind me in offers %v, want feeding's chips", got)
+			}
+			if got := sheet.first(attrIs("name", "note")).attr("value"); got != "Half strength" {
+				t.Errorf("the note came back as %q", got)
+			}
+			if sheet.first(isTag("button"), textIs("Log feeding")) == nil {
+				t.Error("the sheet has no Log feeding button")
+			}
+		})
+	}
+
+	t.Run("a post whose care matches its shown field is logged", func(t *testing.T) {
+		f := rosewood(t)
+		rec := f.post(t, nigelID.String(), url.Values{"row": {"water"}, "care": {"feed"}, "shown": {"feed"}}, true)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d:\n%s", rec.Code, rec.Body.String())
+		}
+		if e := f.latest(t, nigelID); e.CareTypeID != feedID {
+			t.Error("the event is not a feed")
+		}
+	})
+
+	t.Run("a form post on the plant page gets the whole page", func(t *testing.T) {
+		f := rosewood(t)
+		rec := f.post(t, dorisID.String(), url.Values{"over": {overPlant}, "care": {"feed"}, "shown": {"water"}}, false)
+		if rec.Code != http.StatusUnprocessableEntity {
+			t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusUnprocessableEntity, rec.Body.String())
+		}
+		page := readHTML(rec.Body.String())
+		if page.first(isTag("html")) == nil || page.byID("sheet").first(isTag("button"), textIs("Log feeding")) == nil {
+			t.Errorf("the response is not the plant's page with the sheet on feeding:\n%.300s", rec.Body.String())
+		}
+		if n := len(f.events(t, dorisID)); n != 1 {
+			t.Errorf("the plant has %d events, want the post to have written none", n)
+		}
+	})
+}
+
 func TestLog_ASkipStoresTheOverrideIntervalInDays(t *testing.T) {
 	t.Run("a one to three day interval", func(t *testing.T) {
 		f := rosewood(t)
-		rec := f.post(t, nigelID.String(), url.Values{"row": {"water"}, "care": {"water"}, "outcome": {"skipped"}, "again-water": {"2"}, "note": {"  Soil still damp "}}, true)
+		rec := f.post(t, nigelID.String(), url.Values{"row": {"water"}, "care": {"water"}, "outcome": {"skipped"}, "again": {"2"}, "note": {"  Soil still damp "}}, true)
 		if rec.Code != http.StatusOK {
 			t.Fatalf("status = %d:\n%s", rec.Code, rec.Body.String())
 		}
@@ -493,7 +605,7 @@ func TestLog_ASkipStoresTheOverrideIntervalInDays(t *testing.T) {
 
 	t.Run("the usual interval", func(t *testing.T) {
 		f := rosewood(t)
-		f.post(t, nigelID.String(), url.Values{"care": {"water"}, "outcome": {"skipped"}, "again-water": {"4"}}, true)
+		f.post(t, nigelID.String(), url.Values{"care": {"water"}, "outcome": {"skipped"}, "again": {"4"}}, true)
 		if e := f.latest(t, nigelID); *e.OverrideIntervalDays != 4 {
 			t.Errorf("the override is %d, want Nigel's own 4", *e.OverrideIntervalDays)
 		}
@@ -501,7 +613,7 @@ func TestLog_ASkipStoresTheOverrideIntervalInDays(t *testing.T) {
 
 	t.Run("the usual interval of the selected care, not the row's", func(t *testing.T) {
 		f := rosewood(t)
-		f.post(t, nigelID.String(), url.Values{"row": {"water"}, "care": {"feed"}, "outcome": {"skipped"}, "again-feed": {"21"}}, true)
+		f.post(t, nigelID.String(), url.Values{"row": {"water"}, "care": {"feed"}, "outcome": {"skipped"}, "again": {"21"}}, true)
 		if e := f.latest(t, nigelID); *e.OverrideIntervalDays != 21 || e.CareTypeID != feedID {
 			t.Errorf("the event is %+v, want a feed skipped for its own three weeks", e)
 		}
@@ -512,7 +624,7 @@ func TestLog_ASkipStoresTheOverrideIntervalInDays(t *testing.T) {
 	for _, again := range []string{"0", "-1", "5", "4.5", "usual"} {
 		t.Run("an interval the chips did not offer, "+again, func(t *testing.T) {
 			f := rosewood(t)
-			rec := f.post(t, nigelID.String(), url.Values{"care": {"water"}, "outcome": {"skipped"}, "again-water": {again}}, true)
+			rec := f.post(t, nigelID.String(), url.Values{"care": {"water"}, "outcome": {"skipped"}, "again": {again}}, true)
 			if rec.Code != http.StatusBadRequest {
 				t.Errorf("again=%s got %d, want %d", again, rec.Code, http.StatusBadRequest)
 			}
@@ -524,7 +636,7 @@ func TestLog_ASkipStoresTheOverrideIntervalInDays(t *testing.T) {
 
 	t.Run("a done care stores no override whatever chip was selected", func(t *testing.T) {
 		f := rosewood(t)
-		f.post(t, nigelID.String(), url.Values{"care": {"water"}, "outcome": {"done"}, "again-water": {"3"}}, true)
+		f.post(t, nigelID.String(), url.Values{"care": {"water"}, "outcome": {"done"}, "again": {"3"}}, true)
 		if e := f.latest(t, nigelID); !e.Done || e.OverrideIntervalDays != nil {
 			t.Errorf("the event is %+v", e)
 		}
@@ -658,7 +770,7 @@ func TestLog_TheSwapSaysWhatWasLoggedWhatIsLeftAndWhereUndoIs(t *testing.T) {
 func TestLog_ASkipIsAnnouncedAsSkipped(t *testing.T) {
 	f := rosewood(t)
 
-	rec := f.post(t, dorisID.String(), url.Values{"row": {"water"}, "care": {"water"}, "outcome": {"skipped"}, "again-water": {"2"}}, true)
+	rec := f.post(t, dorisID.String(), url.Values{"row": {"water"}, "care": {"water"}, "outcome": {"skipped"}, "again": {"2"}}, true)
 
 	want := "You skipped Doris. 2 plants due today, 1 of them overdue. Undo from the row now, or from Activity later."
 	if got := announcement(rec.Body.String()); got != want {
@@ -994,7 +1106,7 @@ func TestLog_ASkipIsNotifiedAsSkipped(t *testing.T) {
 	f := rosewood(t)
 	got := f.captureNotifications()
 
-	f.post(t, nigelID.String(), url.Values{"row": {"water"}, "care": {"feed"}, "outcome": {"skipped"}, "again-feed": {"3"}}, true)
+	f.post(t, nigelID.String(), url.Values{"row": {"water"}, "care": {"feed"}, "outcome": {"skipped"}, "again": {"3"}}, true)
 
 	if len(*got) != 1 || (*got)[0].n.Body != "Ellie skipped feeding Nigel." {
 		t.Errorf("notified %+v, want one notification saying Ellie skipped feeding Nigel.", *got)
