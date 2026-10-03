@@ -68,13 +68,24 @@ func (f *logFixture) eventRequest(t *testing.T, method, target string, plantID, 
 	return req
 }
 
-// openSheet requests the correcting sheet. Any extra query values are the ones
-// a chip under Care resubmits the form with.
 func (f *logFixture) openSheet(t *testing.T, plantID, eventID uuid.UUID, q logQuery, htmx bool) *httptest.ResponseRecorder {
 	t.Helper()
 
 	rec := httptest.NewRecorder()
 	f.handler.correct(rec, f.eventRequest(t, http.MethodGet, eventPath(plantID, eventID, "", q), plantID, eventID, nil, htmx))
+	return rec
+}
+
+// careChange requests the correcting sheet the way a change under Care does: an
+// htmx GET targeting the Remind me in chips, with the form's fields in the
+// query and no Activity filter.
+func (f *logFixture) careChange(t *testing.T, plantID, eventID uuid.UUID, form url.Values) *httptest.ResponseRecorder {
+	t.Helper()
+
+	req := f.eventRequest(t, http.MethodGet, eventPath(plantID, eventID, "", logQuery{})+"?"+form.Encode(), plantID, eventID, nil, true)
+	req.Header.Set("HX-Target", sheetAgainID)
+	rec := httptest.NewRecorder()
+	f.handler.correct(rec, req)
 	return rec
 }
 
@@ -127,12 +138,6 @@ func correctionSheet(body string) *element {
 // legend.
 func legendFieldset(sheet *element, legend string) *element {
 	return sheet.first(isTag("fieldset"), func(e *element) bool { return e.first(isTag("legend")).text() == legend })
-}
-
-// againFieldset returns the Remind me in fieldset for one care type. The sheet
-// holds one for every care type it offers.
-func againFieldset(sheet *element, care string) *element {
-	return sheet.first(isTag("fieldset"), func(e *element) bool { return e.first(attrIs("name", againField(care))) != nil })
 }
 
 // labelTexts returns the text of each label in a fieldset, in page order. On
@@ -226,6 +231,71 @@ func TestCorrect_TheSheetsFormPostsToAURLThatKeepsTheLogsFilter(t *testing.T) {
 	}
 }
 
+func TestCorrect_ACareChangeSendsNoActivityFilter(t *testing.T) {
+	f := rosewoodCorrections(t)
+	q := logQuery{plant: &nigelID, care: "feed"}
+	sheet := correctionSheet(f.openSheet(t, nigelID, f.eventID(t, nigelID), q, false).Body.String())
+
+	fetch := legendFieldset(sheet, "Care").first(hasAttr("hx-get")).attr("hx-get")
+	if fetch != eventPath(nigelID, f.eventID(t, nigelID), "", logQuery{}) {
+		t.Errorf("a change under Care sends its GET to %q, want the event's URL with no filter, whose care would be read as the sheet's", fetch)
+	}
+}
+
+func TestCorrect_ACareChangeGetsThatCaresReminderChipsAndNoLogButton(t *testing.T) {
+	f := rosewoodCorrections(t)
+	// Doris's event is a watering skipped for two days. The form now says feed,
+	// skipped for three.
+	rec := f.careChange(t, dorisID, f.eventID(t, dorisID), url.Values{"care": {"feed"}, "shown": {"water"}, "outcome": {"skipped"}, "when": {"today"}, "time": {"07:00"}, "again": {"3"}})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d:\n%s", rec.Code, rec.Body.String())
+	}
+	doc := readHTML(rec.Body.String())
+	again := doc.byID(sheetAgainID)
+	if again == nil {
+		t.Fatalf("the response has no element with the Remind me in chips' id:\n%s", rec.Body.String())
+	}
+	if got := labelTexts(again); strings.Join(got, "|") != "1 day|2 days|3 days|7 days" {
+		t.Errorf("Remind me in offers %v, want feeding's chips, with a week where Doris has no feeding schedule", got)
+	}
+	if got := checkedLabel(again); got != "3 days" {
+		t.Errorf("Remind me in is %q, want the three days the form sent rather than the event's two", got)
+	}
+	if doc.byID(sheetLogID) != nil {
+		t.Error("the response holds a Log button, and the correcting sheet has none")
+	}
+}
+
+func TestCorrect_ASaveWhoseCareDiffersFromItsShownField(t *testing.T) {
+	t.Run("a skip renders the sheet again for that care", func(t *testing.T) {
+		f := rosewoodCorrections(t)
+		rec := f.save(t, dorisID, f.eventID(t, dorisID), logQuery{}, url.Values{
+			"care": {"feed"}, "shown": {"water"}, "outcome": {"skipped"}, "when": {"today"}, "time": {"07:00"}, "again": {"2"},
+		}, true)
+		if rec.Code != http.StatusUnprocessableEntity {
+			t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusUnprocessableEntity, rec.Body.String())
+		}
+		sheet := correctionSheet(rec.Body.String())
+		if !strings.Contains(legendFieldset(sheet, "Care").text(), "Not saved yet. Check the options below for feeding.") {
+			t.Errorf("the sheet does not say what happened under Care:\n%s", text(rec.Body.String()))
+		}
+		var water bool
+		if err := f.tx.QueryRow(t.Context(), "SELECT ct.slug = 'water' FROM care_event e JOIN care_type ct ON ct.id = e.care_type_id WHERE e.plant_id = $1", dorisID).Scan(&water); err != nil || !water {
+			t.Errorf("the event is no longer a watering, want the refused save to have changed nothing (err %v)", err)
+		}
+	})
+
+	t.Run("a done care is saved", func(t *testing.T) {
+		f := rosewoodCorrections(t)
+		rec := f.save(t, bigFellaID, f.eventID(t, bigFellaID), logQuery{}, url.Values{
+			"care": {"feed"}, "shown": {"water"}, "outcome": {"done"}, "when": {"today"}, "time": {"07:30"},
+		}, false)
+		if rec.Code != http.StatusSeeOther {
+			t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusSeeOther, rec.Body.String())
+		}
+	})
+}
+
 func TestCorrect_ASkipShowsTheIntervalItWasLoggedWith(t *testing.T) {
 	f := rosewoodCorrections(t)
 	// Doris was skipped for two days, and is watered every 21.
@@ -234,7 +304,7 @@ func TestCorrect_ASkipShowsTheIntervalItWasLoggedWith(t *testing.T) {
 	if got := checkedLabel(legendFieldset(sheet, "Outcome")); got != "Skipped" {
 		t.Errorf("Outcome is %q, want Skipped", got)
 	}
-	if got := checkedLabel(againFieldset(sheet, "water")); got != "2 days" {
+	if got := checkedLabel(legendFieldset(sheet, "Remind me in")); got != "2 days" {
 		t.Errorf("Remind me in is %q, want the two days the skip was recorded with", got)
 	}
 }
@@ -246,10 +316,10 @@ func TestCorrect_AnIntervalTheScheduleNoLongerOffersIsStillOnTheSheet(t *testing
 	f.exec(t, "UPDATE care_event SET override_interval_days = 5 WHERE plant_id = $1", dorisID)
 	sheet := correctionSheet(f.openSheet(t, dorisID, f.eventID(t, dorisID), logQuery{}, false).Body.String())
 
-	if got := labelTexts(againFieldset(sheet, "water")); strings.Join(got, "|") != "1 day|2 days|3 days|5 days|21 days (usual)" {
+	if got := labelTexts(legendFieldset(sheet, "Remind me in")); strings.Join(got, "|") != "1 day|2 days|3 days|5 days|21 days (usual)" {
 		t.Errorf("Remind me in offers %v, want the five days the skip holds among the chips", got)
 	}
-	if got := checkedLabel(againFieldset(sheet, "water")); got != "5 days" {
+	if got := checkedLabel(legendFieldset(sheet, "Remind me in")); got != "5 days" {
 		t.Errorf("Remind me in is %q, want the five days the skip holds", got)
 	}
 }

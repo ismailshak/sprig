@@ -23,6 +23,14 @@ import (
 // placeholder it swaps with. A request targeting it asks for the sheet alone.
 const sheetID = "sheet"
 
+// sheetAgainID is the HTML id of the element holding the Remind me in chips. A
+// change under Care targets it.
+const sheetAgainID = "sheet-again"
+
+// sheetLogID is the HTML id of the Log button. The response to a change under
+// Care swaps it out of band.
+const sheetLogID = "sheet-log"
+
 const (
 	whenNow       = "now"
 	whenToday     = "today"
@@ -80,7 +88,11 @@ type draft struct {
 	Over string
 	// Care is the slug of the care type selected under Care, the one the post
 	// logs.
-	Care    string
+	Care string
+	// Shown is the slug of the care type the form's Remind me in chips and Log
+	// button were rendered for. Without JavaScript it differs from Care after
+	// another care type is chosen.
+	Shown   string
 	Skipped bool
 	When    string
 	Clock   string
@@ -91,19 +103,17 @@ type draft struct {
 
 // readDraft fills a draft from a query string or a posted form. It returns
 // false for a value the sheet never offers: an unknown "over", an unknown
-// outcome, a When not in the chips, or a reminder that is not a number. The
-// reminder is read from the field named after the care, "again-water", because
-// every care type's Remind me in chips are in the form and only the chosen
-// type's are shown.
+// outcome, a When not in the chips, or a reminder that is not a number.
 func readDraft(values url.Values) (draft, bool) {
 	d := draft{
 		Row:   values.Get("row"),
 		Over:  values.Get("over"),
 		Care:  values.Get("care"),
+		Shown: values.Get("shown"),
 		When:  values.Get("when"),
 		Clock: values.Get("time"),
 		At:    values.Get("at"),
-		Again: 2,
+		Again: defaultReminderDays,
 		Note:  strings.TrimSpace(values.Get("note")),
 	}
 	if d.Care == "" {
@@ -129,7 +139,7 @@ func readDraft(values url.Values) (draft, bool) {
 	if !chipsHave(whens, d.When) {
 		return d, false
 	}
-	if again := values.Get(againField(d.Care)); again != "" {
+	if again := values.Get("again"); again != "" {
 		n, err := strconv.ParseInt(again, 10, 32)
 		if err != nil {
 			return d, false
@@ -148,6 +158,12 @@ func (r whenRefused) Error() string { return string(r) }
 // errNotOffered is returned when a post names a skip interval that was not one
 // of the chips the sheet rendered.
 var errNotOffered = errors.New("the sheet did not offer that")
+
+// careChanged is the error for a post whose care differs from its shown field.
+// Its text is shown under the Care chips.
+type careChanged string
+
+func (c careChanged) Error() string { return string(c) }
 
 // performedAt returns the time the draft says the care happened. A time that
 // does not parse, or one later than now, returns a whenRefused, because the
@@ -185,25 +201,6 @@ type chip struct {
 	Value string
 	Label string
 	On    bool
-}
-
-// careOption is one care type the sheet offers: its chip under Care and the
-// two parts of the form that depend on it. The template renders every option's
-// parts and the stylesheet shows the chosen one's.
-type careOption struct {
-	chip
-	// Noun is the care type as a noun, such as "watering", for the Log button.
-	Noun string
-	// Reminders is the Remind me in chips for this care type, under the field
-	// name againField gives.
-	Reminders []chip
-}
-
-// againField is the name of the Remind me in field for one care type. Each
-// type's chips are their own radio group, so choosing another care type does
-// not clear the choice made under this one.
-func againField(care string) string {
-	return "again-" + care
 }
 
 func chipsHave(chips []chip, value string) bool {
@@ -258,9 +255,11 @@ type sheet struct {
 	Over   string
 	Label  string
 	Plant  sheetPlant
-	// Cares is one option per care type the sheet offers. The template renders
+	// Cares is one chip per care type the sheet offers. The template renders
 	// the Care field only when there is more than one.
-	Cares   []careOption
+	Cares []chip
+	// Fetch is the URL a change under Care sends its GET to.
+	Fetch   string
 	Row     string
 	Care    string
 	Skipped bool
@@ -270,12 +269,19 @@ type sheet struct {
 	// WhenError is the message shown under the When chips after a refused post,
 	// and is empty otherwise.
 	WhenError string
+	// CareError is the message shown under the Care chips after a careChanged
+	// refusal, and is empty otherwise.
+	CareError string
 	// Reminders is the Remind me in chips of the chosen care type, the ones a
 	// post is checked against.
 	Reminders []chip
 	Note      string
 	// Noun is the chosen care type as a noun, such as "watering".
 	Noun string
+	// OOB sets hx-swap-oob on the Log button. It is true only in the response
+	// to a change under Care, because in the whole dialog htmx would move the
+	// button out of the dialog when the sheet opens.
+	OOB bool
 	// Correcting is true for the sheet opened over an event already logged.
 	// Its primary button reads Save changes rather than naming the care.
 	Correcting bool
@@ -310,6 +316,7 @@ type sheetPlant struct {
 func newSheet(plant store.Plant, offers []offer, care offer, d draft, now time.Time) *sheet {
 	s := &sheet{
 		Path:    logPath(plant.ID),
+		Fetch:   logPath(plant.ID),
 		Target:  careRowID(plant, care.CareType),
 		Over:    d.Over,
 		Label:   "Log care for " + plant.DisplayName(),
@@ -328,11 +335,7 @@ func newSheet(plant store.Plant, offers []offer, care offer, d draft, now time.T
 		if o.CareType.Slug == d.Row {
 			s.Target = careRowID(plant, o.CareType)
 		}
-		s.Cares = append(s.Cares, careOption{
-			chip:      chip{Value: o.CareType.Slug, Label: o.CareType.Name, On: o.CareType.ID == care.CareType.ID},
-			Noun:      careNoun(o.CareType),
-			Reminders: reminderChips(usualDays(o.Schedule), d.Again),
-		})
+		s.Cares = append(s.Cares, chip{Value: o.CareType.Slug, Label: o.CareType.Name, On: o.CareType.ID == care.CareType.ID})
 	}
 	for _, w := range whens {
 		w.On = w.Value == d.When
@@ -344,7 +347,8 @@ func newSheet(plant store.Plant, offers []offer, care offer, d draft, now time.T
 	if s.At == "" {
 		s.At = now.Format(atLayout)
 	}
-	s.Reminders = reminderChips(usualDays(care.Schedule), d.Again)
+	s.Reminders = reminderChips(usualDays(care.Schedule))
+	s.selectReminder(d.Again)
 	return s
 }
 
@@ -364,6 +368,7 @@ func (s *sheet) forPlant() {
 // may delete the event.
 func (s *sheet) forEvent(principal auth.Principal, e event, d draft) {
 	s.Path = eventPath(e.care().PlantID, e.care().ID, "", e.q)
+	s.Fetch = eventPath(e.care().PlantID, e.care().ID, "", logQuery{})
 	s.Target = logBodyID
 	// Row names a care row on Today, and this sheet is not open over one.
 	s.Row = ""
@@ -373,14 +378,15 @@ func (s *sheet) forEvent(principal auth.Principal, e event, d draft) {
 		s.Delete = eventPath(e.care().PlantID, e.care().ID, "/delete", e.q)
 		s.DeleteTarget = eventRowID(e.care().ID)
 	}
-	s.offerReminder(e.care().OverrideIntervalDays, d.Again)
+	s.offerReminder(e.care().OverrideIntervalDays)
+	s.selectReminder(d.Again)
 }
 
 // offerReminder adds the interval a skip was logged with when no chip offers
 // it. That happens when the schedule's interval changed after the skip. Without
 // the extra chip the sheet would show the skip with nothing selected and refuse
 // to save it again.
-func (s *sheet) offerReminder(days *int32, selected int32) {
+func (s *sheet) offerReminder(days *int32) {
 	if days == nil {
 		return
 	}
@@ -395,11 +401,20 @@ func (s *sheet) offerReminder(days *int32, selected int32) {
 			break
 		}
 	}
-	s.Reminders = slices.Insert(s.Reminders, at, chip{Value: value, Label: daysWord(int(*days)), On: *days == selected})
-	for i := range s.Cares {
-		if s.Cares[i].On {
-			s.Cares[i].Reminders = s.Reminders
-		}
+	s.Reminders = slices.Insert(s.Reminders, at, chip{Value: value, Label: daysWord(int(*days))})
+}
+
+// selectReminder checks the Remind me in chip for the selected number of days,
+// or the default chip when none offers it. A change under Care can send the
+// previous care type's usual interval. With no chip checked, a skip would be
+// stored with the default while the sheet showed nothing selected.
+func (s *sheet) selectReminder(selected int32) {
+	value := strconv.Itoa(int(selected))
+	if !chipsHave(s.Reminders, value) {
+		value = strconv.Itoa(defaultReminderDays)
+	}
+	for i := range s.Reminders {
+		s.Reminders[i].On = s.Reminders[i].Value == value
 	}
 }
 
@@ -407,11 +422,55 @@ func (s *sheet) offerReminder(days *int32, selected int32) {
 // was not one of the chips is refused, because a posted zero would make the
 // skip due again the moment it is stored. A time that does not parse, or one
 // after now, returns a whenRefused for the sheet to show.
+//
+// A post whose care differs from its shown field returns a careChanged, because
+// its Remind me in chips and Log button were rendered for another care type. A
+// correction that is not a skip is accepted, because it shows neither.
 func (s *sheet) accept(d draft, now time.Time) (time.Time, error) {
+	if d.Shown != "" && d.Shown != d.Care && (d.Skipped || !s.Correcting) {
+		verb := "logged"
+		if s.Correcting {
+			verb = "saved"
+		}
+		return time.Time{}, careChanged("Not " + verb + " yet. Check the options below for " + s.Noun + ".")
+	}
 	if d.Skipped && !chipsHave(s.Reminders, strconv.Itoa(int(d.Again))) {
 		return time.Time{}, errNotOffered
 	}
 	return d.performedAt(now)
+}
+
+// refuse puts the message of a refused post on the sheet, under the field it is
+// about, and returns it. It returns "" for an error the sheet has no place for.
+func (s *sheet) refuse(err error) string {
+	var when whenRefused
+	var care careChanged
+	switch {
+	case errors.As(err, &when):
+		s.WhenError = string(when)
+	case errors.As(err, &care):
+		s.CareError = string(care)
+	default:
+		return ""
+	}
+	return err.Error()
+}
+
+// careChange reports whether a GET for the sheet is htmx's request after a
+// change under Care.
+func careChange(r *http.Request) bool {
+	return isHTMX(r) && r.Header.Get("HX-Target") == sheetAgainID
+}
+
+// fragment returns the template a GET for the sheet renders for an htmx
+// request: the Remind me in chips and the Log button for a change under Care,
+// and the whole dialog otherwise. For a change under Care it also sets OOB.
+func (s *sheet) fragment(r *http.Request) string {
+	if careChange(r) {
+		s.OOB = true
+		return "sheet-care"
+	}
+	return "sheet"
 }
 
 func newSheetPlant(plant store.Plant) sheetPlant {
@@ -454,6 +513,10 @@ func usualDays(s store.CareSchedule) int32 {
 	return 0
 }
 
+// defaultReminderDays is the number of days on the Remind me in chip checked
+// when the form sends no interval or one that no chip offers.
+const defaultReminderDays = 2
+
 // fallbackReminderDays is the usual reminder for a schedule with no interval
 // in days, such as a one-off repot.
 const fallbackReminderDays = 7
@@ -462,7 +525,7 @@ const fallbackReminderDays = 7
 // the plant's usual interval, or seven days when the schedule has no interval
 // in days. The usual chip is marked "(usual)", since nothing else on the sheet
 // says what the interval is.
-func reminderChips(usual, selected int32) []chip {
+func reminderChips(usual int32) []chip {
 	days := []int32{1, 2, 3}
 	fourth := usual
 	if fourth == 0 {
@@ -476,7 +539,7 @@ func reminderChips(usual, selected int32) []chip {
 
 	out := make([]chip, 0, len(days))
 	for _, n := range days {
-		c := chip{Value: strconv.Itoa(int(n)), Label: daysWord(int(n)), On: n == selected}
+		c := chip{Value: strconv.Itoa(int(n)), Label: daysWord(int(n))}
 		if n == usual {
 			c.Label = daysWord(int(n)) + " (usual)"
 		}
@@ -527,7 +590,7 @@ func (h *today) sheet(w http.ResponseWriter, r *http.Request) {
 
 	page := newTodayPage(principal, g)
 	page.Sheet = newSheet(lines[0].Plant, offersOf(lines), offerOf(care), d, g.now)
-	h.templates.render(w, r, view{page: "today", fragment: "sheet"}, page)
+	h.templates.render(w, r, view{page: "today", fragment: page.Sheet.fragment(r)}, page)
 }
 
 // plantSheet renders the same sheet on a plant's own page. It offers every care
@@ -557,7 +620,7 @@ func (h *today) plantSheet(w http.ResponseWriter, r *http.Request, principal aut
 	page := newPlantPage(principal, detail)
 	page.Sheet = newSheet(detail.plant, detail.offers(), care, d, detail.now)
 	page.Sheet.forPlant()
-	h.templates.render(w, r, view{page: "plant", fragment: "sheet"}, page)
+	h.templates.render(w, r, view{page: "plant", fragment: page.Sheet.fragment(r)}, page)
 }
 
 // chosenCare picks the care type the sheet on a plant's page opens on. With
@@ -625,19 +688,17 @@ func (h *today) log(w http.ResponseWriter, r *http.Request) {
 	s := newSheet(plant, offersOf(lines), offerOf(care), d, g.now)
 
 	performedAt, err := s.accept(d, g.now)
-	var refused whenRefused
-	switch {
-	case errors.As(err, &refused):
-		s.WhenError = string(refused)
+	if message := s.refuse(err); message != "" {
 		page := newTodayPage(principal, g)
 		page.Sheet = s
 		// The form targets the care row, so a refusal retargets the response
 		// at the sheet so the message is shown.
 		w.Header().Set("HX-Retarget", "#sheet")
 		w.Header().Set("HX-Reswap", "outerHTML")
-		h.templates.render(w, r, view{page: "today", fragment: "sheet", status: http.StatusUnprocessableEntity, announce: s.WhenError}, page)
+		h.templates.render(w, r, view{page: "today", fragment: "sheet", status: http.StatusUnprocessableEntity, announce: message}, page)
 		return
-	case err != nil:
+	}
+	if err != nil {
 		h.templates.badRequest(w, r)
 		return
 	}
@@ -702,15 +763,13 @@ func (h *today) logOnPlant(w http.ResponseWriter, r *http.Request, principal aut
 	s.forPlant()
 
 	performedAt, err := s.accept(d, detail.now)
-	var refused whenRefused
-	switch {
-	case errors.As(err, &refused):
-		s.WhenError = string(refused)
+	if s.refuse(err) != "" {
 		page := newPlantPage(principal, detail)
 		page.Sheet = s
 		h.templates.render(w, r, view{page: "plant", status: http.StatusUnprocessableEntity}, page)
 		return
-	case err != nil:
+	}
+	if err != nil {
 		h.templates.badRequest(w, r)
 		return
 	}
