@@ -50,7 +50,7 @@ test("logging a care from a plant's page returns to that page @swap", async ({ p
   await expect(plant.scheduleRow('Water')).toContainText('Due in 21 days');
 });
 
-test("a care with no schedule can be logged from the plant's page @swap", async ({ plant, sheet }) => {
+test("a care with no schedule can be logged from the plant's page @js", async ({ plant, sheet }) => {
   await plant.open(seeded.doris);
   await plant.logCare();
 

@@ -57,7 +57,7 @@ test('a skip makes the care due again after the chosen number of days @swap', as
   await expect(row).toContainText('Water tomorrow');
 });
 
-test("choosing another care type shows that type's usual interval", async ({ today, sheet }) => {
+test("choosing another care type shows that type's usual interval @js", async ({ today, sheet }) => {
   await today.openSheet(plants.nigel, 'water');
   await sheet.chip('Skipped').check();
   await expect(sheet.chip('4 days (usual)')).toBeVisible();
@@ -68,6 +68,34 @@ test("choosing another care type shows that type's usual interval", async ({ tod
   await expect(sheet.chip('21 days (usual)')).toBeVisible();
   await expect(sheet.chip('Skipped')).toBeChecked();
   await expect(sheet.dialog().getByRole('button', { name: 'Log skip' })).toBeVisible();
+});
+
+test('the arrow keys move between care types and leave focus on the chosen one @js', async ({ page, today, sheet }) => {
+  await today.openSheet(plants.nigel, 'water');
+  await sheet.chip('Water').focus();
+
+  await page.keyboard.press('ArrowRight');
+
+  await expect(sheet.dialog().getByRole('button', { name: 'Log feeding' })).toBeVisible();
+  await expect(sheet.chip('Feed')).toBeChecked();
+  await expect(sheet.chip('Feed')).toBeFocused();
+});
+
+test('without JavaScript, choosing another care type takes a second press of Log @nojs', async ({
+  today,
+  sheet,
+  plant,
+}) => {
+  await today.openSheet(plants.nigel, 'water');
+  await sheet.chip('Feed').check();
+  await sheet.submit('Log watering');
+
+  await expect(sheet.dialog().getByText('Not logged yet. Check the options below for feeding.')).toBeVisible();
+  await sheet.submit('Log feeding');
+  await expect(sheet.dialog()).toHaveCount(0);
+
+  await plant.open(plants.nigel);
+  await expect(plant.recentLines().first()).toContainText('You fed · today');
 });
 
 test('a time later than now is refused @swap', async ({ today, sheet }) => {

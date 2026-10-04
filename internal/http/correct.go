@@ -124,6 +124,11 @@ func (h *activity) readEvent(w http.ResponseWriter, r *http.Request) (event, boo
 // correct handles GET /plants/{plant}/log/{event} and opens the sheet over the
 // row, filled in from the event. A page navigation gets the whole activity page
 // with the sheet on it and the swap that opens the sheet gets the dialog.
+//
+// A change under Care sends the form's fields in the query string and gets the
+// Remind me in chips for the chosen care type. Its URL leaves out the Activity
+// filters, because the Care filter and the sheet's Care field are both named
+// care. e.q holds the form's fields read as filters and is not used.
 func (h *activity) correct(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	e, ok := h.readEvent(w, r)
@@ -135,7 +140,15 @@ func (h *activity) correct(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	change := careChange(r)
 	d := draftOf(e)
+	if change {
+		d, ok = readDraft(r.URL.Query())
+		if !ok {
+			h.templates.badRequest(w, r)
+			return
+		}
+	}
 
 	s, err := h.sheetOver(r, principal, e, d)
 	switch {
@@ -144,6 +157,10 @@ func (h *activity) correct(w http.ResponseWriter, r *http.Request) {
 		return
 	case err != nil:
 		h.templates.serverError(h.logger, w, r, "load the plant", err)
+		return
+	}
+	if change {
+		h.templates.render(w, r, view{page: "activity", fragment: s.fragment(r)}, activityPage{Sheet: s})
 		return
 	}
 	page, err := h.page(r.Context(), principal, e.q)
@@ -194,9 +211,7 @@ func (h *activity) save(w http.ResponseWriter, r *http.Request) {
 	}
 
 	performedAt, err := s.accept(d, e.now)
-	var refused whenRefused
-	switch {
-	case errors.As(err, &refused):
+	if message := s.refuse(err); message != "" {
 		page, err := h.page(r.Context(), principal, e.q)
 		switch {
 		case errors.Is(err, errUnknownCare):
@@ -206,15 +221,15 @@ func (h *activity) save(w http.ResponseWriter, r *http.Request) {
 			h.templates.serverError(h.logger, w, r, "load the log", err)
 			return
 		}
-		s.WhenError = string(refused)
 		page.Sheet = s
 		// The form targets the log body, so a refusal retargets the response at
 		// the sheet, where the message is.
 		w.Header().Set("HX-Retarget", "#sheet")
 		w.Header().Set("HX-Reswap", "outerHTML")
-		h.templates.render(w, r, view{page: "activity", fragment: "sheet", status: http.StatusUnprocessableEntity, announce: s.WhenError}, page)
+		h.templates.render(w, r, view{page: "activity", fragment: "sheet", status: http.StatusUnprocessableEntity, announce: message}, page)
 		return
-	case err != nil:
+	}
+	if err != nil {
 		h.templates.badRequest(w, r)
 		return
 	}
@@ -488,7 +503,7 @@ func draftOf(e event) draft {
 	d := draft{
 		Care:    e.row.CareType.Slug,
 		Skipped: !e.care().Done,
-		Again:   2,
+		Again:   defaultReminderDays,
 		Clock:   at.Format(clockLayout),
 		At:      at.Format(atLayout),
 		When:    whenOther,
