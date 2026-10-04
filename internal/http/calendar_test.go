@@ -306,6 +306,27 @@ func TestCalendar_NextSwapsTheMonthAloneAndAnnouncesIt(t *testing.T) {
 	}
 }
 
+func TestCalendar_AHistoryRestoreReturnsWhatIsInsideTheCalendarElement(t *testing.T) {
+	f := rosewoodCalendar(t)
+	// htmx sends this request on Back or Forward when the month is not in its
+	// history cache. It puts the response inside the page's #calendar element.
+	body := f.get(t, calendarPath+"?month=2026-10", map[string]string{"HX-Request": "true", "HX-History-Restore-Request": "true"})
+
+	doc := readHTML(body)
+	if doc.first(isTag("html")) != nil {
+		t.Errorf("the response is the whole page, want the inside of the calendar alone:\n%.120s", body)
+	}
+	if doc.byID(calendarID) != nil {
+		t.Errorf("the response holds the calendar element the page already has:\n%.200s", body)
+	}
+	if doc.byID("calendar-grid") == nil {
+		t.Errorf("the response does not hold the month's grid:\n%.200s", body)
+	}
+	if got, want := doc.byID("month-previous").attr("href"), "/activity/calendar?month=2026-09"; got != want {
+		t.Errorf("Previous links to %q, want %q for October", got, want)
+	}
+}
+
 func TestCalendar_ADaysLinkSwapsTheSheetAlone(t *testing.T) {
 	f := rosewoodCalendar(t)
 

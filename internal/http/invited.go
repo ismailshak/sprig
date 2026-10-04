@@ -22,6 +22,12 @@ import (
 // holds only its hash.
 const invitedPattern = "/invite/{token}"
 
+// invitedPageName is the template name of the You’re invited page. Every
+// render in this handler uses it because no test can reach the branch where
+// another account takes the handle between the check and the insert. A test of
+// any other branch renders the same name and so checks it for that branch.
+const invitedPageName = "invited"
+
 // InvitedPath is the URL of the page for one token. The form on it posts to
 // the same URL. It is exported because sprig admin invite prints the link.
 func InvitedPath(token string) string { return "/invite/" + token }
@@ -268,7 +274,7 @@ func (h *invited) show(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, acceptPath(token), http.StatusSeeOther)
 		return
 	}
-	h.templates.render(w, r, view{page: "invited"}, newInvitedPage(token, open, freshJoinForm(open), true))
+	h.templates.render(w, r, view{page: invitedPageName}, newInvitedPage(token, open, freshJoinForm(open), true))
 }
 
 // freshJoinForm is the join form before anybody has posted it. The timezone is
@@ -282,7 +288,7 @@ func freshJoinForm(open openInvite) joinForm {
 // 404. Every reason gets the same page and the same status, so the response
 // cannot tell somebody trying tokens which ones were real.
 func (h *invited) renderUnusable(w http.ResponseWriter, r *http.Request) {
-	h.templates.render(w, r, view{page: "invited", status: http.StatusNotFound}, unusableInvitePage())
+	h.templates.render(w, r, view{page: invitedPageName, status: http.StatusNotFound}, unusableInvitePage())
 }
 
 // challenge handles POST /invite/{token}/challenge and returns the options for
@@ -389,7 +395,7 @@ func (h *invited) redeem(w http.ResponseWriter, r *http.Request) {
 	}
 	page.NameError, page.Zone.Error = form.errors()
 	if !form.valid() {
-		h.templates.render(w, r, view{page: "invited", status: http.StatusUnprocessableEntity}, page)
+		h.templates.render(w, r, view{page: invitedPageName, status: http.StatusUnprocessableEntity}, page)
 		return
 	}
 	if taken, err := handleTaken(r.Context(), h.queries, form.handle); err != nil {
@@ -397,7 +403,7 @@ func (h *invited) redeem(w http.ResponseWriter, r *http.Request) {
 		return
 	} else if taken {
 		page.HandleError = handleTakenMessage(form.handle)
-		h.templates.render(w, r, view{page: "invited", status: http.StatusUnprocessableEntity}, page)
+		h.templates.render(w, r, view{page: invitedPageName, status: http.StatusUnprocessableEntity}, page)
 		return
 	}
 	gardenNamed, err := gardenNamer(r.Context(), h.queries, open.row.Garden)
@@ -505,7 +511,7 @@ func (h *invited) finish(w http.ResponseWriter, r *http.Request, page invitedPag
 	// another account took it between the check and the write.
 	if errors.Is(err, store.ErrHandleTaken) {
 		page.HandleError = handleTakenMessage(page.Handle)
-		h.templates.render(w, r, view{page: "invited", status: http.StatusUnprocessableEntity}, page)
+		h.templates.render(w, r, view{page: invitedPageName, status: http.StatusUnprocessableEntity}, page)
 		return
 	}
 	if err != nil {
@@ -513,7 +519,7 @@ func (h *invited) finish(w http.ResponseWriter, r *http.Request, page invitedPag
 		if page.Refusal == "" {
 			return
 		}
-		h.templates.render(w, r, view{page: "invited", status: http.StatusUnprocessableEntity}, page)
+		h.templates.render(w, r, view{page: invitedPageName, status: http.StatusUnprocessableEntity}, page)
 		return
 	}
 
@@ -549,7 +555,7 @@ func (h *invited) tooManyAnswers(w http.ResponseWriter, r *http.Request) {
 	}
 	page := newInvitedPage(r.PathValue("token"), open, readJoinForm(r), false)
 	page.Refusal = tooManyInviteAttempts
-	h.templates.render(w, r, view{page: "invited", status: http.StatusTooManyRequests}, page)
+	h.templates.render(w, r, view{page: invitedPageName, status: http.StatusTooManyRequests}, page)
 }
 
 // tooManyChallenges is the response to a POST /invite/{token}/challenge past
