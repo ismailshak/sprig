@@ -34,10 +34,6 @@ type recoveryPage struct {
 	Left string
 	// Made reads "Made 2 Aug".
 	Made string
-	// Prompted shows the paragraph asking the reader to create codes. It is
-	// true for a person who manages the garden's people. Everyone else
-	// can still reach this page and make codes.
-	Prompted bool
 }
 
 // recoveryBar is the top bar on the Recovery codes page. It goes back to
@@ -61,10 +57,9 @@ func (h *recoveryCodes) show(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	page := recoveryPage{
-		Bar:      recoveryBar(),
-		Action:   recoveryPath,
-		Live:     live,
-		Prompted: principal.Can(auth.MemberManage),
+		Bar:    recoveryBar(),
+		Action: recoveryPath,
+		Live:   live,
 	}
 	if live {
 		page.Left = codesLeftWord(batch.Unused, batch.Size)

@@ -79,17 +79,14 @@ func TestRecovery_AnAccountHoldingNoneIsToldSoAndOfferedASet(t *testing.T) {
 // Recovery codes page.
 const recoveryPrompt = "Without recovery codes, only the person who runs this server can sign you back in"
 
-func TestRecovery_AMemberIsNotAskedToCreateCodes(t *testing.T) {
+func TestRecovery_AMemberWhoCannotManagePeopleIsAskedToCreateCodes(t *testing.T) {
 	f := openRecoveryCodes(t)
 	f.principal.Capabilities = auth.Capabilities{auth.TokenManage: true}
 
 	page := f.page(t, f.handler.show, recoveryPath)
 
-	if strings.Contains(text(page), recoveryPrompt) {
-		t.Errorf("the page asks a member to create codes:\n%s", text(page))
-	}
-	if got, want := createButton(page), "Create codes"; got != want {
-		t.Errorf("the button reads %q, want %q", got, want)
+	if !strings.Contains(text(page), recoveryPrompt) {
+		t.Errorf("the page does not ask a member to create codes:\n%s", text(page))
 	}
 }
 

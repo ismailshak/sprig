@@ -422,12 +422,12 @@ func TestMore_TheAccountRowSaysNoRecoveryCodesWhenEveryCodeHasBeenUsed(t *testin
 	}
 }
 
-func TestMore_AMemberIsNotToldTheyHaveNoRecoveryCodes(t *testing.T) {
+func TestMore_AMemberWhoCannotManagePeopleIsToldTheyHaveNoRecoveryCodes(t *testing.T) {
 	f := moreGarden(t)
 	f.principal.Capabilities = auth.Capabilities{auth.TokenManage: true}
 
-	if got := noteOn(t, f.page(t, f.handler.show, morePath), "Account"); got != "" {
-		t.Errorf("the row says %q to a member, want nothing", got)
+	if got := noteOn(t, f.page(t, f.handler.show, morePath), "Account"); got != "No recovery codes" {
+		t.Errorf("the row says %q to a member, want %q", got, "No recovery codes")
 	}
 }
 
