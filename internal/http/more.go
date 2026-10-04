@@ -140,8 +140,7 @@ func (h *more) state(ctx context.Context, principal auth.Principal) (moreState, 
 }
 
 // newMorePage builds the index. A row the reader's role cannot use is left out
-// rather than shown and refused when pressed, so a sitter gets the first three
-// rows and the links below them.
+// rather than shown and refused when pressed.
 func newMorePage(principal auth.Principal, state moreState, info build.Info) morePage {
 	rows := []linkRow{
 		{Label: "Account", Href: accountPath, Note: codesNote(state.noCodesLeft)},
