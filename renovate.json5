@@ -35,14 +35,5 @@
       depNameTemplate: 'htmx.org',
       datasourceTemplate: 'npm',
     },
-    // The mise version the setup-go action installs
-    {
-      customType: 'regex',
-      managerFilePatterns: ['/^\\.github/actions/setup-go/action\\.yml$/'],
-      matchStrings: ['uses: jdx/mise-action@[^\\n]*\\n\\s+with:\\n\\s+version: (?<currentValue>\\S+)'],
-      depNameTemplate: 'jdx/mise',
-      datasourceTemplate: 'github-releases',
-      extractVersionTemplate: '^v(?<version>.*)$',
-    },
   ],
 }
