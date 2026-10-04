@@ -14,23 +14,34 @@ import (
 	"github.com/ismailshak/sprig/internal/store"
 )
 
-// admin runs sprig admin invite, the one command it has. There is no HTTP
-// route for it, because anyone who can run the binary already controls the
+// admin runs sprig admin invite and sprig admin setup. There is no HTTP route
+// for either, because anyone who can run the binary already controls the
 // server.
 func admin(ctx context.Context, args []string, getenv func(string) string, stdout io.Writer) error {
-	if len(args) == 0 || args[0] != "invite" {
-		return fmt.Errorf("unknown admin command %q: the one command is invite", strings.Join(args, " "))
+	unknown := fmt.Errorf("unknown admin command %q: the commands are invite and setup", strings.Join(args, " "))
+	if len(args) == 0 {
+		return unknown
 	}
-	flags := flag.NewFlagSet("sprig admin invite", flag.ContinueOnError)
-	flags.SetOutput(io.Discard)
-	handle := flags.String("user", "", "the handle of the account the sign-in link is for")
-	if err := flags.Parse(args[1:]); err != nil {
-		return fmt.Errorf("sprig admin invite: %w", err)
+	switch args[0] {
+	case "invite":
+		flags := flag.NewFlagSet("sprig admin invite", flag.ContinueOnError)
+		flags.SetOutput(io.Discard)
+		handle := flags.String("user", "", "the handle of the account the sign-in link is for")
+		if err := flags.Parse(args[1:]); err != nil {
+			return fmt.Errorf("sprig admin invite: %w", err)
+		}
+		if *handle == "" || flags.NArg() > 0 {
+			return errors.New("sprig admin invite takes --user <handle> and nothing else")
+		}
+		return adminInvite(ctx, getenv, stdout, *handle)
+	case "setup":
+		if len(args) > 1 {
+			return errors.New("sprig admin setup takes no arguments")
+		}
+		return adminSetup(ctx, getenv, stdout)
+	default:
+		return unknown
 	}
-	if *handle == "" || flags.NArg() > 0 {
-		return errors.New("sprig admin invite takes --user <handle> and nothing else")
-	}
-	return adminInvite(ctx, getenv, stdout, *handle)
 }
 
 // adminInvite issues a sign-in link for the account with handle and
@@ -58,6 +69,30 @@ func adminInvite(ctx context.Context, getenv func(string) string, stdout io.Writ
 	expires := made.Invite.ExpiresAt.In(locationOf(made.User.Timezone)).Format("2 January 2006")
 	_, err = fmt.Fprintf(stdout, "%s\nThe sign-in link adds a passkey to %s's account. It works once, until %s.\n",
 		cfg.baseURL.JoinPath(sprighttp.InvitedPath(made.Token)), made.User.DisplayName, expires)
+	return err
+}
+
+// adminSetup issues a setup link and prints it with the date it expires. The
+// date is in the server's local zone, because the link belongs to no account
+// whose zone could be used.
+func adminSetup(ctx context.Context, getenv func(string) string, stdout io.Writer) error {
+	cfg, err := loadConfig(getenv)
+	if err != nil {
+		return err
+	}
+	pool, err := store.Open(ctx, cfg.databaseURL)
+	if err != nil {
+		return err
+	}
+	defer pool.Close()
+
+	made, err := auth.IssueSetupLink(ctx, store.New(pool), time.Now())
+	if err != nil {
+		return err
+	}
+	expires := made.Link.ExpiresAt.In(time.Local).Format("2 January 2006")
+	_, err = fmt.Fprintf(stdout, "%s\nThe setup link sets up one garden. It works once, until %s.\n",
+		cfg.baseURL.JoinPath(sprighttp.SetupLinkPath(made.Token)), expires)
 	return err
 }
 

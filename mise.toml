@@ -79,7 +79,7 @@ env = { SPRIG_COOKIE_SECURE = "false", SPRIG_COOKIE_NAME = "sprig_session" }
 run = "go run ./cmd/sprig sweep"
 
 [tasks.admin]
-description = "Run sprig admin against the dev database: mise run admin invite --user <handle>"
+description = "Run sprig admin against the dev database"
 usage = 'arg "<args>..." var=#true help="Passed to sprig admin, such as invite --user emma"'
 env = { SPRIG_COOKIE_SECURE = "false", SPRIG_COOKIE_NAME = "sprig_session" }
 run = 'eval "set -- $usage_args"; go run ./cmd/sprig admin "$@"'

@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"strings"
 	"testing"
+	"time"
 	"uuid"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -132,13 +133,47 @@ func TestAdminInvite_AnUnknownHandleIsRefusedByNameAndWritesNothing(t *testing.T
 	}
 }
 
-func TestAdmin_AnythingOtherThanInviteWithAHandleIsRefusedBeforeTheConfigIsRead(t *testing.T) {
+func TestAdminSetup_PrintsASetupLinkAndWritesNothingButItsRow(t *testing.T) {
+	d := adminFixture(t)
+	var stdout bytes.Buffer
+
+	err := subcommand(t.Context(), []string{"admin", "setup"}, d.getenv, &stdout)
+	if err != nil {
+		t.Fatalf("admin setup: %v", err)
+	}
+
+	lines := strings.Split(strings.TrimSpace(stdout.String()), "\n")
+	if len(lines) != 2 || !strings.HasPrefix(lines[0], "https://sprig.example.com/setup/") {
+		t.Fatalf("admin setup printed:\n%s\nwant the link on the first line and one sentence after it", stdout.String())
+	}
+	token := strings.TrimPrefix(lines[0], "https://sprig.example.com/setup/")
+	open, err := store.New(d.pool).SetupLinkOpen(t.Context(), auth.HashToken(token), time.Now())
+	if err != nil {
+		t.Fatalf("looking up the printed token: %v", err)
+	}
+	if !open {
+		t.Errorf("no unused setup link has the hash of the printed token %q", token)
+	}
+	var links int
+	if err := d.pool.QueryRow(t.Context(), "SELECT count(*) FROM setup_link").Scan(&links); err != nil {
+		t.Fatalf("counting: %v", err)
+	}
+	if links != 1 {
+		t.Errorf("the database holds %d setup links, want 1", links)
+	}
+	if users, memberships, invites := d.counts(t); users != 1 || memberships != 1 || invites != 0 {
+		t.Errorf("the database holds %d accounts, %d memberships and %d invites, want 1, 1 and 0", users, memberships, invites)
+	}
+}
+
+func TestAdmin_ACommandWithTheWrongArgumentsIsRefusedBeforeTheConfigIsRead(t *testing.T) {
 	for _, args := range [][]string{
 		{"admin"},
 		{"admin", "invite"},
 		{"admin", "invite", "emma"},
 		{"admin", "invite", "--user", "emma", "extra"},
 		{"admin", "remove", "--user", "emma"},
+		{"admin", "setup", "--user", "emma"},
 	} {
 		if err := subcommand(t.Context(), args, noEnv, &bytes.Buffer{}); err == nil {
 			t.Errorf("sprig %s ran without an error", strings.Join(args, " "))
