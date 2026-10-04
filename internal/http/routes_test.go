@@ -379,9 +379,8 @@ var routeAccess = map[string]access{
 		path:       revokeInvitePath(rosewoodInviteID),
 		foreign:    revokeInvitePath(fairviewInviteID),
 	},
-	// Rendering the question changes nothing, so it shares a member with
-	// Re-enrol. The post that removes one uses a member of its own, since the
-	// two routes after it would find nothing left.
+	// The GET and the POST name different members, because the POST deletes
+	// its member and a later request for the same member would be a 404.
 	"GET /more/people/{member}/remove": {
 		capability: auth.MemberManage,
 		path:       removeMemberPath("sam"),
@@ -391,11 +390,6 @@ var routeAccess = map[string]access{
 		capability: auth.MemberManage,
 		path:       removeMemberPath("jo"),
 		foreign:    removeMemberPath("robin"),
-	},
-	"POST /more/people/{member}/reenrol": {
-		capability: auth.MemberManage,
-		path:       reenrolMemberPath("sam"),
-		foreign:    reenrolMemberPath("robin"),
 	},
 	"GET /more/tokens": {capability: auth.TokenManage},
 	// A post with no body names no lifetime, so this is refused before it

@@ -1,9 +1,8 @@
 import { aWorkingDevice, withDevice } from '../harness/authenticator';
 import { asAnotherBrowser } from '../harness/browser';
-import { gardens, invites, people } from '../harness/garden';
+import { gardens, invites, people, signInLink } from '../harness/garden';
 import { signIn } from '../harness/signin';
 import { expect, test } from '../harness/test';
-import { AccountScreen } from '../screens/account';
 import { AcceptScreen } from '../screens/accept';
 import { InvitedScreen } from '../screens/invited';
 import { PeopleScreen } from '../screens/people';
@@ -55,35 +54,22 @@ test("a handle another account holds is refused on an invite's join form @passke
   });
 });
 
-test("a re-enrolment link adds a passkey to the member's account and signs that device in @passkey", async ({
-  browser,
-  baseURL,
+test('a sign-in link adds a passkey to the account it was made for and signs the device in @passkey', async ({
   page,
-  people: peopleScreen,
+  invited,
+  account,
 }) => {
-  await signIn(page, people.ellie.handle);
-  await peopleScreen.open();
-  await peopleScreen.reenrol(people.sam.name).click();
-  const token = InvitedScreen.tokenOf((await peopleScreen.link().textContent()) ?? '');
+  await withDevice(page, aWorkingDevice, async () => {
+    await invited.open(signInLink.token);
+    await expect(page.getByRole('heading', { name: 'Add this device to your account' })).toBeVisible();
+    await expect(invited.name()).toHaveCount(0);
 
-  const { page: phone, context } = await asAnotherBrowser(browser, baseURL);
-  try {
-    await withDevice(phone, aWorkingDevice, async () => {
-      const onPhone = new InvitedScreen(phone);
-      await onPhone.open(token);
-      await expect(phone.getByRole('heading', { name: 'Add this device to your account' })).toBeVisible();
-      await expect(onPhone.name()).toHaveCount(0);
+    await invited.addDevice().click();
 
-      await onPhone.addDevice().click();
-
-      await expect(phone).toHaveURL('/');
-      const account = new AccountScreen(phone);
-      await account.open();
-      await expect(account.name()).toHaveValue(people.sam.name);
-    });
-  } finally {
-    await context.close();
-  }
+    await expect(page).toHaveURL('/');
+    await account.open();
+    await expect(account.name()).toHaveValue(people.sam.name);
+  });
 });
 
 test('an account signed in from an invite link joins the garden and keeps the one it was in @passkey', async ({

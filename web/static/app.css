@@ -2458,8 +2458,8 @@ a.wide-action {
   padding: 0 2px 0 10px;
   font-size: 14px;
   color: var(--ink-2);
-  /* Remove on People is a link. It gets the button's box and no underline,
-     so it lines up with Sign-in link beside it. */
+  /* Remove on People is a link. It gets the button's box and no underline to
+     match the Revoke button under Pending invites. */
   text-decoration: none;
 }
 
@@ -2638,10 +2638,10 @@ a.wide-action {
   color: var(--ink-3);
 }
 
-/* Three controls at the row's right-hand end. Only People needs this many: a
-   grade select, a device to return, and Remove. They stay together on one line
-   and the row's text takes what is left, because a member's name and the
-   sentence under it can wrap and the controls cannot. */
+/* The controls at the right-hand end of a People row: an end date when the
+   membership has one, a role select, and Remove. The row's text takes the width
+   they leave, because a member's name and the sentence under it can wrap and
+   the controls cannot. */
 .row__controls {
   flex: none;
   display: flex;
@@ -2651,22 +2651,13 @@ a.wide-action {
   gap: 2px;
 }
 
-/* Three controls do not fit beside the text on a phone. 250px of select plus
-   two buttons left the capability sentence as a narrow column five words tall.
-   So the row wraps and the controls take their own line under the name, still
-   at the right-hand end. The 200px flex basis decides this rather than a
-   breakpoint. Below about 450px the two cannot share a line and above it they
-   can, the same result a media query would give without repeating the number. */
+/* On a phone the controls do not fit beside the text. The row wraps and the
+   controls take their own line under the name, still at the right-hand end.
+   The text's 200px flex basis decides when they wrap, so no media query is
+   needed. */
 .row--people { flex-wrap: wrap; gap: 8px 12px; }
 .row--people .row__text { flex: 1 1 200px; }
 .row--people .row__controls { flex: 0 1 auto; margin-left: auto; }
-
-/* Four controls do not fit across a phone either. The date alone takes 137 of
-   the row's 323px, so they take two lines, and this decides where the break
-   falls. The two fields go together and the two text actions go together, the
-   only split that groups like with like. Letting them wrap wherever they ran out
-   put Re-enrol beside the select and left Remove on a line of its own. */
-.row__acts { flex: none; display: flex; align-items: center; gap: 2px; }
 
 /* The grade word does not shrink. It is at most six characters from a list of
    three, and flex takes width from every part of a meta line equally. On this

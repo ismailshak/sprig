@@ -38,12 +38,6 @@ func removeMemberPath(handle string) string {
 	return memberPath(handle) + "/remove"
 }
 
-// reenrolMemberPath is the URL the Sign-in link button posts to. It creates a
-// link that adds a passkey to the account this person already has.
-func reenrolMemberPath(handle string) string {
-	return memberPath(handle) + "/reenrol"
-}
-
 // revokeInvitePath is the URL an invite row's Revoke button posts to.
 func revokeInvitePath(inviteID uuid.UUID) string {
 	return PeoplePath + "/invites/" + inviteID.String() + "/revoke"
@@ -68,14 +62,8 @@ var offeredRoles = []string{"member", "sitter"}
 type peoplePage struct {
 	Bar topbar
 	// Action is the URL the members form posts to.
-	Action string
-	// Secret is the link the Sign-in link button just created. It is nil on
-	// every other request.
-	Secret *secretBox
-	// SecretWhy is the paragraph under that link, saying what it does to the
-	// account it names.
-	SecretWhy string
-	Members   []memberRow
+	Action  string
+	Members []memberRow
 	// Save is false when the reader is the only member. Their own row has no
 	// controls, so there is nothing to save.
 	Save bool
@@ -128,11 +116,6 @@ type memberRow struct {
 	// Who is what to call this person in a sentence: their display name, with
 	// the handle in brackets after it where another member has the same name.
 	Who string
-	// Reenrol is the URL the Sign-in link button posts to, and ReenrolForm the
-	// id of the form it belongs to. Forms cannot nest, so that form is rendered
-	// after the members form and the button names it in its form attribute.
-	Reenrol     string
-	ReenrolForm string
 	// Remove is the URL the Remove button links to.
 	Remove string
 	// Asking is set on at most one row. That row shows "Remove Ellie?" and two
@@ -168,28 +151,9 @@ type inviteRow struct {
 	Revoke string
 }
 
-// secretBox is a value shown on one response and never again: an invite link, a
-// re-enrolment link or a new API token. Only a hash of it is stored, so it
-// cannot be shown again once the page is left.
-type secretBox struct {
-	// Label is the line above the value, such as "Invite link" or "Your new
-	// token".
-	Label string
-	Value string
-	// Why is the paragraph under the value. It says the value is shown once,
-	// and for a token it names the date it expires.
-	Why string
-}
-
-// peopleState is what one request adds to the People page: the row asking
-// "Remove Ellie?", and a re-enrolment link that was just created.
 type peopleState struct {
 	// asking is the handle of the member whose row shows "Remove Ellie?".
 	asking string
-	// reenrolled is the member the link was created for, and link the link
-	// itself. Both are empty on every request that created no link.
-	reenrolled store.AppUser
-	link       string
 	// announce is the sentence a swap puts in the live region. Empty for a
 	// swap that announces nothing, such as Cancel on the remove confirmation.
 	announce string
@@ -342,8 +306,9 @@ func (h *people) confirmRemoveMember(w http.ResponseWriter, r *http.Request) {
 }
 
 // removeMember handles POST /more/people/{member}/remove. It deletes the
-// membership. The person's sessions on this garden go with it through a
-// foreign key, and the care events they logged keep their name.
+// membership. A foreign key sets garden_id to NULL on the person's sessions in
+// this garden, so they stay signed in with no garden open. The care they
+// logged keeps their name.
 func (h *people) removeMember(w http.ResponseWriter, r *http.Request) {
 	member, ok := h.memberFromPath(w, r)
 	if !ok {
@@ -365,27 +330,6 @@ func (h *people) removeMember(w http.ResponseWriter, r *http.Request) {
 	}
 	h.notify.call(r.Context(), member.AppUser, push.MemberRemovedNotification(gardenNamed(member.AppUser.ID)))
 	h.peopleSaved(w, r, member.AppUser.DisplayName+" removed.")
-}
-
-// reenrolMember handles POST /more/people/{member}/reenrol. It creates an
-// invite against the account this person already has, so opening the link adds
-// a device to that account rather than making a second one with the same name.
-//
-// It renders the link rather than redirecting to it, because only a hash is
-// stored and this response is the one place the link itself exists.
-func (h *people) reenrolMember(w http.ResponseWriter, r *http.Request) {
-	member, ok := h.memberFromPath(w, r)
-	if !ok {
-		return
-	}
-	token, err := createInvite(r, h.queries, h.now(), member.Membership.Role, &member.AppUser.ID, nil)
-	if err != nil {
-		h.templates.serverError(h.logger, w, r, "make the re-enrolment link", err)
-		return
-	}
-	state := peopleState{reenrolled: member.AppUser, link: inviteLink(r, token)}
-	state.announce = "Sign-in link for " + member.AppUser.DisplayName + " is above the list."
-	h.renderPeople(w, r, state)
 }
 
 // revokeInvite handles POST /more/people/invites/{invite}/revoke. Deleting the
@@ -411,7 +355,7 @@ func (h *people) revokeInvite(w http.ResponseWriter, r *http.Request) {
 
 // memberFromPath reads the member the URL names. It writes a 404 and returns
 // false for a handle nobody in this garden holds, and for the reader's own
-// handle, because their row has no Remove and no Sign-in link button.
+// handle, because their row has no Remove.
 func (h *people) memberFromPath(w http.ResponseWriter, r *http.Request) (store.GetMemberByHandleRow, bool) {
 	principal := PrincipalFrom(r)
 	member, err := h.queries.GetMemberByHandle(r.Context(), principal.Garden.ID, r.PathValue("member"))
@@ -428,48 +372,6 @@ func (h *people) memberFromPath(w http.ResponseWriter, r *http.Request) (store.G
 		return store.GetMemberByHandleRow{}, false
 	}
 	return member, true
-}
-
-// createInvite writes an invite row and returns the token that opens it.
-// userID is set for a re-enrolment and nil for somebody new to the garden.
-// ends is the date the membership the invite creates stops on, and nil for one
-// that does not end.
-//
-// A re-enrolment deletes any unredeemed link for the same person first. Those
-// rows are not under Pending invites, so a second press would otherwise leave
-// a working link that no page can revoke.
-func createInvite(r *http.Request, queries *store.Queries, now time.Time, role string, userID *uuid.UUID, ends *time.Time) (string, error) {
-	principal := PrincipalFrom(r)
-	token := auth.NewInviteToken()
-	params := store.CreateInviteParams{
-		GardenID:            principal.Garden.ID,
-		TokenHash:           auth.HashToken(token),
-		Role:                role,
-		UserID:              userID,
-		CreatedBy:           principal.User.ID,
-		ExpiresAt:           now.Add(auth.InviteLifetime),
-		MembershipExpiresAt: ends,
-	}
-	err := queries.InTx(r.Context(), func(q *store.Queries) error {
-		if userID != nil {
-			if _, err := q.DeleteReenrolmentInvites(r.Context(), principal.Garden.ID, userID); err != nil {
-				return err
-			}
-		}
-		_, err := q.CreateInvite(r.Context(), params)
-		return err
-	})
-	if err != nil {
-		return "", err
-	}
-	return token, nil
-}
-
-// inviteLink is the link shown on the page: the host this request arrived at,
-// then the path that redeems the token. It has no scheme, because no
-// hostname is configured and the request is the only place the host is known.
-func inviteLink(r *http.Request, token string) string {
-	return r.Host + InvitedPath(token)
 }
 
 func (h *people) renderPeople(w http.ResponseWriter, r *http.Request, state peopleState) {
@@ -493,9 +395,6 @@ func (h *people) renderPeople(w http.ResponseWriter, r *http.Request, state peop
 		Save:    len(members) > 1,
 		Invites: inviteRows(invites, h.now().In(locationFor(principal.User))),
 	}
-	if state.link != "" {
-		page.Secret, page.SecretWhy = reenrolBox(state.reenrolled, collides, state.link)
-	}
 	if principal.Can(auth.MemberInvite) {
 		page.InviteSomeone = invitePath
 	}
@@ -504,20 +403,6 @@ func (h *people) renderPeople(w http.ResponseWriter, r *http.Request, state peop
 		v.fragment = peopleID
 	}
 	h.templates.render(w, r, v, page)
-}
-
-// reenrolBox builds the box holding a new re-enrolment link and the paragraph
-// under it. The link is shown above the members list rather than on a page of
-// its own, because a page can be navigated back to and the link exists only in
-// this response.
-func reenrolBox(user store.AppUser, collides map[string]bool, link string) (*secretBox, string) {
-	who := whoWord(user, collides)
-	box := &secretBox{
-		Label: "Sign-in link for " + who,
-		Value: link,
-		Why:   "This link is shown only once. Copy it now and send it to " + who + ".",
-	}
-	return box, "It lets " + who + " add a passkey on a new device. It works once and expires in 7 days."
 }
 
 // memberRows builds the Members list. asking is the handle of the one row that
@@ -545,7 +430,6 @@ func newMemberRow(member store.ListMembersRow, principal auth.Principal, collide
 	}
 
 	row.Who = whoWord(member.AppUser, collides)
-	row.Reenrol, row.ReenrolForm = reenrolMemberPath(handle), "reenrol-"+handle
 	row.Remove = removeMemberPath(handle)
 	row.RoleField, row.UntilField = roleField(handle), untilField(handle)
 	row.RoleLabel = row.Who + "’s role"

@@ -58,6 +58,13 @@ func TestSeed_EachSecretConstantHashesToItsRow(t *testing.T) {
 		t.Errorf("the sitter invite admits a %s", role)
 	}
 
+	var user, createdBy uuid.UUID
+	if err := pool.QueryRow(ctx, "SELECT user_id, created_by FROM invite WHERE token_hash = $1 AND redeemed_at IS NULL", auth.HashToken(signInLinkToken)).Scan(&user, &createdBy); err != nil {
+		t.Errorf("the sign-in link resolves to no unredeemed row: %v", err)
+	} else if user != sam.id || createdBy != sam.id {
+		t.Errorf("the sign-in link is for %s and was created by %s, want Sam for both", user, createdBy)
+	}
+
 	var used *time.Time
 	if err := pool.QueryRow(ctx, "SELECT used_at FROM setup_link WHERE token_hash = $1", auth.HashToken(setupLinkToken)).Scan(&used); err != nil {
 		t.Errorf("the setup link resolves to no row: %v", err)
@@ -179,11 +186,10 @@ func TestSeed_OneSitterInviteIsPending(t *testing.T) {
 		Role    string
 		Created time.Time
 		Expires time.Time
-		Joins   bool
 	}
 	rows := collect[row](t, pool, `
-		SELECT role, created_at, expires_at, user_id IS NULL FROM invite
-		WHERE garden_id = $1 AND redeemed_at IS NULL`, home().id)
+		SELECT role, created_at, expires_at FROM invite
+		WHERE garden_id = $1 AND user_id IS NULL AND redeemed_at IS NULL`, home().id)
 	if len(rows) != 1 {
 		t.Fatalf("%d invites are pending, want 1", len(rows))
 	}
@@ -196,9 +202,6 @@ func TestSeed_OneSitterInviteIsPending(t *testing.T) {
 	}
 	if got := daysBetween(ref, inv.Expires); got != 5 {
 		t.Errorf("the invite expires in %d days, want 5", got)
-	}
-	if !inv.Joins {
-		t.Error("the invite names a user, so it re-enrols rather than admits")
 	}
 }
 

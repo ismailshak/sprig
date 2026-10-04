@@ -202,7 +202,7 @@ func (h *passkeyCeremony) refuseSignIn(w http.ResponseWriter, r *http.Request, e
 		// either of them, so the message does not say what was wrong. The log
 		// line names the passkey row, so whoever reads it can find the account.
 		h.logger.WarnContext(r.Context(), "refuse the sign-in", slog.Any("error", err))
-		message = "This passkey can’t be used. Ask the garden’s owner for a new invite link."
+		message = "This passkey can’t be used. Ask the person who runs this server for a sign-in link."
 	case errors.Is(err, auth.ErrFailedVerification):
 		h.logger.WarnContext(r.Context(), "refuse the sign-in", slog.Any("error", err))
 		message = "This passkey couldn’t be verified. Try again."

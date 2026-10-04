@@ -11,7 +11,6 @@ import (
 	"time"
 	"uuid"
 
-	"github.com/ismailshak/sprig/internal/auth"
 	"github.com/ismailshak/sprig/internal/push"
 	"github.com/ismailshak/sprig/internal/store"
 )
@@ -107,8 +106,8 @@ func TestPeople_APermanentMemberHasBothRolesTheirOwnSelectedAndNoEndDate(t *test
 	if row.until != "" {
 		t.Errorf("a permanent membership offers the end date %q; a date arrives with the invite", row.until)
 	}
-	if !slices.Equal(row.acts, []string{"Sign-in link", "Remove"}) {
-		t.Errorf("Sam's row offers %v, want Sign-in link and Remove", row.acts)
+	if !slices.Equal(row.acts, []string{"Remove"}) {
+		t.Errorf("Sam's row offers %v, want Remove", row.acts)
 	}
 }
 
@@ -418,73 +417,6 @@ func TestPeople_RemovingYourselfIsNotFound(t *testing.T) {
 	}
 }
 
-func TestPeople_AReenrolmentLinkIsShownOnceAndOnlyItsHashIsStored(t *testing.T) {
-	f := peopleGarden(t)
-
-	page := f.memberPage(t, http.MethodPost, f.handler.reenrolMember, "sam", reenrolMemberPath("sam"))
-
-	link := secretValue(t, page)
-	if !strings.HasPrefix(link, "example.com/invite/") {
-		t.Fatalf("the link reads %q, want the host this request arrived at and the path that redeems the token", link)
-	}
-	token := strings.TrimPrefix(link, "example.com/invite/")
-
-	var stored string
-	row := f.tx.QueryRow(t.Context(), "SELECT token_hash FROM invite WHERE user_id = $1", otherUserID)
-	if err := row.Scan(&stored); err != nil {
-		t.Fatal(err)
-	}
-	if stored == token {
-		t.Error("the invite row holds the link itself, and only its hash may be stored")
-	}
-	if stored != auth.HashToken(token) {
-		t.Error("the stored hash is not the hash of the link that was shown")
-	}
-	if strings.Contains(f.page(t, f.handler.show, PeoplePath), token) {
-		t.Error("the link is on the page again on the next request, and it is shown exactly once")
-	}
-}
-
-func TestPeople_AReenrolmentLinkIsNotListedUnderPendingInvites(t *testing.T) {
-	f := peopleGarden(t)
-	before := invitesShown(f.page(t, f.handler.show, PeoplePath))
-
-	f.memberPage(t, http.MethodPost, f.handler.reenrolMember, "sam", reenrolMemberPath("sam"))
-
-	after := invitesShown(f.page(t, f.handler.show, PeoplePath))
-	if !slices.Equal(before, after) {
-		t.Errorf("Pending invites reads %v after a re-enrolment and %v before, and Sam is already a member", after, before)
-	}
-}
-
-func TestPeople_ASecondReenrolmentLinkReplacesTheFirst(t *testing.T) {
-	f := peopleGarden(t)
-
-	first := secretValue(t, f.memberPage(t, http.MethodPost, f.handler.reenrolMember, "sam", reenrolMemberPath("sam")))
-	second := secretValue(t, f.memberPage(t, http.MethodPost, f.handler.reenrolMember, "sam", reenrolMemberPath("sam")))
-
-	var hashes []string
-	rows, err := f.tx.Query(t.Context(), "SELECT token_hash FROM invite WHERE user_id = $1", otherUserID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var hash string
-		if err := rows.Scan(&hash); err != nil {
-			t.Fatal(err)
-		}
-		hashes = append(hashes, hash)
-	}
-	token := strings.TrimPrefix(second, "example.com/invite/")
-	if want := []string{auth.HashToken(token)}; !slices.Equal(hashes, want) {
-		t.Errorf("Sam has %d re-enrolment links, want only the one that was just shown", len(hashes))
-	}
-	if first == second {
-		t.Error("the second press showed the first link again")
-	}
-}
-
 func TestPeople_RevokingAnInviteTakesItOutOfTheList(t *testing.T) {
 	f := peopleGarden(t)
 
@@ -631,18 +563,6 @@ func invitesShown(page string) []string {
 		}
 	}
 	return out
-}
-
-// secretValue returns the value a page shows once, such as a new token or an
-// invite link.
-func secretValue(t *testing.T, page string) string {
-	t.Helper()
-
-	value := readHTML(page).byID("secret-value")
-	if value == nil {
-		t.Fatalf("no value in a secret box on:\n%s", page)
-	}
-	return value.text()
 }
 
 // ariaLabels returns the accessible name of every named control on the page,

@@ -114,9 +114,8 @@ type invitedPage struct {
 	// Reenrol is true for a link that adds a device to an account already in
 	// the garden. The form then has no fields.
 	Reenrol bool
-	// By is the display name of the person who created the invite, or empty
-	// for a re-enrolment link the operator made with sprig admin invite.
-	// Garden is the name of the garden the link joins.
+	// By is the display name of the person who sent a join invite. It is empty
+	// for a sign-in link. Garden is the name of the garden the link is for.
 	By        string
 	Garden    string
 	Name      string
@@ -160,7 +159,6 @@ func newInvitedPage(token string, open openInvite, form joinForm, propose bool) 
 	invite := open.row.Invite
 	page := invitedPage{
 		Reenrol:   open.reenrol(),
-		By:        open.row.AppUser.DisplayName,
 		Garden:    open.row.Garden.Name,
 		Name:      form.name,
 		Handle:    form.handle,
@@ -170,13 +168,8 @@ func newInvitedPage(token string, open openInvite, form joinForm, propose bool) 
 		Challenge: invitedChallengePath(token),
 		Field:     credentialField,
 	}
-	// sprig admin invite sets created_by to the account the link is for.
-	// Emptying By makes the page say the link signs you in, instead of
-	// naming the person as the sender of their own link.
-	if page.Reenrol && invite.CreatedBy == open.member.ID {
-		page.By = ""
-	}
 	if !page.Reenrol {
+		page.By = open.row.AppUser.DisplayName
 		page.SignInToJoin = signInToAcceptPath(token)
 		// The date is read in the inviter's zone, because that is the zone it
 		// was chosen in and the person joining has no account to read it in
@@ -239,8 +232,8 @@ func openInviteToken(ctx context.Context, queries *store.Queries, now time.Time,
 		return openInvite{row: row}, true, nil
 	}
 
-	// A re-enrolment link is issued from a member's row. That membership may
-	// have been deleted or ended since, and the link is then unusable.
+	// A sign-in link works only while the account is a member of the link's
+	// garden and that membership has not ended.
 	member, err := queries.GetMembershipWithUserAndGarden(ctx, invite.GardenID, *invite.UserID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return openInvite{}, false, nil

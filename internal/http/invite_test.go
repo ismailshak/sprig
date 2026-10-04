@@ -250,3 +250,15 @@ func TestInvite_AnEndDateThatHasAlreadyBegunIsRefusedAndTomorrowIsNot(t *testing
 		})
 	}
 }
+
+// secretValue returns the value a page shows once, such as a new token or an
+// invite link.
+func secretValue(t *testing.T, page string) string {
+	t.Helper()
+
+	value := readHTML(page).byID("secret-value")
+	if value == nil {
+		t.Fatalf("no value in a secret box on:\n%s", page)
+	}
+	return value.text()
+}

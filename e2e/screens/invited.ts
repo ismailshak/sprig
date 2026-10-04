@@ -1,7 +1,7 @@
 import type { Locator, Page } from '@playwright/test';
 
 // The page an invite link opens, at /invite/<token>. A token comes from the
-// seed or from the link Invite someone and Sign-in link show.
+// seed or from the link Invite someone shows.
 export class InvitedScreen {
   constructor(private readonly page: Page) {}
 
@@ -9,7 +9,7 @@ export class InvitedScreen {
     await this.page.goto(`/invite/${token}`);
   }
 
-  // The link People and Invite someone show has no scheme: the host, then
+  // The link Invite someone shows has no scheme: the host, then
   // /invite/, then the token. tokenOf returns the token.
   static tokenOf(link: string): string {
     const token = link.split('/invite/')[1];

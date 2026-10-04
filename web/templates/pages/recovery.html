@@ -30,7 +30,7 @@
 <p class="note">Creating new codes replaces the current set. The old codes stop working immediately.</p>
 <form method="post" action="{{.Action}}"><button class="wide-action">Create new codes</button></form>
 {{else}}
-{{if .Prompted}}<p class="note">As the owner, nobody can send you a new invite link if you lose your passkeys. Create recovery codes and keep them somewhere safe.</p>{{end}}
+{{if .Prompted}}<p class="note">Without recovery codes, only the person who runs this server can sign you back in if you lose your passkeys. Create codes and keep them somewhere safe.</p>{{end}}
 <form method="post" action="{{.Action}}"><button class="wide-action">Create codes</button></form>
 {{end}}
 {{end}}

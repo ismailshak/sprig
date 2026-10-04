@@ -6,6 +6,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/ismailshak/sprig/internal/auth"
 	"github.com/ismailshak/sprig/internal/store"
 )
 
@@ -67,6 +68,17 @@ type invitePage struct {
 	Done string
 }
 
+// secretBox is an invite link or a new API token, shown only on the response
+// that creates it. Only its hash is stored.
+type secretBox struct {
+	// Label is the line above the value, such as "Invite link" or "Your new
+	// token".
+	Label string
+	Value string
+	// Why is the paragraph under the value.
+	Why string
+}
+
 // show handles GET /more/people/invite. The role and the end date come from
 // the query string, because a chip submits the form here as a GET and the date
 // has to survive that.
@@ -119,12 +131,39 @@ func (h *invite) createInviteLink(w http.ResponseWriter, r *http.Request) {
 		ends = &at
 	}
 
-	token, err := createInvite(r, h.queries, h.now(), role, nil, ends)
+	token, err := createInvite(r, h.queries, h.now(), role, ends)
 	if err != nil {
 		h.templates.serverError(h.logger, w, r, "make the invite link", err)
 		return
 	}
 	h.templates.render(w, r, view{page: "invite"}, madeInvitePage(inviteLink(r, token), ends, locationFor(PrincipalFrom(r).User)))
+}
+
+// createInvite writes an invite for somebody new to the garden and returns the
+// token in its link. ends is the day the new membership ends, or nil for no end
+// date.
+func createInvite(r *http.Request, queries *store.Queries, now time.Time, role string, ends *time.Time) (string, error) {
+	principal := PrincipalFrom(r)
+	token := auth.NewInviteToken()
+	params := store.CreateInviteParams{
+		GardenID:            principal.Garden.ID,
+		TokenHash:           auth.HashToken(token),
+		Role:                role,
+		CreatedBy:           principal.User.ID,
+		ExpiresAt:           now.Add(auth.InviteLifetime),
+		MembershipExpiresAt: ends,
+	}
+	if _, err := queries.CreateInvite(r.Context(), params); err != nil {
+		return "", err
+	}
+	return token, nil
+}
+
+// inviteLink is the link shown on the page: the host this request arrived at,
+// then the path that redeems the token. It has no scheme, because no
+// hostname is configured and the request is the only place the host is known.
+func inviteLink(r *http.Request, token string) string {
+	return r.Host + InvitedPath(token)
 }
 
 // newInvitePage builds the page with the form on it. role is the chip pressed,

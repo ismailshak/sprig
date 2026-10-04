@@ -34,8 +34,8 @@ type recoveryPage struct {
 	Left string
 	// Made reads "Made 2 Aug".
 	Made string
-	// Prompted shows the paragraph saying only an owner is prompted for codes.
-	// It is true for a person who manages the garden's people. Everyone else
+	// Prompted shows the paragraph asking the reader to create codes. It is
+	// true for a person who manages the garden's people. Everyone else
 	// can still reach this page and make codes.
 	Prompted bool
 }

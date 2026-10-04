@@ -4,25 +4,16 @@
      invites that have been sent and nobody has opened.
 
      The member rows are inside one form with Save changes under them, so
-     changing two people's roles is one post. Sign-in link and Remove leave the
-     page instead of saving it, and forms cannot nest, so each has an empty form
-     after the list that the row's button names in its form attribute.
+     changing two people's roles is one post.
 
      With JavaScript every form and link here swaps the page under the top
-     bar, because each changes the list, and a sign-in link adds a box above
-     it. Sign-in link scrolls the page to the top so that box is in view. */}}
+     bar, because each changes the list. */}}
 {{define "main"}}
 {{template "more-topbar" .Bar}}
 {{template "people" .}}
 {{end}}
 
 {{define "people"}}<div class="app__body app__body--sub" id="people">
-{{with .Secret}}
-<div class="section">
-{{template "secret" .}}
-<p class="note">{{$.SecretWhy}}</p>
-</div>
-{{end}}
 <div class="section">
 <div class="section__head"><h2 class="section__title">Members</h2></div>
 <form method="post" action="{{.Action}}" novalidate hx-post="{{.Action}}" hx-target="#people" hx-swap="outerHTML settle:0ms">
@@ -32,10 +23,10 @@
 {{/* The button has an id so htmx puts focus back on it after the swap. */}}
 {{if .Save}}<button class="wide-action" type="submit" id="save">Save changes</button>{{end}}
 </form>
-{{/* The forms a row's own buttons submit. Each is empty apart from its action,
-     because the button that submits it is in the row above. */}}
+{{/* The form the Remove button under "Remove Ellie?" submits. Forms cannot
+     nest, so the button is in the row above and names this form in its form
+     attribute. */}}
 {{range .Members}}
-{{if .ReenrolForm}}<form id="{{.ReenrolForm}}" method="post" action="{{.Reenrol}}" hx-post="{{.Reenrol}}" hx-target="#people" hx-swap="outerHTML settle:0ms scroll:#main:top"></form>{{end}}
 {{with .Asking}}<form id="{{.Form}}" method="post" action="{{.Action}}" hx-post="{{.Action}}" hx-target="#people" hx-swap="outerHTML settle:0ms"></form>{{end}}
 {{end}}
 </div>
@@ -85,15 +76,10 @@
 {{else}}<span class="row__controls">
 {{with .UntilValue}}<input class="input input--unit" type="date" name="{{$.UntilField}}" aria-label="{{$.UntilLabel}}" value="{{.}}">{{end}}
 {{with .Roles}}<select class="input input--unit" name="{{$.RoleField}}" aria-label="{{$.RoleLabel}}">{{template "options" .}}</select>{{end}}
-<span class="row__acts">
-<button class="row__drop" type="submit" form="{{.ReenrolForm}}" aria-label="Sign-in link for {{.Who}}">Sign-in link</button>
 <a class="row__drop" href="{{.Remove}}" aria-label="Remove {{.Who}}" hx-get="{{.Remove}}" hx-target="#people" hx-swap="outerHTML settle:0ms">Remove</a>
-</span>
 </span>
 {{end}}
 {{end}}
 </li>{{end}}
-
-{{define "script"}}<script src="{{asset "copy.js"}}" defer></script>{{end}}
 
 {{define "nav"}}{{template "tabs" "Under More"}}{{end}}

@@ -210,7 +210,6 @@ func routes(d Dependencies) []route {
 		{pattern: "POST " + PeoplePath + "/invites/{invite}/revoke", capability: auth.MemberManage, handler: http.HandlerFunc(peopleHandler.revokeInvite)},
 		{pattern: "GET " + PeoplePath + "/{member}/remove", capability: auth.MemberManage, handler: http.HandlerFunc(peopleHandler.confirmRemoveMember)},
 		{pattern: "POST " + PeoplePath + "/{member}/remove", capability: auth.MemberManage, handler: http.HandlerFunc(peopleHandler.removeMember)},
-		{pattern: "POST " + PeoplePath + "/{member}/reenrol", capability: auth.MemberManage, handler: http.HandlerFunc(peopleHandler.reenrolMember)},
 		{pattern: "GET " + TokensPath, capability: auth.TokenManage, handler: http.HandlerFunc(tokensHandler.show)},
 		{pattern: "POST " + TokensPath, capability: auth.TokenManage, handler: http.HandlerFunc(tokensHandler.createToken)},
 		{pattern: "POST " + TokensPath + "/{token}/revoke", capability: auth.TokenManage, handler: http.HandlerFunc(tokensHandler.revokeToken)},

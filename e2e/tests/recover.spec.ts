@@ -11,7 +11,7 @@ test('a recovery code registers a passkey without signing in, and that passkey t
 }) => {
   await withDevice(page, aWorkingDevice, async () => {
     await signin.open();
-    await page.getByRole('link', { name: 'use a recovery code' }).click();
+    await page.getByRole('link', { name: 'Use a recovery code' }).click();
     await expect(page).toHaveURL('/recover');
     await expect(page.getByRole('heading', { name: 'Recover an account' })).toBeVisible();
 
@@ -46,7 +46,9 @@ test('a code nobody made and a used code get the same page, with no form on it',
   await recover.use().click();
 
   await expect(page.getByRole('heading', { name: 'This code can’t be used' })).toBeVisible();
-  await expect(page.getByText('Try another code, or ask the garden’s owner for a new invite link.')).toBeVisible();
+  await expect(
+    page.getByText('Try another code, or ask the person who runs this server for a sign-in link.'),
+  ).toBeVisible();
   await expect(recover.code()).toHaveCount(0);
   await expect(recover.registerPasskey()).toHaveCount(0);
 
@@ -56,7 +58,9 @@ test('a code nobody made and a used code get the same page, with no form on it',
   await recover.use().click();
 
   await expect(page.getByRole('heading', { name: 'This code can’t be used' })).toBeVisible();
-  await expect(page.getByText('Try another code, or ask the garden’s owner for a new invite link.')).toBeVisible();
+  await expect(
+    page.getByText('Try another code, or ask the person who runs this server for a sign-in link.'),
+  ).toBeVisible();
   await expect(recover.code()).toHaveCount(0);
 });
 
