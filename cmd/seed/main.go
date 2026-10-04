@@ -198,6 +198,11 @@ func clear(ctx context.Context, tx pgx.Tx, gardens []garden, people []*person) e
 	if _, err := tx.Exec(ctx, "DELETE FROM app_user WHERE id = ANY($1)", userIDs); err != nil {
 		return fmt.Errorf("clearing app_user: %w", err)
 	}
+	// A setup link belongs to no garden and no account, so neither cascade
+	// deletes it.
+	if _, err := tx.Exec(ctx, "DELETE FROM setup_link WHERE id = $1", seedID(tableSetupLink, 1)); err != nil {
+		return fmt.Errorf("clearing setup_link: %w", err)
+	}
 	return nil
 }
 

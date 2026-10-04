@@ -1,5 +1,5 @@
 import { attach, aWorkingDevice, withDevice } from '../harness/authenticator';
-import { gardens, people } from '../harness/garden';
+import { gardens, people, setupLink } from '../harness/garden';
 import { signIn } from '../harness/signin';
 import { expect, test } from '../harness/test';
 
@@ -151,6 +151,31 @@ test('a signed-in browser opening Set up your garden is sent to set one up as th
   await expect(page.getByRole('heading', { name: 'Greenhouse' })).toBeVisible();
   await today.switchGarden().click();
   await expect(today.switchTo(gardens.upstairs.name)).toBeVisible();
+});
+
+test('a setup link opened while signed in sets up a garden as that account and is not found the second time', async ({
+  page,
+  errorPage,
+  setup,
+  today,
+}) => {
+  await signIn(page, people.robin.handle);
+
+  await setup.openLink(setupLink.token);
+
+  await expect(page).toHaveURL(`/setup/${setupLink.token}/signed-in`);
+  await expect(page.getByRole('heading', { name: `Set up a garden as ${people.robin.name}` })).toBeVisible();
+  await setup.garden().fill('Greenhouse');
+  await setup.create().click();
+
+  await expect(page).toHaveURL('/');
+  await expect(page.getByRole('heading', { name: 'Greenhouse' })).toBeVisible();
+  await today.switchGarden().click();
+  await expect(today.gardenRow('Greenhouse')).toContainText('Owner');
+
+  await setup.openLink(setupLink.token);
+
+  await expect(errorPage.heading('Page not found')).toBeVisible();
 });
 
 test('an account in no garden is told so on every page and sets up a garden of its own', async ({

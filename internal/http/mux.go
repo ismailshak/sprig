@@ -169,6 +169,11 @@ func routes(d Dependencies) []route {
 		{pattern: "GET " + setupSignedInPath, withoutGarden: true, handler: http.HandlerFunc(setupHandler.showSignedIn)},
 		{pattern: "POST " + setupSignedInPath, withoutGarden: true, handler: http.HandlerFunc(setupHandler.createSignedIn)},
 		{pattern: "GET " + remindersPath, handler: http.HandlerFunc(setupHandler.reminders)},
+		{pattern: "GET " + setupLinkPattern, handler: http.HandlerFunc(setupHandler.show)},
+		{pattern: "POST " + setupLinkPattern + "/challenge", handler: http.HandlerFunc(setupHandler.challenge)},
+		{pattern: "POST " + setupLinkPattern, handler: http.HandlerFunc(setupHandler.create)},
+		{pattern: "GET " + setupLinkPattern + setupSignedInSuffix, withoutGarden: true, handler: http.HandlerFunc(setupHandler.showSignedIn)},
+		{pattern: "POST " + setupLinkPattern + setupSignedInSuffix, withoutGarden: true, handler: http.HandlerFunc(setupHandler.createSignedIn)},
 		{pattern: "GET " + invitedPattern, handler: http.HandlerFunc(invitedHandler.show)},
 		{pattern: "POST " + invitedPattern + "/challenge", limits: inviteLimits(d.TrustedIPHeader, http.HandlerFunc(tooManyChallenges)), handler: http.HandlerFunc(invitedHandler.challenge)},
 		{pattern: "POST " + invitedPattern, limits: inviteLimits(d.TrustedIPHeader, http.HandlerFunc(invitedHandler.tooManyAnswers)), handler: http.HandlerFunc(invitedHandler.redeem)},
@@ -284,6 +289,12 @@ var publicRoutes = map[string]bool{
 	"GET " + setupPath:           true,
 	"POST " + setupChallengePath: true,
 	"POST " + setupPath:          true,
+	// A setup link is opened by somebody who may have no account yet, so its
+	// page, challenge and post are public too. The handler returns 404 for a
+	// link that is used, expired or was never issued.
+	"GET " + setupLinkPattern:                 true,
+	"POST " + setupLinkPattern + "/challenge": true,
+	"POST " + setupLinkPattern:                true,
 	// The handle suggestion fills a field on the two setup forms above and on
 	// an invite's join form. All three come before there is a session.
 	"GET " + handlePath: true,

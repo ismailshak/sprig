@@ -71,6 +71,13 @@ func aGardenForm() url.Values {
 // passkey saved by the request is named Mac · Chrome.
 func (f *setupFixture) request(t *testing.T, handler http.HandlerFunc, path string, form url.Values, cookies ...*http.Cookie) *httptest.ResponseRecorder {
 	t.Helper()
+	return f.requestOnLink(t, handler, "", path, form, cookies...)
+}
+
+// requestOnLink is request with token as the path's {token} value, the way
+// the mux calls a setup link's route. An empty token sets no value.
+func (f *setupFixture) requestOnLink(t *testing.T, handler http.HandlerFunc, token, path string, form url.Values, cookies ...*http.Cookie) *httptest.ResponseRecorder {
+	t.Helper()
 
 	method, body := http.MethodGet, strings.NewReader("")
 	if form != nil {
@@ -81,6 +88,9 @@ func (f *setupFixture) request(t *testing.T, handler http.HandlerFunc, path stri
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	}
 	req.Header.Set("User-Agent", chromeOnMac)
+	if token != "" {
+		req.SetPathValue("token", token)
+	}
 	for _, cookie := range cookies {
 		req.AddCookie(cookie)
 	}
@@ -93,8 +103,15 @@ func (f *setupFixture) request(t *testing.T, handler http.HandlerFunc, path stri
 // and the ceremony cookie. It fails the test on any status but 200.
 func (f *setupFixture) challenge(t *testing.T, form url.Values) (*protocol.CredentialCreation, *http.Cookie) {
 	t.Helper()
+	return f.challengeOnLink(t, "", form)
+}
 
-	rec := f.request(t, f.handler.challenge, setupChallengePath, form)
+// challengeOnLink is challenge on the setup link with token, or on /setup when
+// token is empty.
+func (f *setupFixture) challengeOnLink(t *testing.T, token string, form url.Values) (*protocol.CredentialCreation, *http.Cookie) {
+	t.Helper()
+
+	rec := f.requestOnLink(t, f.handler.challenge, token, setupChallengePathFor(token), form)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("the challenge: status = %d, want %d:\n%s", rec.Code, http.StatusOK, rec.Body.String())
 	}
@@ -113,14 +130,21 @@ func (f *setupFixture) challenge(t *testing.T, form url.Values) (*protocol.Crede
 // post with the credential it made in the credential field.
 func (f *setupFixture) create(t *testing.T, form url.Values, device *passkeytest.Authenticator) *httptest.ResponseRecorder {
 	t.Helper()
+	return f.createOnLink(t, "", form, device)
+}
 
-	creation, cookie := f.challenge(t, form)
+// createOnLink is create on the setup link with token, or on /setup when token
+// is empty.
+func (f *setupFixture) createOnLink(t *testing.T, token string, form url.Values, device *passkeytest.Authenticator) *httptest.ResponseRecorder {
+	t.Helper()
+
+	creation, cookie := f.challengeOnLink(t, token, form)
 	answered := url.Values{}
 	for k, v := range form {
 		answered[k] = v
 	}
 	answered.Set(credentialField, device.Register(creation))
-	return f.request(t, f.handler.create, setupPath, answered, cookie)
+	return f.requestOnLink(t, f.handler.create, token, setupPathFor(token), answered, cookie)
 }
 
 // mustCreate is create for a post the test expects to go through. It returns

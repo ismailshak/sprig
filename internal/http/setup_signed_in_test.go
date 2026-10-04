@@ -25,15 +25,25 @@ func (f *setupFixture) signedInTo(t *testing.T) (auth.Principal, string) {
 // a GET.
 func (f *setupFixture) asAccount(t *testing.T, handler http.HandlerFunc, principal auth.Principal, form url.Values) *httptest.ResponseRecorder {
 	t.Helper()
+	return f.asAccountOnLink(t, handler, "", principal, form)
+}
+
+// asAccountOnLink is asAccount on the signed-in page of the setup link with
+// token, or on /setup/signed-in when token is empty.
+func (f *setupFixture) asAccountOnLink(t *testing.T, handler http.HandlerFunc, token string, principal auth.Principal, form url.Values) *httptest.ResponseRecorder {
+	t.Helper()
 
 	ctx := context.WithValue(t.Context(), principalKey, principal)
 	method, body := http.MethodGet, strings.NewReader("")
 	if form != nil {
 		method, body = http.MethodPost, strings.NewReader(form.Encode())
 	}
-	req := httptest.NewRequestWithContext(ctx, method, setupSignedInPath, body)
+	req := httptest.NewRequestWithContext(ctx, method, setupSignedInPathFor(token), body)
 	if form != nil {
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	}
+	if token != "" {
+		req.SetPathValue("token", token)
 	}
 	rec := httptest.NewRecorder()
 	handler(rec, req)
@@ -83,8 +93,8 @@ func TestSetupSignedIn_ThePageNamesTheAccountAndAsksForTheGardenNameAlone(t *tes
 	if got := doc.byID("garden").attr("name"); got != "garden" {
 		t.Errorf("the garden name field posts as %q, want garden:\n%s", got, page)
 	}
-	if !linkTo(page, signInToSetUpPath, "Sign in as someone else") {
-		t.Errorf("the page has no Sign in as someone else link to %s:\n%s", signInToSetUpPath, page)
+	if !linkTo(page, signInToSetUpPath(""), "Sign in as someone else") {
+		t.Errorf("the page has no Sign in as someone else link to %s:\n%s", signInToSetUpPath(""), page)
 	}
 	buttonNamed(t, page, createLabel)
 	for _, field := range []string{"name", "timezone"} {
@@ -267,7 +277,7 @@ func TestSetup_ThePageLinksToSignInForSomebodyWithAnAccount(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
 	}
-	if !linkTo(rec.Body.String(), signInToSetUpPath, "Sign in") {
+	if !linkTo(rec.Body.String(), signInToSetUpPath(""), "Sign in") {
 		t.Errorf("the page has no link to sign in with the next path set to %s:\n%s", setupSignedInPath, rec.Body.String())
 	}
 }
@@ -281,7 +291,7 @@ func TestSetup_WithSignUpOffTheFirstRunPageHasNoSignInLink(t *testing.T) {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
 	}
 	page := rec.Body.String()
-	if linkTo(page, signInToSetUpPath, "Sign in") || strings.Contains(text(page), "Already have a sprig account?") {
+	if linkTo(page, signInToSetUpPath(""), "Sign in") || strings.Contains(text(page), "Already have an account?") {
 		t.Errorf("the page offers sign in, and with sign-up off it is served on an install with no account:\n%s", page)
 	}
 }

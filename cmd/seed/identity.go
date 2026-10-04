@@ -21,13 +21,14 @@ import (
 // Ellie shows every one of those screens with something on it.
 
 // An API token is sent to /api/chores as a bearer token. An invite is opened
-// as /invite/<token>.
+// as /invite/<token> and a setup link as /setup/<token>.
 //
 //nolint:gosec // These are development constants that only ever reach a database on this machine.
 const (
 	kitchenDisplayToken = "sprg_7c1f-development-kitchen-display"
 	spareDisplayToken   = "sprg_2ea8-development-spare-display"
 	sitterInviteToken   = "development-sitter-invite"
+	setupLinkToken      = "development-setup-link"
 
 	// iPhonePublicKey is the public half of the key pair behind Ellie's iPhone
 	// passkey, as an uncompressed P-256 point in hex. The e2e harness holds the
@@ -198,6 +199,13 @@ func writeIdentity(ctx context.Context, tx pgx.Tx, ref time.Time) error {
 		); err != nil {
 			return fmt.Errorf("writing %s's recovery code %d: %w", batch.owner.handle, i+1, err)
 		}
+	}
+
+	if _, err := tx.Exec(ctx,
+		`INSERT INTO setup_link (id, token_hash, created_at, expires_at) VALUES ($1, $2, $3, $4)`,
+		seedID(tableSetupLink, 1), auth.HashToken(setupLinkToken), ref, ref.Add(auth.InviteLifetime),
+	); err != nil {
+		return fmt.Errorf("writing the setup link: %w", err)
 	}
 
 	for _, b := range browsers() {

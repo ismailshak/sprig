@@ -246,6 +246,24 @@ var routeAccess = map[string]access{
 	// browser is sent here, so it is an ordinary protected route.
 	"GET /setup/reminders":  {},
 	"POST /setup/signed-in": {anyMember: true, withoutGarden: true},
+	// A setup link belongs to no garden, so there is no other garden's token to
+	// refuse. Every path uses a token nobody issued, so every route returns
+	// 404. The two signed-in routes are protected, and their foreign path is
+	// the same path.
+	"GET /setup/{token}":            {public: true, path: SetupLinkPath("no-such-token")},
+	"POST /setup/{token}/challenge": {public: true, path: setupLinkChallengePath("no-such-token")},
+	"POST /setup/{token}":           {public: true, path: SetupLinkPath("no-such-token")},
+	"GET /setup/{token}/signed-in": {
+		withoutGarden: true,
+		path:          setupSignedInPathFor("no-such-token"),
+		foreign:       setupSignedInPathFor("no-such-token"),
+	},
+	"POST /setup/{token}/signed-in": {
+		anyMember:     true,
+		withoutGarden: true,
+		path:          setupSignedInPathFor("no-such-token"),
+		foreign:       setupSignedInPathFor("no-such-token"),
+	},
 	// An invite link is opened before any session exists. The token here was
 	// never issued, so the handler renders the page for a link that cannot be
 	// redeemed. There is no foreign path, because the token is what says which

@@ -117,6 +117,8 @@ After restoring a backup, run `sprig sweep`. It lists any photos whose files are
 docker compose exec sprig /sprig sweep
 ```
 
+### Account recovery
+
 If a garden owner loses every device and their recovery codes, generate a sign-in link for them:
 
 ```sh
@@ -125,7 +127,19 @@ docker compose exec sprig /sprig admin invite --user <handle>
 
 The link adds a new passkey to their account and expires after 7 days. Their handle is shown next to their name on the People page.
 
-The image has a built-in health check. If you want to monitor Sprig from outside, `GET /healthz` returns 200 and needs no sign-in.
+### Setup links
+
+Sign-up is off by default. To let someone set up a garden of their own anyway, generate a setup link:
+
+```sh
+docker compose exec sprig /sprig admin setup
+```
+
+The link sets up one garden and expires after 7 days. Whoever opens it creates an account along with the garden, or adds the garden to their own account if they sign in first.
+
+### Health checks
+
+The image has a built-in health check. If you want to monitor Sprig from outside, `GET /healthz` returns 200 and doesn't require auth.
 
 ## Chores API
 
@@ -166,4 +180,4 @@ mise run e2e    # Playwright tests
 mise run lint
 ```
 
-The dev server runs at `http://localhost:8080` and lets you sign in without a passkey at `/dev/signin`. Run `mise tasks` to see the rest.
+The dev server runs at `http://localhost:8080` and you can sign in without a passkey by visiting `/dev/signin`. Run `mise tasks` to see the rest.

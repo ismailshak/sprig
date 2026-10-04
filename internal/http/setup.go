@@ -22,7 +22,36 @@ const (
 	// to for a registration challenge. It then runs
 	// navigator.credentials.create and posts the form to setupPath.
 	setupChallengePath = setupPath + "/challenge"
+	// setupLinkPattern is the mux pattern of a setup link's URL. {token} is the
+	// token sprig admin setup printed.
+	setupLinkPattern = setupPath + "/{token}"
 )
+
+// SetupLinkPath returns the path of the setup link with token. It is exported
+// because sprig admin setup prints the link.
+func SetupLinkPath(token string) string { return setupPath + "/" + token }
+
+// setupLinkChallengePath returns the path a setup link's page posts its form
+// to for a registration challenge.
+func setupLinkChallengePath(token string) string { return SetupLinkPath(token) + "/challenge" }
+
+// setupPathFor is the URL of the Set up your garden page for the setup link
+// with token, or setupPath when token is "".
+func setupPathFor(token string) string {
+	if token == "" {
+		return setupPath
+	}
+	return SetupLinkPath(token)
+}
+
+// setupChallengePathFor is the URL of the registration challenge for the setup
+// link with token, or setupChallengePath when token is "".
+func setupChallengePathFor(token string) string {
+	if token == "" {
+		return setupChallengePath
+	}
+	return setupLinkChallengePath(token)
+}
 
 // setupPageName is the template name of the Set up your garden page. Every
 // render in this handler uses it because no test can reach the branch where
@@ -46,9 +75,10 @@ const (
 )
 
 // errSetupClosed is returned inside the transaction that creates the garden
-// when sign-up is off and an account already exists. Another request has taken
-// the one registration such an install allows.
-var errSetupClosed = errors.New("an account exists and sign-up is off")
+// when the route has closed since the request started. Another request has
+// created the first account on an install with sign-up off, or the setup link
+// has been used or has expired.
+var errSetupClosed = errors.New("the setup route has closed")
 
 type setupForm struct {
 	garden string
@@ -124,31 +154,32 @@ type setupPage struct {
 	// is rendered on the input and again as the form's data-field, so the
 	// script does not have the name written into it.
 	Field string
-	// SignIn is the URL the "Sign in to set up a garden as yourself" link
-	// under the form points at. Signing in there redirects to the page for
-	// setting up a garden as the account signed in. It is empty with sign-up
+	// SignIn is the URL the "Already have an account? Sign in" link under the
+	// form points at. Signing in there redirects to the page for setting up a
+	// garden as the account signed in. It is empty on /setup with sign-up
 	// off. The template renders no link then, because that page is a 404 on
 	// such an install.
 	SignIn string
 }
 
-// newSetupPage fills the page from form. propose is true on a form nobody has
-// posted yet, so the page's script selects the browser's own zone. It is
-// false when re-rendering a refused post, so the zone the person chose stays.
-// signupOn is SPRIG_SIGNUP_ENABLED.
-func newSetupPage(form setupForm, propose, signupOn bool) setupPage {
+// newSetupPage fills the page from form. token is the setup link's token, or
+// "" on /setup. propose is true on a form nobody has posted yet, so the page's
+// script selects the browser's own zone. It is false when re-rendering a
+// refused post, so the zone the person chose stays. signupOn is
+// SPRIG_SIGNUP_ENABLED.
+func newSetupPage(token string, form setupForm, propose, signupOn bool) setupPage {
 	page := setupPage{
 		Garden:    form.garden,
 		Name:      form.name,
 		Handle:    form.handle,
 		Suggest:   handlePath,
 		Zone:      timezoneField{Zones: zoneOptions(form.zone), Propose: propose},
-		Action:    setupPath,
-		Challenge: setupChallengePath,
+		Action:    setupPathFor(token),
+		Challenge: setupChallengePathFor(token),
 		Field:     credentialField,
 	}
-	if signupOn {
-		page.SignIn = signInToSetUpPath
+	if token != "" || signupOn {
+		page.SignIn = signInToSetUpPath(token)
 	}
 	return page
 }
@@ -157,7 +188,8 @@ func newSetupPage(form setupForm, propose, signupOn bool) setupPage {
 // script asks for, and the post that creates the account, the garden, the
 // owner's membership, the three care types and the passkey, then signs in. It
 // also serves /setup/signed-in, where an account that is already signed in
-// sets up a garden of its own.
+// sets up a garden of its own. Each route is also served under a setup link's
+// path, /setup/{token}.
 type setup struct {
 	logger   *slog.Logger
 	passkeys *auth.Passkeys
@@ -179,12 +211,17 @@ type setup struct {
 	pushKey string
 }
 
-// open reports whether the three public setup routes are served. They are when
-// sign-up is on, and on an install with no account whatever the flag says,
-// because a new install with sign-up off would otherwise have no way to make
-// its first account. A closed route is a 404, so the response gives nothing
-// away about the install.
+// open reports whether the three public setup routes are served. Under a setup
+// link's URL they are served while the link is unused and unexpired, whatever
+// SPRIG_SIGNUP_ENABLED says. Otherwise they are served when sign-up is on, and
+// on an install with no account whatever the flag says, because a new install
+// with sign-up off would otherwise have no way to make its first account. A
+// closed route is a 404, so the response gives nothing away about the install
+// or the link.
 func (h *setup) open(r *http.Request) (bool, error) {
+	if token := r.PathValue("token"); token != "" {
+		return h.queries.SetupLinkOpen(r.Context(), auth.HashToken(token), h.now())
+	}
 	if h.enabled {
 		return true, nil
 	}
@@ -192,9 +229,41 @@ func (h *setup) open(r *http.Request) (bool, error) {
 	return !any, err
 }
 
-// show handles GET /setup. A browser that opens the page while signed in is
-// redirected to /setup/signed-in, because the form here would make a second
-// account for a person who has one.
+// claim runs first in the transaction that creates a garden. It returns
+// errSetupClosed when the route has closed since open was checked. Under a
+// setup link it sets the link's used_at, so a second post with the same link
+// fails. On /setup with sign-up off it locks the account table and checks that
+// it is still empty. With sign-up on it does nothing.
+func (h *setup) claim(ctx context.Context, q *store.Queries, r *http.Request) error {
+	if token := r.PathValue("token"); token != "" {
+		n, err := q.UseSetupLink(ctx, h.now(), auth.HashToken(token))
+		if err != nil {
+			return err
+		}
+		if n == 0 {
+			return errSetupClosed
+		}
+		return nil
+	}
+	if h.enabled {
+		return nil
+	}
+	if err := q.LockUsers(ctx); err != nil {
+		return err
+	}
+	any, err := q.AnyUsers(ctx)
+	if err != nil {
+		return err
+	}
+	if any {
+		return errSetupClosed
+	}
+	return nil
+}
+
+// show handles GET /setup and GET /setup/{token}. A browser that opens the
+// page while signed in is redirected to the signed-in page for the same URL,
+// because the form here would make a second account for a person who has one.
 func (h *setup) show(w http.ResponseWriter, r *http.Request) {
 	if open, err := h.open(r); err != nil {
 		h.templates.serverError(h.logger, w, r, "open the setup page", err)
@@ -203,20 +272,21 @@ func (h *setup) show(w http.ResponseWriter, r *http.Request) {
 		h.templates.notFound(w, r)
 		return
 	}
+	token := r.PathValue("token")
 	if hasSession(w, r, h.sessions, h.resolver, h.now()) {
-		http.Redirect(w, r, setupSignedInPath, http.StatusSeeOther)
+		http.Redirect(w, r, setupSignedInPathFor(token), http.StatusSeeOther)
 		return
 	}
-	h.templates.render(w, r, view{page: setupPageName}, newSetupPage(setupForm{}, true, h.enabled))
+	h.templates.render(w, r, view{page: setupPageName}, newSetupPage(token, setupForm{}, true, h.enabled))
 }
 
-// challenge handles POST /setup/challenge and returns the options for
-// navigator.credentials.create as JSON. The form's fields are posted with the
-// request, because the handle and display name go into the challenge and the
-// browser stores them with the passkey. A form with an empty field is refused
-// here with a 422 and no body. The script then posts the form as it is, so the
-// messages under the fields come from the post and no passkey is made for a
-// form the post would refuse.
+// challenge handles POST /setup/challenge and POST /setup/{token}/challenge.
+// It returns the options for navigator.credentials.create as JSON. The form's
+// fields are posted with the request, because the handle and display name go
+// into the challenge and the browser stores them with the passkey. A form with
+// an empty field is refused here with a 422 and no body. The script then posts
+// the form as it is, so the messages under the fields come from the post and no
+// passkey is made for a form the post would refuse.
 func (h *setup) challenge(w http.ResponseWriter, r *http.Request) {
 	if open, err := h.open(r); err != nil {
 		h.templates.serverError(h.logger, w, r, "start the setup", err)
@@ -261,9 +331,9 @@ func (h *setup) challenge(w http.ResponseWriter, r *http.Request) {
 	writeJSON(h.templates, h.logger, w, r, creation)
 }
 
-// create handles POST /setup. The account, the garden, the membership, the
-// care types and the passkey are written in one transaction, so a refused
-// registration rolls all of them back. A post that goes through signs in and
+// create handles POST /setup and POST /setup/{token}. The account, the garden,
+// the membership, the care types and the passkey are written in one
+// transaction, so a refused registration rolls all of them back. A post that goes through signs in and
 // redirects to the Reminders page.
 func (h *setup) create(w http.ResponseWriter, r *http.Request) {
 	if open, err := h.open(r); err != nil {
@@ -282,7 +352,7 @@ func (h *setup) create(w http.ResponseWriter, r *http.Request) {
 		h.templates.badRequest(w, r)
 		return
 	}
-	page := newSetupPage(form, false, h.enabled)
+	page := newSetupPage(r.PathValue("token"), form, false, h.enabled)
 	page.GardenError, page.NameError, page.Zone.Error = form.errors()
 	if !form.valid() {
 		h.templates.render(w, r, view{page: setupPageName, status: http.StatusUnprocessableEntity}, page)
@@ -315,20 +385,8 @@ func (h *setup) create(w http.ResponseWriter, r *http.Request) {
 	)
 	err = h.queries.InTx(r.Context(), func(q *store.Queries) error {
 		ctx := r.Context()
-		if !h.enabled {
-			// The same check ran outside the transaction. It runs again
-			// here under a lock, so two posts arriving at once cannot
-			// both create the first account.
-			if err := q.LockUsers(ctx); err != nil {
-				return err
-			}
-			any, err := q.AnyUsers(ctx)
-			if err != nil {
-				return err
-			}
-			if any {
-				return errSetupClosed
-			}
+		if err := h.claim(ctx, q, r); err != nil {
+			return err
 		}
 		var err error
 		if form.handle != "" {

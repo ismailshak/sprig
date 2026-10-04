@@ -35,7 +35,7 @@ The pre-commit hook in `.githooks` runs prettier over the staged files that `mis
 
 Decisions already taken. Changing one is a conversation, not a refactor.
 
-1. **Five runtime dependencies:** pgx, go-webauthn, webpush-go, goose, htmx. A sixth is decided in `brief.md` first.
+1. **Every runtime dependency is a deliberate choice.** `go.mod` lists the Go ones and `web/static/` holds the vendored ones. A new one is agreed before any code uses it.
 2. **Deliberately absent:** router, ORM, `database/sql`, Redis, queue, APM, config file, feature flags, admin panel, CSS or JS build step.
 3. **Configuration is `SPRIG_*` environment variables**, read once at startup into a struct. A missing required value stops startup, and the error names every missing value at once. Nothing about the host is compiled in: no path, hostname, port or neighbouring service.
 4. **A garden-scoped store function takes a garden ID.** `GetPlant(gardenID, id)`, never `GetPlant(id)`. No query can return another garden's row.

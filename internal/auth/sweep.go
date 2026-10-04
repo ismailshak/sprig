@@ -9,10 +9,11 @@ import (
 	"github.com/ismailshak/sprig/internal/store"
 )
 
-// inviteGrace is how long a redeemed or expired invite is kept before the
-// sweep deletes it. It is a month so that a link somebody reports as not
-// working can still be found in the table.
-const inviteGrace = 30 * 24 * time.Hour
+// linkGrace is how long the sweep keeps a link that no longer works: an invite
+// or sign-in link that was redeemed or expired, or a setup link that was used
+// or expired. It is a month so that a link somebody reports as not working can
+// still be found in the table.
+const linkGrace = 30 * 24 * time.Hour
 
 // SweepInterval is how long the server waits between sweeps.
 const SweepInterval = 24 * time.Hour
@@ -21,13 +22,15 @@ const SweepInterval = 24 * time.Hour
 type SweepReport struct {
 	Sessions      int64
 	Invites       int64
+	SetupLinks    int64
 	RecoveryCodes int64
 }
 
 // Sweep deletes the rows nothing else deletes and no page shows: sessions
-// last used a sessionTTL or more ago, redeemed invites and expired sign-in
-// links older than inviteGrace, and recovery codes from a batch a newer batch
-// replaced. Each holds the hash of a credential that no longer works.
+// last used a sessionTTL or more ago, redeemed invites, expired sign-in links
+// and used or expired setup links older than linkGrace, and recovery codes
+// from a batch a newer batch replaced. Each holds the hash of a credential
+// that no longer works.
 //
 // Anything a page still lists is left: an expired API token on Tokens, an
 // ended membership on People, an expired join invite under Pending invites,
@@ -41,9 +44,13 @@ func Sweep(ctx context.Context, q *store.Queries, now time.Time, sessionTTL time
 	if err != nil {
 		return report, fmt.Errorf("delete the expired sessions: %w", err)
 	}
-	report.Invites, err = q.DeleteRedeemedAndExpiredInvites(ctx, now.Add(-inviteGrace))
+	report.Invites, err = q.DeleteRedeemedAndExpiredInvites(ctx, now.Add(-linkGrace))
 	if err != nil {
 		return report, fmt.Errorf("delete the spent invites: %w", err)
+	}
+	report.SetupLinks, err = q.DeleteUsedAndExpiredSetupLinks(ctx, now.Add(-linkGrace))
+	if err != nil {
+		return report, fmt.Errorf("delete the used and expired setup links: %w", err)
 	}
 	report.RecoveryCodes, err = q.DeleteSupersededRecoveryCodes(ctx)
 	if err != nil {
@@ -103,6 +110,6 @@ func (s *Sweeper) sweep(ctx context.Context) {
 		return
 	}
 	if report != (SweepReport{}) {
-		s.logger.Info("swept", "sessions", report.Sessions, "invites", report.Invites, "recovery_codes", report.RecoveryCodes)
+		s.logger.Info("swept", "sessions", report.Sessions, "invites", report.Invites, "setup_links", report.SetupLinks, "recovery_codes", report.RecoveryCodes)
 	}
 }

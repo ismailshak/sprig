@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"log/slog"
+	"slices"
 	"testing"
 	"time"
 	"uuid"
@@ -63,6 +64,10 @@ func sweepOnTx(t *testing.T) (*store.Queries, pgx.Tx) {
 			('join-expired-31d', $1, 'sitter', NULL, $2, $4, NULL),
 			('reenrol-open', $1, 'owner', $2, $2, $6, NULL)`,
 			[]any{testGardenID, testUserID, sweptAt.Add(-40 * day), sweptAt.Add(-31 * day), sweptAt.Add(-29 * day), sweptAt.Add(5 * day)}},
+		// Setup links: used 31 and 29 days ago, unused and expired 31 and 29 days ago, and an open one.
+		{`INSERT INTO setup_link (token_hash, expires_at, used_at) VALUES
+			('setup-used-31d', $1, $2), ('setup-used-29d', $1, $3), ('setup-expired-31d', $2, NULL), ('setup-expired-29d', $3, NULL), ('setup-open', $4, NULL)`,
+			[]any{sweptAt.Add(-25 * day), sweptAt.Add(-31 * day), sweptAt.Add(-29 * day), sweptAt.Add(5 * day)}},
 		// Emma holds a batch from ten days ago and one from yesterday, each with a used code. Sam holds one batch.
 		{`INSERT INTO recovery_code (user_id, code_hash, generated_at, used_at) VALUES
 			($1, 'emma-old-1', $3, NULL), ($1, 'emma-old-2', $3, $3),
@@ -131,6 +136,21 @@ func TestSweep_AnInviteNoPageListsIsDeletedAfterAMonthAndAnExpiredJoinInviteIsKe
 	want := []string{"join-expired-31d", "redeemed-29d", "reenrol-open"}
 	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] || got[2] != want[2] {
 		t.Errorf("the invites left are %v, want %v: the expired join invite is on the People page", got, want)
+	}
+}
+
+func TestSweep_ASetupLinkUsedOrExpiredAMonthAgoIsDeleted(t *testing.T) {
+	q, tx := sweepOnTx(t)
+
+	report := sweepOnce(t, q)
+
+	if report.SetupLinks != 2 {
+		t.Errorf("the report counts %d setup links, want 2", report.SetupLinks)
+	}
+	got := hashes(t, tx, "setup_link", "token_hash")
+	want := []string{"setup-expired-29d", "setup-open", "setup-used-29d"}
+	if !slices.Equal(got, want) {
+		t.Errorf("the setup links left are %v, want %v", got, want)
 	}
 }
 

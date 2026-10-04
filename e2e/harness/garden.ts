@@ -54,6 +54,10 @@ export const invites = {
   sitter: { token: 'development-sitter-invite' },
 } as const;
 
+// The one setup link, unused and made today. Its token is the plaintext the
+// seed hashes, so a test can open the link.
+export const setupLink = { token: 'development-setup-link' } as const;
+
 // The recovery codes the seed gives Ellie: ten made, two of them used. unused
 // and used are the plaintext of two of the ten, so a test can post a code the
 // seed hashed.
