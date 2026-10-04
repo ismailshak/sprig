@@ -82,6 +82,7 @@ Go handler tests:
 
 - A handler test asserts on the status, the redirect, the headers, the rows written and the text a person reads. Where a claim depends on markup, it asserts on the attribute that holds it: a field's name, value, `checked` or `selected`, a `details` element's `open`, a link's `href`, a form's `action`, `hx-target`, an inline `style` the server computes, or an id the server assigns.
 - It never names a class or depends on a wrapper element, and never matches markup with a regular expression or a substring. It reads the body with `readHTML`, a test helper over `encoding/xml`.
+- A Go test renders every template name a handler uses, and it goes through the handler: the page and fragment of each `view`, each fragment a helper returns, and the template of each `sentence` call. A name with no template is an error only on a request that renders it. A fragment's test sends the htmx headers that select it. A `sentence` call's test asserts the sentence, because a failure only logs and returns an empty string. Where no request can reach a branch, that branch uses the same name constant as a branch a test reaches. `mise run coverage --html` shows the lines no test runs.
 
 Playwright rules:
 

@@ -162,10 +162,9 @@ func (t *Templates) set(page string) (*template.Template, error) {
 		pages = reloaded
 	}
 
-	// A view is a literal in a handler, so a page that is not in the set is a
-	// typo, and it surfaces on the first request for that route rather than
-	// at startup. If routes ever declare their view the way they declare
-	// their capability, New can check every page name against the set instead.
+	// A page name with no file returns this error on the first request that
+	// renders it, not at startup. Handler tests render every page name a
+	// handler uses for that reason.
 	set, ok := pages[page]
 	if !ok {
 		return nil, fmt.Errorf("no page named %q", page)

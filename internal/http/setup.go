@@ -24,6 +24,12 @@ const (
 	setupChallengePath = setupPath + "/challenge"
 )
 
+// setupPageName is the template name of the Set up your garden page. Every
+// render in this handler uses it because no test can reach the branch where
+// another account takes the handle between the check and the insert. A test of
+// any other branch renders the same name and so checks it for that branch.
+const setupPageName = "setup"
+
 // seededCareTypes are the care types every new garden starts with, in the
 // order the Garden page lists them.
 var seededCareTypes = [...]struct{ name, slug string }{
@@ -201,7 +207,7 @@ func (h *setup) show(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, setupSignedInPath, http.StatusSeeOther)
 		return
 	}
-	h.templates.render(w, r, view{page: "setup"}, newSetupPage(setupForm{}, true, h.enabled))
+	h.templates.render(w, r, view{page: setupPageName}, newSetupPage(setupForm{}, true, h.enabled))
 }
 
 // challenge handles POST /setup/challenge and returns the options for
@@ -279,7 +285,7 @@ func (h *setup) create(w http.ResponseWriter, r *http.Request) {
 	page := newSetupPage(form, false, h.enabled)
 	page.GardenError, page.NameError, page.Zone.Error = form.errors()
 	if !form.valid() {
-		h.templates.render(w, r, view{page: "setup", status: http.StatusUnprocessableEntity}, page)
+		h.templates.render(w, r, view{page: setupPageName, status: http.StatusUnprocessableEntity}, page)
 		return
 	}
 	if taken, err := handleTaken(r.Context(), h.queries, form.handle); err != nil {
@@ -287,7 +293,7 @@ func (h *setup) create(w http.ResponseWriter, r *http.Request) {
 		return
 	} else if taken {
 		page.HandleError = handleTakenMessage(form.handle)
-		h.templates.render(w, r, view{page: "setup", status: http.StatusUnprocessableEntity}, page)
+		h.templates.render(w, r, view{page: setupPageName, status: http.StatusUnprocessableEntity}, page)
 		return
 	}
 
@@ -349,7 +355,7 @@ func (h *setup) create(w http.ResponseWriter, r *http.Request) {
 	// browser made is not saved, since the transaction rolled back.
 	if errors.Is(err, store.ErrHandleTaken) {
 		page.HandleError = handleTakenMessage(form.handle)
-		h.templates.render(w, r, view{page: "setup", status: http.StatusUnprocessableEntity}, page)
+		h.templates.render(w, r, view{page: setupPageName, status: http.StatusUnprocessableEntity}, page)
 		return
 	}
 	if err != nil {
@@ -411,5 +417,5 @@ func (h *setup) refuse(w http.ResponseWriter, r *http.Request, page setupPage, e
 	if page.Refusal == "" {
 		return
 	}
-	h.templates.render(w, r, view{page: "setup", status: http.StatusUnprocessableEntity}, page)
+	h.templates.render(w, r, view{page: setupPageName, status: http.StatusUnprocessableEntity}, page)
 }

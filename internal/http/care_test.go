@@ -915,12 +915,16 @@ func TestWindow_TheHeadingIsReturnedWithTheRow(t *testing.T) {
 		f := rosewood(t)
 		f.water(t, bigFellaID)
 		f.water(t, nigelID)
-		head := dayHeadIn(f.post(t, dorisID.String(), url.Values{"care": {"water"}}, true).Body.String())
+		body := f.post(t, dorisID.String(), url.Values{"care": {"water"}}, true).Body.String()
+		head := dayHeadIn(body)
 		if got := head.text(); got != "All done for today." {
 			t.Errorf("the head says %q, want the tick that waits for the windows to close", got)
 		}
 		if strings.Contains(head.text(), "Nothing else is due.") {
 			t.Error("the empty screen was rendered over rows that are still on the page")
+		}
+		if got, want := announcement(body), "You watered Doris. All done for today. Undo from the row now, or from Activity later."; got != want {
+			t.Errorf("the swap announces %q, want %q", got, want)
 		}
 	})
 
