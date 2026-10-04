@@ -223,6 +223,14 @@ type Session struct {
 	LastSeenAt          time.Time
 }
 
+type SetupLink struct {
+	ID        uuid.UUID
+	TokenHash string
+	CreatedAt time.Time
+	ExpiresAt time.Time
+	UsedAt    *time.Time
+}
+
 type WebauthnCeremony struct {
 	ID        uuid.UUID
 	TokenHash string
