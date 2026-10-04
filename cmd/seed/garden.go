@@ -26,6 +26,7 @@ const (
 	tableAPIToken
 	tablePushSubscription
 	tableCalendarNote
+	tableSetupLink
 )
 
 func seedID(table, n int) uuid.UUID {

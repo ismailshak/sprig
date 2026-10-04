@@ -58,6 +58,13 @@ func TestSeed_EachSecretConstantHashesToItsRow(t *testing.T) {
 		t.Errorf("the sitter invite admits a %s", role)
 	}
 
+	var used *time.Time
+	if err := pool.QueryRow(ctx, "SELECT used_at FROM setup_link WHERE token_hash = $1", auth.HashToken(setupLinkToken)).Scan(&used); err != nil {
+		t.Errorf("the setup link resolves to no row: %v", err)
+	} else if used != nil {
+		t.Errorf("the setup link was used at %v, want unused", *used)
+	}
+
 	batch := recovery()
 	for i, code := range batch.codes {
 		var owner uuid.UUID
@@ -74,7 +81,7 @@ func TestSeed_NoSecretIsStoredInTheClear(t *testing.T) {
 	ctx := t.Context()
 
 	columns := []string{
-		"api_token.token_hash", "invite.token_hash", "recovery_code.code_hash",
+		"api_token.token_hash", "invite.token_hash", "recovery_code.code_hash", "setup_link.token_hash",
 	}
 	for _, column := range columns {
 		table, name, _ := strings.Cut(column, ".")

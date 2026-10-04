@@ -7,6 +7,10 @@ export class SetupScreen {
     await this.page.goto('/setup');
   }
 
+  async openLink(token: string): Promise<void> {
+    await this.page.goto(`/setup/${token}`);
+  }
+
   garden(): Locator {
     return this.page.getByLabel('Garden name');
   }
