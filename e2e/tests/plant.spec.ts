@@ -83,6 +83,6 @@ test("a time later than now is refused on the plant's page @swap", async ({ plan
 
   await sheet.submit('Log watering');
 
-  await expect(sheet.dialog().getByText('That time is in the future.')).toBeVisible();
+  await expect(sheet.field('When').getByText('That time is in the future.')).toBeVisible();
   await expect(plant.heading()).toHaveText(seeded.doris.name);
 });

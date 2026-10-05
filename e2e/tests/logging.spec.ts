@@ -104,7 +104,7 @@ test('a time later than now is refused @swap', async ({ today, sheet }) => {
   await sheet.time().fill('23:59');
   await sheet.submit('Log watering');
 
-  await expect(sheet.dialog().getByText('That time is in the future.')).toBeVisible();
+  await expect(sheet.field('When').getByText('That time is in the future.')).toBeVisible();
   await expect(sheet.chip('Earlier today')).toBeChecked();
 });
 
@@ -125,7 +125,7 @@ test('a time later than now is refused without replacing the open sheet @js', as
   await sheet.time().fill('23:59');
   await sheet.submit('Log watering');
 
-  await expect(sheet.dialog().getByText('That time is in the future.')).toBeVisible();
+  await expect(sheet.field('When').getByText('That time is in the future.')).toBeVisible();
   expect(await dialog?.evaluate((element) => element.isConnected)).toBe(true);
 });
 
