@@ -32,3 +32,22 @@ test('signing out ends the session', async ({ page, more }) => {
   await page.goto('/');
   await expect(page).toHaveURL('/signin');
 });
+
+// The sessionStorage key under which htmx keeps copies of Activity. Back
+// restores a copy from it without a request.
+const historyCache = 'htmx-history-cache';
+
+test('signing out removes the copies of Activity kept for Back @js', async ({ page, more, activity }) => {
+  await signIn(page, people.ellie.handle);
+  await activity.open();
+  await activity.older().click();
+  await expect(page).toHaveURL(/\/activity\?before=/);
+  const stored = () => page.evaluate((key) => sessionStorage.getItem(key), historyCache);
+  await expect.poll(stored).not.toBeNull();
+
+  await more.open();
+  await more.signOut().click();
+
+  await expect(page).toHaveURL('/signin');
+  await expect.poll(stored).toBeNull();
+});

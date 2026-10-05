@@ -36,6 +36,12 @@ export class SheetScreen {
     return this.dialog().getByText(/^Logged by /);
   }
 
+  // The live region inside the sheet. While the sheet is open, the page's
+  // script writes announcements and failed requests into it instead of #status.
+  announcement(): Locator {
+    return this.dialog().getByRole('status');
+  }
+
   async cancel(): Promise<void> {
     await this.dialog().getByRole('button', { name: 'Cancel' }).click();
   }

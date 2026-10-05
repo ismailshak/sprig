@@ -486,11 +486,7 @@ a.empty__action { display: inline-flex; align-items: center; }
    is on the row rather than inside the Undo button, because a bar thin enough
    not to dominate the button would have to cross the label to be visible.
 
-   --grace is the length of the window and --grace-delay is the negative of the
-   time already elapsed, both set inline on the row. The negative delay keeps the
-   bar in step with the timer when the row is re-rendered inside its window.
-   Re-rendering replaces the element, and without the offset the bar would
-   restart from full. */
+   --grace is the length of the window, set inline on the row. */
 .row--done::after,
 .grace::after {
   content: "";
@@ -501,7 +497,7 @@ a.empty__action { display: inline-flex; align-items: center; }
   height: 2px;
   background: var(--accent);
   transform-origin: left;
-  animation: grace-drain var(--grace, 4000ms) linear var(--grace-delay, 0ms) forwards;
+  animation: grace-drain var(--grace, 4000ms) linear forwards;
 }
 
 @keyframes grace-drain { to { transform: scaleX(0) } }
@@ -2804,8 +2800,8 @@ a.wide-action {
 
 /* The app fills the window and the live region is the last element in the
    body, so a shown line in the normal flow would be below the fold. It is
-   fixed to the top of the window instead, above the sheet's z-index of 20,
-   because a swap sent from inside the sheet can fail too. */
+   fixed to the top of the window instead, above the sticky top bar. A sheet's
+   own region is fixed there too, above the sheet's panel. */
 .status--shown {
   position: fixed;
   top: 0;

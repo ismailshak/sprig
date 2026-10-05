@@ -39,10 +39,6 @@
       // The page changes mode for as long as it is open, and the next page
       // follows the system again.
     }
-    if (chosen === 'system') {
-      delete document.documentElement.dataset.mode;
-    } else {
-      document.documentElement.dataset.mode = chosen;
-    }
+    window.sprigAppearance(chosen);
   });
 })();

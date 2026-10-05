@@ -27,6 +27,7 @@
 {{template "sheet-form" $}}
 <form method="dialog"><button class="sheet__cancel">Cancel</button></form>
 </div>
+{{template "sheet-status"}}
 </dialog>{{else}}<div id="sheet"></div>{{end}}{{end}}
 
 {{/* Every choice on the form is a radio group. The stylesheet shows the

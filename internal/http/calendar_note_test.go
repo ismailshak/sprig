@@ -357,6 +357,9 @@ func TestCalendarNote_ARefusedNoteIsShownAgainWithTheReason(t *testing.T) {
 			if got := noteError(sheet); got != tc.want {
 				t.Errorf("the sheet says %q, want %q", got, tc.want)
 			}
+			if !hasEmptyLiveRegion(sheet) {
+				t.Error("the sheet has no empty live region for the refusal to be read from")
+			}
 			if text, first, last := noteFields(sheet); text != strings.TrimSpace(tc.form.Get("text")) || first != tc.form.Get("first") || last != tc.form.Get("last") {
 				t.Errorf("the fields hold %q, %q, %q, want what was posted", text, first, last)
 			}
