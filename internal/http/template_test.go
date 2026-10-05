@@ -131,6 +131,20 @@ func TestRender_ANavigationGetsTheWholePage(t *testing.T) {
 	}
 }
 
+func TestRender_APageAndAFragmentBothVaryOnTheHTMXHeaders(t *testing.T) {
+	templates, _ := fixtureTemplates(t)
+	v := view{page: "today", fragment: "care-row"}
+
+	for name, rec := range map[string]*httptest.ResponseRecorder{
+		"page":     renderTo(t, templates, false, v, struct{ Rows []fixtureRowData }{}),
+		"fragment": renderTo(t, templates, true, v, fixtureRowData{Plant: "Doris", Care: "water"}),
+	} {
+		if got := rec.Header().Get("Vary"); got != "HX-Request, HX-Target, HX-History-Restore-Request" {
+			t.Errorf("the %s's Vary is %q, want the three htmx request headers", name, got)
+		}
+	}
+}
+
 // Otherwise every htmx attribute in the templates would need to know whether
 // its route has a fragment.
 func TestRender_AViewWithNoFragmentGivesHTMXTheWholePage(t *testing.T) {

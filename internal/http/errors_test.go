@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -71,6 +72,25 @@ func TestNotFound_ARequestThatIsNotABrowserNavigationReadsOneLineOfText(t *testi
 		}
 		if ct := rec.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/plain") {
 			t.Errorf("%s: Content-Type = %q, want text/plain", name, ct)
+		}
+	}
+}
+
+func TestNotFound_ThePageAndTheLineOfTextBothVaryOnAccept(t *testing.T) {
+	deps := testDependencies(t)
+	deps.Resolver = acceptEveryToken(memberWith(everyCapability()))
+	app := New(deps)
+	for name, prepare := range map[string]func(*http.Request){
+		"page": func(r *http.Request) { browsing(r) },
+		"text": func(r *http.Request) { r.Header.Set("Accept", "*/*") },
+	} {
+		req := signedIn(httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/nope", nil))
+		prepare(req)
+		rec := httptest.NewRecorder()
+		app.ServeHTTP(rec, req)
+
+		if got := rec.Header().Values("Vary"); !slices.Contains(got, "Accept") {
+			t.Errorf("the %s's Vary is %q, want Accept", name, got)
 		}
 	}
 }

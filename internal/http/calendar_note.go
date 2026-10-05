@@ -22,6 +22,10 @@ const notesPath = calendarPath + "/notes"
 // sheet.
 const noteSheetTemplate = "note-sheet"
 
+// noteFormTemplate is the template that renders the form inside the note
+// sheet. A refused note returns it.
+const noteFormTemplate = "note-form"
+
 // noteChangedTemplate is the template for the response to an added, saved or
 // deleted note: the month's grid, and an empty #sheet swapped out of band to
 // close the sheet.
@@ -164,7 +168,7 @@ func (h *activity) newNote(w http.ResponseWriter, r *http.Request) {
 		First:  first.Format(time.DateOnly),
 		Button: "Add note",
 	}
-	h.renderNoteSheet(w, r, n, s, 0)
+	h.renderNoteSheet(w, r, n, s, noteSheetTemplate, 0)
 }
 
 // createNote handles POST /activity/calendar/notes and writes the note.
@@ -211,7 +215,7 @@ func (h *activity) editNote(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s := editNoteSheet(note, n.q.month)
-	h.renderNoteSheet(w, r, n, s, 0)
+	h.renderNoteSheet(w, r, n, s, noteSheetTemplate, 0)
 }
 
 // saveNote handles POST /activity/calendar/notes/{note} and writes the
@@ -316,9 +320,10 @@ func editNoteSheet(note store.CalendarNote, month time.Time) *noteSheet {
 	return s
 }
 
-// renderNoteSheet renders s. An htmx request gets the dialog alone. Any other
-// request gets the calendar page with the sheet open over it.
-func (h *activity) renderNoteSheet(w http.ResponseWriter, r *http.Request, n noteRequest, s *noteSheet, status int) {
+// renderNoteSheet renders s. An htmx request gets the fragment alone: the
+// dialog, or the form inside it for a refusal. Any other request gets the
+// calendar page with the sheet open over it.
+func (h *activity) renderNoteSheet(w http.ResponseWriter, r *http.Request, n noteRequest, s *noteSheet, fragment string, status int) {
 	s.Max = lastNoteDay(n.now).Format(time.DateOnly)
 	page := calendarPage{}
 	if !isHTMX(r) {
@@ -330,15 +335,13 @@ func (h *activity) renderNoteSheet(w http.ResponseWriter, r *http.Request, n not
 		}
 	}
 	page.NoteSheet = s
-	h.templates.render(w, r, view{page: "calendar", fragment: noteSheetTemplate, status: status, announce: s.Error}, page)
+	h.templates.render(w, r, view{page: "calendar", fragment: fragment, status: status, announce: s.Error}, page)
 }
 
-// refuseNote renders the sheet again with its error message and a 422. The
-// form targets #calendar-grid, so the response headers retarget it at #sheet.
+// refuseNote renders the sheet's form again with its error message and a 422.
 func (h *activity) refuseNote(w http.ResponseWriter, r *http.Request, n noteRequest, s *noteSheet) {
-	w.Header().Set("HX-Retarget", "#"+sheetID)
-	w.Header().Set("HX-Reswap", "outerHTML")
-	h.renderNoteSheet(w, r, n, s, http.StatusUnprocessableEntity)
+	refuseOnSheet(w)
+	h.renderNoteSheet(w, r, n, s, noteFormTemplate, http.StatusUnprocessableEntity)
 }
 
 // noteChanged responds to an added, saved or deleted note. Without htmx it

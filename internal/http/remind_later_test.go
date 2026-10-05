@@ -484,15 +484,9 @@ func TestRemindLater_ARefusedTimeSetsNothingAndKeepsWhatWasTyped(t *testing.T) {
 			rec := f.postReminder(t, remindLaterPath, c.form, true)
 
 			wantStatus(t, rec, http.StatusUnprocessableEntity)
-			if got := rec.Header().Get("HX-Retarget"); got != "#"+sheetID {
-				t.Errorf("HX-Retarget = %q, want %q", got, "#"+sheetID)
-			}
-			sheet := remindLaterDialog(rec.Body.String())
+			sheet := refusalForm(t, rec)
 			if !strings.Contains(sheet.text(), string(c.want)) {
 				t.Errorf("the sheet does not say %q:\n%s", c.want, sheet.text())
-			}
-			if !hasEmptyLiveRegion(sheet) {
-				t.Error("the sheet has no empty live region for the refusal to be read from")
 			}
 			if got := sheet.first(attrIs("name", timeField)).attr("value"); got != c.form.Get(timeField) {
 				t.Errorf("the time input reads %q, want the %q that was posted", got, c.form.Get(timeField))
@@ -531,9 +525,14 @@ func TestRemindLater_ASecondReminderIsRefusedWhileOneIsWaiting(t *testing.T) {
 	if got := f.storedReminder(t, rosewoodMembershipID); !got.Equal(waiting) {
 		t.Errorf("the reminder is at %s, want it left at %s", got.UTC(), waiting)
 	}
-	sheet := remindLaterDialog(rec.Body.String())
+	sheet := refusalForm(t, rec)
 	if !strings.Contains(sheet.text(), string(reminderWaiting)) {
 		t.Errorf("the sheet does not say %q:\n%s", reminderWaiting, sheet.text())
+	}
+	// The sheet was opened with no reminder waiting, so the line above the
+	// chips has to change with the refusal.
+	if !strings.Contains(sheet.text(), "You’ll get a reminder at 2:00pm.") {
+		t.Errorf("the sheet does not say when the waiting reminder is:\n%s", sheet.text())
 	}
 	if sheet.first(isTag("button"), textIs("Reschedule")) == nil {
 		t.Errorf("the sheet does not offer Reschedule:\n%s", sheet)
@@ -570,7 +569,7 @@ func TestRemindLater_RescheduleIsRefusedOnceTheReminderHasBeenSent(t *testing.T)
 	if got := f.storedReminder(t, rosewoodMembershipID); !got.IsZero() {
 		t.Errorf("a reminder was set, %s, want none", got.UTC())
 	}
-	sheet := remindLaterDialog(rec.Body.String())
+	sheet := refusalForm(t, rec)
 	if !strings.Contains(sheet.text(), string(reminderSent)) {
 		t.Errorf("the sheet does not say %q:\n%s", reminderSent, sheet.text())
 	}
@@ -612,10 +611,7 @@ func TestRemindLater_RemoveIsRefusedOnceTheReminderHasBeenSent(t *testing.T) {
 	rec := f.postReminder(t, removeReminderPath, nil, true)
 
 	wantStatus(t, rec, http.StatusUnprocessableEntity)
-	if got := rec.Header().Get("HX-Retarget"); got != "#"+sheetID {
-		t.Errorf("HX-Retarget = %q, want %q", got, "#"+sheetID)
-	}
-	sheet := remindLaterDialog(rec.Body.String())
+	sheet := refusalForm(t, rec)
 	if !strings.Contains(sheet.text(), string(reminderSent)) {
 		t.Errorf("the sheet does not say %q:\n%s", reminderSent, sheet.text())
 	}

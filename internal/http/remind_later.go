@@ -248,26 +248,25 @@ func (h *today) showRemindLater(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	h.renderRemindLater(w, r, g, state.sheet(), http.StatusOK)
+	h.renderRemindLater(w, r, g, state.sheet(), "remind-later-sheet", http.StatusOK)
 }
 
-// renderRemindLater renders sheet. An htmx request gets the dialog alone. Any
-// other request gets Today with the sheet open over it.
-func (h *today) renderRemindLater(w http.ResponseWriter, r *http.Request, g gardenDay, sheet *remindLaterSheet, status int) {
+// renderRemindLater renders sheet. An htmx request gets the fragment alone:
+// the dialog, or the form inside it for a refusal. Any other request gets Today
+// with the sheet open over it.
+func (h *today) renderRemindLater(w http.ResponseWriter, r *http.Request, g gardenDay, sheet *remindLaterSheet, fragment string, status int) {
 	page := todayPage{}
 	if !isHTMX(r) {
 		page = newTodayPage(PrincipalFrom(r), g)
 	}
 	page.RemindLaterSheet = sheet
-	h.templates.render(w, r, view{page: "today", fragment: "remind-later-sheet", status: status, announce: sheet.Error}, page)
+	h.templates.render(w, r, view{page: "today", fragment: fragment, status: status, announce: sheet.Error}, page)
 }
 
-// refuseRemindLater renders the sheet again with its error and a 422. The form
-// targets the link, so the response headers retarget it at #sheet.
+// refuseRemindLater renders the sheet's form again with its error and a 422.
 func (h *today) refuseRemindLater(w http.ResponseWriter, r *http.Request, g gardenDay, sheet *remindLaterSheet) {
-	w.Header().Set("HX-Retarget", "#"+sheetID)
-	w.Header().Set("HX-Reswap", "outerHTML settle:0ms")
-	h.renderRemindLater(w, r, g, sheet, http.StatusUnprocessableEntity)
+	refuseOnSheet(w)
+	h.renderRemindLater(w, r, g, sheet, "remind-later-form", http.StatusUnprocessableEntity)
 }
 
 // setReminder handles POST /remind-later. It sets a new reminder, or with the

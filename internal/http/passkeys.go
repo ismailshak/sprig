@@ -14,7 +14,7 @@ func removePasskeyPath(passkeyID uuid.UUID) string {
 }
 
 // passkeysListID is both the HTML id of the list and the name of the template
-// that renders it. Remove swaps it.
+// that renders it. Remove and Add passkey swap it.
 const passkeysListID = "passkeys-list"
 
 // passkeyProviders names the passkey provider for each AAGUID an
@@ -66,10 +66,10 @@ type passkeysPage struct {
 	// OnlyOne is true when the account has one credential left. The page then
 	// says why no row offers Remove.
 	OnlyOne bool
-	// Error is the message shown above Add a passkey when a device was refused.
+	// Error is the message shown above Add passkey when a device was refused.
 	// Empty otherwise.
 	Error string
-	// Add is the URL the Add a passkey form posts the browser's credential to.
+	// Add is the URL the Add passkey form posts the browser's credential to.
 	Add string
 	// Challenge is the URL the page's script posts to for a challenge, before it
 	// calls the browser's credential API.

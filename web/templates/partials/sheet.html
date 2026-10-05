@@ -32,13 +32,15 @@
 
 {{/* Every choice on the form is a radio group. The stylesheet shows the
      elements marked sheet__done or sheet__skipped for the selected outcome.
-     The post uses settle:0ms because it replaces a care row.
+     The post uses settle:0ms because the element it replaces keeps its id.
+     The form is also the fragment a refused post returns, swapped under its
+     own id.
 
      A change under Care swaps in the Remind me in chips and the Log button
      for the chosen care type. The Care chips are not replaced, so focus and
      arrow-key movement stay on them. hx-sync aborts the request of an
      earlier change that is still in flight. */}}
-{{define "sheet-form"}}{{with .Sheet}}{{$s := .}}<form class="sheet__form" method="post" action="{{.Path}}"{{with .Target}} hx-post="{{$s.Path}}" hx-target="#{{.}}" hx-swap="outerHTML settle:0ms"{{end}}>
+{{define "sheet-form"}}{{with .Sheet}}{{$s := .}}<form class="sheet__form" id="sheet-form" method="post" action="{{.Path}}"{{with .Target}} hx-post="{{$s.Path}}" hx-target="#{{.}}" hx-swap="outerHTML settle:0ms"{{end}}>
 {{with .Row}}<input type="hidden" name="row" value="{{.}}">{{end}}
 {{with .Over}}<input type="hidden" name="over" value="{{.}}">{{end}}
 {{if gt (len .Cares) 1}}<fieldset class="field">

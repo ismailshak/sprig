@@ -58,9 +58,10 @@ func (h *passkeyCeremony) registerChallenge(w http.ResponseWriter, r *http.Reque
 	writeJSON(h.templates, h.logger, w, r, creation)
 }
 
-// register handles POST /more/passkeys and saves the device the browser just
-// enrolled. It redirects to the Passkeys page, or renders it again with the
-// reason the device was refused.
+// register handles POST /more/passkeys and saves the passkey the browser just
+// made. An htmx post returns the list with the new device on it, or with
+// the reason the device was refused. A form post gets a redirect to the
+// Passkeys page, or the page again with the reason.
 func (h *passkeyCeremony) register(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	if err := r.ParseForm(); err != nil {
@@ -87,12 +88,22 @@ func (h *passkeyCeremony) register(w http.ResponseWriter, r *http.Request) {
 		h.refuseRegistration(w, r, principal, keys, err)
 		return
 	}
-	http.Redirect(w, r, passkeysPath, http.StatusSeeOther)
+	if !isHTMX(r) {
+		http.Redirect(w, r, passkeysPath, http.StatusSeeOther)
+		return
+	}
+	keys, err = h.queries.ListPasskeys(r.Context(), principal.User.ID)
+	if err != nil {
+		h.templates.serverError(h.logger, w, r, "list the passkeys", err)
+		return
+	}
+	page := newPasskeysPage(keys, h.now().In(locationFor(principal.User)))
+	h.templates.render(w, r, view{page: "passkeys", fragment: passkeysListID, announce: "Passkey added."}, page)
 }
 
-// refuseRegistration re-renders the Passkeys page with the reason the device
-// was not enrolled. keys is the list the page shows, read before the credential
-// was checked.
+// refuseRegistration renders the Passkeys page, or the list for htmx, with the
+// reason the device was refused. keys is the list the page shows, read before
+// the credential was checked.
 func (h *passkeyCeremony) refuseRegistration(w http.ResponseWriter, r *http.Request, principal auth.Principal, keys []store.PasskeyCredential, err error) {
 	message := registrationRefusal(h.templates, h.logger, w, r, err, "add the passkey")
 	if message == "" {
@@ -100,7 +111,7 @@ func (h *passkeyCeremony) refuseRegistration(w http.ResponseWriter, r *http.Requ
 	}
 	page := newPasskeysPage(keys, h.now().In(locationFor(principal.User)))
 	page.Error = message
-	h.templates.render(w, r, view{page: "passkeys", status: http.StatusUnprocessableEntity}, page)
+	h.templates.render(w, r, view{page: "passkeys", fragment: passkeysListID, status: http.StatusUnprocessableEntity}, page)
 }
 
 // registrationRefusal returns the sentence a page shows when a device was not

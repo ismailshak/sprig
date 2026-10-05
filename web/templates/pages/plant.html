@@ -34,15 +34,7 @@
 {{with .Archived}}<p class="hero__where">{{.}}</p>{{end}}
 </div>
 
-{{with .Schedule}}
-<section class="section section--schedule" aria-labelledby="schedule">
-<div class="section__head">
-<h2 class="section__title" id="schedule">Schedule</h2>
-</div>
-<ul class="list">
-{{template "schedule-rows" $}}</ul>
-</section>
-{{end}}
+{{template "plant-schedule" .}}
 
 {{with .Log}}<a class="wide-action" href="{{.}}" hx-get="{{.}}" hx-target="#sheet" hx-swap="outerHTML">Log care</a>{{end}}
 
@@ -76,21 +68,45 @@
 {{end}}</div>{{else}}<p class="strip__none">No photos yet.</p>{{end}}
 </section>
 
-{{/* Recent lines say who did what, without the plant's name, because every
-     line is about this plant. */}}
-<section class="section section--activity" aria-labelledby="recent">
+<section class="section section--activity" id="plant-recent" aria-labelledby="recent">
+{{template "plant-recent" .}}
+</section>
+
+{{template "plant-foot" .}}
+</div>{{end}}
+
+{{/* The Schedule section, and the fragment returned after care is logged
+     from the sheet. The swap replaces the section and not one row, because
+     logging a one-off removes its row and can move a Not scheduled row. A
+     reader who may not edit schedules can have no rows. The section is then
+     empty and hidden under the same id, so the next swap has an element to
+     replace. */}}
+{{define "plant-schedule"}}{{if .Schedule}}<section class="section section--schedule" id="plant-schedule" aria-labelledby="schedule">
 <div class="section__head">
+<h2 class="section__title" id="schedule">Schedule</h2>
+</div>
+<ul class="list">
+{{template "schedule-rows" .}}</ul>
+</section>{{else}}<section id="plant-schedule" hidden></section>{{end}}{{end}}
+
+{{/* What is inside the Recent activity section. Recent lines say who did
+     what, without the plant's name, because every line is about this
+     plant. */}}
+{{define "plant-recent"}}<div class="section__head">
 <h2 class="section__title" id="recent">Recent activity</h2>
 </div>
 <ul class="loglist">
 {{range .Recent}}<li class="logline"><b>{{.Who}}</b> {{.Did}} &middot; {{.When}}</li>
 {{else}}<li class="logline logline--none">No activity yet.</li>
 {{end}}</ul>
-{{with .Activity}}<a class="foot-link" href="{{.Href}}">{{.Label}}{{template "icon-chevron"}}</a>{{end}}
-</section>
+{{with .Activity}}<a class="foot-link" href="{{.Href}}">{{.Label}}{{template "icon-chevron"}}</a>{{end}}{{end}}
 
-{{template "plant-foot" .}}
-</div>{{end}}
+{{/* The response to care logged from the sheet with htmx: the Schedule
+     section, Recent activity out of band, and an empty #sheet that closes the
+     dialog. */}}
+{{define "plant-logged"}}{{template "plant-schedule" .}}
+<div hx-swap-oob="innerHTML:#plant-recent">{{template "plant-recent" .}}</div>
+<div id="sheet" hx-swap-oob="true"></div>{{end}}
 
 {{/* The rows of the Schedule section. Also the fragment returned when a swap
      targets one row. */}}

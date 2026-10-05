@@ -115,6 +115,29 @@ func sheetIn(body string) *element {
 	return readHTML(body).byID("sheet")
 }
 
+// refusalForm checks that rec is the response to a refused post from an open
+// sheet, that it replaces the sheet's form and not the dialog, and returns the
+// form.
+func refusalForm(t *testing.T, rec *httptest.ResponseRecorder) *element {
+	t.Helper()
+
+	if got := rec.Header().Get("HX-Retarget"); got != "#"+sheetFormID {
+		t.Errorf("HX-Retarget is %q, want the sheet's form", got)
+	}
+	if got := rec.Header().Get("HX-Reswap"); got != "outerHTML settle:0ms" {
+		t.Errorf("HX-Reswap is %q, want outerHTML settle:0ms", got)
+	}
+	doc := readHTML(rec.Body.String())
+	if doc.byID(sheetID) != nil {
+		t.Errorf("the refusal holds the whole sheet:\n%s", rec.Body.String())
+	}
+	form := doc.byID(sheetFormID)
+	if form == nil || form.tag != "form" {
+		t.Fatalf("the refusal holds no form under the id %s:\n%s", sheetFormID, rec.Body.String())
+	}
+	return form
+}
+
 // hasEmptyLiveRegion reports whether sheet holds an empty role="status"
 // element. The page's script writes announcements and failed requests into it
 // once the sheet is on the page, because a screen reader does not read the
@@ -504,16 +527,13 @@ func TestLog_ATimeInTheFutureIsRefused(t *testing.T) {
 			if rec.Code != http.StatusUnprocessableEntity {
 				t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusUnprocessableEntity, rec.Body.String())
 			}
-			if rec.Header().Get("HX-Retarget") != "#sheet" || rec.Header().Get("HX-Reswap") != "outerHTML" {
-				t.Error("the refusal is not aimed back at the sheet")
-			}
-			sheet := sheetIn(rec.Body.String())
+			sheet := refusalForm(t, rec)
 			when := sheetFields(sheet)["When"]
 			if !strings.Contains(when.text(), c.want) {
 				t.Errorf("the sheet does not say %q under When:\n%s", c.want, text(rec.Body.String()))
 			}
-			if !hasEmptyLiveRegion(sheet) {
-				t.Error("the sheet has no empty live region for the refusal to be read from")
+			if got := announcement(rec.Body.String()); got != c.want {
+				t.Errorf("the refusal announces %q, want %q", got, c.want)
 			}
 			if got := checkedValue(when); got != c.form.Get("when") {
 				t.Errorf("the sheet came back on %q, want %q", got, c.form.Get("when"))
@@ -541,13 +561,10 @@ func TestLog_APostWhoseCareDiffersFromItsShownFieldIsRefusedWithThePostedCaresCh
 			if rec.Code != http.StatusUnprocessableEntity {
 				t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusUnprocessableEntity, rec.Body.String())
 			}
-			if rec.Header().Get("HX-Retarget") != "#sheet" {
-				t.Error("the response is not aimed back at the sheet")
-			}
 			if n := len(f.events(t, nigelID)); n != 1 {
 				t.Errorf("the plant has %d events, want the post to have written none", n)
 			}
-			sheet := sheetIn(rec.Body.String())
+			sheet := refusalForm(t, rec)
 			by := sheetFields(sheet)
 			if !strings.Contains(by["Care"].text(), "Not logged yet. Check the options below for feeding.") {
 				t.Errorf("the sheet does not say what happened under Care:\n%s", text(rec.Body.String()))

@@ -48,8 +48,17 @@
 <div class="sheet__panel">
 <div class="sheet__grip"></div>
 <h2 class="sheet__title" id="remind-later-title">Remind me later</h2>
+{{template "remind-later-form" $}}
+<form method="dialog"><button class="sheet__cancel">Cancel</button></form>
+</div>
+{{template "sheet-status"}}
+</dialog>{{else}}<div id="sheet"></div>{{end}}{{end}}
+
+{{/* The form inside the Remind me later sheet, and the fragment a refusal
+     returns. The line saying whether a reminder is waiting is inside the form,
+     because a reminder can be set or sent after the sheet opened. */}}
+{{define "remind-later-form"}}{{with .RemindLaterSheet}}<form class="sheet__form" id="sheet-form" method="post" action="{{.Path}}" hx-post="{{.Path}}" hx-target="#{{.Target}}" hx-swap="outerHTML settle:0ms">
 <p class="lead">{{if .Set}}{{template "remind-later-words" .Set}}{{else}}Get a notification of what’s still due.{{end}}</p>
-<form class="sheet__form" method="post" action="{{.Path}}" hx-post="{{.Path}}" hx-target="#{{.Target}}" hx-swap="outerHTML settle:0ms">
 {{if .Set}}<input type="hidden" name="reschedule" value="1">
 {{end}}<fieldset class="field">
 <legend class="field__label">When</legend>
@@ -61,11 +70,7 @@
 <button class="sheet__go">{{if .Set}}Reschedule{{else}}Remind me{{end}}</button>
 {{with .Remove}}<button class="sheet__delete" formaction="{{.}}" hx-post="{{.}}">Remove reminder</button>{{end}}
 </div>
-</form>
-<form method="dialog"><button class="sheet__cancel">Cancel</button></form>
-</div>
-{{template "sheet-status"}}
-</dialog>{{else}}<div id="sheet"></div>{{end}}{{end}}
+</form>{{end}}{{end}}
 
 {{/* The sheet's line while a reminder is waiting. The announcement after a
      reminder is set renders it too. */}}

@@ -53,6 +53,9 @@ type errorPage struct {
 // script or an API caller has no page to put it on.
 func (t *Templates) refuse(w http.ResponseWriter, r *http.Request, status int, title, line string) {
 	text := plainText(title, line)
+	// Accept decides between the error page and one line of text at the same
+	// URL.
+	w.Header().Add("Vary", "Accept")
 	if !wantsPage(r) {
 		http.Error(w, text, status)
 		return

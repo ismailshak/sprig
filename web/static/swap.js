@@ -83,8 +83,8 @@
 
   // putBack is the timer that puts the sentence back. say cancels it so that a
   // failure written before it fires is not overwritten. The region is looked
-  // up when the timer fires, because a refusal on a sheet replaces the sheet
-  // after the sentence is taken out of #status.
+  // up when the timer fires, because a sheet can open or close in the 100ms
+  // before it does.
   let putBack = 0;
   document.addEventListener('htmx:oobAfterSwap', (event) => {
     if (event.detail.target !== status || !status.hasChildNodes()) return;

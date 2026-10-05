@@ -275,7 +275,7 @@ func TestCorrect_ASaveWhoseCareDiffersFromItsShownField(t *testing.T) {
 		if rec.Code != http.StatusUnprocessableEntity {
 			t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusUnprocessableEntity, rec.Body.String())
 		}
-		sheet := correctionSheet(rec.Body.String())
+		sheet := refusalForm(t, rec)
 		if !strings.Contains(legendFieldset(sheet, "Care").text(), "Not saved yet. Check the options below for feeding.") {
 			t.Errorf("the sheet does not say what happened under Care:\n%s", text(rec.Body.String()))
 		}
@@ -395,10 +395,7 @@ func TestCorrect_ASaveWithATimeLaterThanNowIsRefusedAndTheSheetSaysThatIsLaterTh
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusUnprocessableEntity, rec.Body.String())
 	}
-	if rec.Header().Get("HX-Retarget") != "#sheet" {
-		t.Error("the refusal is not aimed back at the sheet")
-	}
-	sheet := correctionSheet(rec.Body.String())
+	sheet := refusalForm(t, rec)
 	if !strings.Contains(legendFieldset(sheet, "When").text(), "That time is in the future.") {
 		t.Errorf("the sheet does not say the time is later than now:\n%s", sheet.text())
 	}

@@ -11,3 +11,13 @@ export async function asAnotherBrowser(
   const context = await browser.newContext({ baseURL });
   return { page: await context.newPage(), context };
 }
+
+// sameDocument sets a property on the page's window and returns a check that
+// reads it back. A reload or a navigation replaces the window, so the check
+// returns false once the page has been loaded again.
+export async function sameDocument(page: Page): Promise<() => Promise<boolean>> {
+  await page.evaluate(() => {
+    (window as Window & { sprigLoaded?: boolean }).sprigLoaded = true;
+  });
+  return () => page.evaluate(() => (window as Window & { sprigLoaded?: boolean }).sprigLoaded === true);
+}

@@ -522,19 +522,27 @@ func TestPlantSheet_ThePlantHeadingIsNotALink(t *testing.T) {
 	}
 }
 
-// The sheet on a plant's page has no row to swap, so its form is an ordinary
-// post and the flow is the same with and without JavaScript.
-func TestPlantSheet_TheFormPostsWithoutAnHTMXSwap(t *testing.T) {
+func TestPlantSheet_TheFormSwapsTheScheduleSection(t *testing.T) {
 	f := rosewoodPlant(t)
 
 	body := f.sheet(t, plantSheetPath(bigFellaID), true).Body.String()
 
-	form := readHTML(body).first(isTag("form"), attrIs("action", logPath(bigFellaID)))
+	form := readHTML(body).byID(sheetFormID)
 	if form == nil {
-		t.Fatalf("the sheet has no form posting to the plant's log:\n%s", body)
+		t.Fatalf("the sheet has no form under the id %s:\n%s", sheetFormID, body)
 	}
-	if form.has("hx-post") {
-		t.Errorf("the form swaps a row this page does not have:\n%s", form)
+	for name, want := range map[string]string{
+		"action":    logPath(bigFellaID),
+		"hx-post":   logPath(bigFellaID),
+		"hx-target": "#" + plantScheduleID,
+		"hx-swap":   "outerHTML settle:0ms",
+	} {
+		if got := form.attr(name); got != want {
+			t.Errorf("the form's %s is %q, want %q", name, got, want)
+		}
+	}
+	if page := f.page(t, bigFellaID); readHTML(page).byID(plantScheduleID) == nil {
+		t.Errorf("the plant's page has no element with the id %s for the form to replace", plantScheduleID)
 	}
 }
 
@@ -569,6 +577,75 @@ func TestPlantSheet_RecordsTheCareAndRedirectsToThePlant(t *testing.T) {
 	// now counts from today.
 	if got := rowFor(t, f.page(t, bigFellaID), "Water"); got.when != "Due in 10 days" {
 		t.Errorf("the schedule row reads %+v, want the watering ten days out", got)
+	}
+}
+
+func TestPlantSheet_AnHTMXLogReturnsOnlyTheSectionsThatChanged(t *testing.T) {
+	f := rosewoodPlant(t)
+
+	rec := f.post(t, bigFellaID.String(), url.Values{"over": {overPlant}, "care": {"water"}, "when": {whenNow}}, true)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	body := rec.Body.String()
+	doc := readHTML(body)
+	if doc.first(isTag("html")) != nil || doc.byID(plantBodyID) != nil {
+		t.Fatalf("the response holds more of the page than the parts that changed:\n%s", body)
+	}
+	if got := rowFor(t, body, "Water"); got.when != "Due in 10 days" {
+		t.Errorf("the Water row reads %+v, want the watering ten days out", got)
+	}
+	recent := doc.first(attrIs("hx-swap-oob", "innerHTML:#plant-recent"))
+	if recent == nil {
+		t.Fatalf("the response does not replace Recent activity:\n%s", body)
+	}
+	if got := recent.first(isTag("li")).text(); got != "You watered · today" {
+		t.Errorf("Recent activity starts with %q, want You watered · today", got)
+	}
+	if sheet := doc.byID(sheetID); sheet == nil || sheet.attr("hx-swap-oob") != "true" || sheet.text() != "" {
+		t.Errorf("the response does not close the sheet, got %s", sheet)
+	}
+	if got := announcement(body); got != "You watered Big Fella." {
+		t.Errorf("the swap announces %q, want You watered Big Fella.", got)
+	}
+}
+
+// A reader who may not edit schedules sees no row for a care type with no
+// schedule. Big Fella's only schedule is the watering, so once it is removed
+// the Schedule section has no rows and the swap still needs its id.
+func TestPlantSheet_TheScheduleSectionKeepsItsIDWithNoRows(t *testing.T) {
+	f := rosewoodPlant(t)
+	f.principal.Capabilities = auth.Capabilities{auth.CareLog: true}
+	f.exec(t, "DELETE FROM care_schedule WHERE plant_id = $1", bigFellaID)
+
+	rec := f.post(t, bigFellaID.String(), url.Values{"over": {overPlant}, "care": {"water"}, "when": {whenNow}}, true)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	for name, body := range map[string]string{"page": f.page(t, bigFellaID), "swap": rec.Body.String()} {
+		section := readHTML(body).byID(plantScheduleID)
+		if section == nil || !section.has("hidden") || section.text() != "" {
+			t.Errorf("the %s has no empty hidden element with the id %s, got %s", name, plantScheduleID, section)
+		}
+	}
+}
+
+func TestPlantSheet_AnHTMXRefusalReturnsTheFormWithTheReason(t *testing.T) {
+	f := rosewoodPlant(t)
+
+	rec := f.post(t, bigFellaID.String(), url.Values{"over": {overPlant}, "care": {"water"}, "when": {whenOther}, "at": {"2026-09-04T09:00"}}, true)
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusUnprocessableEntity)
+	}
+	form := refusalForm(t, rec)
+	if !strings.Contains(form.text(), "That time is in the future.") {
+		t.Errorf("the form does not say why:\n%s", form.text())
+	}
+	if got := form.attr("hx-target"); got != "#"+plantScheduleID {
+		t.Errorf("the form's hx-target is %q, want the Schedule section", got)
+	}
+	if len(f.events(t, bigFellaID)) != 1 {
+		t.Error("the refused post wrote an event")
 	}
 }
 
