@@ -58,8 +58,9 @@
           'Notifications are blocked on this device. Allow them in your browser’s settings, then try again.';
         return;
       }
-    } catch {
-      message.textContent = 'Notifications couldn’t be turned on. Try again in a minute.';
+    } catch (error) {
+      message.textContent =
+        error instanceof push.Refused ? error.message : 'Notifications couldn’t be turned on. Try again in a minute.';
       return;
     } finally {
       pressing = false;

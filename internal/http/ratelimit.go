@@ -149,6 +149,14 @@ func ByToken(r *http.Request) string {
 	return auth.HashToken(token)
 }
 
+// ByAccount keys a request on the signed-in account, so one person's posts
+// share a bucket whichever device or address they come from. It panics on a
+// route that does not take the session cookie, because a public route has no
+// principal and a bearer-token route has none yet when its limits run.
+func ByAccount(r *http.Request) string {
+	return PrincipalFrom(r).User.ID.String()
+}
+
 func bearerToken(r *http.Request) string {
 	scheme, token, ok := strings.Cut(r.Header.Get("Authorization"), " ")
 	if !ok || !strings.EqualFold(scheme, "Bearer") {

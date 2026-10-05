@@ -29,9 +29,8 @@ const warnBefore = 7 * 24 * time.Hour
 const maxDeadlineLate = 7 * 24 * time.Hour
 
 // Deadlines is the job that sends the notifications due at a time stored on a
-// row: a token a week from expiry and a token expired, to everyone who can
-// manage the garden's tokens, and a sitting ended, to the sitter and the
-// person who invited them.
+// row. A token's creator is told a week before it expires and when it has. A
+// sitter and the person who invited them are told when the sitting ends.
 //
 // It sleeps on one timer until the earliest of those instants, sends
 // everything due, then works out the next one. Each send claims a ledger row
@@ -66,10 +65,10 @@ func NewDeadlines(logger *slog.Logger, queries *store.Queries, sender *Sender, b
 	}
 }
 
-// Wake has the job work out its next send again. A handler calls it after
-// committing a token created or revoked, or a membership's end date set or
-// moved. It never blocks. A second call before the job looks again does
-// nothing.
+// Wake has the job work out its next send again. A handler calls it after a
+// commit that creates or revokes a token, sets or moves a membership's end
+// date, or changes a member's role. It never blocks. A call while an earlier
+// one is still pending does nothing.
 func (d *Deadlines) Wake() {
 	wakeJob(d.wake)
 }

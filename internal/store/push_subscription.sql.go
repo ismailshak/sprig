@@ -12,6 +12,20 @@ import (
 	"uuid"
 )
 
+const countOtherPushSubscriptions = `-- name: CountOtherPushSubscriptions :one
+SELECT count(*) FROM push_subscription
+WHERE user_id = $1 AND endpoint <> $2
+`
+
+// Leaves out the subscription at @endpoint, because subscribing that browser
+// again updates its row.
+func (q *Queries) CountOtherPushSubscriptions(ctx context.Context, userID uuid.UUID, endpoint string) (int64, error) {
+	row := q.db.QueryRow(ctx, countOtherPushSubscriptions, userID, endpoint)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const deletePushSubscription = `-- name: DeletePushSubscription :execrows
 DELETE FROM push_subscription
 WHERE user_id = $1 AND id = $2

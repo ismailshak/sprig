@@ -51,8 +51,8 @@ var (
 )
 
 // seedUpstairs writes a second garden, Upstairs, owned by Robin and with Sam
-// as a member. Robin has no browser subscribed, so a deadline query over
-// Upstairs returns Sam's row alone.
+// as a member. Robin has no browser subscribed, so no deadline query returns a
+// row for Robin.
 func seedUpstairs(t *testing.T, db store.DBTX) {
 	t.Helper()
 
@@ -100,7 +100,7 @@ func sends(t *testing.T, db store.DBTX, kind string) []string {
 	return out
 }
 
-func TestDeadlines_ATokenAWeekFromExpiryNotifiesEveryoneWhoCanManageTokensAndHasABrowser(t *testing.T) {
+func TestDeadlines_ATokenAWeekFromExpiryNotifiesOnlyItsCreator(t *testing.T) {
 	tx := pgtest.Tx(t, migrateSchema)
 	service := newPushService(t, http.StatusCreated)
 	seedRosewood(t, tx, service)
@@ -113,12 +113,12 @@ func TestDeadlines_ATokenAWeekFromExpiryNotifiesEveryoneWhoCanManageTokensAndHas
 	if err != nil {
 		t.Fatalf("sendDue: %v", err)
 	}
-	// Robin can manage tokens and has no browser, so no row is claimed for
-	// them.
-	if got, want := service.received(), []string{"/ellie-mac", "/ellie-phone", "/sam-phone"}; !slices.Equal(got, want) {
+	// Sam can manage tokens and has a browser subscribed. Ellie created the
+	// token, so the warning goes to Ellie's two browsers alone.
+	if got, want := service.received(), []string{"/ellie-mac", "/ellie-phone"}; !slices.Equal(got, want) {
 		t.Errorf("the push service received %q, want %q", got, want)
 	}
-	if got, want := sends(t, tx, tokenExpiringKind), []string{"ellie " + kitchenTokenID.String(), "sam " + kitchenTokenID.String()}; !slices.Equal(got, want) {
+	if got, want := sends(t, tx, tokenExpiringKind), []string{"ellie " + kitchenTokenID.String()}; !slices.Equal(got, want) {
 		t.Errorf("the ledger holds %q, want %q", got, want)
 	}
 	if !next.Equal(expires) {
@@ -163,10 +163,10 @@ func TestDeadlines_AnExpiredTokenNotifiesOnceAndTheNextLookSendsNothingMore(t *t
 		t.Fatalf("the second look: %v", err)
 	}
 
-	if got, want := service.received(), []string{"/ellie-mac", "/ellie-phone", "/sam-phone"}; !slices.Equal(got, want) {
+	if got, want := service.received(), []string{"/ellie-mac", "/ellie-phone"}; !slices.Equal(got, want) {
 		t.Errorf("the push service received %q, want %q once", got, want)
 	}
-	if got, want := sends(t, tx, tokenExpiredKind), []string{"ellie " + kitchenTokenID.String(), "sam " + kitchenTokenID.String()}; !slices.Equal(got, want) {
+	if got, want := sends(t, tx, tokenExpiredKind), []string{"ellie " + kitchenTokenID.String()}; !slices.Equal(got, want) {
 		t.Errorf("the ledger holds %q, want %q", got, want)
 	}
 	// The warning's instant is past too, and the token has expired, so the
@@ -192,7 +192,7 @@ func TestDeadlines_AWarningMissedWhileTheProcessWasDownIsSentWhileTheTokenStillW
 	if err != nil {
 		t.Fatalf("sendDue: %v", err)
 	}
-	if got, want := sends(t, tx, tokenExpiringKind), []string{"ellie " + kitchenTokenID.String(), "sam " + kitchenTokenID.String()}; !slices.Equal(got, want) {
+	if got, want := sends(t, tx, tokenExpiringKind), []string{"ellie " + kitchenTokenID.String()}; !slices.Equal(got, want) {
 		t.Errorf("the ledger holds %q, want %q: the warning was due five days ago", got, want)
 	}
 	if !next.Equal(expires) {
@@ -237,12 +237,12 @@ func TestDeadlines_ARevokedTokenNotifiesNobody(t *testing.T) {
 	}
 }
 
-func TestDeadlines_ATokenExpiringInOneGardenNotifiesNobodyFromAnotherGarden(t *testing.T) {
+func TestDeadlines_ATokenNotifiesItsCreatorOnceWhenTheyBelongToTwoGardens(t *testing.T) {
 	tx := pgtest.Tx(t, migrateSchema)
 	service := newPushService(t, http.StatusCreated)
 	seedRosewood(t, tx, service)
 	seedFairview(t, tx)
-	// Ellie owns Fairview as well as Rosewood. Sam is in Rosewood alone.
+	// Ellie owns Fairview as well as Rosewood.
 	giveToken(t, tx, fairviewID, kitchenTokenID, noon.AddDate(0, 0, -30), noon.Add(-time.Hour), nil)
 	deadlines := newDeadlines(t, tx, service, fixed(noon))
 
@@ -251,26 +251,51 @@ func TestDeadlines_ATokenExpiringInOneGardenNotifiesNobodyFromAnotherGarden(t *t
 	}
 
 	if got, want := service.received(), []string{"/ellie-mac", "/ellie-phone"}; !slices.Equal(got, want) {
-		t.Errorf("the push service received %q, want Ellie's browsers alone: Fairview's token is not Sam's to manage", got)
+		t.Errorf("the push service received %q, want Ellie's browsers once", got)
 	}
 }
 
-func TestDeadlines_ASitterIsNotToldAboutTokens(t *testing.T) {
-	tx := pgtest.Tx(t, migrateSchema)
-	service := newPushService(t, http.StatusCreated)
-	seedRosewood(t, tx, service)
-	if _, err := tx.Exec(t.Context(), "UPDATE membership SET role = 'sitter' WHERE id = $1", samMembershipID); err != nil {
-		t.Fatal(err)
+func TestDeadlines_ATokenWhoseCreatorCanNoLongerManageTokensNotifiesNobody(t *testing.T) {
+	cases := []struct {
+		name   string
+		change string
+		args   []any
+	}{
+		{"removed", "DELETE FROM membership WHERE id = $1", []any{ellieMembershipID}},
+		// Thirty days ago, so the job does not also send Ellie the notice that
+		// her access ended.
+		{"membership ended", "UPDATE membership SET expires_at = $2 WHERE id = $1", []any{ellieMembershipID, noon.AddDate(0, 0, -30)}},
+		{"now a sitter", "UPDATE membership SET role = 'sitter' WHERE id = $1", []any{ellieMembershipID}},
 	}
-	giveToken(t, tx, rosewoodID, kitchenTokenID, noon.AddDate(0, 0, -30), noon.Add(-time.Hour), nil)
-	deadlines := newDeadlines(t, tx, service, fixed(noon))
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			tx := pgtest.Tx(t, migrateSchema)
+			service := newPushService(t, http.StatusCreated)
+			seedRosewood(t, tx, service)
+			// The kitchen display's warning is due and the spare token expired
+			// an hour ago. Ellie created both. Sam can still manage tokens in
+			// Rosewood.
+			giveToken(t, tx, rosewoodID, kitchenTokenID, noon.AddDate(0, 0, -23), noon.AddDate(0, 0, 7), nil)
+			giveToken(t, tx, rosewoodID, spareTokenID, noon.AddDate(0, 0, -30), noon.Add(-time.Hour), nil)
+			if _, err := tx.Exec(t.Context(), c.change, c.args...); err != nil {
+				t.Fatalf("changing Ellie's membership: %v", err)
+			}
+			deadlines := newDeadlines(t, tx, service, fixed(noon))
 
-	if _, err := deadlines.sendDue(t.Context()); err != nil {
-		t.Fatalf("sendDue: %v", err)
-	}
+			if _, err := deadlines.sendDue(t.Context()); err != nil {
+				t.Fatalf("sendDue: %v", err)
+			}
 
-	if got, want := service.received(), []string{"/ellie-mac", "/ellie-phone"}; !slices.Equal(got, want) {
-		t.Errorf("the push service received %q, want Ellie's browsers alone: a sitter cannot manage tokens", got)
+			if got := service.received(); len(got) != 0 {
+				t.Errorf("the push service received %q, want nothing for tokens that stopped working", got)
+			}
+			if got := sends(t, tx, tokenExpiringKind); len(got) != 0 {
+				t.Errorf("the ledger holds warnings %q, want none", got)
+			}
+			if got := sends(t, tx, tokenExpiredKind); len(got) != 0 {
+				t.Errorf("the ledger holds expired notices %q, want none", got)
+			}
+		})
 	}
 }
 
@@ -441,7 +466,13 @@ func TestListTokenDeadlines_EachRowNamesTheGardensOwnerAndWhetherTheRecipientIsT
 	seedUpstairs(t, tx)
 	made, expires := noon.AddDate(0, 0, -30), noon.AddDate(0, 0, 3)
 	giveToken(t, tx, rosewoodID, kitchenTokenID, made, expires, nil)
+	giveToken(t, tx, rosewoodID, spareTokenID, made, expires, nil)
 	giveToken(t, tx, upstairsID, upstairsTokenID, made, expires, nil)
+	// Ellie created the kitchen token. Sam created the spare and the Upstairs
+	// token, and is a member of both gardens.
+	if _, err := tx.Exec(t.Context(), "UPDATE api_token SET created_by = $1 WHERE id IN ($2, $3)", samID, spareTokenID, upstairsTokenID); err != nil {
+		t.Fatalf("making Sam the creator of two tokens: %v", err)
+	}
 
 	rows, err := store.New(tx).ListTokenDeadlines(t.Context(), store.ListTokenDeadlinesParams{
 		Now:        noon,
@@ -508,11 +539,12 @@ func TestRun_ATokenCreatedNotifiesAtItsExpiryWithoutWaitingForTheTimer(t *testin
 	// Ellie creates a token that expires half a second from now, and the
 	// handler wakes the job.
 	expires := noon.Add(time.Since(started) + 500*time.Millisecond)
-	giveToken(t, pool, rosewoodID, kitchenTokenID, noon.AddDate(0, 0, -30), expires, nil)
+	// It was made with less than a week to live, so it gets no warning.
+	giveToken(t, pool, rosewoodID, kitchenTokenID, noon, expires, nil)
 	deadlines.Wake()
 
-	waitForSends(t, service, 3, 5*time.Second)
-	if got, want := service.received(), []string{"/ellie-mac", "/ellie-phone", "/sam-phone"}; !slices.Equal(got, want) {
+	waitForSends(t, service, 2, 5*time.Second)
+	if got, want := service.received(), []string{"/ellie-mac", "/ellie-phone"}; !slices.Equal(got, want) {
 		t.Errorf("the push service received %q, want %q", got, want)
 	}
 }

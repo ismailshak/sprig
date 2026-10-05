@@ -12,11 +12,13 @@ import (
 	"net/netip"
 	"net/url"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 	"uuid"
 
+	"github.com/ismailshak/sprig/internal/auth"
 	"github.com/ismailshak/sprig/internal/push"
 	"github.com/ismailshak/sprig/internal/store"
 )
@@ -663,6 +665,192 @@ func TestSubscribe_ALookupThatFailsIsAServerErrorAndWritesNoRow(t *testing.T) {
 	}
 	if count := subscriptionCount(t, f); count != 2 {
 		t.Errorf("a failed post wrote a row: the account has %d, want 2", count)
+	}
+}
+
+// fillTo adds subscriptions to the signed-in account until it holds count.
+func fillTo(t *testing.T, f *notificationsFixture, count int) {
+	t.Helper()
+
+	for i := subscriptionCount(t, f); i < count; i++ {
+		f.exec(t, `INSERT INTO push_subscription (user_id, endpoint, p256dh_key, auth_key)
+			VALUES ($1, $2, 'p', 'a')`, moreUserID, "https://push.invalid/old/"+strconv.Itoa(i))
+	}
+}
+
+func fillToCap(t *testing.T, f *notificationsFixture) {
+	t.Helper()
+
+	fillTo(t, f, maxPushSubscriptions)
+}
+
+// endpointExists reports whether any account has a subscription at endpoint.
+func endpointExists(t *testing.T, f *notificationsFixture, endpoint string) bool {
+	t.Helper()
+
+	var exists bool
+	if err := f.tx.QueryRow(t.Context(), "SELECT EXISTS (SELECT 1 FROM push_subscription WHERE endpoint = $1)", endpoint).Scan(&exists); err != nil {
+		t.Fatalf("looking for %s: %v", endpoint, err)
+	}
+	return exists
+}
+
+func TestSubscribe_ANewDeviceAtTheCapIsRefusedAndWritesNoRow(t *testing.T) {
+	f := openNotifications(t)
+	fillToCap(t, f)
+	p256dh, auth := browserKeys(t)
+
+	rec := f.subscribe(t, "https://push.example.com/send/new", chromeOnMac, p256dh, auth)
+
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusUnprocessableEntity, rec.Body.String())
+	}
+	if got := strings.TrimSpace(rec.Body.String()); got != tooManyDevicesElsewhere {
+		t.Errorf("the body is %q, want %q", got, tooManyDevicesElsewhere)
+	}
+	if count := subscriptionCount(t, f); count != maxPushSubscriptions {
+		t.Errorf("the account has %d subscriptions, want %d", count, maxPushSubscriptions)
+	}
+	if endpointExists(t, f, "https://push.example.com/send/new") {
+		t.Error("the refused device was written")
+	}
+}
+
+func TestSubscribe_AddThisDeviceAtTheCapShowsAnErrorUnderTheButton(t *testing.T) {
+	f := openNotifications(t)
+	fillToCap(t, f)
+
+	rec := f.addDevice(t)
+
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusUnprocessableEntity, rec.Body.String())
+	}
+	doc := readHTML(rec.Body.String())
+	if doc.first(isTag("html")) != nil || doc.byID(devicesID) == nil {
+		t.Fatalf("the response is not the %s element alone:\n%.200s", devicesID, rec.Body.String())
+	}
+	if got := doc.byID("push-error").text(); got != tooManyDevices {
+		t.Errorf("the line under Add this device is %q, want %q", got, tooManyDevices)
+	}
+	if rows := stackedRowsOf(rec.Body.String()); len(rows) != maxPushSubscriptions {
+		t.Errorf("the section lists %d devices, want %d", len(rows), maxPushSubscriptions)
+	}
+	if add := doc.first(isTag("button"), textIs("Add this device")); add == nil || !add.has("autofocus") {
+		t.Errorf("Add this device is %v, want it marked autofocus", add)
+	}
+}
+
+func TestSubscribe_ANewDeviceWithNineSubscribedIsSaved(t *testing.T) {
+	f := openNotifications(t)
+	fillTo(t, f, maxPushSubscriptions-1)
+	p256dh, auth := browserKeys(t)
+
+	rec := f.subscribe(t, "https://push.example.com/send/new", chromeOnMac, p256dh, auth)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusNoContent, rec.Body.String())
+	}
+	if count := subscriptionCount(t, f); count != maxPushSubscriptions {
+		t.Errorf("the account has %d subscriptions, want %d", count, maxPushSubscriptions)
+	}
+}
+
+func TestSubscribe_AnotherAccountsSubscriptionsDoNotCountTowardTheCap(t *testing.T) {
+	f := openNotifications(t)
+	for i := range maxPushSubscriptions {
+		f.exec(t, `INSERT INTO push_subscription (user_id, endpoint, p256dh_key, auth_key)
+			VALUES ($1, $2, 'p', 'a')`, otherUserID, "https://push.invalid/other/"+strconv.Itoa(i))
+	}
+	p256dh, auth := browserKeys(t)
+
+	rec := f.subscribe(t, "https://push.example.com/send/new", chromeOnMac, p256dh, auth)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusNoContent, rec.Body.String())
+	}
+}
+
+func TestSubscribe_AnAlreadySubscribedBrowserAtTheCapIsSaved(t *testing.T) {
+	f := openNotifications(t)
+	fillToCap(t, f)
+	p256dh, auth := browserKeys(t)
+
+	rec := f.subscribe(t, phoneEndpoint, safariOniPhone, p256dh, auth)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusNoContent, rec.Body.String())
+	}
+	if got := subscriptionOf(t, f.moreFixture, phoneEndpoint); got.p256dh != p256dh {
+		t.Errorf("the row holds the p256dh key %s, want the one just posted, %s", got.p256dh, p256dh)
+	}
+}
+
+// pushMux is New with a session cookie of testToken resolving to the sitter
+// and otherToken resolving to a second account. Queries is nil. A post must
+// therefore be refused before the handler reads the database: a subscribe with
+// no endpoint is a 400, and a test send with push off is a 404.
+func pushMux(t *testing.T) http.Handler {
+	t.Helper()
+
+	other := sitterPrincipal()
+	other.User.ID = uuid.MustParse("00000000-0000-7000-8000-000000000099")
+	deps := testDependencies(t)
+	deps.Resolver = ResolverFunc(func(_ context.Context, _ time.Time, token string) (auth.Principal, error) {
+		if token == otherToken {
+			return other, nil
+		}
+		return sitterPrincipal(), nil
+	})
+	return New(deps)
+}
+
+const otherToken = "another-accounts-session"
+
+func postAs(t *testing.T, handler http.Handler, session, path string) *httptest.ResponseRecorder {
+	t.Helper()
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, path, nil)
+	req.AddCookie(&http.Cookie{Name: "__Host-sprig_session", Value: session})
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	return rec
+}
+
+func TestPushLimits_ASeventhPostInAMinuteFromOneAccountIsRefused(t *testing.T) {
+	for _, path := range []string{subscribePath, sendTestPath} {
+		t.Run(path, func(t *testing.T) {
+			handler := pushMux(t)
+			for i := range 6 {
+				if rec := postAs(t, handler, testToken, path); rec.Code == http.StatusTooManyRequests {
+					t.Fatalf("post %d was refused", i+1)
+				}
+			}
+
+			rec := postAs(t, handler, testToken, path)
+
+			if rec.Code != http.StatusTooManyRequests {
+				t.Fatalf("the seventh post: status = %d, want %d", rec.Code, http.StatusTooManyRequests)
+			}
+			if rec.Header().Get("Retry-After") == "" {
+				t.Error("the refusal sets no Retry-After")
+			}
+			if got := strings.TrimSpace(rec.Body.String()); got != plainText(tooManyPushTitle, tooManyPushLine) {
+				t.Errorf("the body is %q, want the sentence the live region shows", got)
+			}
+		})
+	}
+}
+
+func TestPushLimits_OneAccountPastTheLimitDoesNotRefuseAnotherAccount(t *testing.T) {
+	handler := pushMux(t)
+	for range 7 {
+		postAs(t, handler, testToken, subscribePath)
+	}
+
+	rec := postAs(t, handler, otherToken, subscribePath)
+
+	if rec.Code == http.StatusTooManyRequests {
+		t.Errorf("the second account was refused")
 	}
 }
 

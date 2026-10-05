@@ -220,15 +220,15 @@ func (h *people) saveMembers(w http.ResponseWriter, r *http.Request) {
 		h.templates.serverError(h.logger, w, r, "save the members", err)
 		return
 	}
-	ended := false
 	for _, change := range changes {
 		if change.role != "" {
 			h.notify.call(r.Context(), change.user, push.RoleChangedNotification(gardenNamed(change.user.ID), change.role, todayPath))
 		}
-		ended = ended || change.ends != nil
 	}
-	// The deadlines job sends when a membership's end date passes.
-	if ended {
+	// A new role can move the deadlines job's next send as well as a new end
+	// date, because a token's expiry notices go only to a creator whose role
+	// grants token.manage.
+	if len(changes) > 0 {
 		h.wake.call()
 	}
 	h.peopleSaved(w, r, savedAnnouncement)

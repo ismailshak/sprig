@@ -74,13 +74,14 @@ func randomHex(n int) string {
 }
 
 // ErrNoAPIToken is returned for a bearer token with no live row. A token that
-// was never issued, one revoked and one past its expiry all get this error, so
-// a caller cannot tell which tokens were once real.
+// was never issued, one revoked, one past its expiry and one whose creator can
+// no longer manage tokens in its garden all get this error, so a caller cannot
+// tell which tokens were once real.
 var ErrNoAPIToken = errors.New("no live token")
 
-// APITokenLive reports whether token still works at now. A revoked token is
-// never live, whatever now is. Any other is live strictly before its
-// expires_at.
+// APITokenLive reports whether token is unrevoked and now is before its
+// expires_at. A token that passes can still be refused, because Resolve also
+// checks its creator's membership.
 func APITokenLive(token store.APIToken, now time.Time) bool {
 	return token.RevokedAt == nil && now.Before(token.ExpiresAt)
 }
@@ -97,19 +98,28 @@ func NewAPITokens(queries *store.Queries) *APITokens {
 
 // Resolve returns the Principal for a bearer token at now and sets the row's
 // last_used_at to now. It returns ErrNoAPIToken when the token matches no row,
-// or matches one that is revoked or expired.
+// or matches one that is revoked or expired. It also returns ErrNoAPIToken
+// when the account that created the token has no membership of its garden at
+// now with a role that grants TokenManage. The check runs on every request
+// rather than revoking the token when the creator leaves, because a membership
+// that reaches its end date runs no code at that moment.
 //
 // The Principal holds the token's garden and the token row and nothing else.
 // It has no capabilities, so a route that checks one refuses the request.
 func (t *APITokens) Resolve(ctx context.Context, now time.Time, token string) (Principal, error) {
-	row, err := t.queries.GetAPITokenByHash(ctx, HashToken(token))
+	found, err := t.queries.GetAPITokenByHash(ctx, store.GetAPITokenByHashParams{
+		Capability: string(TokenManage),
+		Now:        now,
+		TokenHash:  HashToken(token),
+	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Principal{}, ErrNoAPIToken
 	}
 	if err != nil {
 		return Principal{}, fmt.Errorf("read the token: %w", err)
 	}
-	if !APITokenLive(row, now) {
+	row := found.APIToken
+	if !APITokenLive(row, now) || !found.CreatorCanManage {
 		return Principal{}, ErrNoAPIToken
 	}
 	if err := t.queries.TouchAPIToken(ctx, now, row.TokenHash); err != nil {

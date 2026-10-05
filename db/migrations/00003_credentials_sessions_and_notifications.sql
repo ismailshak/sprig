@@ -196,8 +196,8 @@ INSERT INTO notification_kind (name) VALUES
     -- Notifications page is the way to stop it.
     -- Sent to the person who issued an invite when it is accepted.
     ('invite_accepted'),
-    -- Sent to everyone who can manage the garden's tokens a week before a
-    -- token expires, and again when it has.
+    -- Sent to the person who created a token a week before it expires, and
+    -- again when it has.
     ('token_expiring'),
     ('token_expired'),
     -- Sent to a sitter and to the person who invited them when the sitting's

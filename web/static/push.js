@@ -30,10 +30,16 @@ window.sprigPush = (function () {
     ]);
   }
 
+  // Refused is thrown when the server refuses the subscription with a 422. Its
+  // message is the sentence in the response body, written for the person to
+  // read.
+  class Refused extends Error {}
+
   // subscribe subscribes this browser and posts the subscription to url. It
   // returns the permission: 'granted' once the browser is subscribed, and
   // 'denied' or 'default' when it was not given, with nothing subscribed. It
-  // throws when the push service does not respond or the post is refused.
+  // throws Refused when the server refuses with a 422, and another error when
+  // the push service does not respond or the post fails for any other reason.
   async function subscribe(key, url) {
     const made = await subscription(key);
     if (!made) return Notification.permission;
@@ -46,6 +52,7 @@ window.sprigPush = (function () {
         auth: keys.auth,
       }),
     });
+    if (response.status === 422) throw new Refused(await response.text());
     if (!response.ok) throw new Error('the subscription was refused with ' + response.status);
     return 'granted';
   }
@@ -68,5 +75,5 @@ window.sprigPush = (function () {
     return Uint8Array.from(binary, (char) => char.charCodeAt(0));
   }
 
-  return { supported, subscription, subscribe, current };
+  return { supported, subscription, subscribe, current, Refused };
 })();
