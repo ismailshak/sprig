@@ -21,6 +21,13 @@ export class SheetScreen {
     return this.dialog().getByLabel('Note');
   }
 
+  // A fieldset on the sheet, named by its legend: Care, Outcome or When. With
+  // JavaScript, a refusal's text is also written into announcement() 100ms
+  // after the swap, so a test looks for the refusal inside its field.
+  field(legend: string): Locator {
+    return this.dialog().getByRole('group', { name: legend, exact: true });
+  }
+
   // Only one primary button shows, "Log watering" or "Log skip".
   async submit(label: string): Promise<void> {
     await this.dialog().getByRole('button', { name: label, exact: true }).click();
