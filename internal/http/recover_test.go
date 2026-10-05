@@ -225,7 +225,7 @@ func TestRecover_ThePageIsOneCodeFieldAndSaysItCannotHelpSomebodyWhoNeverMadeCod
 	if hasTabBar(page) {
 		t.Errorf("the page has a tab bar, and nobody here is signed in:\n%s", page)
 	}
-	if !strings.Contains(text(page), "No recovery codes? Ask the garden’s owner for a new invite link.") {
+	if !strings.Contains(text(page), "No recovery codes? Ask the person who runs this server for a sign-in link.") {
 		t.Errorf("the page does not say who it cannot help:\n%s", text(page))
 	}
 }

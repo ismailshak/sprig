@@ -29,10 +29,6 @@ export class PeopleScreen {
     return this.page.getByRole('button', { name: 'Save changes' });
   }
 
-  reenrol(name: string): Locator {
-    return this.page.getByRole('button', { name: `Sign-in link for ${name}` });
-  }
-
   remove(name: string): Locator {
     return this.page.getByRole('link', { name: `Remove ${name}` });
   }
@@ -57,12 +53,5 @@ export class PeopleScreen {
 
   inviteSomeone(): Locator {
     return this.page.getByRole('link', { name: 'Invite someone' });
-  }
-
-  // The sign-in link, shown once at the top of the page. It is matched on
-  // the path that redeems it, because no other text on the page contains
-  // that.
-  link(): Locator {
-    return this.page.getByText(/\/invite\//);
   }
 }

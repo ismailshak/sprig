@@ -119,7 +119,7 @@ docker compose exec sprig /sprig sweep
 
 ### Account recovery
 
-If a garden owner loses every device and their recovery codes, generate a sign-in link for them:
+If a user loses every device and their recovery codes, generate a sign-in link for them:
 
 ```sh
 docker compose exec sprig /sprig admin invite --user <handle>

@@ -36,7 +36,6 @@ test('the owner is offered no role, no end date and no way to remove themselves'
   await expect(people.role(seeded.ellie.name)).toHaveCount(0);
   await expect(people.until(seeded.ellie.name)).toHaveCount(0);
   await expect(people.remove(seeded.ellie.name)).toHaveCount(0);
-  await expect(people.reenrol(seeded.ellie.name)).toHaveCount(0);
 });
 
 test('a membership that has ended is offered no role until it is given a new date @swap', async ({ people }) => {
@@ -74,16 +73,6 @@ test('a removed member leaves the list and the care they logged keeps their name
   await expect(people.row(seeded.sam.name)).toHaveCount(0);
   await activity.open();
   await expect(activity.rows().filter({ hasText: seeded.sam.name }).first()).toBeVisible();
-});
-
-test('a re-enrolment link is shown once and is gone on the next visit @swap', async ({ people }) => {
-  await people.open();
-
-  await people.reenrol(seeded.sam.name).click();
-
-  await expect(people.link()).toContainText('/invite/');
-  await people.open();
-  await expect(people.link()).toHaveCount(0);
 });
 
 test('Pending invites is not shown once the last invite is revoked @swap', async ({ people }) => {

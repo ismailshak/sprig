@@ -183,17 +183,15 @@ func (h *account) newAccountPage(ctx context.Context, principal auth.Principal, 
 	}
 	page.Zone.Zones = zoneOptions(form.zone)
 
-	if principal.Can(auth.MemberManage) {
-		batch, live, err := recoveryBatch(ctx, h.queries, principal.User.ID)
-		if err != nil {
-			return accountPage{}, err
-		}
-		switch {
-		case !live:
-			page.Codes.Note = accountCodesNote
-		case batch.Unused == 0:
-			page.Codes.Note = accountCodesNoneLeftNote
-		}
+	batch, live, err := recoveryBatch(ctx, h.queries, principal.User.ID)
+	if err != nil {
+		return accountPage{}, err
+	}
+	switch {
+	case !live:
+		page.Codes.Note = accountCodesNote
+	case batch.Unused == 0:
+		page.Codes.Note = accountCodesNoneLeftNote
 	}
 	return page, nil
 }

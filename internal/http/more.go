@@ -101,11 +101,7 @@ type linkRow struct {
 type moreState struct {
 	notificationsOn bool
 	pendingInvites  int
-	// noCodesLeft is true when the signed-in person manages the garden's people
-	// and holds no unused recovery code. Only someone who manages people is
-	// prompted for codes, because there is nobody above them to send a new
-	// invite.
-	noCodesLeft bool
+	noCodesLeft     bool
 }
 
 func (h *more) show(w http.ResponseWriter, r *http.Request) {
@@ -125,28 +121,26 @@ func (h *more) state(ctx context.Context, principal auth.Principal) (moreState, 
 	}
 	state := moreState{notificationsOn: anyNotificationOn(preferences)}
 
-	// The People row and the Account row's note are both only rendered for
-	// someone who can manage people, so a member's index does not pay for
-	// either query.
+	batch, live, err := recoveryBatch(ctx, h.queries, principal.User.ID)
+	if err != nil {
+		return moreState{}, err
+	}
+	state.noCodesLeft = !live || batch.Unused == 0
+
+	// Only someone who can manage people sees the People row, so the pending
+	// invites are counted only for them.
 	if principal.Can(auth.MemberManage) {
 		pending, err := h.queries.CountPendingInvites(ctx, principal.Garden.ID, h.now())
 		if err != nil {
 			return moreState{}, fmt.Errorf("count the pending invites: %w", err)
 		}
 		state.pendingInvites = int(pending)
-
-		batch, live, err := recoveryBatch(ctx, h.queries, principal.User.ID)
-		if err != nil {
-			return moreState{}, err
-		}
-		state.noCodesLeft = !live || batch.Unused == 0
 	}
 	return state, nil
 }
 
 // newMorePage builds the index. A row the reader's role cannot use is left out
-// rather than shown and refused when pressed, so a sitter gets the first three
-// rows and the links below them.
+// rather than shown and refused when pressed.
 func newMorePage(principal auth.Principal, state moreState, info build.Info) morePage {
 	rows := []linkRow{
 		{Label: "Account", Href: accountPath, Note: codesNote(state.noCodesLeft)},

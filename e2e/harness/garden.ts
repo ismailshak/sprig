@@ -54,6 +54,10 @@ export const invites = {
   sitter: { token: 'development-sitter-invite' },
 } as const;
 
+// A sign-in link that adds a passkey to Sam's account. Its token is the
+// plaintext the seed hashes, so a test can open the link.
+export const signInLink = { token: 'development-sign-in-link' } as const;
+
 // The one setup link, unused and made today. Its token is the plaintext the
 // seed hashes, so a test can open the link.
 export const setupLink = { token: 'development-setup-link' } as const;

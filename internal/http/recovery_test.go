@@ -67,25 +67,26 @@ func TestRecovery_AnAccountHoldingNoneIsToldSoAndOfferedASet(t *testing.T) {
 	if row := batchRow(page); row != "" {
 		t.Errorf("the page shows the batch %q for an account holding none", row)
 	}
-	if !strings.Contains(text(page), "As the owner, nobody can send you a new invite link") {
-		t.Errorf("the page does not say the account is holding none:\n%s", text(page))
+	if !strings.Contains(text(page), recoveryPrompt) {
+		t.Errorf("the page does not ask for codes to be created:\n%s", text(page))
 	}
 	if got, want := createButton(page), "Create codes"; got != want {
 		t.Errorf("the button reads %q, want %q", got, want)
 	}
 }
 
-func TestRecovery_AMemberIsNotToldThatOnlyAnOwnerIsPromptedForCodes(t *testing.T) {
+// recoveryPrompt is the start of the paragraph above Create codes on the
+// Recovery codes page.
+const recoveryPrompt = "Without recovery codes, only the person who runs this server can sign you back in"
+
+func TestRecovery_AMemberWhoCannotManagePeopleIsAskedToCreateCodes(t *testing.T) {
 	f := openRecoveryCodes(t)
 	f.principal.Capabilities = auth.Capabilities{auth.TokenManage: true}
 
 	page := f.page(t, f.handler.show, recoveryPath)
 
-	if strings.Contains(text(page), "only an owner is prompted") {
-		t.Errorf("the page tells a member only an owner is prompted:\n%s", page)
-	}
-	if got, want := createButton(page), "Create codes"; got != want {
-		t.Errorf("the button reads %q, want %q", got, want)
+	if !strings.Contains(text(page), recoveryPrompt) {
+		t.Errorf("the page does not ask a member to create codes:\n%s", text(page))
 	}
 }
 

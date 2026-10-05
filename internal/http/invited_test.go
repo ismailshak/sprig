@@ -33,9 +33,10 @@ const (
 	// so joining would create a membership that grants nothing.
 	endedBeforeJoiningLink = "ended-before-joining"
 	// samsLink adds a device to Sam's account. Sam is a member of Rosewood.
+	// Like a link from sprig admin invite, it was created by Sam's own account.
 	samsLink = "add-a-device-for-sam"
-	// claresLink adds a device to Clare's account. Clare's access to Rosewood
-	// ended twelve days ago.
+	// claresLink adds a device to Clare's account and was created by it.
+	// Clare's access to Rosewood ended twelve days ago.
 	claresLink = "add-a-device-for-clare"
 	// expiringNowLink expires at the instant the handler calls now.
 	expiringNowLink = "expiring-this-instant"
@@ -71,8 +72,8 @@ func invitedGarden(t *testing.T) *invitedFixture {
 		(uuidv7(), $2, $9, 'sitter', NULL, $4, $10, NULL, NULL),
 		(uuidv7(), $2, $11, 'sitter', NULL, $4, $5, $10, NULL),
 		(uuidv7(), $2, $12, 'sitter', NULL, $4, $5, NULL, $10),
-		(uuidv7(), $2, $13, 'member', $14, $4, $5, NULL, NULL),
-		(uuidv7(), $2, $15, 'sitter', $16, $4, $5, NULL, NULL),
+		(uuidv7(), $2, $13, 'member', $14, $14, $5, NULL, NULL),
+		(uuidv7(), $2, $15, 'sitter', $16, $16, $5, NULL, NULL),
 		(uuidv7(), $2, $17, 'sitter', NULL, $4, $18, NULL, NULL)`,
 		invitedSitterID, moreGardenID, auth.HashToken(sitterLink), moreUserID, thursday.AddDate(0, 0, 5), sitterAccessEnds,
 		invitedMemberID, auth.HashToken(memberLink),
@@ -289,7 +290,7 @@ func TestInvited_AReenrolmentLinkAsksForNothingAndNamesTheAccountsGarden(t *test
 	page := rec.Body.String()
 	for _, want := range []string{
 		"Add this device to your account",
-		"Ellie sent this link so you can sign in to Rosewood from this device.",
+		"This link signs you in to Rosewood from this device.",
 		"Requires JavaScript and a browser with passkey support.",
 	} {
 		if !strings.Contains(text(page), want) {
@@ -565,10 +566,6 @@ func TestInvited_ALinkFromSprigAdminInviteAddsAPasskeyToTheSameAccountAndChanges
 		t.Fatalf("issuing the link: %v", err)
 	}
 
-	page := f.show(t, made.Token).Body.String()
-	if !strings.Contains(text(page), "This link signs you in to") || strings.Contains(text(page), "Sam sent this link") {
-		t.Errorf("the page names a sender, and the operator made the link:\n%s", text(page))
-	}
 	rec := f.redeem(t, made.Token, nil, device)
 
 	principal := f.sessionOf(t, rec, "/")

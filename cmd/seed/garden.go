@@ -229,6 +229,9 @@ func home() garden {
 		plants: append(livingPlants(), archivedPlants()...),
 		invites: []invite{
 			{id: seedID(tableInvite, 1), token: sitterInviteToken, role: "sitter", createdBy: &ellie, daysOld: 2, expiresInDays: 5},
+			// A sign-in link for Sam. user and createdBy are both Sam, as on a
+			// link from sprig admin invite.
+			{id: seedID(tableInvite, 2), token: signInLinkToken, role: "member", user: &sam, createdBy: &sam, expiresInDays: 7},
 		},
 		// Ellie is away from today, while Jo is still sitting, so the calendar
 		// has a day with a note and a sitter's band on it.

@@ -28,6 +28,7 @@ const (
 	kitchenDisplayToken = "sprg_7c1f-development-kitchen-display"
 	spareDisplayToken   = "sprg_2ea8-development-spare-display"
 	sitterInviteToken   = "development-sitter-invite"
+	signInLinkToken     = "development-sign-in-link"
 	setupLinkToken      = "development-setup-link"
 
 	// iPhonePublicKey is the public half of the key pair behind Ellie's iPhone
@@ -83,9 +84,12 @@ func iPhoneKey() *ecdsa.PublicKey {
 }
 
 type invite struct {
-	id            uuid.UUID
-	token         string
-	role          string
+	id    uuid.UUID
+	token string
+	role  string
+	// user is the account a sign-in link adds a passkey to. It is nil for an
+	// invite that joins somebody new to the garden.
+	user          *person
 	createdBy     *person
 	daysOld       int
 	expiresInDays int
@@ -225,10 +229,14 @@ func writeIdentity(ctx context.Context, tx pgx.Tx, ref time.Time) error {
 
 func writeInvites(ctx context.Context, tx pgx.Tx, g *garden, ref time.Time) error {
 	for _, inv := range g.invites {
+		var userID *uuid.UUID
+		if inv.user != nil {
+			userID = &inv.user.id
+		}
 		if _, err := tx.Exec(ctx,
-			`INSERT INTO invite (id, garden_id, token_hash, role, created_by, created_at, expires_at)
-				VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-			inv.id, g.id, auth.HashToken(inv.token), inv.role, inv.createdBy.id,
+			`INSERT INTO invite (id, garden_id, token_hash, role, user_id, created_by, created_at, expires_at)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+			inv.id, g.id, auth.HashToken(inv.token), inv.role, userID, inv.createdBy.id,
 			ref.AddDate(0, 0, -inv.daysOld), ref.AddDate(0, 0, inv.expiresInDays),
 		); err != nil {
 			return fmt.Errorf("writing the %s invite to %s: %w", inv.role, g.name, err)

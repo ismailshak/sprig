@@ -40,7 +40,7 @@ const (
 	// this page, so somebody holding a stolen sheet of codes cannot find out
 	// which of them still work.
 	codeCannotBeUsedTitle = "This code can’t be used"
-	codeCannotBeUsedLine  = "It may have been used already or replaced by a newer set. Try another code, or ask the garden’s owner for a new invite link."
+	codeCannotBeUsedLine  = "It may have been used already or replaced by a newer set. Try another code, or ask the person who runs this server for a sign-in link."
 	// The heading and the sentence shown for a post past the rate limit.
 	tooManyAttemptsTitle = "Too many attempts"
 	tooManyAttemptsLine  = "Wait a few minutes and try again."

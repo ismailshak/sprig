@@ -387,12 +387,12 @@ func TestAccount_ASaveWithNoDisplayNameKeepsThePageAndReadsOutTheMessage(t *test
 	}
 }
 
-func TestAccount_AMemberIsNotToldTheyHaveNoRecoveryCodes(t *testing.T) {
+func TestAccount_AMemberWhoCannotManagePeopleIsToldTheyHaveNoRecoveryCodes(t *testing.T) {
 	f := openAccount(t)
 	f.principal.Capabilities = auth.Capabilities{auth.TokenManage: true}
 
-	if got := noteOn(t, f.page(t, f.handler.show, accountPath), "Recovery codes"); got != "" {
-		t.Errorf("the row says %q to a member, want nothing", got)
+	if got := noteOn(t, f.page(t, f.handler.show, accountPath), "Recovery codes"); got != accountCodesNote {
+		t.Errorf("the row says %q to a member, want %q", got, accountCodesNote)
 	}
 }
 
