@@ -18,6 +18,7 @@ skipped=(
   '.vscode/*'
   '.gitignore'
   '.golangci.yml'
+  'LICENSE'
   'renovate.json5'
   'sqlc.yaml'
 )
