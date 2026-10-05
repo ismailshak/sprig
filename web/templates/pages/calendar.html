@@ -97,14 +97,22 @@
 
 {{/* The Add note and Edit note sheet, rendered in place of the day's sheet.
      The form swaps #calendar-grid, because a note changes nothing else on the
-     page. The server retargets a refused note at #sheet. Delete posts the same
-     form to its own URL so it works without JavaScript. */}}
+     page. The server retargets a refused note at the form. Delete posts the
+     same form to its own URL so it works without JavaScript. */}}
 {{define "note-sheet"}}{{with .NoteSheet}}<dialog open class="sheet" id="sheet" aria-labelledby="note-sheet-title" tabindex="-1">
 <form method="dialog"><button class="sheet__scrim" tabindex="-1" aria-hidden="true"></button></form>
 <div class="sheet__panel">
 <div class="sheet__grip"></div>
 <h2 class="sheet__title" id="note-sheet-title">{{.Title}}</h2>
-<form class="sheet__form" method="post" action="{{.Path}}" hx-post="{{.Path}}" hx-target="#calendar-grid" hx-swap="outerHTML settle:0ms">
+{{template "note-form" $}}
+<form method="dialog"><button class="sheet__cancel">Cancel</button></form>
+</div>
+{{template "sheet-status"}}
+</dialog>{{else}}<div id="sheet"></div>{{end}}{{end}}
+
+{{/* The form inside the note sheet, and the fragment a refused note
+     returns. */}}
+{{define "note-form"}}{{with .NoteSheet}}<form class="sheet__form" id="sheet-form" method="post" action="{{.Path}}" hx-post="{{.Path}}" hx-target="#calendar-grid" hx-swap="outerHTML settle:0ms">
 <div class="field">
 <label class="field__label" for="note-text">Note</label>
 <input class="input" id="note-text" name="text" type="text" value="{{.Text}}">
@@ -122,11 +130,7 @@
 <button class="sheet__go">{{.Button}}</button>
 {{with .Delete}}<button class="sheet__delete" formaction="{{.}}" hx-post="{{.}}">Delete</button>{{end}}
 </div>
-</form>
-<form method="dialog"><button class="sheet__cancel">Cancel</button></form>
-</div>
-{{template "sheet-status"}}
-</dialog>{{else}}<div id="sheet"></div>{{end}}{{end}}
+</form>{{end}}{{end}}
 
 {{/* The response to an added, saved or deleted note: the grid, and an empty
      #sheet that closes the dialog. */}}

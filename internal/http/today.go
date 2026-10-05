@@ -422,8 +422,15 @@ func (h *today) daySentence(head todayHead) string {
 // from Today: what was logged, what is left, and where Undo is. The row's Undo
 // goes when the undo window closes, so the sentence also points at Activity.
 func (h *today) loggedAnnouncement(principal auth.Principal, plant store.Plant, careType store.CareType, event store.CareEvent, head todayHead) string {
+	return whoDidSentence(principal, plant, careType, event) + " " + h.daySentence(head) + " Undo from the row now, or from Activity later."
+}
+
+// whoDidSentence returns the sentence saying what was logged, such as "You
+// watered Doris." It starts the announcement on Today and is the whole
+// announcement on a plant's page.
+func whoDidSentence(principal auth.Principal, plant store.Plant, careType store.CareType, event store.CareEvent) string {
 	who, did := whoDid(principal, principal.User.DisplayName, event, careType)
-	return who + " " + did + " " + plant.DisplayName() + ". " + h.daySentence(head) + " Undo from the row now, or from Activity later."
+	return who + " " + did + " " + plant.DisplayName() + "."
 }
 
 // newTodayEmpty picks which empty state to show. The tick means something was

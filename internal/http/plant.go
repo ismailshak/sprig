@@ -505,6 +505,10 @@ const plantFootID = "plant-foot"
 // of the template that renders it. Restore swaps it.
 const plantBodyID = "plant"
 
+// plantScheduleID is both the HTML id of the Schedule section and the name of
+// the template that renders it. Logging care from the sheet swaps it.
+const plantScheduleID = "plant-schedule"
+
 // plantSwap picks the fragment an htmx request gets and narrows the page to
 // what that fragment renders. A page navigation, or a swap targeting anything
 // else, gets the whole page. It returns false for a schedule row the page does

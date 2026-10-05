@@ -1,18 +1,22 @@
 /* Registering a passkey and signing in with one. Both do the same three
    things: post for a challenge, hand it to the browser's credential API, and
-   submit the browser's answer as an ordinary form post. Only the browser can
-   talk to the authenticator. The forms it runs on are the only ones in sprig
-   that need a script.
+   post the credential it returns. Only the browser can talk to the
+   authenticator. The forms it runs on are the only ones in sprig that need a
+   script.
 
    A form here has data-passkey="create" or data-passkey="get", a
    data-challenge URL to post for the challenge, and a data-field naming the
-   hidden input the answer goes in. Its submit button starts disabled, and the
-   note named by data-note says the form needs a script. This script enables the
-   button and removes the note.
+   hidden input the credential goes in. Its submit button starts disabled, and
+   the note named by data-note says the form needs a script. This script
+   enables the button and removes the note.
 
    The form's fields are posted with the request for the challenge. Set up
    your garden needs the display name before the passkey is made, because the
-   browser stores that name with the passkey. */
+   browser stores that name with the passkey.
+
+   A form with data-swap, Add passkey on Passkeys, posts the credential with
+   htmx and replaces the element with that id. The other forms redirect to
+   another page when they succeed, so they post it as an ordinary form. */
 (function () {
   const forms = document.querySelectorAll('form[data-passkey]');
   // The three JSON helpers arrived in browsers later than the credential API
@@ -29,7 +33,9 @@
   for (const form of forms) {
     const field = form.elements.namedItem(form.dataset.field);
     const button = form.querySelector('button[type="submit"]');
-    const message = document.getElementById(form.dataset.message);
+    // The message line is looked up each time, because the swap on Passkeys
+    // replaces it.
+    const message = () => document.getElementById(form.dataset.message);
     const note = document.getElementById(form.dataset.note);
     if (!field || !button) continue;
 
@@ -39,7 +45,8 @@
     form.addEventListener('submit', async (event) => {
       event.preventDefault();
       button.disabled = true;
-      if (message) message.textContent = '';
+      const line = message();
+      if (line) line.textContent = '';
 
       try {
         const response = await fetch(form.dataset.challenge, {
@@ -73,12 +80,26 @@
               });
 
         field.value = JSON.stringify(credential.toJSON());
+        if (form.dataset.swap) {
+          // htmx rejects with no error when the post cannot reach the server.
+          // The page's swap script has already said so in the live region.
+          await htmx
+            .ajax('POST', form.action, {
+              source: form,
+              target: '#' + form.dataset.swap,
+              swap: 'outerHTML settle:0ms',
+            })
+            .catch(() => {});
+          button.disabled = false;
+          return;
+        }
         // submit() does not fire this event again, so the post goes straight
         // out with the credential in the field.
         form.submit();
       } catch (error) {
         button.disabled = false;
-        if (message) message.textContent = refusal(error, form.dataset.passkey);
+        const line = message();
+        if (line) line.textContent = refusal(error, form.dataset.passkey);
       }
     });
   }

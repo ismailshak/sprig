@@ -1,3 +1,4 @@
+import { sameDocument } from '../harness/browser';
 import { people, plants as seeded } from '../harness/garden';
 import { signIn } from '../harness/signin';
 import { expect, test } from '../harness/test';
@@ -48,6 +49,19 @@ test("logging a care from a plant's page returns to that page @swap", async ({ p
   await expect(page).toHaveURL(`/plants/${seeded.doris.id}`);
   await expect(plant.recentLines().first()).toContainText('You watered · today');
   await expect(plant.scheduleRow('Water')).toContainText('Due in 21 days');
+});
+
+test("logging a care from a plant's page does not reload the page @js", async ({ page, plant, sheet }) => {
+  await plant.open(seeded.doris);
+  const loadedOnce = await sameDocument(page);
+  await plant.logCare();
+
+  await sheet.submit('Log watering');
+
+  await expect(sheet.dialog()).toHaveCount(0);
+  await expect(plant.recentLines().first()).toContainText('You watered · today');
+  await expect(plant.scheduleRow('Water')).toContainText('Due in 21 days');
+  expect(await loadedOnce()).toBe(true);
 });
 
 test("a care with no schedule can be logged from the plant's page @js", async ({ plant, sheet }) => {

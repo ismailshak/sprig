@@ -222,11 +222,8 @@ func (h *activity) save(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		page.Sheet = s
-		// The form targets the log body, so a refusal retargets the response at
-		// the sheet, where the message is.
-		w.Header().Set("HX-Retarget", "#sheet")
-		w.Header().Set("HX-Reswap", "outerHTML")
-		h.templates.render(w, r, view{page: "activity", fragment: "sheet", status: http.StatusUnprocessableEntity, announce: message}, page)
+		refuseOnSheet(w)
+		h.templates.render(w, r, view{page: "activity", fragment: sheetFormTemplate, status: http.StatusUnprocessableEntity, announce: message}, page)
 		return
 	}
 	if err != nil {

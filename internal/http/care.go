@@ -23,6 +23,23 @@ import (
 // placeholder it swaps with. A request targeting it asks for the sheet alone.
 const sheetID = "sheet"
 
+// sheetFormID is the HTML id of the form inside an open sheet. A refused post
+// replaces the form alone. Replacing the dialog would start the backdrop's
+// fade and the panel's rise again.
+const sheetFormID = "sheet-form"
+
+// sheetFormTemplate is the template that renders the form inside the log-care
+// sheet and the sheet a row on Activity opens. A refused post returns it.
+const sheetFormTemplate = "sheet-form"
+
+// refuseOnSheet sets the headers that put a refused post's response in place
+// of the sheet's form. The form's own target is the element a successful post
+// replaces.
+func refuseOnSheet(w http.ResponseWriter) {
+	w.Header().Set("HX-Retarget", "#"+sheetFormID)
+	w.Header().Set("HX-Reswap", "outerHTML settle:0ms")
+}
+
 // sheetAgainID is the HTML id of the element holding the Remind me in chips. A
 // change under Care targets it.
 const sheetAgainID = "sheet-again"
@@ -249,8 +266,8 @@ type sheet struct {
 	// Path is the URL the sheet's form posts to.
 	Path string
 	// Target is the HTML id of the element the post replaces: the care row on
-	// Today, the log body on the Activity page. It is empty on a plant's page,
-	// which renders the whole page again.
+	// Today, the log body on the Activity page, the Schedule section on a
+	// plant's page.
 	Target string
 	Over   string
 	Label  string
@@ -353,11 +370,10 @@ func newSheet(plant store.Plant, offers []offer, care offer, d draft, now time.T
 }
 
 // forPlant adjusts the sheet for a plant's page. The plant heading is no longer
-// a link, since it would point at the page already open. The swap target is
-// cleared because that page has no care row to replace, so the post renders the
-// whole page again.
+// a link, since it would point at the page already open. The post replaces the
+// Schedule section.
 func (s *sheet) forPlant() {
-	s.Target = ""
+	s.Target = plantScheduleID
 	s.Plant.Href = ""
 }
 
@@ -691,11 +707,8 @@ func (h *today) log(w http.ResponseWriter, r *http.Request) {
 	if message := s.refuse(err); message != "" {
 		page := newTodayPage(principal, g)
 		page.Sheet = s
-		// The form targets the care row, so a refusal retargets the response
-		// at the sheet so the message is shown.
-		w.Header().Set("HX-Retarget", "#sheet")
-		w.Header().Set("HX-Reswap", "outerHTML")
-		h.templates.render(w, r, view{page: "today", fragment: "sheet", status: http.StatusUnprocessableEntity, announce: message}, page)
+		refuseOnSheet(w)
+		h.templates.render(w, r, view{page: "today", fragment: sheetFormTemplate, status: http.StatusUnprocessableEntity, announce: message}, page)
 		return
 	}
 	if err != nil {
@@ -731,9 +744,10 @@ func (h *today) log(w http.ResponseWriter, r *http.Request) {
 	h.templates.render(w, r, v, swap)
 }
 
-// logOnPlant logs the care posted from the sheet on a plant's page and
-// redirects back to that page. The page has no care row to replace, so the post
-// never returns a fragment.
+// logOnPlant logs the care posted from the sheet on a plant's page. An htmx
+// post returns the Schedule section, with Recent activity and an empty sheet
+// out of band. The rest of the page is not swapped, because the picture at the
+// top would fade in again. A form post gets a redirect back to the page.
 func (h *today) logOnPlant(w http.ResponseWriter, r *http.Request, principal auth.Principal, plantID uuid.UUID) {
 	detail, err := loadPlant(r.Context(), h.queries, principal, plantID, h.now())
 	switch {
@@ -763,10 +777,11 @@ func (h *today) logOnPlant(w http.ResponseWriter, r *http.Request, principal aut
 	s.forPlant()
 
 	performedAt, err := s.accept(d, detail.now)
-	if s.refuse(err) != "" {
+	if message := s.refuse(err); message != "" {
 		page := newPlantPage(principal, detail)
 		page.Sheet = s
-		h.templates.render(w, r, view{page: "plant", status: http.StatusUnprocessableEntity}, page)
+		refuseOnSheet(w)
+		h.templates.render(w, r, view{page: "plant", fragment: sheetFormTemplate, status: http.StatusUnprocessableEntity, announce: message}, page)
 		return
 	}
 	if err != nil {
@@ -781,7 +796,19 @@ func (h *today) logOnPlant(w http.ResponseWriter, r *http.Request, principal aut
 		return
 	}
 	h.notify.call(r.Context(), principal, activityNotification(principal, detail.plant, care.CareType, logged.Done))
-	http.Redirect(w, r, plantPath(detail.plant.ID), http.StatusSeeOther)
+	if !isHTMX(r) {
+		http.Redirect(w, r, plantPath(detail.plant.ID), http.StatusSeeOther)
+		return
+	}
+	// The plant is loaded again so the Schedule rows count the new event and
+	// Recent activity lists it.
+	after, err := loadPlant(r.Context(), h.queries, principal, plantID, h.now())
+	if err != nil {
+		h.templates.serverError(h.logger, w, r, "load the plant", err)
+		return
+	}
+	v := view{page: "plant", fragment: "plant-logged", announce: whoDidSentence(principal, detail.plant, care.CareType, logged)}
+	h.templates.render(w, r, v, newPlantPage(principal, after))
 }
 
 // notifyActivity sends the other members of the garden a push notification

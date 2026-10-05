@@ -118,6 +118,17 @@ test('a time later than now is announced from inside the sheet @js', async ({ to
   await expect(today.announcement()).toBeEmpty();
 });
 
+test('a time later than now is refused without replacing the open sheet @js', async ({ today, sheet }) => {
+  await today.openSheet(plants.doris, 'water');
+  const dialog = await sheet.dialog().elementHandle();
+  await sheet.chip('Earlier today').check();
+  await sheet.time().fill('23:59');
+  await sheet.submit('Log watering');
+
+  await expect(sheet.dialog().getByText('That time is in the future.')).toBeVisible();
+  expect(await dialog?.evaluate((element) => element.isConnected)).toBe(true);
+});
+
 test('a log that cannot reach the server is reported inside the sheet @js', async ({ context, today, sheet }) => {
   await today.openSheet(plants.doris, 'water');
   await context.setOffline(true);

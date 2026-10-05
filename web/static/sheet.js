@@ -30,8 +30,9 @@
   document.addEventListener('htmx:beforeSwap', (event) => {
     if (event.detail.target.id !== 'sheet') return;
     const active = document.activeElement;
-    // A refused time swaps the open sheet for another while focus is inside
-    // it. The opener stays the element that opened the first one.
+    // Add note and a note on the calendar's day sheet swap that sheet for the
+    // note sheet while focus is inside it. The opener stays the day's link in
+    // the grid that opened the day sheet.
     if (active && active.closest('#sheet')) return;
     opener = active && active !== document.body ? active : event.detail.requestConfig.elt;
   });

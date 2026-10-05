@@ -131,6 +131,9 @@ type view struct {
 // into the live region.
 const announceTemplate = "announce"
 
+// varyHTMX is the Vary header on every response render writes.
+const varyHTMX = "HX-Request, HX-Target, HX-History-Restore-Request"
+
 // render writes v to w. It executes into a buffer first, because a template
 // that fails halfway has already written the top of the page, and that much
 // would otherwise reach the browser under a 200.
@@ -142,6 +145,10 @@ func (t *Templates) render(w http.ResponseWriter, r *http.Request, v view, data 
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	// One URL returns a page or a fragment depending on these headers. Without
+	// Vary, Back to a URL htmx pushed can show the cached fragment in place of
+	// the page.
+	w.Header().Add("Vary", varyHTMX)
 	if v.status != 0 {
 		w.WriteHeader(v.status)
 	}

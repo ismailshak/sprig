@@ -237,14 +237,33 @@ func TestPasskeys_AddAPasskeyPostsToTheChallengeURLAndThenToThePasskeysPage(t *t
 
 	page := f.page(t, f.handler.show, passkeysPath)
 
-	// The page's script posts to data-challenge for a challenge, then submits
-	// this form.
+	// The page's script posts to data-challenge for a challenge, then posts
+	// this form with htmx and swaps the element data-swap names.
 	form := formTo(page, passkeysPath)
 	if form == nil {
 		t.Fatalf("the Add a passkey form does not post to %s:\n%s", passkeysPath, page)
 	}
 	if got := form.attr("data-challenge"); got != registerPath {
 		t.Errorf("the form offers a challenge at %q, want %s", got, registerPath)
+	}
+	if got := form.attr("data-swap"); got != passkeysListID {
+		t.Errorf("the form's data-swap is %q, want %s", got, passkeysListID)
+	}
+}
+
+// The swap after a refusal replaces the list. A refusal line outside it would
+// keep the old message.
+func TestPasskeys_TheRefusalLineIsInsideTheListAddPasskeyReplaces(t *testing.T) {
+	f := openPasskeys(t)
+
+	page := f.page(t, f.handler.show, passkeysPath)
+
+	form := formTo(page, passkeysPath)
+	if form == nil {
+		t.Fatalf("the Add passkey form does not post to %s:\n%s", passkeysPath, page)
+	}
+	if list := readHTML(page).byID(form.attr("data-swap")); list == nil || list.byID(form.attr("data-message")) == nil {
+		t.Errorf("the line the script writes a refusal into is not inside %s:\n%s", form.attr("data-swap"), page)
 	}
 }
 

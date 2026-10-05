@@ -11,14 +11,12 @@
 {{template "passkeys-list" .}}
 {{/* Only the browser can talk to the device holding a passkey, so a script
      drives this form. It posts to data-challenge for a challenge, puts the
-     browser's credential in the hidden field, then posts the form. The button
-     starts disabled with the note under it, because the server cannot tell
-     whether the script will run. The script enables the button and removes the
-     note. In a browser with no credential API it does neither. The error line
-     is always rendered, because the script writes the browser's refusal into
-     it. */}}
-<p class="field__error" id="passkey-error" role="alert">{{.Error}}</p>
-<form method="post" action="{{.Add}}" data-passkey="create" data-challenge="{{.Challenge}}" data-field="{{.Field}}" data-message="passkey-error" data-note="passkey-noscript">
+     browser's credential in the hidden field, then posts the form with htmx,
+     swapping the element data-swap names. The button starts disabled with the
+     note under it, because the server cannot tell whether the script will
+     run. The script enables the button and removes the note. In a browser
+     with no credential API it does neither. */}}
+<form method="post" action="{{.Add}}" data-passkey="create" data-challenge="{{.Challenge}}" data-field="{{.Field}}" data-message="passkey-error" data-note="passkey-noscript" data-swap="passkeys-list">
 <input type="hidden" name="{{.Field}}">
 <button class="wide-action" type="submit" disabled>Add passkey</button>
 <p class="note" id="passkey-noscript">Requires JavaScript and a browser with passkey support.</p>
@@ -26,9 +24,10 @@
 </div>
 {{end}}
 
-{{/* The list and the note under it. Remove swaps this and not the page, so
-     the Add passkey form below keeps the listeners the page's script gave
-     it. */}}
+{{/* The list, the note under it and the error line. Remove and Add passkey
+     swap this and not the page, so the Add passkey form below keeps the
+     listeners the page's script gave it. The error line is always rendered,
+     because the script writes the browser's refusal into it. */}}
 {{define "passkeys-list"}}<div id="passkeys-list">
 <ul class="list">
 {{range .Keys}}<li class="row row--setting row--stack">
@@ -44,6 +43,7 @@
      because removing the last passkey is the one action here that nothing can
      undo. */}}
 {{if .OnlyOne}}<p class="note">Your only passkey can’t be removed. Add one on another device first.</p>{{end}}
+<p class="field__error" id="passkey-error" role="alert">{{.Error}}</p>
 </div>{{end}}
 
 {{define "script"}}<script src="{{asset "passkey.js"}}" defer></script>{{end}}

@@ -350,15 +350,9 @@ func TestCalendarNote_ARefusedNoteIsShownAgainWithTheReason(t *testing.T) {
 			if rec.Code != http.StatusUnprocessableEntity {
 				t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusUnprocessableEntity, rec.Body.String())
 			}
-			if got := rec.Header().Get("HX-Retarget"); got != "#"+sheetID {
-				t.Errorf("HX-Retarget is %q, want the sheet", got)
-			}
-			sheet := noteSheetOf(t, rec.Body.String())
+			sheet := refusalForm(t, rec)
 			if got := noteError(sheet); got != tc.want {
 				t.Errorf("the sheet says %q, want %q", got, tc.want)
-			}
-			if !hasEmptyLiveRegion(sheet) {
-				t.Error("the sheet has no empty live region for the refusal to be read from")
 			}
 			if text, first, last := noteFields(sheet); text != strings.TrimSpace(tc.form.Get("text")) || first != tc.form.Get("first") || last != tc.form.Get("last") {
 				t.Errorf("the fields hold %q, %q, %q, want what was posted", text, first, last)
@@ -433,7 +427,7 @@ func TestCalendarNote_ARefusedChangeKeepsTheNoteAsItWas(t *testing.T) {
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusUnprocessableEntity, rec.Body.String())
 	}
-	if got := noteError(noteSheetOf(t, rec.Body.String())); got != noteMissing {
+	if got := noteError(refusalForm(t, rec)); got != noteMissing {
 		t.Errorf("the sheet says %q, want %q", got, noteMissing)
 	}
 	if text, first, _ := f.storedNote(t, calendarAwayNoteID); text != "Ellie away" || first.Format(time.DateOnly) != "2026-09-05" {

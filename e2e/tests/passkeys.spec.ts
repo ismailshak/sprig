@@ -1,4 +1,5 @@
 import { aWorkingDevice, withDevice } from '../harness/authenticator';
+import { sameDocument } from '../harness/browser';
 import { devices, people } from '../harness/garden';
 import { signIn } from '../harness/signin';
 import { expect, test } from '../harness/test';
@@ -31,6 +32,18 @@ test('adding a passkey puts the device on the list @passkey', async ({ page, pas
   await expect(passkeys.row(devices.phone)).toBeVisible();
   await expect(passkeys.row(devices.laptop)).toBeVisible();
   await expect(passkeys.refusal()).toHaveText('');
+});
+
+test('adding a passkey does not reload the page @passkey', async ({ page, passkeys }) => {
+  await passkeys.open();
+  const loadedOnce = await sameDocument(page);
+
+  await withDevice(page, aWorkingDevice, async () => {
+    await passkeys.add().click();
+    await expect(passkeys.rows()).toHaveCount(3);
+  });
+
+  expect(await loadedOnce()).toBe(true);
 });
 
 test('a device that already holds a passkey adds no second one @passkey', async ({ page, passkeys }) => {

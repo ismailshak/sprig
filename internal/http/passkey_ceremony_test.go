@@ -353,6 +353,25 @@ func (f *moreFixture) registerDevice(t *testing.T, h *passkeyCeremony, device *p
 	return f.post(t, h.register, passkeysPath, url.Values{credentialField: {device.Register(&creation)}}, cookie)
 }
 
+// registerDeviceWithHTMX is registerDevice with the headers htmx sends when
+// Add passkey posts the credential.
+func (f *moreFixture) registerDeviceWithHTMX(t *testing.T, h *passkeyCeremony, device *passkeytest.Authenticator) *httptest.ResponseRecorder {
+	t.Helper()
+
+	var creation protocol.CredentialCreation
+	cookie := f.challengeJSON(t, h.registerChallenge, registerPath, &creation)
+	ctx := context.WithValue(t.Context(), principalKey, f.principal)
+	body := strings.NewReader(url.Values{credentialField: {device.Register(&creation)}}.Encode())
+	req := httptest.NewRequestWithContext(ctx, http.MethodPost, passkeysPath, body)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+	req.Header.Set("HX-Target", passkeysListID)
+	req.AddCookie(cookie)
+	rec := httptest.NewRecorder()
+	h.register(rec, req)
+	return rec
+}
+
 // signInWith runs a sign-in through the two handlers and returns the response
 // to the second post.
 func (f *moreFixture) signInWith(t *testing.T, h *passkeyCeremony, device *passkeytest.Authenticator) *httptest.ResponseRecorder {
@@ -489,6 +508,52 @@ func TestPasskeys_ADeviceRegisteredASecondTimeIsRefusedOnThePage(t *testing.T) {
 	}
 	if !strings.Contains(text(rec.Body.String()), "already has a passkey") {
 		t.Errorf("the page does not say the device already has a passkey:\n%s", text(rec.Body.String()))
+	}
+}
+
+func TestPasskeys_AddingAPasskeyWithHTMXReturnsTheListWithTheNewDevice(t *testing.T) {
+	f := moreGarden(t)
+	h := ceremonyOn(t, f)
+
+	rec := f.registerDeviceWithHTMX(t, h, aDevice())
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusOK, text(rec.Body.String()))
+	}
+	body := rec.Body.String()
+	doc := readHTML(body)
+	list := doc.byID(passkeysListID)
+	if list == nil || doc.first(isTag("html")) != nil {
+		t.Fatalf("the response is not the list alone:\n%s", body)
+	}
+	if got := len(list.all(isTag("button"), textIs("Remove"))); got != 3 {
+		t.Errorf("the list offers Remove %d times, want 3 for the two seeded devices and the new one:\n%s", got, text(body))
+	}
+	if got := announcement(body); got != "Passkey added." {
+		t.Errorf("the swap announces %q, want Passkey added.", got)
+	}
+}
+
+func TestPasskeys_AddingAPasskeyWithHTMXFromADeviceThatHasOneReturnsTheListWithTheReason(t *testing.T) {
+	f := moreGarden(t)
+	h := ceremonyOn(t, f)
+	device := aDevice()
+	f.enrolDevice(t, h, device)
+
+	rec := f.registerDeviceWithHTMX(t, h, device)
+
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusUnprocessableEntity, text(rec.Body.String()))
+	}
+	list := readHTML(rec.Body.String()).byID(passkeysListID)
+	if list == nil {
+		t.Fatalf("the response has no list:\n%s", rec.Body.String())
+	}
+	if got := list.first(attrIs("role", "alert")).text(); got != "This device already has a passkey for sprig." {
+		t.Errorf("the list's error line reads %q, want the reason the device was refused", got)
+	}
+	if got := len(list.all(isTag("button"), textIs("Remove"))); got != 3 {
+		t.Errorf("the list offers Remove %d times, want 3 for the devices already on the list", got)
 	}
 }
 
