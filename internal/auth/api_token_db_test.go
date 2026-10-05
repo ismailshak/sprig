@@ -135,3 +135,74 @@ func TestAPITokens_TheStoredHashIsRefusedLikeAnyUnknownString(t *testing.T) {
 		}
 	}
 }
+
+func TestAPITokens_ATokenIsRefusedOnceItsCreatorIsRemovedFromTheGarden(t *testing.T) {
+	tokens, tx, rosewood, _ := apiTokensOnTx(t)
+	if _, err := tx.Exec(t.Context(), "DELETE FROM membership WHERE garden_id = $1 AND user_id = $2", testGardenID, testUserID); err != nil {
+		t.Fatalf("removing the creator: %v", err)
+	}
+
+	_, err := tokens.Resolve(t.Context(), signedInAt, rosewood)
+
+	if !errors.Is(err, ErrNoAPIToken) {
+		t.Errorf("Resolve = %v, want ErrNoAPIToken", err)
+	}
+	if at := lastUsed(t, tx, rosewood); at != nil {
+		t.Errorf("last_used_at = %v, and a refused request records no use", at)
+	}
+}
+
+func TestAPITokens_ATokenStopsAtTheInstantItsCreatorsMembershipEnds(t *testing.T) {
+	tokens, tx, rosewood, _ := apiTokensOnTx(t)
+	endsAt := signedInAt.Add(time.Hour)
+	if _, err := tx.Exec(t.Context(), "UPDATE membership SET expires_at = $1 WHERE garden_id = $2 AND user_id = $3", endsAt, testGardenID, testUserID); err != nil {
+		t.Fatalf("setting the creator's end date: %v", err)
+	}
+
+	if _, err := tokens.Resolve(t.Context(), endsAt.Add(-time.Second), rosewood); err != nil {
+		t.Errorf("a second before the creator's membership ends the token is refused: %v", err)
+	}
+	if _, err := tokens.Resolve(t.Context(), endsAt, rosewood); !errors.Is(err, ErrNoAPIToken) {
+		t.Errorf("when the creator's membership ends Resolve = %v, want ErrNoAPIToken", err)
+	}
+}
+
+func TestAPITokens_ATokenIsRefusedWhenItsCreatorsRoleLacksTokenManage(t *testing.T) {
+	cases := []struct {
+		role string
+		live bool
+	}{
+		{"member", true},
+		{"sitter", false},
+	}
+	for _, c := range cases {
+		t.Run(c.role, func(t *testing.T) {
+			tokens, tx, rosewood, _ := apiTokensOnTx(t)
+			if _, err := tx.Exec(t.Context(), "UPDATE membership SET role = $1 WHERE garden_id = $2 AND user_id = $3", c.role, testGardenID, testUserID); err != nil {
+				t.Fatalf("changing the creator's role: %v", err)
+			}
+
+			_, err := tokens.Resolve(t.Context(), signedInAt, rosewood)
+
+			if c.live && err != nil {
+				t.Errorf("with the creator a %s Resolve = %v, want the token to work", c.role, err)
+			}
+			if !c.live && !errors.Is(err, ErrNoAPIToken) {
+				t.Errorf("with the creator a %s Resolve = %v, want ErrNoAPIToken", c.role, err)
+			}
+		})
+	}
+}
+
+// Noor owns Fairview and is a sitter in Rosewood. Owning Fairview grants token.manage
+// there and nowhere else.
+func TestAPITokens_ACreatorsRoleInAnotherGardenDoesNotKeepTheTokenWorking(t *testing.T) {
+	tokens, tx, _, _ := apiTokensOnTx(t)
+	porch := insertAPIToken(t, tx, testGardenID, otherUserID, "The porch display")
+
+	_, err := tokens.Resolve(t.Context(), signedInAt, porch)
+
+	if !errors.Is(err, ErrNoAPIToken) {
+		t.Errorf("Resolve = %v, want ErrNoAPIToken", err)
+	}
+}

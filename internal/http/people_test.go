@@ -686,19 +686,19 @@ func TestPeople_AMemberWhoseRoleChangedIsToldTheNewRole(t *testing.T) {
 	}
 }
 
-func TestPeople_ANewEndDateWakesTheJobsAndARoleChangeDoesNot(t *testing.T) {
+func TestPeople_ARoleChangeAndANewEndDateEachWakeTheJobs(t *testing.T) {
 	f := peopleGarden(t)
 	woken := 0
 	f.handler.wake = countingWake(&woken)
 
-	f.do(t, f.handler.saveMembers, PeoplePath, url.Values{"role.sam": {"sitter"}})
-	if woken != 0 {
-		t.Errorf("a role change woke the jobs %d times, want 0: no instant moved", woken)
+	f.do(t, f.handler.saveMembers, PeoplePath, url.Values{"role.jo": {"member"}})
+	if woken != 1 {
+		t.Errorf("a role change woke the jobs %d times, want 1", woken)
 	}
 
 	f.do(t, f.handler.saveMembers, PeoplePath, url.Values{"until.jo": {"2026-10-01"}})
-	if woken != 1 {
-		t.Errorf("an end date woke the jobs %d times, want 1", woken)
+	if woken != 2 {
+		t.Errorf("an end date woke the jobs %d times in all, want 2", woken)
 	}
 }
 

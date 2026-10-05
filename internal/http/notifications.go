@@ -32,8 +32,9 @@ const (
 // A handler calls it after committing a change to when either job next sends:
 // a digest type switched on or off, the digest hour, an account's timezone, a
 // browser subscribed, a garden deleted, an account closed, a token created or
-// revoked, a membership's end date set or moved. Without it a job finds the
-// change only when its timer next fires. It is nil when push is off.
+// revoked, a membership's end date set or moved, a member's role changed.
+// Without it a job finds the change only when its timer next fires. It is nil
+// when push is off.
 type wakeJobs func()
 
 func (w wakeJobs) call() {
@@ -127,6 +128,12 @@ type notificationsPage struct {
 	// FocusSendTest is true on the response to Add this device. Send test
 	// notification is marked autofocus.
 	FocusSendTest bool
+	// FocusAdd is true on the response that refuses Add this device. The new
+	// button is marked autofocus because the swap replaced the one with focus.
+	FocusAdd bool
+	// AddError is the line under Add this device when the server refused the
+	// device. The script writes its own lines there too.
+	AddError string
 }
 
 // browserRow is one push subscription, shown as a row under Subscribed
@@ -183,6 +190,10 @@ type notificationsState struct {
 	testResult    string
 	saved         bool
 	focusSendTest bool
+	focusAdd      bool
+	addError      string
+	// status is the response's status code. Zero means 200.
+	status int
 	// announce is the sentence a swap puts in the live region.
 	announce string
 }
@@ -209,7 +220,9 @@ func (h *notifications) renderNotifications(w http.ResponseWriter, r *http.Reque
 	page.TestResult = state.testResult
 	page.Saved = state.saved
 	page.FocusSendTest = state.focusSendTest
-	v := view{page: "notifications", announce: state.announce}
+	page.FocusAdd = state.focusAdd
+	page.AddError = state.addError
+	v := view{page: "notifications", status: state.status, announce: state.announce}
 	switch r.Header.Get("HX-Target") {
 	case devicesID:
 		v.fragment = devicesID
@@ -261,12 +274,31 @@ func (h *notifications) sendTestNotification(w http.ResponseWriter, r *http.Requ
 	http.Redirect(w, r, notificationsPath+"?"+testResultParam+"="+result, http.StatusSeeOther)
 }
 
+// maxPushSubscriptions is the most devices one account can have subscribed.
+// Logging care sends a push to each subscription of the garden's other
+// members, one after another. Without a cap one member could make each log
+// send any number of requests.
+const maxPushSubscriptions = 10
+
+// The sentences shown when a device is refused because the account already has
+// maxPushSubscriptions. tooManyDevicesElsewhere names the Notifications page
+// because the Reminders page and the banner on Today have no device list.
+var (
+	tooManyDevices          = "You have " + strconv.Itoa(maxPushSubscriptions) + " devices subscribed. Remove one, then add this device."
+	tooManyDevicesElsewhere = "You have " + strconv.Itoa(maxPushSubscriptions) + " devices subscribed. Remove one on the Notifications page, then try again."
+)
+
 // subscribeBrowser stores the endpoint and two keys the browser's push API
 // produced. The row belongs to the signed-in account, so a browser another
 // account subscribed in moves to this one and its dates start over. Add this
 // device posts as a swap and gets the Subscribed devices section with the new
 // row. The Reminders page and the banner on Today post with fetch and get an
 // empty 204.
+//
+// A browser that would take the account past maxPushSubscriptions is refused
+// with a 422 and nothing is written. Add this device gets the Subscribed
+// devices section with tooManyDevices under the button. A fetch gets
+// tooManyDevicesElsewhere as plain text.
 func (h *notifications) subscribeBrowser(w http.ResponseWriter, r *http.Request) {
 	// With push off no browser can have a subscription to post, so the route
 	// is a 404.
@@ -303,15 +335,41 @@ func (h *notifications) subscribeBrowser(w http.ResponseWriter, r *http.Request)
 	if ua := r.UserAgent(); ua != "" {
 		userAgent = &ua
 	}
-	err = h.queries.UpsertPushSubscription(r.Context(), store.UpsertPushSubscriptionParams{
-		UserID:    principal.User.ID,
-		Endpoint:  endpoint,
-		P256dhKey: p256dh,
-		AuthKey:   auth,
-		UserAgent: userAgent,
+	full := false
+	err = h.queries.InTx(r.Context(), func(q *store.Queries) error {
+		// The lock makes two subscribe requests from one account run one at a
+		// time. Without it both could count 9 other subscriptions and both
+		// insert a row.
+		if err := q.LockUser(r.Context(), principal.User.ID); err != nil {
+			return err
+		}
+		others, err := q.CountOtherPushSubscriptions(r.Context(), principal.User.ID, endpoint)
+		if err != nil {
+			return err
+		}
+		if others >= maxPushSubscriptions {
+			full = true
+			return nil
+		}
+		return q.UpsertPushSubscription(r.Context(), store.UpsertPushSubscriptionParams{
+			UserID:    principal.User.ID,
+			Endpoint:  endpoint,
+			P256dhKey: p256dh,
+			AuthKey:   auth,
+			UserAgent: userAgent,
+		})
 	})
 	if err != nil {
 		h.templates.serverError(h.logger, w, r, "save the push subscription", err)
+		return
+	}
+	if full {
+		if isHTMX(r) {
+			state := notificationsState{status: http.StatusUnprocessableEntity, addError: tooManyDevices, focusAdd: true}
+			h.renderNotifications(w, r, principal, principal.Membership.DigestHour, state)
+			return
+		}
+		http.Error(w, tooManyDevicesElsewhere, http.StatusUnprocessableEntity)
 		return
 	}
 	h.wake.call()

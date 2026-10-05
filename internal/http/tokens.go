@@ -35,9 +35,9 @@ var tokenLives = []int{7, 30, 60, 90}
 // defaultTokenLife is the lifetime chosen when the form opens, in days.
 const defaultTokenLife = 30
 
-// tokensPage is the Tokens page: the API tokens a device sends instead of
-// signing in as a person. A token can only read, so Revoke and Remove act
-// without asking first.
+// tokensPage is the Tokens page: the API tokens the signed-in person created
+// in this garden. A device sends one instead of signing in. A token can only
+// read, so Revoke and Remove act without asking first.
 type tokensPage struct {
 	Bar topbar
 	// Action is the URL the New token form posts to.
@@ -159,14 +159,14 @@ func (h *tokens) revokeToken(w http.ResponseWriter, r *http.Request) {
 		h.templates.notFound(w, r)
 		return
 	}
-	params := store.RevokeAPITokenParams{Now: h.now(), GardenID: principal.Garden.ID, TokenID: tokenID}
+	params := store.RevokeAPITokenParams{Now: h.now(), GardenID: principal.Garden.ID, UserID: principal.User.ID, TokenID: tokenID}
 	revoked, err := h.queries.RevokeAPIToken(r.Context(), params)
 	if err != nil {
 		h.templates.serverError(h.logger, w, r, "revoke the token", err)
 		return
 	}
-	// Another garden's token and one already revoked are both 404, since
-	// neither was a button this page offered.
+	// Another member's token, another garden's and one already revoked are
+	// all 404, since none was a button this page offered.
 	if revoked == 0 {
 		h.templates.notFound(w, r)
 		return
@@ -184,7 +184,7 @@ func (h *tokens) revokeToken(w http.ResponseWriter, r *http.Request) {
 // 200. announce is the sentence a swap puts in the live region.
 func (h *tokens) renderTokens(w http.ResponseWriter, r *http.Request, page tokensPage, status int, announce string) {
 	principal := PrincipalFrom(r)
-	tokens, err := h.queries.ListAPITokens(r.Context(), principal.Garden.ID)
+	tokens, err := h.queries.ListAPITokens(r.Context(), principal.Garden.ID, principal.User.ID)
 	if err != nil {
 		h.templates.serverError(h.logger, w, r, "list the tokens", err)
 		return

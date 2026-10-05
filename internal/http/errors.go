@@ -24,6 +24,10 @@ const (
 	// The 413 names the photo, because nothing else on a form is big enough
 	// to reach the size cap.
 	tooLargeTitle = "The photo is too large"
+	// The 429 for Add this device and Send test notification. Their limit
+	// lets another post through within ten seconds.
+	tooManyPushTitle = "Too many attempts"
+	tooManyPushLine  = "Wait a moment and try again."
 )
 
 // The 404 and 500 bodies for a request that is not a browser navigation.
@@ -109,4 +113,9 @@ func (t *Templates) badRequest(w http.ResponseWriter, r *http.Request) {
 // tooLarge responds with a 413 to a form post over the size cap.
 func (t *Templates) tooLarge(w http.ResponseWriter, r *http.Request) {
 	t.refuse(w, r, http.StatusRequestEntityTooLarge, tooLargeTitle, tooLargeLine)
+}
+
+// tooMany responds with a 429 to a post past the push rate limit.
+func (t *Templates) tooMany(w http.ResponseWriter, r *http.Request) {
+	t.refuse(w, r, http.StatusTooManyRequests, tooManyPushTitle, tooManyPushLine)
 }

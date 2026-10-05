@@ -22,6 +22,12 @@ ON CONFLICT (endpoint) DO UPDATE SET
     created_at = CASE WHEN push_subscription.user_id = EXCLUDED.user_id THEN push_subscription.created_at ELSE now() END,
     last_sent_at = CASE WHEN push_subscription.user_id = EXCLUDED.user_id THEN push_subscription.last_sent_at END;
 
+-- Leaves out the subscription at @endpoint, because subscribing that browser
+-- again updates its row.
+-- name: CountOtherPushSubscriptions :one
+SELECT count(*) FROM push_subscription
+WHERE user_id = @user_id AND endpoint <> @endpoint;
+
 -- name: SetPushSubscriptionSent :exec
 UPDATE push_subscription SET last_sent_at = @sent_at
 WHERE user_id = @user_id AND id = @subscription_id;

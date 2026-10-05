@@ -109,9 +109,10 @@
 <input type="hidden" name="endpoint" value="">
 <input type="hidden" name="p256dh" value="">
 <input type="hidden" name="auth" value="">
-<button class="wide-action" type="submit">Add this device</button>
-{{/* The script writes the reason Add this device failed into this line. */}}
-<p class="field__error" id="push-error" role="alert"></p>
+<button class="wide-action" type="submit"{{if .FocusAdd}} autofocus{{end}}>Add this device</button>
+{{/* The reason Add this device failed. The server sets it when the account
+     has too many devices. The script sets it when the push API fails. */}}
+<p class="field__error" id="push-error" role="alert">{{.AddError}}</p>
 </form>
 {{if .Browsers}}
 {{/* The script fills endpoint with this browser's push subscription URL.

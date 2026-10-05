@@ -166,7 +166,7 @@ curl -H "Authorization: Bearer sprg_..." https://sprig.example.com/api/chores
 }
 ```
 
-Each token can make 6 requests a minute.
+Each token can make 6 requests a minute. Only the person who created a token can see or revoke it. It stops working while they're out of the garden or a sitter in it, and starts working again if their access comes back.
 
 ## Developing
 

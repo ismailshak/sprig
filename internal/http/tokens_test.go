@@ -206,6 +206,54 @@ func TestTokens_RevokingATokenThatIsAlreadyRevokedIsNotFound(t *testing.T) {
 	}
 }
 
+var porchTokenID = uuid.MustParse("00000000-0000-7000-8000-000000000353")
+
+// addSamsToken makes Sam a member of Rosewood and gives Sam a working token
+// there, the porch display.
+func addSamsToken(t *testing.T, f *tokensFixture) {
+	t.Helper()
+
+	f.exec(t, `INSERT INTO membership (garden_id, user_id, role, invited_by, digest_hour) VALUES ($1, $2, 'member', $3, 8)`,
+		moreGardenID, otherUserID, moreUserID)
+	f.exec(t, `INSERT INTO api_token (id, garden_id, name, token_hash, prefix, created_by, expires_at)
+		VALUES ($1, $2, 'The porch display', 'porch', 'sprg_9b3d', $3, $4)`,
+		porchTokenID, moreGardenID, otherUserID, thursday.AddDate(0, 0, 20))
+}
+
+func TestTokens_AnotherMembersTokenIsNotListed(t *testing.T) {
+	f := tokenGarden(t)
+	addSamsToken(t, f)
+
+	rows := tokensShown(f.page(t, f.handler.show, TokensPath))
+
+	for _, row := range rows {
+		if strings.HasPrefix(row.says, "The porch display ") {
+			t.Errorf("the list shows Sam's token: %+v", rows)
+		}
+	}
+	if len(rows) != 2 {
+		t.Errorf("the list has %d rows, want Ellie's 2: %+v", len(rows), rows)
+	}
+}
+
+func TestTokens_RevokingAnotherMembersTokenIsNotFoundAndLeavesItUnrevoked(t *testing.T) {
+	f := tokenGarden(t)
+	addSamsToken(t, f)
+
+	rec := f.remove(t, f.handler.revokeToken, "token", porchTokenID, revokeTokenPath(porchTokenID))
+
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusNotFound)
+	}
+	var revoked *time.Time
+	if err := f.tx.QueryRow(t.Context(), "SELECT revoked_at FROM api_token WHERE id = $1", porchTokenID).Scan(&revoked); err != nil {
+		t.Fatalf("reading Sam's token: %v", err)
+	}
+	if revoked != nil {
+		t.Errorf("Sam's token was revoked at %s", revoked)
+	}
+}
+
 func tokensInGarden(t *testing.T, f *moreFixture) int {
 	t.Helper()
 

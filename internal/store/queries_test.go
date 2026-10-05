@@ -454,7 +454,9 @@ func TestSetProfilePhoto_APhotoWithNoSquareVariantIsRefusedAndThePictureIsUnchan
 // take the garden as input. A query on session, invite or api_token alone
 // binds @token_hash, and one on membership alone binds @user_id, so every row
 // it touches belongs to the caller. A query joining any of them to another
-// scoped table binds @garden_id like any other.
+// scoped table binds @garden_id like any other. GetAPITokenByHash and
+// ListTokenDeadlines join api_token to membership on api_token.garden_id
+// instead.
 func TestQueries_EveryQueryOnAGardenScopedTableBindsTheGarden(t *testing.T) {
 	tx := sharedTx(t)
 
@@ -517,6 +519,10 @@ func TestQueries_EveryQueryOnAGardenScopedTableBindsTheGarden(t *testing.T) {
 		// the lookup and the last_used_at write beside it bind @token_hash.
 		// Every other query on api_token binds @garden_id.
 		if slices.Equal(touched, []string{"api_token"}) && strings.Contains(query.sql, "@token_hash") {
+			continue
+		}
+		if query.name == "GetAPITokenByHash" && slices.Equal(touched, []string{"membership", "api_token"}) &&
+			strings.Contains(query.sql, "membership.garden_id = api_token.garden_id") {
 			continue
 		}
 		if slices.Equal(touched, []string{"membership"}) && strings.Contains(query.sql, "@user_id") {

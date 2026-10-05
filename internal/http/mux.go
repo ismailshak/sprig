@@ -185,8 +185,8 @@ func routes(d Dependencies) []route {
 		{pattern: "POST " + acceptPattern, withoutGarden: true, handler: http.HandlerFunc(invitedHandler.accept)},
 		{pattern: "GET " + notificationsPath, handler: http.HandlerFunc(notificationsHandler.show)},
 		{pattern: "POST " + notificationsPath, handler: http.HandlerFunc(notificationsHandler.saveNotifications)},
-		{pattern: "POST " + subscribePath, handler: http.HandlerFunc(notificationsHandler.subscribeBrowser)},
-		{pattern: "POST " + sendTestPath, handler: http.HandlerFunc(notificationsHandler.sendTestNotification)},
+		{pattern: "POST " + subscribePath, limits: pushLimits(d.Templates), handler: http.HandlerFunc(notificationsHandler.subscribeBrowser)},
+		{pattern: "POST " + sendTestPath, limits: pushLimits(d.Templates), handler: http.HandlerFunc(notificationsHandler.sendTestNotification)},
 		{pattern: "POST " + notificationsPath + "/browsers/{browser}/remove", handler: http.HandlerFunc(notificationsHandler.removeBrowser)},
 		{pattern: "GET " + installPath, handler: install(d.Templates)},
 		{pattern: "GET " + appearancePath, handler: appearance(d.Templates)},
@@ -266,6 +266,14 @@ func handleLimits(trustedIPHeader string) []middleware {
 		Limit(NewLimiter(rate.Every(time.Minute/30), 30), ClientAddress(trustedIPHeader), refused),
 		Limit(NewLimiter(rate.Every(time.Minute/300), 300), AnySource, refused),
 	}
+}
+
+// pushLimits limits Add this device and Send test notification to six posts a
+// minute per account. Each post makes the server contact the host in a push
+// endpoint the account chose, with a DNS lookup or a POST. The limit stops a
+// script from using the server to send a stream of requests to that host.
+func pushLimits(templates *Templates) []middleware {
+	return []middleware{Limit(NewLimiter(rate.Every(time.Minute/6), 6), ByAccount, http.HandlerFunc(templates.tooMany))}
 }
 
 // publicRoutes is every route served without a session. Authenticate covers

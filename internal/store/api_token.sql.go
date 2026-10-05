@@ -53,41 +53,59 @@ func (q *Queries) CreateAPIToken(ctx context.Context, arg CreateAPITokenParams) 
 }
 
 const getAPITokenByHash = `-- name: GetAPITokenByHash :one
-SELECT id, garden_id, name, token_hash, prefix, created_by, created_at, expires_at, last_used_at, revoked_at FROM api_token WHERE token_hash = $1
+SELECT api_token.id, api_token.garden_id, api_token.name, api_token.token_hash, api_token.prefix, api_token.created_by, api_token.created_at, api_token.expires_at, api_token.last_used_at, api_token.revoked_at,
+    EXISTS (SELECT 1 FROM membership
+        JOIN role_capability ON role_capability.role = membership.role AND role_capability.capability = $1
+        WHERE membership.garden_id = api_token.garden_id AND membership.user_id = api_token.created_by
+          AND (membership.expires_at IS NULL OR membership.expires_at > $2::timestamptz)) AS creator_can_manage
+FROM api_token WHERE token_hash = $3
 `
+
+type GetAPITokenByHashParams struct {
+	Capability string
+	Now        time.Time
+	TokenHash  string
+}
+
+type GetAPITokenByHashRow struct {
+	APIToken         APIToken
+	CreatorCanManage bool
+}
 
 // Returns revoked and expired rows too, so the caller decides whether the
 // token still works. It binds no garden_id because this row is what tells a
-// request which garden it is on.
-func (q *Queries) GetAPITokenByHash(ctx context.Context, tokenHash string) (APIToken, error) {
-	row := q.db.QueryRow(ctx, getAPITokenByHash, tokenHash)
-	var i APIToken
+// request which garden it is on. creator_can_manage is true when the account
+// that created the token has a membership of the token's garden that has not
+// ended at @now, with a role that grants @capability.
+func (q *Queries) GetAPITokenByHash(ctx context.Context, arg GetAPITokenByHashParams) (GetAPITokenByHashRow, error) {
+	row := q.db.QueryRow(ctx, getAPITokenByHash, arg.Capability, arg.Now, arg.TokenHash)
+	var i GetAPITokenByHashRow
 	err := row.Scan(
-		&i.ID,
-		&i.GardenID,
-		&i.Name,
-		&i.TokenHash,
-		&i.Prefix,
-		&i.CreatedBy,
-		&i.CreatedAt,
-		&i.ExpiresAt,
-		&i.LastUsedAt,
-		&i.RevokedAt,
+		&i.APIToken.ID,
+		&i.APIToken.GardenID,
+		&i.APIToken.Name,
+		&i.APIToken.TokenHash,
+		&i.APIToken.Prefix,
+		&i.APIToken.CreatedBy,
+		&i.APIToken.CreatedAt,
+		&i.APIToken.ExpiresAt,
+		&i.APIToken.LastUsedAt,
+		&i.APIToken.RevokedAt,
+		&i.CreatorCanManage,
 	)
 	return i, err
 }
 
 const listAPITokens = `-- name: ListAPITokens :many
 SELECT id, garden_id, name, token_hash, prefix, created_by, created_at, expires_at, last_used_at, revoked_at FROM api_token
-WHERE garden_id = $1 AND revoked_at IS NULL
+WHERE garden_id = $1 AND created_by = $2 AND revoked_at IS NULL
 ORDER BY created_at DESC, id
 `
 
-// The Tokens list, newest first. A revoked token leaves the list. One that has
-// expired stays in it and goes grey, because it is still the row somebody came
-// looking for.
-func (q *Queries) ListAPITokens(ctx context.Context, gardenID uuid.UUID) ([]APIToken, error) {
-	rows, err := q.db.Query(ctx, listAPITokens, gardenID)
+// The Tokens list: the unrevoked tokens @user_id created in the garden, newest
+// first. Expired tokens are included so their creator can remove them.
+func (q *Queries) ListAPITokens(ctx context.Context, gardenID uuid.UUID, userID uuid.UUID) ([]APIToken, error) {
+	rows, err := q.db.Query(ctx, listAPITokens, gardenID, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -124,7 +142,7 @@ SELECT api_token.id, api_token.garden_id, api_token.name, api_token.token_hash, 
     coalesce(owner.id = membership.user_id, false)::boolean AS recipient_owns
 FROM api_token
 JOIN garden ON garden.id = api_token.garden_id
-JOIN membership ON membership.garden_id = api_token.garden_id
+JOIN membership ON membership.garden_id = api_token.garden_id AND membership.user_id = api_token.created_by
     AND (membership.expires_at IS NULL OR membership.expires_at > $1::timestamptz)
 JOIN role_capability ON role_capability.role = membership.role AND role_capability.capability = $2
 JOIN app_user ON app_user.id = membership.user_id
@@ -139,7 +157,7 @@ LEFT JOIN LATERAL (
 WHERE api_token.revoked_at IS NULL
   AND api_token.expires_at > $3::timestamptz
   AND EXISTS (SELECT 1 FROM push_subscription WHERE push_subscription.user_id = membership.user_id)
-ORDER BY api_token.expires_at, api_token.id, membership.created_at, membership.id
+ORDER BY api_token.expires_at, api_token.id
 `
 
 type ListTokenDeadlinesParams struct {
@@ -159,13 +177,14 @@ type ListTokenDeadlinesRow struct {
 	RecipientOwns bool
 }
 
-// Every unrevoked token expiring after @since, paired with each member of its
-// garden whose role grants @capability and whose membership has not ended at
-// @now. A member with no browser subscribed is left out, so the job never
-// claims a ledger row and then sends nothing. owner_name is the display name
-// of the garden's owner, empty when the garden has no owner. recipient_owns is
-// true when the member is that owner. There is no @garden_id because the job
-// runs across every garden.
+// Every unrevoked token expiring after @since, paired with the membership of
+// the person who created it. A token whose creator has no membership of its
+// garden at @now with a role that grants @capability is left out, because it
+// has already stopped working. A creator with no browser subscribed is left
+// out, so the job never claims a ledger row and then sends nothing. owner_name
+// is the display name of the garden's owner, empty when the garden has no
+// owner. recipient_owns is true when the creator is that owner. There is no
+// @garden_id because the job runs across every garden.
 func (q *Queries) ListTokenDeadlines(ctx context.Context, arg ListTokenDeadlinesParams) ([]ListTokenDeadlinesRow, error) {
 	rows, err := q.db.Query(ctx, listTokenDeadlines, arg.Now, arg.Capability, arg.Since)
 	if err != nil {
@@ -206,20 +225,25 @@ func (q *Queries) ListTokenDeadlines(ctx context.Context, arg ListTokenDeadlines
 
 const revokeAPIToken = `-- name: RevokeAPIToken :execrows
 UPDATE api_token SET revoked_at = $1::timestamptz
-WHERE garden_id = $2 AND id = $3 AND revoked_at IS NULL
+WHERE garden_id = $2 AND created_by = $3 AND id = $4 AND revoked_at IS NULL
 `
 
 type RevokeAPITokenParams struct {
 	Now      time.Time
 	GardenID uuid.UUID
+	UserID   uuid.UUID
 	TokenID  uuid.UUID
 }
 
-// Revoke and Remove are one write. The row leaves the list either way, and the
-// two words differ because one stops a credential that still works and the
-// other clears away one that has already run out.
+// Revoke and Remove both set revoked_at. A token another member created
+// updates no row, the same as one that does not exist.
 func (q *Queries) RevokeAPIToken(ctx context.Context, arg RevokeAPITokenParams) (int64, error) {
-	result, err := q.db.Exec(ctx, revokeAPIToken, arg.Now, arg.GardenID, arg.TokenID)
+	result, err := q.db.Exec(ctx, revokeAPIToken,
+		arg.Now,
+		arg.GardenID,
+		arg.UserID,
+		arg.TokenID,
+	)
 	if err != nil {
 		return 0, err
 	}
