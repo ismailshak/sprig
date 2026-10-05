@@ -64,7 +64,7 @@ func Authenticate(logger *slog.Logger, templates *Templates, sessions *auth.Sess
 			token := sessions.TokenFromRequest(r)
 			if token == "" {
 				logger.LogAttrs(r.Context(), slog.LevelDebug, "session refused", slog.String("reason", "the request has no session cookie"))
-				http.Redirect(w, r, signInPath, http.StatusSeeOther)
+				redirectToSignIn(w, r)
 				return
 			}
 
@@ -73,7 +73,7 @@ func Authenticate(logger *slog.Logger, templates *Templates, sessions *auth.Sess
 			case errors.Is(err, auth.ErrNoSession):
 				logger.LogAttrs(r.Context(), slog.LevelDebug, "session refused", slog.String("reason", err.Error()))
 				http.SetCookie(w, sessions.ClearedCookie())
-				http.Redirect(w, r, signInPath, http.StatusSeeOther)
+				redirectToSignIn(w, r)
 				return
 			case err != nil:
 				templates.serverError(logger, w, r, "resolve the session", err)
@@ -87,6 +87,17 @@ func Authenticate(logger *slog.Logger, templates *Templates, sessions *auth.Sess
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
+}
+
+// An htmx request gets HX-Redirect and an empty body instead of a 303. The
+// browser follows a 303 inside the XMLHttpRequest, and htmx would swap the
+// whole sign-in page into the element the request targeted.
+func redirectToSignIn(w http.ResponseWriter, r *http.Request) {
+	if isHTMX(r) {
+		w.Header().Set("HX-Redirect", signInPath)
+		return
+	}
+	http.Redirect(w, r, signInPath, http.StatusSeeOther)
 }
 
 // requireToken resolves the bearer token in the Authorization header and puts

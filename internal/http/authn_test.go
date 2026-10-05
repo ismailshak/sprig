@@ -198,6 +198,48 @@ func TestAuthenticate_AnUnknownTokenClearsTheCookieAndRedirectsToSignIn(t *testi
 	}
 }
 
+func TestAuthenticate_AnHtmxRequestWithNoCookieLoadsSignInInsteadOfSwapping(t *testing.T) {
+	handler, _ := protected(t, acceptEveryToken(sitterPrincipal()))
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/plants", nil)
+	req.Header.Set("HX-Request", "true")
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	if got := rec.Header().Get("HX-Redirect"); got != signInPath {
+		t.Errorf("HX-Redirect = %q, want %q", got, signInPath)
+	}
+	if rec.Body.Len() != 0 {
+		t.Errorf("the response has a body, and htmx would swap it into the element the request targeted:\n%s", rec.Body.String())
+	}
+}
+
+func TestAuthenticate_AnHtmxRequestWithAnUnknownTokenClearsTheCookieAndLoadsSignIn(t *testing.T) {
+	handler, _ := protected(t, rejectEveryToken)
+
+	rec := httptest.NewRecorder()
+	req := signedIn(httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/plants", nil))
+	req.Header.Set("HX-Request", "true")
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	if got := rec.Header().Get("HX-Redirect"); got != signInPath {
+		t.Errorf("HX-Redirect = %q, want %q", got, signInPath)
+	}
+	if rec.Body.Len() != 0 {
+		t.Errorf("the response has a body, and htmx would swap it into the element the request targeted:\n%s", rec.Body.String())
+	}
+	cookie := cookieNamed(t, rec, "__Host-sprig_session")
+	if cookie == nil || cookie.MaxAge >= 0 {
+		t.Errorf("Set-Cookie = %v, want the session cookie cleared", cookie)
+	}
+}
+
 func TestAuthenticate_ATouchedSessionReachesTheHandlerAndExtendsTheCookie(t *testing.T) {
 	principal := sitterPrincipal()
 	principal.SessionTouched = true
