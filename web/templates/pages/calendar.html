@@ -92,6 +92,7 @@
 {{with .AddNote}}<a class="sheet__add" href="{{.}}" hx-get="{{.}}" hx-target="#sheet" hx-swap="outerHTML settle:0ms">Add note</a>{{end}}
 <form method="dialog"><button class="sheet__cancel">Close</button></form>
 </div>
+{{template "sheet-status"}}
 </dialog>{{else}}<div id="sheet"></div>{{end}}{{end}}
 
 {{/* The Add note and Edit note sheet, rendered in place of the day's sheet.
@@ -124,6 +125,7 @@
 </form>
 <form method="dialog"><button class="sheet__cancel">Cancel</button></form>
 </div>
+{{template "sheet-status"}}
 </dialog>{{else}}<div id="sheet"></div>{{end}}{{end}}
 
 {{/* The response to an added, saved or deleted note: the grid, and an empty

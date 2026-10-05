@@ -115,6 +115,15 @@ func sheetIn(body string) *element {
 	return readHTML(body).byID("sheet")
 }
 
+// hasEmptyLiveRegion reports whether sheet holds an empty role="status"
+// element. The page's script writes announcements and failed requests into it
+// once the sheet is on the page, because a screen reader does not read the
+// text a live region arrives with.
+func hasEmptyLiveRegion(sheet *element) bool {
+	region := sheet.first(attrIs("role", "status"))
+	return region != nil && region.text() == ""
+}
+
 // sheetFields returns each fieldset in the sheet by the text of its legend.
 func sheetFields(sheet *element) map[string]*element {
 	byLegend := map[string]*element{}
@@ -498,9 +507,13 @@ func TestLog_ATimeInTheFutureIsRefused(t *testing.T) {
 			if rec.Header().Get("HX-Retarget") != "#sheet" || rec.Header().Get("HX-Reswap") != "outerHTML" {
 				t.Error("the refusal is not aimed back at the sheet")
 			}
-			when := sheetFields(sheetIn(rec.Body.String()))["When"]
+			sheet := sheetIn(rec.Body.String())
+			when := sheetFields(sheet)["When"]
 			if !strings.Contains(when.text(), c.want) {
 				t.Errorf("the sheet does not say %q under When:\n%s", c.want, text(rec.Body.String()))
+			}
+			if !hasEmptyLiveRegion(sheet) {
+				t.Error("the sheet has no empty live region for the refusal to be read from")
 			}
 			if got := checkedValue(when); got != c.form.Get("when") {
 				t.Errorf("the sheet came back on %q, want %q", got, c.form.Get("when"))

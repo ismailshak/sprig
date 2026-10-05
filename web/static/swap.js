@@ -17,6 +17,10 @@
    back 100ms later. Without the empty region in between, a screen reader
    would not read out a second Saved. in a row, because the text is unchanged.
 
+   While a sheet is open, both are written into the live region inside the
+   sheet instead, because an open sheet is a modal dialog and makes #status
+   inert.
+
    The undo window. A logged row sends a request of its own when its window
    ends. On Today that request removes the row and on Activity it replaces it.
    The stylesheet pauses the row's drain bar while Undo has a focus ring, and
@@ -70,24 +74,31 @@
     say('Couldn’t reach sprig. Check the connection and try again.');
   });
   document.addEventListener('htmx:afterSwap', () => {
-    status.classList.remove('status--shown');
+    for (const shown of document.querySelectorAll('.status--shown')) shown.classList.remove('status--shown');
   });
 
+  // region returns the open sheet's live region, or #status when no sheet is
+  // open.
+  const region = () => document.querySelector('dialog:modal > [role="status"]') || status;
+
   // putBack is the timer that puts the sentence back. say cancels it so that a
-  // failure written before it fires is not overwritten.
+  // failure written before it fires is not overwritten. The region is looked
+  // up when the timer fires, because a refusal on a sheet replaces the sheet
+  // after the sentence is taken out of #status.
   let putBack = 0;
   document.addEventListener('htmx:oobAfterSwap', (event) => {
     if (event.detail.target !== status || !status.hasChildNodes()) return;
     clearTimeout(putBack);
     const sentence = Array.from(status.childNodes);
     status.replaceChildren();
-    putBack = setTimeout(() => status.replaceChildren(...sentence), 100);
+    putBack = setTimeout(() => region().replaceChildren(...sentence), 100);
   });
 
   function say(text) {
     clearTimeout(putBack);
-    status.textContent = text;
-    status.classList.add('status--shown');
+    const target = region();
+    target.textContent = text;
+    target.classList.add('status--shown');
   }
 
   // htmx's delay fires once and cannot pause, so when it fires the request

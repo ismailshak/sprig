@@ -66,8 +66,8 @@ export class TodayScreen {
     return this.page.locator('#activity');
   }
 
-  // The live region every swap writes its announcement into. It is in the
-  // layout on every page, under this id.
+  // The layout's live region. While a sheet is open, the page's script writes
+  // into the one inside the sheet instead.
   announcement(): Locator {
     return this.page.locator('#status');
   }

@@ -12,6 +12,12 @@ export class AppearanceScreen {
     return this.page.getByRole('radio', { name: label });
   }
 
+  // The two theme-color tags in the head. Their content is the colour of the
+  // browser's toolbar, or of the status bar in an installed app.
+  themeColors(): Locator {
+    return this.page.locator('meta[name="theme-color"]');
+  }
+
   // The line under the radios, rendered for a browser running no JavaScript.
   // The page's script removes it.
   noScriptNote(): Locator {

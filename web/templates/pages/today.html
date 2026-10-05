@@ -64,6 +64,7 @@
 </form>
 <form method="dialog"><button class="sheet__cancel">Cancel</button></form>
 </div>
+{{template "sheet-status"}}
 </dialog>{{else}}<div id="sheet"></div>{{end}}{{end}}
 
 {{/* The sheet's line while a reminder is waiting. The announcement after a
@@ -109,6 +110,7 @@
 {{end}}</ul>
 <form method="dialog"><button class="sheet__cancel">Cancel</button></form>
 </div>
+{{template "sheet-status"}}
 </dialog>{{end}}
 
 {{define "garden-sheet-row"}}<span class="row__text">

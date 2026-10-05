@@ -6,6 +6,14 @@
      window, because a failed swap otherwise leaves the page unchanged. */}}
 {{define "status"}}<p class="status visually-hidden" id="status" aria-live="polite" aria-atomic="true"></p>{{end}}
 
+{{/* The live region inside each sheet. While a sheet is open the layout's
+     script writes into it instead of #status, because a modal dialog makes
+     everything outside it inert. It is a child of the dialog rather than the
+     panel because the panel's animation and drag set a transform on it, and a
+     fixed element inside a transformed one is placed against that element
+     instead of the window. */}}
+{{define "sheet-status"}}<p class="status visually-hidden" role="status"></p>{{end}}
+
 {{/* The element appended to a swap's response. htmx puts the sentence inside
-     #status, where the screen reader reads it. */}}
+     #status. */}}
 {{define "announce"}}<span hx-swap-oob="innerHTML:#status">{{.}}</span>{{end}}

@@ -333,8 +333,12 @@ func TestCalendar_ADaysLinkSwapsTheSheetAlone(t *testing.T) {
 	body := f.get(t, calendarPath+"?month=2026-09&day=2026-09-03", map[string]string{"HX-Request": "true", "HX-Target": sheetID})
 
 	doc := readHTML(body)
-	if sheet := doc.byID(sheetID); sheet == nil || sheet.tag != "dialog" {
+	sheet := doc.byID(sheetID)
+	if sheet == nil || sheet.tag != "dialog" {
 		t.Fatalf("the swap has no open sheet:\n%s", body)
+	}
+	if !hasEmptyLiveRegion(sheet) {
+		t.Error("the sheet has no empty live region for a failure to be read from")
 	}
 	if doc.byID(calendarID) != nil {
 		t.Errorf("the swap renders the month as well as the sheet")

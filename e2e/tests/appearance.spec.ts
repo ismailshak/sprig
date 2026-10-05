@@ -31,6 +31,39 @@ test('the dark colour scheme survives a reload and holds on the next page @js', 
   await expect(page.locator('html')).not.toHaveAttribute('data-mode');
 });
 
+test('the theme colour follows a change of colour scheme without a reload @js', async ({ page, appearance }) => {
+  const contentAndMedia = () =>
+    appearance
+      .themeColors()
+      .evaluateAll((tags) => tags.map((tag) => [tag.getAttribute('content'), tag.getAttribute('media')]));
+  await appearance.open();
+  const rendered = await contentAndMedia();
+  const colourFor = (scheme: string) =>
+    rendered.find(([, media]) => media === `(prefers-color-scheme: ${scheme})`)?.[0];
+  const light = colourFor('light');
+  const dark = colourFor('dark');
+  expect(light).toBeTruthy();
+  expect(dark).toBeTruthy();
+
+  await appearance.mode('Dark').check();
+  await page.reload();
+
+  await appearance.mode('Light').check();
+  await expect.poll(contentAndMedia).toEqual([
+    [light, null],
+    [light, null],
+  ]);
+
+  await appearance.mode('Dark').check();
+  await expect.poll(contentAndMedia).toEqual([
+    [dark, null],
+    [dark, null],
+  ]);
+
+  await appearance.mode('System').check();
+  await expect.poll(contentAndMedia).toEqual(rendered);
+});
+
 test('without JavaScript the colour scheme cannot be changed @nojs', async ({ appearance }) => {
   await appearance.open();
 

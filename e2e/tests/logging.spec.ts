@@ -108,6 +108,25 @@ test('a time later than now is refused @swap', async ({ today, sheet }) => {
   await expect(sheet.chip('Earlier today')).toBeChecked();
 });
 
+test('a time later than now is announced from inside the sheet @js', async ({ today, sheet }) => {
+  await today.openSheet(plants.doris, 'water');
+  await sheet.chip('Earlier today').check();
+  await sheet.time().fill('23:59');
+  await sheet.submit('Log watering');
+
+  await expect(sheet.announcement()).toHaveText('That time is in the future.');
+  await expect(today.announcement()).toBeEmpty();
+});
+
+test('a log that cannot reach the server is reported inside the sheet @js', async ({ context, today, sheet }) => {
+  await today.openSheet(plants.doris, 'water');
+  await context.setOffline(true);
+  await sheet.submit('Log watering');
+
+  await expect(sheet.announcement()).toHaveText('Couldn’t reach sprig. Check the connection and try again.');
+  await expect(today.announcement()).toBeEmpty();
+});
+
 test('the sheet takes focus when it opens and Escape puts it back on the row @js', async ({ page, today, sheet }) => {
   await today.rowLink(plants.nigel, 'water').focus();
   await page.keyboard.press('Enter');

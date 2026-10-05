@@ -711,6 +711,9 @@ func TestToday_TheGardenSheetListsEveryLiveGardenWithItsOwnerAndRoleAndMarksTheC
 		if got := gardenSheetOf(page); !slices.Equal(got, want) {
 			t.Errorf("with htmx = %v the sheet is\n%+v\nwant\n%+v", hx, got, want)
 		}
+		if !hasEmptyLiveRegion(readHTML(page).byID("sheet")) {
+			t.Errorf("with htmx = %v the sheet has no empty live region for a failure to be read from", hx)
+		}
 		hasHeading := readHTML(page).first(isTag("h1")) != nil
 		if hasHeading == hx {
 			t.Errorf("with htmx = %v the response has a page heading = %v, want %v", hx, hasHeading, !hx)

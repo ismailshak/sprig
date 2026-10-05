@@ -491,6 +491,9 @@ func TestRemindLater_ARefusedTimeSetsNothingAndKeepsWhatWasTyped(t *testing.T) {
 			if !strings.Contains(sheet.text(), string(c.want)) {
 				t.Errorf("the sheet does not say %q:\n%s", c.want, sheet.text())
 			}
+			if !hasEmptyLiveRegion(sheet) {
+				t.Error("the sheet has no empty live region for the refusal to be read from")
+			}
 			if got := sheet.first(attrIs("name", timeField)).attr("value"); got != c.form.Get(timeField) {
 				t.Errorf("the time input reads %q, want the %q that was posted", got, c.form.Get(timeField))
 			}
