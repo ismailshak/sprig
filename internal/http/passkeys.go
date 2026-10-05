@@ -147,13 +147,7 @@ func (h *passkeys) removePasskey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if signedInBy := principal.Session.PasskeyCredentialID; signedInBy != nil && *signedInBy == passkeyID {
-		// The browser follows a 303 itself, so htmx would swap the sign-in
-		// page into the list. HX-Redirect loads it as a page instead.
-		if isHTMX(r) {
-			w.Header().Set("HX-Redirect", signInPath)
-			return
-		}
-		http.Redirect(w, r, signInPath, http.StatusSeeOther)
+		redirectToSignIn(w, r)
 		return
 	}
 	if isHTMX(r) {
