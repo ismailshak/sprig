@@ -49,7 +49,27 @@ export class SheetScreen {
     return this.dialog().getByRole('status');
   }
 
+  // dragDown dispatches a ten-move touch drag down from the middle of target.
+  // Playwright's touchscreen can only tap.
+  async dragDown(target: Locator, distance: number): Promise<void> {
+    const box = await target.boundingBox();
+    if (!box) throw new Error('dragDown: the target is not on screen');
+    const x = box.x + box.width / 2;
+    const top = box.y + box.height / 2;
+    const touch = (y: number) => ({ identifier: 0, clientX: x, clientY: y });
+    await target.dispatchEvent('touchstart', { touches: [touch(top)], changedTouches: [touch(top)] });
+    for (let step = 1; step <= 10; step++) {
+      const at = touch(top + (distance * step) / 10);
+      await target.dispatchEvent('touchmove', { touches: [at], changedTouches: [at] });
+    }
+    await target.dispatchEvent('touchend', { touches: [], changedTouches: [touch(top + distance)] });
+  }
+
+  cancelButton(): Locator {
+    return this.dialog().getByRole('button', { name: 'Cancel' });
+  }
+
   async cancel(): Promise<void> {
-    await this.dialog().getByRole('button', { name: 'Cancel' }).click();
+    await this.cancelButton().click();
   }
 }

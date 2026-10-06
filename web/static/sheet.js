@@ -5,13 +5,16 @@
    so Tab stays inside the sheet, Escape closes it and focus goes back to the
    control that opened it.
 
-   A sheet can be dragged down to close it, the same as Cancel or Close. The
-   log-care sheet is dragged by its grip or its plant heading. Every other sheet
-   is dragged by its grip or its title.
+   A finger dragged down anywhere on a sheet's panel closes the sheet, the
+   same as Cancel or Close. While the panel is scrolled down, the finger
+   scrolls it. The panel moves only once it is scrolled to the top. A mouse
+   does not drag a sheet.
 
-   A sheet is swapped into the page by htmx, so the listeners are on the
-   document and find the sheet from the event. A drag that starts in the
-   panel's body is ignored, because that is how the panel scrolls. */
+   A sheet is swapped into the page by htmx, so the htmx and click listeners
+   are on the document and find the sheet from the event. The touch listeners
+   are added to each sheet's dialog when it is made modal, because a
+   non-passive touchmove listener on the document would make every scroll on
+   the page wait for this script. */
 (function () {
   // modals is the dialogs already reopened as modals. Reopening one a second
   // time would close it.
@@ -37,6 +40,66 @@
     opener = active && active !== document.body ? active : event.detail.requestConfig.elt;
   });
 
+  // closeAfter is how many pixels the panel has to be dragged down for the
+  // release to close it. A shorter drag puts the panel back.
+  const closeAfter = 80;
+  // tapUnder is how many pixels the finger has to move down before a touch is
+  // a drag. A shorter touch on a link or button is a tap on it.
+  const tapUnder = 8;
+  // drag is the touch in progress on a sheet's panel, or null. y is the
+  // finger's clientY at the last touch event. from is the clientY where the
+  // panel started to follow the finger, or null before that. moved is how many
+  // pixels the finger is below from.
+  let drag = null;
+  // dragged is the element the last drag started on, or null. The click the
+  // browser fires after the drag is cancelled.
+  let dragged = null;
+
+  // putBack clears the transform and transition a drag set on the panel.
+  const putBack = (panel) => {
+    panel.style.transition = '';
+    panel.style.transform = '';
+  };
+
+  // A one-finger touch inside a sheet's panel starts a drag. A second finger
+  // puts the panel back and ends the drag.
+  const touchStart = (event) => {
+    if (drag) putBack(drag.panel);
+    const panel = event.touches.length === 1 && event.target.closest('.sheet__panel');
+    drag = panel ? { panel, target: event.target, y: event.touches[0].clientY, from: null, moved: 0 } : null;
+  };
+
+  // The browser scrolls the panel until the finger moves down while the panel
+  // is scrolled to the top. Every move after that is cancelled and moves the
+  // panel with the finger, including a move back up. The listener is not
+  // passive, because a passive listener cannot cancel a move.
+  const touchMove = (event) => {
+    if (!drag) return;
+    const y = event.touches[0].clientY;
+    if (drag.from === null && y > drag.y && drag.panel.scrollTop <= 0) drag.from = drag.y;
+    drag.y = y;
+    if (drag.from === null) return;
+    event.preventDefault();
+    drag.moved = Math.max(0, y - drag.from);
+    drag.panel.style.transition = 'none';
+    drag.panel.style.transform = 'translateY(' + drag.moved + 'px)';
+  };
+
+  const release = () => {
+    if (!drag) return;
+    const { panel, target, moved } = drag;
+    drag = null;
+    putBack(panel);
+    if (moved < tapUnder) return;
+    dragged = target;
+    // The click is fired in the same task as the touchend, so dragged is
+    // cleared in the next task.
+    setTimeout(() => (dragged = null));
+    if (moved < closeAfter) return;
+    const dialog = panel.closest('dialog');
+    if (dialog) dialog.close();
+  };
+
   // modal reopens an open dialog as a modal. The open attribute has to come
   // off first, because showModal refuses a dialog that is already open. The
   // dialog itself is then focused, so the screen reader reads its label and
@@ -52,6 +115,10 @@
       if (opener && opener.isConnected) opener.focus();
       opener = null;
     });
+    dialog.addEventListener('touchstart', touchStart);
+    dialog.addEventListener('touchmove', touchMove, { passive: false });
+    dialog.addEventListener('touchend', release);
+    dialog.addEventListener('touchcancel', release);
   };
 
   // refocus puts focus back on the opener, without scrolling, after a save or
@@ -91,56 +158,6 @@
       refocus(event.detail.target.id);
     }
   });
-
-  // closeAfter is how many pixels the panel has to be dragged down for the
-  // release to close it. A shorter drag puts the panel back.
-  const closeAfter = 80;
-  // tapUnder is how many pixels the pointer has to move down before a press is
-  // a drag. A shorter press on the plant heading is a tap on its link.
-  const tapUnder = 8;
-  // drag is the drag in progress. Null between drags.
-  let drag = null;
-  // dragged is the element a drag was just released from, so the click the
-  // release fires can be cancelled. Null otherwise.
-  let dragged = null;
-
-  document.addEventListener('pointerdown', (event) => {
-    const handle = event.target.closest('.sheet__grip, .sheet__plant, .sheet__title');
-    if (!handle) return;
-    // A mouse press on the plant heading or the title is ignored, because
-    // above 900px the sheet is a centred dialog and a mouse drag selects text.
-    if (!handle.classList.contains('sheet__grip') && event.pointerType === 'mouse') return;
-    const panel = handle.closest('.sheet__panel');
-    if (!panel) return;
-    handle.setPointerCapture(event.pointerId);
-    drag = { from: event.clientY, panel, handle, moved: 0 };
-  });
-
-  document.addEventListener('pointermove', (event) => {
-    if (!drag) return;
-    drag.moved = Math.max(0, event.clientY - drag.from);
-    if (drag.moved < tapUnder) return;
-    drag.panel.style.transition = 'none';
-    drag.panel.style.transform = 'translateY(' + drag.moved + 'px)';
-  });
-
-  const release = () => {
-    if (!drag) return;
-    const { panel, handle, moved } = drag;
-    drag = null;
-    panel.style.transition = '';
-    panel.style.transform = '';
-    if (moved < tapUnder) return;
-    dragged = handle;
-    // The click follows the release in the same task, so the mark is cleared
-    // straight after it.
-    setTimeout(() => (dragged = null));
-    if (moved < closeAfter) return;
-    const dialog = panel.closest('dialog');
-    if (dialog) dialog.close();
-  };
-  document.addEventListener('pointerup', release);
-  document.addEventListener('pointercancel', release);
 
   document.addEventListener(
     'click',

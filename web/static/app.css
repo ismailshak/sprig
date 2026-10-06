@@ -536,19 +536,10 @@ body:has(dialog[open]) { overscroll-behavior: none; }
 @keyframes fade { from { opacity: 0 } }
 @keyframes rise { from { transform: translateY(14px); opacity: 0 } }
 
-/* The grip, the plant heading and the title can be dragged down to close the
-   sheet. The grip is a box the height of a finger with the bar inside it,
-   because iOS applies touch-action only to an element's own box. A touch on a
-   pseudo-element reaching outside that box scrolled the panel instead of
-   starting the drag. touch-action: none on each stops the panel scrolling
-   while it is dragged. */
+/* The grip is the bar at the top of the panel. It shows that the sheet can be
+   dragged down. */
 .sheet__grip {
-  position: relative;
-  width: 156px;
   padding: 16px 0 12px;
-  margin: 0 auto;
-  touch-action: none;
-  cursor: grab;
 }
 
 .sheet__grip::before {
@@ -565,17 +556,13 @@ body:has(dialog[open]) { overscroll-behavior: none; }
   display: flex; align-items: center; gap: 13px; width: 100%;
   padding: 8px 8px 14px; margin: 0 -8px; text-align: left;
   border-bottom: var(--row-divider);
-  touch-action: none;
 }
 
 /* The heading of every sheet but the log-care sheet. The log-care sheet has
-   the plant heading here. The side margins are negative so that a drag can
-   start anywhere across the panel's width. */
+   the plant heading here. */
 .sheet__title {
-  margin: 0 calc(-1 * var(--sheet-pad));
-  padding: 4px var(--sheet-pad) 8px;
+  padding: 4px 0 8px;
   min-height: var(--tap);
-  touch-action: none;
   font-family: var(--font-display);
   font-weight: var(--display-weight);
   letter-spacing: var(--display-tracking);
@@ -851,7 +838,6 @@ legend.field__label + * { clear: both; }
 @media (min-width: 900px) {
   .sheet { justify-content: center; align-items: center; }
   .sheet__grip { display: none; }
-  .sheet__plant, .sheet__title { touch-action: auto; }
   .sheet__panel {
     width: 420px;
     max-height: 84%;
