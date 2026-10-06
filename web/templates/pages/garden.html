@@ -1,8 +1,9 @@
 {{define "title"}}Garden · sprig{{end}}
 
 {{/* The garden's name, its care types and its photo storage. A care type is
-     renamed, turned off or deleted from its own row: the row is a link to its
-     own URL, and that URL renders this page with the row as a form. With
+     renamed, turned off or deleted from its own row. A care type the garden
+     added also has its icon chosen there. The row is a link to its own URL,
+     and that URL renders this page with the row as a form. With
      JavaScript the link, the form and its buttons swap the Care types section
      instead of loading the page. The Save button under Name swaps the page
      under the top bar with the Saved line on it. Without JavaScript the post
@@ -59,7 +60,8 @@
 </div>{{end}}
 
 {{/* A care type's row while it is being edited. The form is the row, so one
-     care type is saved on its own.
+     care type is saved on its own. The Icon field is a row of radios, one per
+     icon. The care types every garden starts with have no Icon field.
 
      Save comes before Turn off in the markup and the stylesheet moves the
      drop button to the left, because pressing Enter in the name field submits
@@ -68,6 +70,11 @@
 {{define "care-type-editor"}}<form class="row row--editing" method="post" action="{{.Action}}" novalidate hx-post="{{.Action}}" hx-target="#care-types" hx-swap="outerHTML settle:0ms">
 <input class="input" type="text" name="name" value="{{.Name}}" aria-label="Care type name" autofocus>
 {{with .Error}}<p class="field__error">{{.}}</p>{{end}}
+{{with .Icons}}<fieldset class="row__icons">
+<legend class="visually-hidden">Icon</legend>
+<div class="chips">{{range .}}<label class="chip chip--icon"><input type="radio" name="icon" value="{{.Value}}" aria-label="{{.Label}}"{{if .On}} checked{{end}}>{{template "care-icon" .Value}}</label>{{end}}</div>
+</fieldset>{{end}}
+{{with .IconError}}<p class="field__error">{{.}}</p>{{end}}
 {{with .Why}}<p class="row__why">{{.}}</p>{{end}}
 <div class="row__buttons">
 <span>

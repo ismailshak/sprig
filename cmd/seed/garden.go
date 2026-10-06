@@ -82,6 +82,7 @@ type careType struct {
 	id   uuid.UUID
 	name string
 	slug string
+	icon string
 	// archivedDaysAgo is set on a care type that was tried and turned off. A
 	// type with events cannot be deleted, only archived, which removes it from
 	// scheduling and keeps its history readable.
@@ -219,12 +220,12 @@ func home() garden {
 			{id: seedID(tableMembership, 6), person: &clare, role: "sitter", invitedBy: &ellie, daysOld: 400, expiresInDays: -12, digestOff: true},
 		},
 		careTypes: []careType{
-			{id: seedID(tableCareType, 1), name: "Water", slug: "water"},
-			{id: seedID(tableCareType, 2), name: "Feed", slug: "feed"},
-			{id: seedID(tableCareType, 3), name: "Repot", slug: "repot"},
+			{id: seedID(tableCareType, 1), name: "Water", slug: "water", icon: "water"},
+			{id: seedID(tableCareType, 2), name: "Feed", slug: "feed", icon: "feed"},
+			{id: seedID(tableCareType, 3), name: "Repot", slug: "repot", icon: "repot"},
 			// Tried and turned off. It still has events, so it cannot be
 			// deleted, only archived.
-			{id: seedID(tableCareType, 4), name: "Mist", slug: "mist", archivedDaysAgo: 10},
+			{id: seedID(tableCareType, 4), name: "Mist", slug: "mist", icon: "mist", archivedDaysAgo: 10},
 		},
 		plants: append(livingPlants(), archivedPlants()...),
 		invites: []invite{
@@ -461,8 +462,8 @@ func upstairs() garden {
 			{id: seedID(tableMembership, 4), person: &sam, role: "sitter", invitedBy: &robin, daysOld: 60, expiresInDays: 12, digestOff: true},
 		},
 		careTypes: []careType{
-			{id: seedID(tableCareType, 5), name: "Water", slug: "water"},
-			{id: seedID(tableCareType, 6), name: "Feed", slug: "feed"},
+			{id: seedID(tableCareType, 5), name: "Water", slug: "water", icon: "water"},
+			{id: seedID(tableCareType, 6), name: "Feed", slug: "feed", icon: "feed"},
 		},
 		plants: []plant{
 			{

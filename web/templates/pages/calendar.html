@@ -56,7 +56,7 @@
 <span class="month__number{{if .Notes}} month__number--noted{{end}}">{{.Number}}</span>
 {{if .Bands}}<span class="month__bands" aria-hidden="true">{{range .Bands}}<span class="month__band{{if .Covered}} month__band--{{.Colour}}{{if .Starts}} month__band--start{{end}}{{if .Ends}} month__band--end{{end}}{{end}}"></span>{{end}}</span>{{end}}
 {{if .Notes}}<ul class="month__notes" aria-hidden="true">{{range .Notes}}<li class="month__note">{{.Text}}</li>{{end}}</ul>{{end}}
-{{if .Shown}}<ul class="month__cares" aria-hidden="true">{{range .Shown}}<li class="month__care{{if .Skipped}} month__care--skipped{{else if .Logged}} month__care--logged{{end}}"><span class="month__icon">{{template "care-icon" .Slug}}</span><span class="month__name">{{.Name}}</span></li>{{end}}{{with .More}}<li class="month__more">+{{.}}</li>{{end}}</ul>{{end}}
+{{if .Shown}}<ul class="month__cares" aria-hidden="true">{{range .Shown}}<li class="month__care{{if .Skipped}} month__care--skipped{{else if .Logged}} month__care--logged{{end}}"><span class="month__icon">{{template "care-icon" .Icon}}</span><span class="month__name">{{.Name}}</span></li>{{end}}{{with .More}}<li class="month__more">+{{.}}</li>{{end}}</ul>{{end}}
 {{if .Href}}</a>{{else}}</span>{{end}}
 {{end}}</td>{{end}}
 

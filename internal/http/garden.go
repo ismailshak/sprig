@@ -1,6 +1,7 @@
 package http
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -24,8 +25,8 @@ import (
 const careTypesPath = gardenPath + "/types"
 
 // careTypePath is the URL of one care type. A GET renders the Garden page with
-// that row open as an editor and a POST renames it. The care type is named by
-// slug, which a rename does not change.
+// that row open as an editor and a POST saves its name and icon. The path holds
+// the care type's slug. A new name leaves the slug as it was.
 func careTypePath(slug string) string {
 	return careTypesPath + "/" + slug
 }
@@ -116,16 +117,22 @@ type careTypeRow struct {
 }
 
 // careTypeEditor is a row while it is being edited: the name in a text field,
-// the sentence saying what can be done to this type, and the buttons.
+// the Icon field, the sentence saying what can be done to this type, and the
+// buttons.
 type careTypeEditor struct {
 	// Action is the URL Save posts to.
 	Action string
-	// Name is what the field holds: the care type's name, or what was typed
-	// and refused.
+	// Name is what the name field holds: the care type's name, or what was
+	// typed and refused.
 	Name string
-	// Error is shown under the field, empty when the name is valid.
+	// Error is shown under the name field, empty when the name is valid.
 	Error string
-	// Why is the sentence under the name. It is empty for a care type that
+	// Icons holds the Icon field's radios. It is nil for the care types every
+	// garden starts with because their icons are fixed.
+	Icons []option
+	// IconError is shown under the Icon field, empty when the icon is valid.
+	IconError string
+	// Why is the sentence above the buttons. It is empty for a care type that
 	// does not exist yet.
 	Why string
 	// Drop is the Turn off, Turn on or Delete button. It is nil for a care type
@@ -143,7 +150,7 @@ type dropButton struct {
 	Action string
 }
 
-// careTypeEdit says which row of the list is open and what its field holds. The
+// careTypeEdit says which row of the list is open and what its fields hold. The
 // zero value leaves every row closed.
 type careTypeEdit struct {
 	// slug names the care type whose row is open.
@@ -151,10 +158,14 @@ type careTypeEdit struct {
 	// adding opens an empty row at the end of the list, for a care type that
 	// does not exist yet.
 	adding bool
-	// name is what the open row's field holds, and message what is shown under
-	// it.
+	// name is what the open row's name field holds, and message what is shown
+	// under it.
 	name    string
 	message string
+	// icon is the icon checked in the open row's Icon field. iconMessage is
+	// shown under that field.
+	icon        string
+	iconMessage string
 }
 
 func (h *garden) show(w http.ResponseWriter, r *http.Request) {
@@ -192,24 +203,32 @@ func (h *garden) saveGardenName(w http.ResponseWriter, r *http.Request) {
 }
 
 // newCareType handles GET /more/garden/types. It renders the page with an
-// empty row at the end of the list.
+// empty row at the end of the list and defaultCareIcon checked.
 func (h *garden) newCareType(w http.ResponseWriter, r *http.Request) {
-	h.renderGarden(w, r, gardenPage{Name: PrincipalFrom(r).Garden.Name}, careTypeEdit{adding: true}, 0, "")
+	h.renderGarden(w, r, gardenPage{Name: PrincipalFrom(r).Garden.Name}, careTypeEdit{adding: true, icon: defaultCareIcon}, 0, "")
 }
 
 // createCareType handles POST /more/garden/types. The slug is generated from
-// the name here and never changes again.
+// the name here and never changes again. A name with the slug of a care type
+// every garden starts with, such as Water added after Water was deleted, gets
+// that type's icon whatever was posted.
 func (h *garden) createCareType(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	name, ok := h.postedName(w, r)
 	if !ok {
 		return
 	}
-	edit := careTypeEdit{adding: true, name: name}
+	icon := r.PostForm.Get("icon")
+	edit := careTypeEdit{adding: true, name: name, icon: icon}
 
 	slug := store.CareTypeSlug(name)
-	if message := nameProblem(name, slug); message != "" {
-		edit.message = message
+	if fixed, ok := seededIcon(slug); ok {
+		icon = fixed
+	} else if !knownCareIcon(icon) {
+		edit.iconMessage = careIconMissing
+	}
+	edit.message = nameProblem(name, slug)
+	if edit.message != "" || edit.iconMessage != "" {
 		h.refuseCareType(w, r, edit)
 		return
 	}
@@ -224,7 +243,7 @@ func (h *garden) createCareType(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	params := store.CreateCareTypeParams{GardenID: principal.Garden.ID, Name: name, Slug: slug}
+	params := store.CreateCareTypeParams{GardenID: principal.Garden.ID, Name: name, Slug: slug, Icon: icon}
 	if _, err := h.queries.CreateCareType(r.Context(), params); err != nil {
 		h.templates.serverError(h.logger, w, r, "create the care type", err)
 		return
@@ -240,13 +259,14 @@ func (h *garden) editCareType(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	h.renderGarden(w, r, gardenPage{Name: principal.Garden.Name}, careTypeEdit{slug: care.Slug, name: care.Name}, 0, "")
+	h.renderGarden(w, r, gardenPage{Name: principal.Garden.Name}, careTypeEdit{slug: care.Slug, name: care.Name, icon: care.Icon}, 0, "")
 }
 
-// renameCareType handles POST /more/garden/types/{care}. Only the name is
-// written, so every schedule and every event the type has keeps pointing at
-// it.
-func (h *garden) renameCareType(w http.ResponseWriter, r *http.Request) {
+// saveCareType handles POST /more/garden/types/{care}. Only the name and the
+// icon are written, so every schedule and every event the type has keeps
+// pointing at it. The icon of a care type every garden starts with is left as
+// it is, whatever was posted.
+func (h *garden) saveCareType(w http.ResponseWriter, r *http.Request) {
 	principal := PrincipalFrom(r)
 	care, ok := h.careTypeFromPath(w, r, principal)
 	if !ok {
@@ -256,11 +276,17 @@ func (h *garden) renameCareType(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	edit := careTypeEdit{slug: care.Slug, name: name}
+	icon := r.PostForm.Get("icon")
+	edit := careTypeEdit{slug: care.Slug, name: name, icon: icon}
 
+	if _, fixed := seededIcon(care.Slug); fixed {
+		icon = care.Icon
+	} else if !knownCareIcon(icon) {
+		edit.iconMessage = careIconMissing
+	}
 	slug := store.CareTypeSlug(name)
-	if message := nameProblem(name, slug); message != "" {
-		edit.message = message
+	edit.message = nameProblem(name, slug)
+	if edit.message != "" || edit.iconMessage != "" {
 		h.refuseCareType(w, r, edit)
 		return
 	}
@@ -277,9 +303,9 @@ func (h *garden) renameCareType(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	params := store.RenameCareTypeParams{Name: name, GardenID: principal.Garden.ID, CareTypeID: care.ID}
-	if _, err := h.queries.RenameCareType(r.Context(), params); err != nil {
-		h.templates.serverError(h.logger, w, r, "rename the care type", err)
+	params := store.UpdateCareTypeParams{Name: name, Icon: icon, GardenID: principal.Garden.ID, CareTypeID: care.ID}
+	if _, err := h.queries.UpdateCareType(r.Context(), params); err != nil {
+		h.templates.serverError(h.logger, w, r, "save the care type", err)
 		return
 	}
 	h.careTypesSaved(w, r)
@@ -379,11 +405,13 @@ func (h *garden) postedName(w http.ResponseWriter, r *http.Request) (string, boo
 	return strings.TrimSpace(r.PostForm.Get("name")), true
 }
 
-// refuseCareType renders the page with the row still open, what was typed
-// still in the field and the reason under it.
+// refuseCareType renders the page with the row still open, what was posted
+// still in the fields and the reason under each field that was refused. The
+// live region announces the name's message when there is one, because the
+// name field comes first.
 func (h *garden) refuseCareType(w http.ResponseWriter, r *http.Request, edit careTypeEdit) {
 	page := gardenPage{Name: PrincipalFrom(r).Garden.Name}
-	h.renderGarden(w, r, page, edit, http.StatusUnprocessableEntity, edit.message)
+	h.renderGarden(w, r, page, edit, http.StatusUnprocessableEntity, cmp.Or(edit.message, edit.iconMessage))
 }
 
 // careTypeWithSlug returns the name of the care type holding slug, and the
@@ -483,10 +511,12 @@ func careTypeRows(types []store.ListCareTypesWithEventsRow, edit careTypeEdit) [
 	}
 	if edit.adding {
 		rows = append(rows, careTypeRow{Editor: &careTypeEditor{
-			Action: careTypesPath,
-			Name:   edit.name,
-			Error:  edit.message,
-			Cancel: gardenPath,
+			Action:    careTypesPath,
+			Name:      edit.name,
+			Error:     edit.message,
+			Icons:     careIconOptions(edit.icon),
+			IconError: edit.iconMessage,
+			Cancel:    gardenPath,
 		}})
 	}
 	return rows
@@ -499,11 +529,15 @@ func careTypeRows(types []store.ListCareTypesWithEventsRow, edit careTypeEdit) [
 func openCareType(care store.ListCareTypesWithEventsRow, edit careTypeEdit) *careTypeEditor {
 	slug := care.CareType.Slug
 	editor := &careTypeEditor{
-		Action: careTypePath(slug),
-		Name:   edit.name,
-		Error:  edit.message,
-		Why:    careTypeWhy(care.Events, care.CareType.ArchivedAt != nil),
-		Cancel: gardenPath,
+		Action:    careTypePath(slug),
+		Name:      edit.name,
+		Error:     edit.message,
+		IconError: edit.iconMessage,
+		Why:       careTypeWhy(care.Events, care.CareType.ArchivedAt != nil),
+		Cancel:    gardenPath,
+	}
+	if _, fixed := seededIcon(slug); !fixed {
+		editor.Icons = careIconOptions(edit.icon)
 	}
 	switch {
 	case care.CareType.ArchivedAt != nil:
@@ -516,8 +550,8 @@ func openCareType(care store.ListCareTypesWithEventsRow, edit careTypeEdit) *car
 	return editor
 }
 
-// careTypeWhy is the sentence under the name in an open row: that the care type
-// is off, or how many times it has been used.
+// careTypeWhy is the sentence above the buttons in an open row: that the care
+// type is off, or how many times it has been used.
 func careTypeWhy(events int64, off bool) string {
 	switch {
 	case off:

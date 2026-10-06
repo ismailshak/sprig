@@ -83,6 +83,19 @@ test('a care type nothing has been logged against is added and then deleted @swa
   await expect(garden.row('Prune')).toHaveCount(0);
 });
 
+test('the icon chosen for a new care type is checked when its row is opened again @swap', async ({ garden }) => {
+  await garden.open();
+  await garden.addType().click();
+
+  await garden.typeName().fill('Prune');
+  await garden.icon('Shears').check();
+  await garden.save().click();
+  await expect(garden.row('Prune')).toBeVisible();
+
+  await garden.row('Prune').click();
+  await expect(garden.icon('Shears')).toBeChecked();
+});
+
 test('a name another care type already has is refused and the page says which @swap', async ({ garden, page }) => {
   await garden.open();
   await garden.addType().click();

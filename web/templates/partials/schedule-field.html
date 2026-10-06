@@ -9,7 +9,7 @@
      the row is open, so a post or a re-render keeps it open without the button
      being pressed again. */}}
 {{define "schedule-field"}}{{if .Open}}<li class="sched sched--editing" id="{{.ID}}">
-<span class="sched__icon">{{template "care-icon" .Slug}}</span>
+<span class="sched__icon">{{template "care-icon" .Icon}}</span>
 <input type="hidden" name="open" value="{{.Slug}}">
 {{template "schedule-controls" .}}
 <div class="sched__buttons">
@@ -26,7 +26,7 @@
      elements. */}}
 <button class="sched__open" type="submit" name="open" value="{{.Slug}}" formmethod="get" formaction="{{.Path}}"
  hx-get="{{.Path}}?open={{.Slug}}" hx-target="#{{.ID}}" hx-swap="outerHTML settle:0ms">
-<span class="sched__icon">{{template "care-icon" .Slug}}</span>
+<span class="sched__icon">{{template "care-icon" .Icon}}</span>
 <span class="sched__text">
 <span class="sched__type">{{.Care}}</span>
 </span>

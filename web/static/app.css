@@ -2499,6 +2499,12 @@ a.wide-action {
 
 .row--editing > .input { flex: 1 1 100%; margin-top: 0; }
 
+/* The Icon field under the name, one chip per icon with the icon and no
+   words. Each radio's accessible name says which icon it is. */
+.row__icons { flex: 1 1 100%; border: 0; padding: 0; margin: 0; min-width: 0; }
+.chip--icon { display: inline-flex; align-items: center; padding: 9px 12px; }
+.chip--icon svg { width: 20px; height: 20px; }
+
 .row__edits { flex: 1 1 100%; }
 .row__edits .row__drop { padding-left: 0; }
 

@@ -285,9 +285,9 @@ func writeGarden(ctx context.Context, tx pgx.Tx, g *garden, ref time.Time, event
 			archived = &at
 		}
 		if _, err := tx.Exec(ctx,
-			`INSERT INTO care_type (id, garden_id, name, slug, created_at, archived_at)
-				VALUES ($1, $2, $3, $4, $5, $6)`,
-			ct.id, g.id, ct.name, ct.slug, created.Add(time.Duration(i)*time.Second), archived,
+			`INSERT INTO care_type (id, garden_id, name, slug, icon, created_at, archived_at)
+				VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+			ct.id, g.id, ct.name, ct.slug, ct.icon, created.Add(time.Duration(i)*time.Second), archived,
 		); err != nil {
 			return 0, fmt.Errorf("writing the care type %s: %w", ct.slug, err)
 		}

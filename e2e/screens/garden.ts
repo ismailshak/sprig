@@ -35,6 +35,12 @@ export class GardenScreen {
     return this.page.getByLabel('Care type name');
   }
 
+  // A radio in the open row's Icon field. Its name says which icon it shows,
+  // such as Shears.
+  icon(label: string): Locator {
+    return this.page.getByRole('radio', { name: label, exact: true });
+  }
+
   save(): Locator {
     return this.page.locator('form', { has: this.typeName() }).getByRole('button', { name: 'Save' });
   }

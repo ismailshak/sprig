@@ -123,7 +123,7 @@
      Without JavaScript it is a link to the editor's own page. */}}
 {{define "schedule-row"}}{{if .Edit}}{{template "schedule-editor" .Edit}}{{else}}<li class="sched{{if not .Scheduled}} sched--add{{end}}" id="{{.ID}}">
 {{if .Open}}<a href="{{.Open}}" hx-get="{{.Open}}" hx-target="#{{.ID}}" hx-swap="outerHTML settle:0ms">{{end}}
-<span class="sched__icon">{{template "care-icon" .Slug}}</span>
+<span class="sched__icon">{{template "care-icon" .Icon}}</span>
 <div class="sched__text">
 <span class="sched__type">{{.Care}}</span>
 {{with .Rule}}<span class="sched__every">{{.}}{{with $.Season}} &middot; {{.}}{{end}}</span>{{end}}
@@ -147,7 +147,7 @@
      row. */}}
 {{define "schedule-editor"}}<li class="sched sched--editing" id="{{.ID}}">
 <form method="post" action="{{.Path}}" hx-post="{{.Path}}" hx-target="#{{.ID}}" hx-swap="outerHTML settle:0ms">
-<span class="sched__icon">{{template "care-icon" .Slug}}</span>
+<span class="sched__icon">{{template "care-icon" .Icon}}</span>
 {{template "schedule-controls" .}}
 {{if .Asking}}<div class="sched__confirm">
 <span class="sched__ask">Remove this schedule?</span>

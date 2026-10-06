@@ -1,6 +1,7 @@
 package http
 
 import (
+	"cmp"
 	"testing"
 	"uuid"
 
@@ -48,14 +49,20 @@ func insertGarden(t *testing.T, tx pgx.Tx, id uuid.UUID, name string, careTypes 
 	insertCareTypes(t, tx, id, careTypes...)
 }
 
-// insertCareTypes writes each care type's ID, Name and Slug into the garden. A
-// zero ID lets the column generate one.
+// insertCareTypes writes each care type's ID, Name, Slug and Icon into the
+// garden. A zero ID lets the column generate one. An empty Icon is filled from
+// seededCareTypes for water, feed and repot, and is defaultCareIcon otherwise.
 func insertCareTypes(t *testing.T, tx pgx.Tx, gardenID uuid.UUID, careTypes ...store.CareType) {
 	t.Helper()
 
 	for _, ct := range careTypes {
-		mustExec(t, tx, "INSERT INTO care_type (id, garden_id, name, slug) VALUES (coalesce($1, uuidv7()), $2, $3, $4)",
-			generatedIfZero(ct.ID), gardenID, ct.Name, ct.Slug)
+		icon := ct.Icon
+		if icon == "" {
+			seeded, _ := seededIcon(ct.Slug)
+			icon = cmp.Or(seeded, defaultCareIcon)
+		}
+		mustExec(t, tx, "INSERT INTO care_type (id, garden_id, name, slug, icon) VALUES (coalesce($1, uuidv7()), $2, $3, $4, $5)",
+			generatedIfZero(ct.ID), gardenID, ct.Name, ct.Slug, icon)
 	}
 }
 

@@ -38,6 +38,10 @@ CREATE TABLE care_type (
     name        text NOT NULL,
     -- Code refers to a care type by slug, so the name can be changed freely.
     slug        text COLLATE "C" NOT NULL,
+    -- The name of the care type's icon. The handler checks it against the
+    -- icons the app has. A name the app has no icon for renders the water
+    -- drop.
+    icon        text NOT NULL DEFAULT 'water',
     created_at  timestamptz NOT NULL DEFAULT now(),
     -- Set when a type with events is turned off. It cannot be deleted.
     archived_at timestamptz,

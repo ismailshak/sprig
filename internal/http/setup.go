@@ -60,11 +60,12 @@ func setupChallengePathFor(token string) string {
 const setupPageName = "setup"
 
 // seededCareTypes are the care types every new garden starts with, in the
-// order the Garden page lists them.
-var seededCareTypes = [...]struct{ name, slug string }{
-	{"Water", "water"},
-	{"Feed", "feed"},
-	{"Repot", "repot"},
+// order the Garden page lists them. Their icons are fixed. The Garden page
+// offers an Icon field only on the care types a garden adds.
+var seededCareTypes = [...]struct{ name, slug, icon string }{
+	{"Water", "water", "water"},
+	{"Feed", "feed", "feed"},
+	{"Repot", "repot", "repot"},
 }
 
 // The message shown under a field that was posted empty.
@@ -460,7 +461,7 @@ func createGardenOwnedBy(ctx context.Context, q *store.Queries, name string, use
 		return store.Garden{}, store.Membership{}, err
 	}
 	for _, care := range seededCareTypes {
-		if _, err := q.CreateCareType(ctx, store.CreateCareTypeParams{GardenID: garden.ID, Name: care.name, Slug: care.slug}); err != nil {
+		if _, err := q.CreateCareType(ctx, store.CreateCareTypeParams{GardenID: garden.ID, Name: care.name, Slug: care.slug, Icon: care.icon}); err != nil {
 			return store.Garden{}, store.Membership{}, err
 		}
 	}

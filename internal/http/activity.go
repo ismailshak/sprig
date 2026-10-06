@@ -476,8 +476,9 @@ type eventRow struct {
 	// every row and the care is what differs. The template renders the plant's
 	// name instead when Act is empty.
 	Act string
-	// Slug picks the icon shown in place of the plant's photo on a filtered row.
-	Slug string
+	// Icon is the name of the care type's icon, shown in place of the plant's
+	// photo on a filtered row.
+	Icon string
 	// Skipped is true for a skip. The icon is then grey instead of green.
 	Skipped bool
 	Name    string
@@ -688,7 +689,7 @@ func newPlantEventRow(principal auth.Principal, q logQuery, e store.ListCareEven
 		ID:      eventRowID(e.CareEvent.ID),
 		Href:    correctHref(principal, q, e.CareEvent),
 		Act:     capitalise(did),
-		Slug:    e.CareType.Slug,
+		Icon:    e.CareType.Icon,
 		Skipped: !e.CareEvent.Done,
 		Who:     who,
 		When:    agoWord(e.CareEvent.PerformedAt, now) + ", " + clockWord(e.CareEvent.PerformedAt, now),
