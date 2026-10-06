@@ -10,7 +10,7 @@
      new row's class and style at the old row's values for 20ms and the browser
      paints that frame. The stylesheet collapses a row with row--done or
      htmx-swapping to zero height. */}}
-{{define "care-row"}}<li class="row{{if .Done}} row--done{{end}}" id="{{.ID}}"{{if .Done}} style="--grace:{{.Grace}}ms" hx-get="/" hx-trigger="load delay:{{.Grace}}ms" hx-swap="delete swap:{{.Collapse}}ms settle:0ms"{{end}}>
+{{define "care-row"}}<li class="row{{if .Done}} row--done{{end}}" id="{{.ID}}"{{if .OOB}} hx-swap-oob="true"{{end}}{{if .Done}} style="--grace:{{.Grace}}ms" hx-get="/" hx-trigger="load delay:{{.Grace}}ms" hx-swap="delete swap:{{.Collapse}}ms settle:0ms"{{end}}>
 {{if .Done}}<span class="row__open">{{else}}<a class="row__open" href="{{.Href}}" hx-get="{{.Href}}" hx-target="#sheet" hx-swap="outerHTML">{{end}}
 {{template "avatar" .Picture}}
 <span class="row__text">

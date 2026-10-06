@@ -100,7 +100,8 @@ func sheetPath(plantID uuid.UUID, slug string) string {
 // and from the body on a post.
 type draft struct {
 	// Row is the slug of the care type whose Today row the sheet was opened
-	// from. The post replaces that row.
+	// from. The post replaces that row unless the care it logs has a row of its
+	// own on Today.
 	Row  string
 	Over string
 	// Care is the slug of the care type selected under Care, the one the post
@@ -735,11 +736,25 @@ func (h *today) log(w http.ResponseWriter, r *http.Request) {
 		h.templates.serverError(h.logger, w, r, "load the day", err)
 		return
 	}
+	// A sheet opened from one care's row can log another care. When that care
+	// has a row of its own on Today, that row is replaced out of band and the
+	// row the sheet was opened from is left as it is, because its care is still
+	// due. HX-Retarget is not used because htmx swaps nothing when the new
+	// target is missing from the page, as it is on a page rendered before the
+	// care fell due. A missing out-of-band target skips only the row.
+	// hx-swap-oob takes a swap style and no modifiers, so settle:0ms for the
+	// row comes from HX-Reswap.
+	oob := d.Care != d.Row && g.cares.listed(plant.ID, d.Care)
+	if oob {
+		d.Row = d.Care
+		w.Header().Set("HX-Reswap", "none settle:0ms")
+	}
 	swap := careSwap{
 		Row:  loggedRow(plant, lines, d, care.CareType, logged, g.now),
 		Head: swapHead(principal, after),
 		Feed: swapFeed(principal, after),
 	}
+	swap.Row.OOB = oob
 	v := view{page: "today", fragment: "care-logged", announce: h.loggedAnnouncement(principal, plant, care.CareType, logged, swap.Head)}
 	h.templates.render(w, r, v, swap)
 }
@@ -917,7 +932,7 @@ func (h *today) undo(w http.ResponseWriter, r *http.Request) {
 	if named, ok := lineFor(lines, r.URL.Query().Get("row")); ok {
 		line = named
 	}
-	row := newCareRow(schedule.Row{Plant: line.Plant, Care: line, Lines: lines}, g.now)
+	row := newCareRow(line, g.now)
 	swap := careSwap{Row: row, Head: swapHead(principal, g), Feed: swapFeed(principal, g)}
 	v := view{page: "today", fragment: "care-undone", announce: "Undone. " + h.daySentence(swap.Head)}
 	h.templates.render(w, r, v, swap)
@@ -932,10 +947,9 @@ func lineFor(lines []schedule.Line, slug string) (schedule.Line, bool) {
 	return schedule.Line{}, false
 }
 
-// loggedRow builds the care row in its logged state for the swap. Its id, name
-// and care come from the row the sheet was opened from, because that is the row
-// on the page whichever care was logged. The line under it names the care that
-// was logged.
+// loggedRow builds the logged state of the care row for d.Row. Its id, care
+// name and links are that row's even when the sheet logged a different care.
+// The line under it names the care that was logged.
 func loggedRow(plant store.Plant, lines []schedule.Line, d draft, careType store.CareType, event store.CareEvent, now time.Time) careRow {
 	rowType := careType
 	if line, ok := lineFor(lines, d.Row); ok {

@@ -673,8 +673,9 @@ func TestLog_ASkipStoresTheOverrideIntervalInDays(t *testing.T) {
 	})
 }
 
-func TestLog_ASheetOpenedFromOneRowCanLogADifferentCare(t *testing.T) {
+func TestLog_ACareWithNoRowLoggedFromAnotherCaresSheetReplacesTheRowTheSheetWasOpenedFrom(t *testing.T) {
 	f := rosewood(t)
+	f.feedNigelOn(t, day(time.September, 11))
 	rec := f.post(t, nigelID.String(), url.Values{"row": {"water"}, "care": {"feed"}}, true)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d:\n%s", rec.Code, rec.Body.String())
@@ -682,12 +683,75 @@ func TestLog_ASheetOpenedFromOneRowCanLogADifferentCare(t *testing.T) {
 	if e := f.latest(t, nigelID); e.CareTypeID != feedID {
 		t.Error("the event is not a feed")
 	}
+	if got := rec.Header().Get("HX-Reswap"); got != "" {
+		t.Errorf("HX-Reswap is %q, want the row the sheet was opened from replaced", got)
+	}
 	row := careRowIn(rec.Body.String(), nigelID)
 	if row == nil {
 		t.Fatalf("the swap is not the watering row the sheet was over:\n%s", rec.Body.String())
 	}
+	if row.has("hx-swap-oob") {
+		t.Error("the watering row is sent out of band, and it is the row the form targets")
+	}
 	if got := row.text(); got != "Nigel Fed just now Undo" {
 		t.Errorf("the row says %q", got)
+	}
+}
+
+func TestLog_ACareWithARowLoggedFromAnotherCaresSheetReplacesItsOwnRow(t *testing.T) {
+	f := rosewood(t)
+	f.feedNigelOn(t, day(time.September, 3))
+	rec := f.post(t, nigelID.String(), url.Values{"row": {"water"}, "care": {"feed"}}, true)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d:\n%s", rec.Code, rec.Body.String())
+	}
+	if got, want := rec.Header().Get("HX-Reswap"), "none settle:0ms"; got != want {
+		t.Errorf("HX-Reswap is %q, want %q so the watering row the form targets is left alone", got, want)
+	}
+	doc := readHTML(rec.Body.String())
+	if doc.byID(rowID(nigelID)) != nil {
+		t.Error("the swap replaces Nigel's watering row, which is still due")
+	}
+	row := doc.byID(feedRowID(nigelID))
+	if row == nil {
+		t.Fatalf("the swap has no row for Nigel's feed:\n%s", rec.Body.String())
+	}
+	if got := row.attr("hx-swap-oob"); got != "true" {
+		t.Errorf("the feed row's hx-swap-oob is %q, want true", got)
+	}
+	if got := row.text(); got != "Nigel Fed just now Undo" {
+		t.Errorf("the row says %q", got)
+	}
+	undo := row.first(isTag("button"), textIs("Undo"))
+	if got, want := undo.attr("hx-target"), "#"+feedRowID(nigelID); got != want {
+		t.Errorf("Undo swaps %q, want %q", got, want)
+	}
+	if got, want := undo.attr("hx-delete"), undoPath(nigelID, f.latest(t, nigelID).ID, "feed"); got != want {
+		t.Errorf("Undo deletes at %q, want %q", got, want)
+	}
+}
+
+func TestLog_LoggingOneOfAPlantsTwoDueCaresLeavesTheOtherRowOnThePage(t *testing.T) {
+	f := rosewood(t)
+	f.feedNigelOn(t, day(time.September, 3))
+	rec := f.post(t, nigelID.String(), url.Values{"row": {"feed"}, "care": {"feed"}}, true)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d:\n%s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if readHTML(body).byID(rowID(nigelID)) != nil {
+		t.Error("the swap replaces Nigel's watering row, which is still due")
+	}
+	if got := dayHeadIn(body).text(); got != "3 tasks due today, 1 of them overdue." {
+		t.Errorf("the head says %q, want the count without Nigel's feed", got)
+	}
+
+	byID, _ := sectionsOf(f.show(t))
+	if byID["due-today"].byID(rowID(nigelID)) == nil {
+		t.Error("Nigel's watering is no longer due today after his feed was logged")
+	}
+	if byID["due-today"].byID(feedRowID(nigelID)) != nil {
+		t.Error("Nigel's feed is still due today after being logged")
 	}
 }
 
@@ -791,7 +855,7 @@ func TestLog_TheSwapSaysWhatWasLoggedWhatIsLeftAndWhereUndoIs(t *testing.T) {
 
 	rec := f.post(t, dorisID.String(), url.Values{"row": {"water"}, "care": {"water"}}, true)
 
-	want := "You watered Doris. 2 plants due today, 1 of them overdue. Undo from the row now, or from Activity later."
+	want := "You watered Doris. 2 tasks due today, 1 of them overdue. Undo from the row now, or from Activity later."
 	if got := announcement(rec.Body.String()); got != want {
 		t.Errorf("the swap announces %q, want %q", got, want)
 	}
@@ -802,7 +866,7 @@ func TestLog_ASkipIsAnnouncedAsSkipped(t *testing.T) {
 
 	rec := f.post(t, dorisID.String(), url.Values{"row": {"water"}, "care": {"water"}, "outcome": {"skipped"}, "again": {"2"}}, true)
 
-	want := "You skipped Doris. 2 plants due today, 1 of them overdue. Undo from the row now, or from Activity later."
+	want := "You skipped Doris. 2 tasks due today, 1 of them overdue. Undo from the row now, or from Activity later."
 	if got := announcement(rec.Body.String()); got != want {
 		t.Errorf("the swap announces %q, want %q", got, want)
 	}
@@ -815,7 +879,7 @@ func TestUndo_TheSwapSaysUndoneAndWhatIsLeft(t *testing.T) {
 
 	rec := f.undo(t, dorisID, event.ID, "water", true)
 
-	if got, want := announcement(rec.Body.String()), "Undone. 3 plants due today, 1 of them overdue."; got != want {
+	if got, want := announcement(rec.Body.String()), "Undone. 3 tasks due today, 1 of them overdue."; got != want {
 		t.Errorf("the swap announces %q, want %q", got, want)
 	}
 }
@@ -933,7 +997,7 @@ func TestWindow_TheHeadingIsReturnedWithTheRow(t *testing.T) {
 	t.Run("a day with cares outstanding shows the count", func(t *testing.T) {
 		f := rosewood(t)
 		head := dayHeadIn(f.post(t, dorisID.String(), url.Values{"care": {"water"}}, true).Body.String())
-		if got := head.text(); got != "2 plants due today, 1 of them overdue." {
+		if got := head.text(); got != "2 tasks due today, 1 of them overdue." {
 			t.Errorf("the head says %q, want the count without Doris", got)
 		}
 		if head.attr("hx-swap-oob") != "true" {
@@ -963,7 +1027,7 @@ func TestWindow_TheHeadingIsReturnedWithTheRow(t *testing.T) {
 		f.post(t, dorisID.String(), url.Values{"row": {"water"}, "care": {"water"}}, true)
 		event := f.latest(t, dorisID)
 		head := dayHeadIn(f.undo(t, dorisID, event.ID, "water", true).Body.String())
-		if got := head.text(); got != "3 plants due today, 1 of them overdue." {
+		if got := head.text(); got != "3 tasks due today, 1 of them overdue." {
 			t.Errorf("the head says %q, want Doris counted again", got)
 		}
 	})

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -105,6 +106,7 @@ const collapseMS = 320
 type gardenDay struct {
 	lines  []schedule.Line
 	day    schedule.Day
+	cares  dayCares
 	latest []store.CareEvent
 	recent []store.ListRecentCareEventsRow
 	plants int64
@@ -175,7 +177,52 @@ func (h *today) load(ctx context.Context, principal auth.Principal) (gardenDay, 
 
 	g.lines = schedule.Resolve(schedules, g.latest, g.now)
 	g.day = schedule.Today(g.lines)
+	g.cares = caresOf(g.day)
 	return g, nil
+}
+
+// dayCares holds the schedules Today lists as rows, one slice per section.
+type dayCares struct {
+	overdue  []schedule.Line
+	dueToday []schedule.Line
+	comingUp []schedule.Line
+}
+
+// caresOf returns every overdue care, every care due today and every care in
+// the Coming up window, each section ordered by due date. A plant can have rows
+// in two sections, such as an overdue watering and a feed due tomorrow.
+func caresOf(day schedule.Day) dayCares {
+	var cares dayCares
+	for _, rows := range [][]schedule.Row{day.Overdue, day.DueToday, day.ComingUp} {
+		for _, row := range rows {
+			for _, line := range row.Lines {
+				switch {
+				case line.State == schedule.Overdue:
+					cares.overdue = append(cares.overdue, line)
+				case line.State == schedule.DueToday:
+					cares.dueToday = append(cares.dueToday, line)
+				case line.ComingUp():
+					cares.comingUp = append(cares.comingUp, line)
+				}
+			}
+		}
+	}
+	slices.SortStableFunc(cares.overdue, schedule.CompareDue)
+	slices.SortStableFunc(cares.dueToday, schedule.CompareDue)
+	slices.SortStableFunc(cares.comingUp, schedule.CompareDue)
+	return cares
+}
+
+// listed reports whether Today has a row for the plant's care of this type.
+func (c dayCares) listed(plantID uuid.UUID, slug string) bool {
+	for _, lines := range [][]schedule.Line{c.overdue, c.dueToday, c.comingUp} {
+		for _, line := range lines {
+			if line.Plant.ID == plantID && line.CareType.Slug == slug {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // windows reports whether any care in the feed was recorded within the grace
@@ -342,6 +389,9 @@ type careRow struct {
 	Undo     string
 	Grace    int
 	Collapse int
+	// OOB sets hx-swap-oob on the row. It is true when the sheet opened from
+	// one care's row logs another care that has a row of its own.
+	OOB bool
 }
 
 // careRowPrefix starts every care row id, so a swap targeting a row can be
@@ -353,7 +403,7 @@ func careRowID(plant store.Plant, careType store.CareType) string {
 }
 
 func newTodayPage(principal auth.Principal, g gardenDay) todayPage {
-	day, latest, plants, now := g.day, g.latest, g.plants, g.now
+	cares, now := g.cares, g.now
 	page := todayPage{
 		Date:      now.Format("Monday 2 January"),
 		Garden:    principal.Garden.Name,
@@ -367,37 +417,38 @@ func newTodayPage(principal auth.Principal, g gardenDay) todayPage {
 	if len(g.bar.gardens) > 1 {
 		page.Switch = gardensPath
 	}
-	if rows := day.Overdue; len(rows) > 0 {
-		page.Sections = append(page.Sections, todaySection{ID: "overdue", Title: "Overdue", Alert: true, Rows: careRows(rows, now)})
+	if lines := cares.overdue; len(lines) > 0 {
+		page.Sections = append(page.Sections, todaySection{ID: "overdue", Title: "Overdue", Alert: true, Rows: careRows(lines, now)})
 	}
-	if rows := day.DueToday; len(rows) > 0 {
-		page.Sections = append(page.Sections, todaySection{ID: "due-today", Title: "Due today", Rows: careRows(rows, now)})
+	if lines := cares.dueToday; len(lines) > 0 {
+		page.Sections = append(page.Sections, todaySection{ID: "due-today", Title: "Due today", Rows: careRows(lines, now)})
 	}
 	// remindLaterState returns nil unless something is overdue or due today.
 	// Sections[0] is one of those two here.
 	if link := g.remindLaterState(principal.Membership.RemindAgainAt).link(); link != nil && len(page.Sections) > 0 {
 		page.Sections[0].RemindLater = link
 	}
-	if rows := day.ComingUp; len(rows) > 0 {
-		page.Sections = append(page.Sections, todaySection{ID: "coming-up", Title: "Coming up", Rows: careRows(rows, now), Calendar: calendarPath})
+	if lines := cares.comingUp; len(lines) > 0 {
+		page.Sections = append(page.Sections, todaySection{ID: "coming-up", Title: "Coming up", Rows: careRows(lines, now), Calendar: calendarPath})
 	}
 
-	page.Head = newTodayHead(principal, day, latest, plants, now)
+	page.Head = newTodayHead(principal, g)
 	return page
 }
 
-// newTodayHead builds the heading for a page load.
-func newTodayHead(principal auth.Principal, day schedule.Day, latest []store.CareEvent, plants int64, now time.Time) todayHead {
-	if outstanding := len(day.Overdue) + len(day.DueToday); outstanding > 0 {
-		return todayHead{Summary: &todaySummary{Outstanding: outstanding, Overdue: len(day.Overdue)}}
+// newTodayHead builds the heading for a page load. The summary counts rows, the
+// same as the counts beside the Overdue and Due today titles.
+func newTodayHead(principal auth.Principal, g gardenDay) todayHead {
+	if outstanding := len(g.cares.overdue) + len(g.cares.dueToday); outstanding > 0 {
+		return todayHead{Summary: &todaySummary{Outstanding: outstanding, Overdue: len(g.cares.overdue)}}
 	}
-	return todayHead{Empty: newTodayEmpty(principal, day, latest, plants, now)}
+	return todayHead{Empty: newTodayEmpty(principal, g)}
 }
 
 // swapHead builds the heading for a swap response. Clear is only set here,
 // because a page load never renders a row inside a grace window.
 func swapHead(principal auth.Principal, g gardenDay) todayHead {
-	head := newTodayHead(principal, g.day, g.latest, g.plants, g.now)
+	head := newTodayHead(principal, g)
 	if head.Empty != nil && g.windows() {
 		head = todayHead{Clear: true}
 	}
@@ -406,7 +457,7 @@ func swapHead(principal auth.Principal, g gardenDay) todayHead {
 }
 
 // daySentence is the summary bar as one sentence, for the announcement a swap
-// makes: "3 plants due today, 1 of them overdue." It renders the bar's own
+// makes: "3 tasks due today, 1 of them overdue." It renders the bar's own
 // templates, so the bar and the sentence hold the same words.
 func (h *today) daySentence(head todayHead) string {
 	switch {
@@ -439,8 +490,8 @@ func whoDidSentence(principal auth.Principal, plant store.Plant, careType store.
 // finished, so a day with nothing scheduled gets the leaf. The next-up line and
 // the link to the plant list are shown only when Coming up is empty, since
 // otherwise that section says the same thing.
-func newTodayEmpty(principal auth.Principal, day schedule.Day, latest []store.CareEvent, plants int64, now time.Time) *todayEmpty {
-	if plants == 0 {
+func newTodayEmpty(principal auth.Principal, g gardenDay) *todayEmpty {
+	if g.plants == 0 {
 		// The link is shown only to a reader who may create a plant, since the
 		// route refuses anyone else.
 		empty := &todayEmpty{
@@ -454,16 +505,16 @@ func newTodayEmpty(principal auth.Principal, day schedule.Day, latest []store.Ca
 	}
 
 	empty := &todayEmpty{Title: "Nothing due today"}
-	if caredForOn(latest, now) {
+	if caredForOn(g.latest, g.now) {
 		empty.Done = true
 		empty.Title = "All done for today"
 		empty.Line = "Nothing else is due."
 	}
-	if len(day.ComingUp) > 0 {
+	if len(g.cares.comingUp) > 0 {
 		return empty
 	}
-	if len(day.Next) > 0 {
-		empty.Line = nextLine(day.Next, now)
+	if len(g.day.Next) > 0 {
+		empty.Line = nextLine(g.day.Next, g.now)
 	}
 	empty.Action = &link{Label: "See all plants", Href: "/plants"}
 	return empty
@@ -483,34 +534,34 @@ func caredForOn(latest []store.CareEvent, now time.Time) bool {
 	return false
 }
 
-func careRows(rows []schedule.Row, now time.Time) []careRow {
-	out := make([]careRow, 0, len(rows))
-	for _, row := range rows {
-		out = append(out, newCareRow(row, now))
+func careRows(lines []schedule.Line, now time.Time) []careRow {
+	out := make([]careRow, 0, len(lines))
+	for _, line := range lines {
+		out = append(out, newCareRow(line, now))
 	}
 	return out
 }
 
-func newCareRow(row schedule.Row, now time.Time) careRow {
+func newCareRow(line schedule.Line, now time.Time) careRow {
 	r := careRow{
-		ID:        careRowID(row.Plant, row.Care.CareType),
-		Href:      sheetPath(row.Plant.ID, row.Care.CareType.Slug),
-		Path:      logPath(row.Plant.ID),
-		Name:      row.Plant.DisplayName(),
-		Botanical: row.Plant.BotanicalOnly(),
-		Picture:   squarePicturePath(row.Plant),
-		Care:      row.Care.CareType.Name,
-		Slug:      row.Care.CareType.Slug,
-		Icon:      row.Care.CareType.Icon,
+		ID:        careRowID(line.Plant, line.CareType),
+		Href:      sheetPath(line.Plant.ID, line.CareType.Slug),
+		Path:      logPath(line.Plant.ID),
+		Name:      line.Plant.DisplayName(),
+		Botanical: line.Plant.BotanicalOnly(),
+		Picture:   squarePicturePath(line.Plant),
+		Care:      line.CareType.Name,
+		Slug:      line.CareType.Slug,
+		Icon:      line.CareType.Icon,
 	}
-	if row.Plant.Location != nil {
-		r.Room = *row.Plant.Location
+	if line.Plant.Location != nil {
+		r.Room = *line.Plant.Location
 	}
-	switch row.Care.State {
+	switch line.State {
 	case schedule.Overdue:
-		r.Late = overdueWord(row.Care, now)
+		r.Late = overdueWord(line, now)
 	case schedule.Upcoming:
-		r.When = comingWord(row.Care, now)
+		r.When = comingWord(line, now)
 	}
 	return r
 }
