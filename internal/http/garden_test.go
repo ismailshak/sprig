@@ -41,15 +41,16 @@ func openGarden(t *testing.T) *gardenFixture {
 // careTypeGarden gives Ellie's garden the four care types the Garden page has
 // to tell apart: Water with two events behind it, Feed with none, Mist turned
 // off with one event still logged against it, and Prune in the other garden.
+// Mist is the one the garden added, with the spray bottle icon.
 func careTypeGarden(t *testing.T) *gardenFixture {
 	t.Helper()
 
 	f := openGarden(t)
 	f.principal.Capabilities[auth.CareTypeManage] = true
-	f.exec(t, `INSERT INTO care_type (id, garden_id, name, slug, created_at, archived_at) VALUES
-		($1, $2, 'Water', 'water', '2026-01-01T00:00:00Z', NULL),
-		($3, $2, 'Feed',  'feed',  '2026-01-02T00:00:00Z', NULL),
-		($4, $2, 'Mist',  'mist',  '2026-01-03T00:00:00Z', now())`,
+	f.exec(t, `INSERT INTO care_type (id, garden_id, name, slug, icon, created_at, archived_at) VALUES
+		($1, $2, 'Water', 'water', 'water', '2026-01-01T00:00:00Z', NULL),
+		($3, $2, 'Feed',  'feed',  'feed',  '2026-01-02T00:00:00Z', NULL),
+		($4, $2, 'Mist',  'mist',  'mist',  '2026-01-03T00:00:00Z', now())`,
 		moreWaterID, moreGardenID, moreFeedID, moreMistID)
 	f.exec(t, "INSERT INTO care_type (garden_id, name, slug) VALUES ($1, 'Prune', 'prune')", otherGardenID)
 	f.exec(t, "INSERT INTO plant (id, garden_id, nickname) VALUES ($1, $2, 'Fern')", morePlantID, moreGardenID)
@@ -119,6 +120,11 @@ type editor struct {
 	// drop is the word on the button beside Save, and dropTo where it posts.
 	drop   string
 	dropTo string
+	// icons is the value of each radio in the Icon field, in page order. icon
+	// is the value of the checked one. Both are empty when the row has no Icon
+	// field.
+	icons []string
+	icon  string
 }
 
 // editorOn returns the open row, and fails when no row on the page is open.
@@ -140,6 +146,12 @@ func editorOn(t *testing.T, page string) editor {
 	if drop := form.first(isTag("button"), hasAttr("formaction")); drop != nil {
 		open.dropTo, open.drop = drop.attr("formaction"), drop.text()
 	}
+	for _, radio := range form.all(isTag("input"), attrIs("name", "icon")) {
+		open.icons = append(open.icons, radio.attr("value"))
+		if radio.has("checked") {
+			open.icon = radio.attr("value")
+		}
+	}
 	return open
 }
 
@@ -153,6 +165,17 @@ func (f *gardenFixture) careTypeRow(t *testing.T, slug string) (name string, arc
 		t.Fatalf("reading the %s care type back: %v", slug, err)
 	}
 	return name, archivedAt != nil
+}
+
+func (f *gardenFixture) careTypeIcon(t *testing.T, slug string) string {
+	t.Helper()
+
+	var icon string
+	if err := f.tx.QueryRow(t.Context(), "SELECT icon FROM care_type WHERE garden_id = $1 AND slug = $2",
+		moreGardenID, slug).Scan(&icon); err != nil {
+		t.Fatalf("reading the %s care type's icon: %v", slug, err)
+	}
+	return icon
 }
 
 func (f *gardenFixture) careTypeCount(t *testing.T, slug string) int {
@@ -368,7 +391,7 @@ func TestGarden_ThePageASaveRedirectsToSaysSavedAndAPlainVisitDoesNot(t *testing
 func TestGarden_ARenameChangesTheNameAndLeavesTheSlug(t *testing.T) {
 	f := careTypeGarden(t)
 
-	rec := f.careType(t, f.handler.renameCareType, "feed", careTypePath("feed"), url.Values{"name": {"Fertilise"}})
+	rec := f.careType(t, f.handler.saveCareType, "feed", careTypePath("feed"), url.Values{"name": {"Fertilise"}})
 
 	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != gardenPath {
 		t.Fatalf("status = %d to %q, want %d to %s", rec.Code, rec.Header().Get("Location"), http.StatusSeeOther, gardenPath)
@@ -381,7 +404,7 @@ func TestGarden_ARenameChangesTheNameAndLeavesTheSlug(t *testing.T) {
 func TestGarden_ARenameToAnEmptyNameIsRefusedWithTheReasonUnderTheField(t *testing.T) {
 	f := careTypeGarden(t)
 
-	rec := f.careType(t, f.handler.renameCareType, "feed", careTypePath("feed"), url.Values{"name": {"  "}})
+	rec := f.careType(t, f.handler.saveCareType, "feed", careTypePath("feed"), url.Values{"name": {"  "}})
 
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusUnprocessableEntity)
@@ -397,7 +420,7 @@ func TestGarden_ARenameToAnEmptyNameIsRefusedWithTheReasonUnderTheField(t *testi
 func TestGarden_ARenameToANameAnotherCareTypeHasIsRefusedAndTheMessageNamesThatType(t *testing.T) {
 	f := careTypeGarden(t)
 
-	rec := f.careType(t, f.handler.renameCareType, "feed", careTypePath("feed"), url.Values{"name": {"water"}})
+	rec := f.careType(t, f.handler.saveCareType, "feed", careTypePath("feed"), url.Values{"name": {"water"}})
 
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusUnprocessableEntity)
@@ -413,7 +436,7 @@ func TestGarden_ARenameToANameAnotherCareTypeHasIsRefusedAndTheMessageNamesThatT
 func TestGarden_ARenameToTheSameNameInCapitalsIsSaved(t *testing.T) {
 	f := careTypeGarden(t)
 
-	rec := f.careType(t, f.handler.renameCareType, "water", careTypePath("water"), url.Values{"name": {"WATER"}})
+	rec := f.careType(t, f.handler.saveCareType, "water", careTypePath("water"), url.Values{"name": {"WATER"}})
 
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusSeeOther, rec.Body.String())
@@ -426,7 +449,7 @@ func TestGarden_ARenameToTheSameNameInCapitalsIsSaved(t *testing.T) {
 func TestGarden_ANewCareTypeIsCreatedWithASlugFromItsName(t *testing.T) {
 	f := careTypeGarden(t)
 
-	rec := f.do(t, f.handler.createCareType, careTypesPath, url.Values{"name": {"Wipe leaves"}})
+	rec := f.do(t, f.handler.createCareType, careTypesPath, url.Values{"name": {"Wipe leaves"}, "icon": {"clean"}})
 
 	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != gardenPath {
 		t.Fatalf("status = %d to %q, want %d to %s", rec.Code, rec.Header().Get("Location"), http.StatusSeeOther, gardenPath)
@@ -455,7 +478,7 @@ func TestGarden_ANameACareTypeAlreadyHasIsRefusedRatherThanCreatingASecond(t *te
 func TestGarden_ANameACareTypeThatIsOffAlreadyHasIsRefused(t *testing.T) {
 	f := careTypeGarden(t)
 
-	rec := f.do(t, f.handler.createCareType, careTypesPath, url.Values{"name": {"Mist"}})
+	rec := f.do(t, f.handler.createCareType, careTypesPath, url.Values{"name": {"Mist"}, "icon": {"mist"}})
 
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusUnprocessableEntity)
@@ -468,7 +491,7 @@ func TestGarden_ANameACareTypeThatIsOffAlreadyHasIsRefused(t *testing.T) {
 func TestGarden_ANameWithNoLetterOrNumberInItIsRefused(t *testing.T) {
 	f := careTypeGarden(t)
 
-	rec := f.do(t, f.handler.createCareType, careTypesPath, url.Values{"name": {"!!!"}})
+	rec := f.do(t, f.handler.createCareType, careTypesPath, url.Values{"name": {"!!!"}, "icon": {"water"}})
 
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusUnprocessableEntity)
@@ -492,7 +515,7 @@ func TestGarden_ANameWithNoLetterOrNumberInItIsRefused(t *testing.T) {
 func TestGarden_AnEmptyNewCareTypeIsRefusedWithTheReasonUnderTheField(t *testing.T) {
 	f := careTypeGarden(t)
 
-	rec := f.do(t, f.handler.createCareType, careTypesPath, url.Values{"name": {""}})
+	rec := f.do(t, f.handler.createCareType, careTypesPath, url.Values{"name": {""}, "icon": {"water"}})
 
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusUnprocessableEntity)
@@ -789,7 +812,7 @@ func TestStorageLine_TheLineAddsWhatToDeleteFromNineTenthsOfTheQuota(t *testing.
 func TestGarden_ARenameSentAsASwapGetsTheCareTypesWithEveryRowClosedAndNotTheWholePage(t *testing.T) {
 	f := careTypeGarden(t)
 
-	rec := f.swap(t, f.handler.renameCareType, careTypePath("feed"), careTypesID, "care", "feed", url.Values{"name": {"Fertilise"}})
+	rec := f.swap(t, f.handler.saveCareType, careTypePath("feed"), careTypesID, "care", "feed", url.Values{"name": {"Fertilise"}})
 
 	body := fragment(t, rec, careTypesID)
 	if readHTML(body).byID(careTypesID).first(isTag("form")) != nil {
@@ -824,5 +847,176 @@ func TestGarden_DeleteGardenIsLinkedOnlyForAReaderWithGardenDelete(t *testing.T)
 	f.principal.Capabilities[auth.GardenDelete] = true
 	if link := deleteLink(); link.text() != "Delete garden" {
 		t.Errorf("the link to %s reads %q, want Delete garden", deleteGardenPath, link.text())
+	}
+}
+
+func TestGarden_ANewCareTypeIsSavedWithTheIconChosenForIt(t *testing.T) {
+	f := careTypeGarden(t)
+
+	rec := f.do(t, f.handler.createCareType, careTypesPath, url.Values{"name": {"Wipe leaves"}, "icon": {"clean"}})
+
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusSeeOther, rec.Body.String())
+	}
+	if got := f.careTypeIcon(t, "wipe_leaves"); got != "clean" {
+		t.Errorf("the new care type's icon is %q, want clean", got)
+	}
+}
+
+func TestGarden_ANewCareTypeWithAnIconTheIconFieldDoesNotOfferIsRefusedAndNotCreated(t *testing.T) {
+	f := careTypeGarden(t)
+
+	rec := f.do(t, f.handler.createCareType, careTypesPath, url.Values{"name": {"Wipe leaves"}, "icon": {"feed"}})
+
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusUnprocessableEntity)
+	}
+	open := editorOn(t, rec.Body.String())
+	if !slices.Contains(open.says, careIconMissing) {
+		t.Errorf("the form says %q, want %q", open.says, careIconMissing)
+	}
+	if open.name != "Wipe leaves" || open.icon != "" {
+		t.Errorf("the field holds %q with %q checked, want what was typed and no icon checked", open.name, open.icon)
+	}
+	if got := f.careTypeCount(t, "wipe_leaves"); got != 0 {
+		t.Errorf("the garden has %d care types with the slug wipe_leaves, want 0", got)
+	}
+}
+
+func TestGarden_ANewCareTypeWithNoIconPostedIsRefused(t *testing.T) {
+	f := careTypeGarden(t)
+
+	rec := f.do(t, f.handler.createCareType, careTypesPath, url.Values{"name": {"Wipe leaves"}})
+
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusUnprocessableEntity)
+	}
+	if got := f.careTypeCount(t, "wipe_leaves"); got != 0 {
+		t.Errorf("the garden has %d care types with the slug wipe_leaves, want 0", got)
+	}
+}
+
+func TestGarden_ANewCareTypeNamedRepotGetsTheRepotIconWhateverIconWasPosted(t *testing.T) {
+	f := careTypeGarden(t)
+
+	rec := f.do(t, f.handler.createCareType, careTypesPath, url.Values{"name": {"Repot"}, "icon": {"prune"}})
+
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusSeeOther, rec.Body.String())
+	}
+	if got := f.careTypeIcon(t, "repot"); got != "repot" {
+		t.Errorf("the Repot care type's icon is %q, want repot", got)
+	}
+}
+
+func TestGarden_SavingACareTypeTheGardenAddedWritesTheIconChosenForIt(t *testing.T) {
+	f := careTypeGarden(t)
+
+	rec := f.careType(t, f.handler.saveCareType, "mist", careTypePath("mist"), url.Values{"name": {"Mist"}, "icon": {"prune"}})
+
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusSeeOther, rec.Body.String())
+	}
+	if got := f.careTypeIcon(t, "mist"); got != "prune" {
+		t.Errorf("the Mist care type's icon is %q, want prune", got)
+	}
+}
+
+func TestGarden_SavingACareTypeWithAnIconTheIconFieldDoesNotOfferIsRefusedAndKeepsItsIcon(t *testing.T) {
+	f := careTypeGarden(t)
+
+	rec := f.careType(t, f.handler.saveCareType, "mist", careTypePath("mist"), url.Values{"name": {"Spray"}, "icon": {"repot"}})
+
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusUnprocessableEntity)
+	}
+	if got := editorOn(t, rec.Body.String()).says; !slices.Contains(got, careIconMissing) {
+		t.Errorf("the row says %q, want %q", got, careIconMissing)
+	}
+	if name, _ := f.careTypeRow(t, "mist"); name != "Mist" {
+		t.Errorf("the refused save left the care type called %q, want Mist", name)
+	}
+	if got := f.careTypeIcon(t, "mist"); got != "mist" {
+		t.Errorf("the refused save left the icon %q, want mist", got)
+	}
+}
+
+func TestGarden_SavingFeedWithAnIconPostedLeavesTheFeedIcon(t *testing.T) {
+	f := careTypeGarden(t)
+
+	rec := f.careType(t, f.handler.saveCareType, "feed", careTypePath("feed"), url.Values{"name": {"Fertilise"}, "icon": {"prune"}})
+
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want %d:\n%s", rec.Code, http.StatusSeeOther, rec.Body.String())
+	}
+	if got := f.careTypeIcon(t, "feed"); got != "feed" {
+		t.Errorf("the Feed care type's icon is %q, want feed", got)
+	}
+}
+
+func TestGarden_TheRowOfACareTypeTheGardenAddedHasTheIconFieldWithItsIconChecked(t *testing.T) {
+	f := careTypeGarden(t)
+
+	open := editorOn(t, f.careType(t, f.handler.editCareType, "mist", careTypePath("mist"), nil).Body.String())
+
+	want := []string{"water", "prune", "mist", "rotate", "pest", "clean", "light",
+		"photo", "temperature", "inspect", "harvest", "propagate", "checkmark", "pencil", "star", "leaf"}
+	if !slices.Equal(open.icons, want) {
+		t.Errorf("the Icon field offers %v, want %v", open.icons, want)
+	}
+	if open.icon != "mist" {
+		t.Errorf("the Icon field has %q checked, want mist", open.icon)
+	}
+}
+
+func TestGarden_TheRowOfFeedHasNoIconField(t *testing.T) {
+	f := careTypeGarden(t)
+
+	open := editorOn(t, f.careType(t, f.handler.editCareType, "feed", careTypePath("feed"), nil).Body.String())
+
+	if len(open.icons) != 0 {
+		t.Errorf("the Feed row offers the icons %v, want no Icon field", open.icons)
+	}
+}
+
+func TestGarden_TheRowForANewCareTypeHasTheWaterDropChecked(t *testing.T) {
+	f := careTypeGarden(t)
+
+	open := editorOn(t, f.page(t, f.handler.newCareType, careTypesPath))
+
+	if open.icon != "water" {
+		t.Errorf("the Icon field has %q checked, want water", open.icon)
+	}
+}
+
+func TestGarden_EachRadioInTheIconFieldShowsTheIconItSaves(t *testing.T) {
+	f := careTypeGarden(t)
+
+	rec := f.careType(t, f.handler.editCareType, "mist", careTypePath("mist"), nil)
+
+	labels := readHTML(rec.Body.String()).all(isTag("label"), func(e *element) bool {
+		return e.first(isTag("input"), attrIs("name", "icon")) != nil
+	})
+	if len(labels) != len(careIcons) {
+		t.Fatalf("the Icon field has %d radios, want %d", len(labels), len(careIcons))
+	}
+	for _, label := range labels {
+		value := label.first(isTag("input"), attrIs("name", "icon")).attr("value")
+		if got := iconsIn(label); !slices.Equal(got, []string{value}) {
+			t.Errorf("the %s radio shows the icons %v, want [%s]", value, got, value)
+		}
+	}
+}
+
+func TestGarden_ANewCareTypeRefusedForItsNameKeepsTheIconThatWasChosen(t *testing.T) {
+	f := careTypeGarden(t)
+
+	rec := f.do(t, f.handler.createCareType, careTypesPath, url.Values{"name": {""}, "icon": {"pest"}})
+
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusUnprocessableEntity)
+	}
+	if got := editorOn(t, rec.Body.String()).icon; got != "pest" {
+		t.Errorf("the Icon field has %q checked, want pest", got)
 	}
 }

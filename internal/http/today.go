@@ -332,6 +332,8 @@ type careRow struct {
 	When string
 	Care string
 	Slug string
+	// Icon is the name of the care type's icon.
+	Icon string
 	// Done marks a row whose care was just logged, and Said is its meta line.
 	// Grace and Collapse are in milliseconds because the style attribute and
 	// the trigger delay are written in them.
@@ -499,6 +501,7 @@ func newCareRow(row schedule.Row, now time.Time) careRow {
 		Picture:   squarePicturePath(row.Plant),
 		Care:      row.Care.CareType.Name,
 		Slug:      row.Care.CareType.Slug,
+		Icon:      row.Care.CareType.Icon,
 	}
 	if row.Plant.Location != nil {
 		r.Room = *row.Plant.Location

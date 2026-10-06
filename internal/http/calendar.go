@@ -377,7 +377,7 @@ type calendarBand struct {
 }
 
 // calendarRow is one care on the calendar, in a day's sheet or in the cares
-// due in the month. A day in the grid shows only its Name and its Slug's icon.
+// due in the month. A day in the grid shows only its Name and its Icon.
 type calendarRow struct {
 	// Href is the URL of the plant's page.
 	Href string
@@ -387,8 +387,8 @@ type calendarRow struct {
 	// Picture is the URL of the plant's profile picture as a square, empty for
 	// a plant with no picture.
 	Picture string
-	// Slug picks the care's icon.
-	Slug string
+	// Icon is the name of the care type's icon.
+	Icon string
 	// Logged is true for care that was logged and false for care that is due.
 	// Skipped is true for a logged skip.
 	Logged  bool
@@ -546,7 +546,7 @@ func newLoggedRow(principal auth.Principal, e store.ListCareEventsBetweenRow, no
 		Name:      e.Plant.DisplayName(),
 		Botanical: e.Plant.BotanicalOnly(),
 		Picture:   squarePicturePath(e.Plant),
-		Slug:      e.CareType.Slug,
+		Icon:      e.CareType.Icon,
 		Logged:    true,
 		Skipped:   !e.CareEvent.Done,
 		Care:      who + " " + did,
@@ -571,7 +571,7 @@ func dueRows(cares []dueCare, now time.Time) []calendarRow {
 			Name:      c.line.Plant.DisplayName(),
 			Botanical: c.line.Plant.BotanicalOnly(),
 			Picture:   squarePicturePath(c.line.Plant),
-			Slug:      c.line.CareType.Slug,
+			Icon:      c.line.CareType.Icon,
 			Care:      c.line.CareType.Name,
 		}
 		switch {

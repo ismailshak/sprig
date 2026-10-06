@@ -39,14 +39,14 @@ SELECT * FROM care_type
 WHERE garden_id = @garden_id AND slug = @slug;
 
 -- name: CreateCareType :one
-INSERT INTO care_type (garden_id, name, slug)
-VALUES (@garden_id, @name, @slug)
+INSERT INTO care_type (garden_id, name, slug, icon)
+VALUES (@garden_id, @name, @slug, @icon)
 RETURNING *;
 
 -- The slug is left alone. Code refers to a care type by slug and events refer
--- to its row, so a rename changes the word and nothing else.
--- name: RenameCareType :one
-UPDATE care_type SET name = @name
+-- to its row, so a save changes the name and the icon and nothing else.
+-- name: UpdateCareType :one
+UPDATE care_type SET name = @name, icon = @icon
 WHERE garden_id = @garden_id AND id = @care_type_id
 RETURNING *;
 

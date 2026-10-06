@@ -23,7 +23,7 @@
 <form method="post" action="{{.Path}}" hx-post="{{.Path}}" hx-target="#{{.ID}}" hx-swap="outerHTML settle:0ms">
 <input type="hidden" name="row" value="{{.Slug}}">
 <input type="hidden" name="when" value="now">
-{{if .When}}<button class="care care--quiet" name="care" value="{{.Slug}}">Log</button>{{else}}<button class="care" name="care" value="{{.Slug}}">{{template "care-icon" .Slug}}{{.Care}}</button>{{end}}
+{{if .When}}<button class="care care--quiet" name="care" value="{{.Slug}}">Log</button>{{else}}<button class="care" name="care" value="{{.Slug}}">{{template "care-icon" .Icon}}{{.Care}}</button>{{end}}
 </form>{{end}}
 </li>{{end}}
 

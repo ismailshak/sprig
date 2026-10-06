@@ -14,7 +14,7 @@ import (
 const archiveCareType = `-- name: ArchiveCareType :one
 UPDATE care_type SET archived_at = now()
 WHERE garden_id = $1 AND id = $2 AND archived_at IS NULL
-RETURNING id, garden_id, name, slug, created_at, archived_at
+RETURNING id, garden_id, name, slug, icon, created_at, archived_at
 `
 
 // Turning a care type off takes it out of the scheduler and out of the sheet
@@ -28,6 +28,7 @@ func (q *Queries) ArchiveCareType(ctx context.Context, gardenID uuid.UUID, careT
 		&i.GardenID,
 		&i.Name,
 		&i.Slug,
+		&i.Icon,
 		&i.CreatedAt,
 		&i.ArchivedAt,
 	)
@@ -35,25 +36,32 @@ func (q *Queries) ArchiveCareType(ctx context.Context, gardenID uuid.UUID, careT
 }
 
 const createCareType = `-- name: CreateCareType :one
-INSERT INTO care_type (garden_id, name, slug)
-VALUES ($1, $2, $3)
-RETURNING id, garden_id, name, slug, created_at, archived_at
+INSERT INTO care_type (garden_id, name, slug, icon)
+VALUES ($1, $2, $3, $4)
+RETURNING id, garden_id, name, slug, icon, created_at, archived_at
 `
 
 type CreateCareTypeParams struct {
 	GardenID uuid.UUID
 	Name     string
 	Slug     string
+	Icon     string
 }
 
 func (q *Queries) CreateCareType(ctx context.Context, arg CreateCareTypeParams) (CareType, error) {
-	row := q.db.QueryRow(ctx, createCareType, arg.GardenID, arg.Name, arg.Slug)
+	row := q.db.QueryRow(ctx, createCareType,
+		arg.GardenID,
+		arg.Name,
+		arg.Slug,
+		arg.Icon,
+	)
 	var i CareType
 	err := row.Scan(
 		&i.ID,
 		&i.GardenID,
 		&i.Name,
 		&i.Slug,
+		&i.Icon,
 		&i.CreatedAt,
 		&i.ArchivedAt,
 	)
@@ -82,7 +90,7 @@ func (q *Queries) DeleteUnusedCareType(ctx context.Context, gardenID uuid.UUID, 
 }
 
 const getCareType = `-- name: GetCareType :one
-SELECT id, garden_id, name, slug, created_at, archived_at FROM care_type
+SELECT id, garden_id, name, slug, icon, created_at, archived_at FROM care_type
 WHERE garden_id = $1 AND id = $2
 `
 
@@ -97,6 +105,7 @@ func (q *Queries) GetCareType(ctx context.Context, gardenID uuid.UUID, careTypeI
 		&i.GardenID,
 		&i.Name,
 		&i.Slug,
+		&i.Icon,
 		&i.CreatedAt,
 		&i.ArchivedAt,
 	)
@@ -104,7 +113,7 @@ func (q *Queries) GetCareType(ctx context.Context, gardenID uuid.UUID, careTypeI
 }
 
 const getCareTypeBySlug = `-- name: GetCareTypeBySlug :one
-SELECT id, garden_id, name, slug, created_at, archived_at FROM care_type
+SELECT id, garden_id, name, slug, icon, created_at, archived_at FROM care_type
 WHERE garden_id = $1 AND slug = $2
 `
 
@@ -118,6 +127,7 @@ func (q *Queries) GetCareTypeBySlug(ctx context.Context, gardenID uuid.UUID, slu
 		&i.GardenID,
 		&i.Name,
 		&i.Slug,
+		&i.Icon,
 		&i.CreatedAt,
 		&i.ArchivedAt,
 	)
@@ -125,7 +135,7 @@ func (q *Queries) GetCareTypeBySlug(ctx context.Context, gardenID uuid.UUID, slu
 }
 
 const listAllCareTypes = `-- name: ListAllCareTypes :many
-SELECT id, garden_id, name, slug, created_at, archived_at FROM care_type
+SELECT id, garden_id, name, slug, icon, created_at, archived_at FROM care_type
 WHERE garden_id = $1
 ORDER BY created_at, id
 `
@@ -146,6 +156,7 @@ func (q *Queries) ListAllCareTypes(ctx context.Context, gardenID uuid.UUID) ([]C
 			&i.GardenID,
 			&i.Name,
 			&i.Slug,
+			&i.Icon,
 			&i.CreatedAt,
 			&i.ArchivedAt,
 		); err != nil {
@@ -160,7 +171,7 @@ func (q *Queries) ListAllCareTypes(ctx context.Context, gardenID uuid.UUID) ([]C
 }
 
 const listCareTypes = `-- name: ListCareTypes :many
-SELECT id, garden_id, name, slug, created_at, archived_at FROM care_type
+SELECT id, garden_id, name, slug, icon, created_at, archived_at FROM care_type
 WHERE garden_id = $1 AND archived_at IS NULL
 ORDER BY created_at, id
 `
@@ -181,6 +192,7 @@ func (q *Queries) ListCareTypes(ctx context.Context, gardenID uuid.UUID) ([]Care
 			&i.GardenID,
 			&i.Name,
 			&i.Slug,
+			&i.Icon,
 			&i.CreatedAt,
 			&i.ArchivedAt,
 		); err != nil {
@@ -195,7 +207,7 @@ func (q *Queries) ListCareTypes(ctx context.Context, gardenID uuid.UUID) ([]Care
 }
 
 const listCareTypesWithEvents = `-- name: ListCareTypesWithEvents :many
-SELECT care_type.id, care_type.garden_id, care_type.name, care_type.slug, care_type.created_at, care_type.archived_at, count(care_event.id) AS events
+SELECT care_type.id, care_type.garden_id, care_type.name, care_type.slug, care_type.icon, care_type.created_at, care_type.archived_at, count(care_event.id) AS events
 FROM care_type
 LEFT JOIN care_event
        ON care_event.care_type_id = care_type.id
@@ -227,6 +239,7 @@ func (q *Queries) ListCareTypesWithEvents(ctx context.Context, gardenID uuid.UUI
 			&i.CareType.GardenID,
 			&i.CareType.Name,
 			&i.CareType.Slug,
+			&i.CareType.Icon,
 			&i.CareType.CreatedAt,
 			&i.CareType.ArchivedAt,
 			&i.Events,
@@ -241,38 +254,10 @@ func (q *Queries) ListCareTypesWithEvents(ctx context.Context, gardenID uuid.UUI
 	return items, nil
 }
 
-const renameCareType = `-- name: RenameCareType :one
-UPDATE care_type SET name = $1
-WHERE garden_id = $2 AND id = $3
-RETURNING id, garden_id, name, slug, created_at, archived_at
-`
-
-type RenameCareTypeParams struct {
-	Name       string
-	GardenID   uuid.UUID
-	CareTypeID uuid.UUID
-}
-
-// The slug is left alone. Code refers to a care type by slug and events refer
-// to its row, so a rename changes the word and nothing else.
-func (q *Queries) RenameCareType(ctx context.Context, arg RenameCareTypeParams) (CareType, error) {
-	row := q.db.QueryRow(ctx, renameCareType, arg.Name, arg.GardenID, arg.CareTypeID)
-	var i CareType
-	err := row.Scan(
-		&i.ID,
-		&i.GardenID,
-		&i.Name,
-		&i.Slug,
-		&i.CreatedAt,
-		&i.ArchivedAt,
-	)
-	return i, err
-}
-
 const restoreCareType = `-- name: RestoreCareType :one
 UPDATE care_type SET archived_at = NULL
 WHERE garden_id = $1 AND id = $2 AND archived_at IS NOT NULL
-RETURNING id, garden_id, name, slug, created_at, archived_at
+RETURNING id, garden_id, name, slug, icon, created_at, archived_at
 `
 
 func (q *Queries) RestoreCareType(ctx context.Context, gardenID uuid.UUID, careTypeID uuid.UUID) (CareType, error) {
@@ -283,6 +268,42 @@ func (q *Queries) RestoreCareType(ctx context.Context, gardenID uuid.UUID, careT
 		&i.GardenID,
 		&i.Name,
 		&i.Slug,
+		&i.Icon,
+		&i.CreatedAt,
+		&i.ArchivedAt,
+	)
+	return i, err
+}
+
+const updateCareType = `-- name: UpdateCareType :one
+UPDATE care_type SET name = $1, icon = $2
+WHERE garden_id = $3 AND id = $4
+RETURNING id, garden_id, name, slug, icon, created_at, archived_at
+`
+
+type UpdateCareTypeParams struct {
+	Name       string
+	Icon       string
+	GardenID   uuid.UUID
+	CareTypeID uuid.UUID
+}
+
+// The slug is left alone. Code refers to a care type by slug and events refer
+// to its row, so a save changes the name and the icon and nothing else.
+func (q *Queries) UpdateCareType(ctx context.Context, arg UpdateCareTypeParams) (CareType, error) {
+	row := q.db.QueryRow(ctx, updateCareType,
+		arg.Name,
+		arg.Icon,
+		arg.GardenID,
+		arg.CareTypeID,
+	)
+	var i CareType
+	err := row.Scan(
+		&i.ID,
+		&i.GardenID,
+		&i.Name,
+		&i.Slug,
+		&i.Icon,
 		&i.CreatedAt,
 		&i.ArchivedAt,
 	)

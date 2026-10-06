@@ -178,8 +178,9 @@ type scheduleRow struct {
 	// closed or being edited, so htmx can replace one with the other.
 	ID   string
 	Care string
-	// Slug picks the row's icon.
 	Slug string
+	// Icon is the name of the care type's icon.
+	Icon string
 	// Rule is the schedule as text, such as "Every 7 days". Empty for a care
 	// type the plant has no schedule for.
 	Rule string
@@ -352,6 +353,7 @@ func scheduleRows(principal auth.Principal, d plantDetail) []scheduleRow {
 				ID:   scheduleRowID(care),
 				Care: care.Name,
 				Slug: care.Slug,
+				Icon: care.Icon,
 				When: "Not scheduled",
 				Open: schedulePath(d.plant.ID, care.Slug),
 			})
@@ -376,6 +378,7 @@ func newScheduleRow(line schedule.Line, d plantDetail, edit bool) scheduleRow {
 		ID:        scheduleRowID(line.CareType),
 		Care:      line.CareType.Name,
 		Slug:      line.CareType.Slug,
+		Icon:      line.CareType.Icon,
 		Rule:      ruleWord(line.Schedule),
 		When:      dueWord(line, d.now),
 		Scheduled: true,

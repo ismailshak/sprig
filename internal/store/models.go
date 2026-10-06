@@ -79,6 +79,7 @@ type CareType struct {
 	GardenID   uuid.UUID
 	Name       string
 	Slug       string
+	Icon       string
 	CreatedAt  time.Time
 	ArchivedAt *time.Time
 }

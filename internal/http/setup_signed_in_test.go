@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"slices"
 	"strings"
 	"testing"
 	"uuid"
@@ -141,8 +142,12 @@ func TestSetupSignedIn_CreatingWritesAGardenTheAccountOwnsMovesTheSessionAndLand
 	if err != nil {
 		t.Fatalf("listing the care types: %v", err)
 	}
-	if len(types) != 3 {
-		t.Errorf("Allotment has %d care types, want 3 of its own", len(types))
+	var icons []string
+	for _, care := range types {
+		icons = append(icons, care.Slug+":"+care.Icon)
+	}
+	if want := []string{"water:water", "feed:feed", "repot:repot"}; !slices.Equal(icons, want) {
+		t.Errorf("Allotment's care types and their icons are %v, want %v", icons, want)
 	}
 
 	// liveGardens is the query behind the garden sheet.

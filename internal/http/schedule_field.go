@@ -247,6 +247,8 @@ type scheduleField struct {
 	ID   string
 	Care string
 	Slug string
+	// Icon is the name of the care type's icon.
+	Icon string
 	Open bool
 	// Path is the URL the row re-renders from, the form's own URL.
 	Path string
@@ -298,6 +300,7 @@ func newScheduleField(f scheduleDraft, path string, now time.Time) scheduleField
 		ID:       scheduleRowID(f.care),
 		Care:     f.care.Name,
 		Slug:     f.care.Slug,
+		Icon:     f.care.Icon,
 		Open:     f.open,
 		Path:     path,
 		Repeats:  f.shape != shapeOnce,
