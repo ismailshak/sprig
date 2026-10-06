@@ -129,8 +129,14 @@ func midnightUTC(t time.Time) time.Time {
 	return time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
 }
 
-// Day is the garden's schedules grouped into the three sections the Today
-// page shows.
+// ComingUp reports whether the line belongs in Today's Coming up section: due
+// after today and no more than comingUpDays away.
+func (l Line) ComingUp() bool {
+	return l.State == Upcoming && l.Days <= comingUpDays
+}
+
+// Day is the garden's plants grouped by each plant's most pressing care:
+// overdue, due today, or due within the week.
 type Day struct {
 	Overdue  []Row
 	DueToday []Row
@@ -141,20 +147,17 @@ type Day struct {
 	Next []Row
 }
 
-// Row is a plant on the Today page and the care that put it there.
+// Row is a plant and the care that decided its group.
 type Row struct {
 	Plant store.Plant
-	// Care is the plant's most overdue care, or failing that its soonest. A
-	// plant gets one row however many cares are due, because the sheet the
-	// row opens offers the rest.
+	// Care is the plant's most overdue care, or failing that its soonest.
 	Care Line
 	// Lines is every schedule the plant has, in any state, in Resolve's order.
-	// The sheet lists these care types and their intervals.
 	Lines []Line
 }
 
-// Today groups resolved lines into the sections the Today page shows. A plant
-// whose schedules are all dormant or spent appears in none of them.
+// Today groups resolved lines by plant. A plant whose schedules are all
+// dormant or spent appears in no group.
 func Today(lines []Line) Day {
 	var day Day
 	var later []Row
@@ -164,7 +167,7 @@ func Today(lines []Line) Day {
 			day.Overdue = append(day.Overdue, row)
 		case row.Care.State == DueToday:
 			day.DueToday = append(day.DueToday, row)
-		case row.Care.Days <= comingUpDays:
+		case row.Care.ComingUp():
 			day.ComingUp = append(day.ComingUp, row)
 		default:
 			later = append(later, row)
@@ -222,11 +225,16 @@ func compareLines(a, b Line) int {
 	return cmp.Or(cmp.Compare(a.State, b.State), cmp.Compare(soon(a), soon(b)))
 }
 
-// compareRows orders by due date, then name, then plant id, so two plants
-// sharing a name keep a stable order.
 func compareRows(a, b Row) int {
+	return CompareDue(a.Care, b.Care)
+}
+
+// CompareDue orders lines by due date, then plant name, then plant id, so two
+// plants sharing a name keep a stable order. Two lines of one plant due the
+// same day compare equal.
+func CompareDue(a, b Line) int {
 	return cmp.Or(
-		cmp.Compare(soon(a.Care), soon(b.Care)),
+		cmp.Compare(soon(a), soon(b)),
 		strings.Compare(strings.ToLower(a.Plant.DisplayName()), strings.ToLower(b.Plant.DisplayName())),
 		cmp.Compare(a.Plant.ID.String(), b.Plant.ID.String()),
 	)

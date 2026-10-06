@@ -84,8 +84,8 @@ func rosewood(t *testing.T) *todayFixture {
 			rosewoodID, p.id, waterID, readerID, p.lastWatered)
 	}
 	// Nigel gets a second care because the sheet shows the Care field only for
-	// a plant with more than one. set_at puts the feed a week out so his row
-	// stays a watering.
+	// a plant with more than one. set_at puts the feed on 10 September, the
+	// last day Coming up lists.
 	mustExec(t, tx, "INSERT INTO care_schedule (garden_id, plant_id, care_type_id, interval_count, interval_unit, set_at) VALUES ($1, $2, $3, 3, 'week', $4)",
 		rosewoodID, nigelID, feedID, day(time.August, 20))
 
@@ -172,6 +172,25 @@ func rowID(plantID uuid.UUID) string {
 	return "care-" + plantID.String() + "-water"
 }
 
+func feedRowID(plantID uuid.UUID) string {
+	return "care-" + plantID.String() + "-feed"
+}
+
+// feedNigelOn moves Nigel's three-weekly feed so it first falls due on due.
+func (f *todayFixture) feedNigelOn(t *testing.T, due time.Time) {
+	t.Helper()
+	f.exec(t, "UPDATE care_schedule SET set_at = $1 WHERE plant_id = $2 AND care_type_id = $3", due.AddDate(0, 0, -21), nigelID, feedID)
+}
+
+// rowIDs returns the id of each care row in a section, in page order.
+func rowIDs(section *element) []string {
+	var ids []string
+	for _, row := range section.all(isTag("li"), hasAttr("id")) {
+		ids = append(ids, row.attr("id"))
+	}
+	return ids
+}
+
 // imageSources returns the src of every img in e, in page order.
 func imageSources(e *element) []string {
 	var srcs []string
@@ -181,7 +200,7 @@ func imageSources(e *element) []string {
 	return srcs
 }
 
-func TestToday_PlacesEachPlantInTheSectionItsCareFallsIn(t *testing.T) {
+func TestToday_PlacesEachCareInTheSectionItsDueDayFallsIn(t *testing.T) {
 	page := rosewood(t).show(t)
 
 	byID, order := sectionsOf(page)
@@ -189,30 +208,30 @@ func TestToday_PlacesEachPlantInTheSectionItsCareFallsIn(t *testing.T) {
 		t.Fatalf("sections = %v, want %v", order, want)
 	}
 
-	want := map[string][]uuid.UUID{
-		"overdue":   {bigFellaID},
-		"due-today": {dorisID, nigelID},
-		"coming-up": {trailMixID, opuntiaID, sproutID},
+	want := map[string][]string{
+		"overdue":   {rowID(bigFellaID)},
+		"due-today": {rowID(dorisID), rowID(nigelID)},
+		"coming-up": {rowID(trailMixID), rowID(opuntiaID), rowID(sproutID), feedRowID(nigelID)},
 	}
-	for id, plants := range want {
-		got := rows(byID[id])
-		if len(got) != len(plants) {
-			t.Errorf("%s holds %d rows, want %d", id, len(got), len(plants))
+	for section, ids := range want {
+		got := rows(byID[section])
+		if len(got) != len(ids) {
+			t.Errorf("%s holds %d rows, want %d", section, len(got), len(ids))
 		}
-		for _, plant := range plants {
-			if _, ok := got[rowID(plant)]; !ok {
-				t.Errorf("%s has no row with the id %s", id, rowID(plant))
+		for _, id := range ids {
+			if _, ok := got[id]; !ok {
+				t.Errorf("%s has no row with the id %s", section, id)
 			}
 		}
-		if c := count(t, byID[id]); c != strconv.Itoa(len(plants)) {
-			t.Errorf("%s counts %s, want %d", id, c, len(plants))
+		if c := count(t, byID[section]); c != strconv.Itoa(len(ids)) {
+			t.Errorf("%s counts %s, want %d", section, c, len(ids))
 		}
 	}
 	if readHTML(page).byID(rowID(spikeID)) != nil {
 		t.Error("Spike is on the page, and is not due for another twelve days")
 	}
-	if !strings.Contains(text(page), "3 plants due today, 1 of them overdue.") {
-		t.Errorf("the summary does not say three plants need attention and one is overdue:\n%s", text(page))
+	if !strings.Contains(text(page), "3 tasks due today, 1 of them overdue.") {
+		t.Errorf("the summary does not say three tasks are due and one is overdue:\n%s", text(page))
 	}
 }
 
@@ -250,6 +269,88 @@ func TestToday_ARowShowsLatenessOrTheDueDayButNotBoth(t *testing.T) {
 	}
 }
 
+func TestToday_APlantWithTwoCaresDueHasARowAndACareButtonForEach(t *testing.T) {
+	f := rosewood(t)
+	f.feedNigelOn(t, day(time.September, 3))
+	page := f.show(t)
+
+	byID, _ := sectionsOf(page)
+	dueToday := byID["due-today"]
+	for _, c := range []struct{ id, slug string }{{rowID(nigelID), "water"}, {feedRowID(nigelID), "feed"}} {
+		row := dueToday.byID(c.id)
+		if row == nil {
+			t.Errorf("Due today has no row with the id %s", c.id)
+			continue
+		}
+		if got, want := row.first(isTag("a")).attr("href"), sheetPath(nigelID, c.slug); got != want {
+			t.Errorf("the %s row opens the sheet at %q, want %q", c.slug, got, want)
+		}
+		form := row.first(isTag("form"))
+		if form.attr("hx-target") != "#"+c.id {
+			t.Errorf("the %s row's care button swaps %q, want its own row", c.slug, form.attr("hx-target"))
+		}
+		if form.first(attrIs("name", "care"), attrIs("value", c.slug)) == nil {
+			t.Errorf("the %s row's care button does not post care=%s", c.slug, c.slug)
+		}
+	}
+	if c := count(t, dueToday); c != "3" {
+		t.Errorf("Due today counts %s, want 3", c)
+	}
+	if !strings.Contains(text(page), "4 tasks due today, 1 of them overdue.") {
+		t.Errorf("the summary does not count Nigel's watering and feed as two tasks:\n%s", text(page))
+	}
+}
+
+func TestToday_APlantsFeedIsListedByItsOwnDueDayWhileItsWateringIsDueToday(t *testing.T) {
+	cases := []struct {
+		name    string
+		due     time.Time
+		section string
+	}{
+		{"a feed a day late is overdue", day(time.September, 2), "overdue"},
+		{"a feed due today is due today", day(time.September, 3), "due-today"},
+		{"a feed due tomorrow is coming up", day(time.September, 4), "coming-up"},
+		{"a feed due in eight days is not listed", day(time.September, 11), ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			f := rosewood(t)
+			f.feedNigelOn(t, c.due)
+			byID, _ := sectionsOf(f.show(t))
+			for id, section := range byID {
+				if listed := section.byID(feedRowID(nigelID)) != nil; listed != (id == c.section) {
+					t.Errorf("%s lists Nigel's feed: %v", id, listed)
+				}
+			}
+			if byID["due-today"].byID(rowID(nigelID)) == nil {
+				t.Error("Nigel's watering is no longer due today")
+			}
+		})
+	}
+}
+
+func TestToday_AFeedOutOfItsSeasonHasNoRow(t *testing.T) {
+	f := rosewood(t)
+	f.exec(t, "UPDATE care_schedule SET season_start_month = 3, season_end_month = 4 WHERE plant_id = $1 AND care_type_id = $2", nigelID, feedID)
+	if readHTML(f.show(t)).byID(feedRowID(nigelID)) != nil {
+		t.Error("Nigel's feed is listed in September with a season of March to April")
+	}
+}
+
+func TestToday_OverdueRowsAreOrderedByHowLateEachCareIs(t *testing.T) {
+	f := rosewood(t)
+	// Big Fella's feed is four days late and his watering two. Nigel's feed is
+	// three days late, so its row goes between Big Fella's two.
+	f.exec(t, "INSERT INTO care_schedule (garden_id, plant_id, care_type_id, interval_count, interval_unit, set_at) VALUES ($1, $2, $3, 3, 'week', $4)",
+		rosewoodID, bigFellaID, feedID, day(time.August, 9))
+	f.feedNigelOn(t, day(time.August, 31))
+	byID, _ := sectionsOf(f.show(t))
+	got := rowIDs(byID["overdue"])
+	if want := []string{feedRowID(bigFellaID), feedRowID(nigelID), rowID(bigFellaID)}; !slices.Equal(got, want) {
+		t.Errorf("Overdue lists %v, want %v", got, want)
+	}
+}
+
 func TestToday_TheCountsDropAsCaresAreLogged(t *testing.T) {
 	f := rosewood(t)
 
@@ -262,7 +363,7 @@ func TestToday_TheCountsDropAsCaresAreLogged(t *testing.T) {
 	if readHTML(page).byID(rowID(dorisID)) != nil {
 		t.Error("Doris is still on the page after being watered")
 	}
-	if !strings.Contains(text(page), "2 plants due today, 1 of them overdue.") {
+	if !strings.Contains(text(page), "2 tasks due today, 1 of them overdue.") {
 		t.Errorf("the summary did not fall to two:\n%s", text(page))
 	}
 
@@ -272,8 +373,8 @@ func TestToday_TheCountsDropAsCaresAreLogged(t *testing.T) {
 	if _, ok := byID["due-today"]; ok {
 		t.Errorf("Due today is still rendered with nothing in it: %v", order)
 	}
-	if !strings.Contains(text(page), "1 plant due today, 1 of them overdue.") {
-		t.Errorf("the summary did not fall to one plant:\n%s", text(page))
+	if !strings.Contains(text(page), "1 task due today, 1 of them overdue.") {
+		t.Errorf("the summary did not fall to one task:\n%s", text(page))
 	}
 
 	f.water(t, bigFellaID)

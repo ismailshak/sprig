@@ -6,8 +6,8 @@
 // whatever day the seed runs. The e2e suite depends on that, because it seeds
 // from empty before every test.
 //
-// Seasonal schedules follow the real calendar. Feeding is out of season from
-// October to February, so a garden seeded in winter has fewer plants due than
+// Seasonal schedules follow the real calendar. The seasonal feeds run from
+// March to September, so a garden seeded in winter has fewer plants due than
 // one seeded in summer.
 //
 // Running the seed again replaces what it wrote last time and leaves everything

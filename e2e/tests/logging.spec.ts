@@ -44,6 +44,29 @@ test('the care button on a row logs the care with the current time @swap', async
   await expect(today.careRow(plants.doris, 'water')).toHaveCount(0);
 });
 
+test('logging one of two cares due on a plant leaves the other row on Today @swap', async ({ today }) => {
+  await expect(today.section('Due today').locator(today.careRow(plants.nigel, 'feed'))).toBeVisible();
+
+  await today.careButton(plants.nigel, 'feed').click();
+
+  await expect(today.careRow(plants.nigel, 'feed').getByRole('button', { name: 'Feed' })).toHaveCount(0);
+  await expect(today.careRow(plants.nigel, 'water').getByRole('button', { name: 'Water' })).toBeVisible();
+
+  await today.open();
+  await expect(today.careRow(plants.nigel, 'feed')).toHaveCount(0);
+  await expect(today.section('Due today').locator(today.careRow(plants.nigel, 'water'))).toBeVisible();
+});
+
+test("feed logged from the watering row's sheet gets Undo on the feed row @js", async ({ today, sheet }) => {
+  await today.openSheet(plants.nigel, 'water');
+  await sheet.chip('Feed').check();
+  await sheet.submit('Log feeding');
+
+  await expect(sheet.dialog()).toHaveCount(0);
+  await expect(today.undoButton(plants.nigel, 'feed')).toBeVisible();
+  await expect(today.careRow(plants.nigel, 'water').getByRole('button', { name: 'Water' })).toBeVisible();
+});
+
 test('a skip makes the care due again after the chosen number of days @swap', async ({ today, sheet }) => {
   await today.openSheet(plants.nigel, 'water');
   await sheet.chip('Skipped').check();

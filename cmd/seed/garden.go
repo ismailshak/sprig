@@ -327,7 +327,8 @@ func livingPlants() []plant {
 			notes:         "Trim the brown fronds at the base rather than cutting across them.",
 			schedules: []schedule{
 				{id: seedID(tableCareSchedule, 8), slug: "water", count: 4, unit: engine.UnitDay, dueIn: 0},
-				{id: seedID(tableCareSchedule, 9), slug: "feed", count: 3, unit: engine.UnitWeek, dueIn: 11, seasonStart: 3, seasonEnd: 9},
+				// No season, so in any month Today has a plant with two cares due.
+				{id: seedID(tableCareSchedule, 9), slug: "feed", count: 3, unit: engine.UnitWeek, dueIn: 0},
 			},
 			// Misting was tried for a month and given up. The care type was
 			// archived afterwards, so these events have no schedule.
