@@ -242,6 +242,35 @@ test('above 900px the sheet still traps focus and gives it back on Escape @wide'
   await expect(today.rowLink(plants.nigel, 'water')).toBeFocused();
 });
 
+test('a downward drag from the body of the sheet closes it @js', async ({ today, sheet }) => {
+  await today.openSheet(plants.doris, 'water');
+  await sheet.dragDown(sheet.field('When'), 120);
+
+  await expect(sheet.dialog()).toBeHidden();
+  await expect(today.careRow(plants.doris, 'water')).toBeVisible();
+});
+
+test('a short downward drag leaves the sheet open @js', async ({ today, sheet }) => {
+  await today.openSheet(plants.doris, 'water');
+  await sheet.dragDown(sheet.field('When'), 40);
+
+  await expect(sheet.dialog()).toBeVisible();
+});
+
+test('a downward drag while the sheet is scrolled down leaves the sheet open @js', async ({ page, today, sheet }) => {
+  // The sheet fits the phone's viewport, so the window is made short enough
+  // for the panel to scroll. A synthetic touch does not scroll the panel, so
+  // it stays scrolled down for the whole drag.
+  const viewport = page.viewportSize();
+  if (!viewport) throw new Error('the phone project has no viewport');
+  await page.setViewportSize({ width: viewport.width, height: 400 });
+  await today.openSheet(plants.doris, 'water');
+  await sheet.cancelButton().scrollIntoViewIfNeeded();
+  await sheet.dragDown(sheet.field('When'), 120);
+
+  await expect(sheet.dialog()).toBeVisible();
+});
+
 test('cancelling the sheet leaves the row unchanged', async ({ today, sheet }) => {
   await today.openSheet(plants.doris, 'water');
   await sheet.cancel();
