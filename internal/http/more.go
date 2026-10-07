@@ -15,6 +15,7 @@ import (
 const (
 	morePath          = "/more"
 	accountPath       = morePath + "/account"
+	accountEditPath   = accountPath + "/edit"
 	recoveryPath      = accountPath + "/recovery"
 	passkeysPath      = morePath + "/passkeys"
 	notificationsPath = morePath + "/notifications"

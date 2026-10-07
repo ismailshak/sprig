@@ -7,6 +7,16 @@ export class AccountScreen {
     await this.page.goto('/more/account');
   }
 
+  // The value shown for label while the form is closed. The page lists each
+  // label as a term with its value as the definition after it.
+  shown(label: string): Locator {
+    return this.page.getByRole('term').filter({ hasText: label }).locator('xpath=following-sibling::dd[1]');
+  }
+
+  edit(): Locator {
+    return this.page.getByRole('link', { name: 'Edit', exact: true });
+  }
+
   name(): Locator {
     return this.page.getByLabel('Display name');
   }
@@ -25,6 +35,10 @@ export class AccountScreen {
 
   save(): Locator {
     return this.page.getByRole('button', { name: 'Save changes' });
+  }
+
+  cancel(): Locator {
+    return this.page.getByRole('link', { name: 'Cancel' });
   }
 
   closeAccount(): Locator {

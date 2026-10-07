@@ -1264,10 +1264,11 @@ a.foot-link { text-decoration: none; color: var(--ink-2); }
 
 /* Label and value side by side, the label in the same muted style as every
    other label in the app. A grid rather than two text columns, so a long value
-   wraps under itself instead of under its label. */
+   wraps under itself instead of under its label. The label column is 92px, or
+   as wide as the longest label when that is wider. */
 .facts {
   display: grid;
-  grid-template-columns: 92px minmax(0, 1fr);
+  grid-template-columns: minmax(92px, max-content) minmax(0, 1fr);
   gap: 9px 12px;
   margin: 0;
   font-size: 14px;
@@ -2324,6 +2325,7 @@ a.month__day::after { content: ""; position: absolute; inset: 0; }
    thing, and the gap between fields separates them. */
 .app__body--sub .field { margin-top: 20px; }
 .app__body--sub .field__label { margin-bottom: 2px; }
+.app__body--sub .panel { margin-top: 20px; }
 .app__body--sub .section { margin-top: 28px; }
 .app__body--sub .section .care--outline { margin-top: 12px; }
 

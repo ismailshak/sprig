@@ -63,7 +63,7 @@ test('a passkey the seed holds signs in without registering one first @passkey',
 
     await expect(page).toHaveURL('/');
     await account.open();
-    await expect(account.name()).toHaveValue(people.ellie.name);
+    await expect(account.shown('Display name')).toHaveText(people.ellie.name);
   } finally {
     await detach();
   }

@@ -3,22 +3,33 @@
 {{/* The account's display name, handle and timezone. There is no email or
      password to change, because sprig has neither.
 
-     novalidate turns the browser's own validation off, so an empty field is
-     reported by the server as the message under that field.
-
-     With JavaScript, Save changes swaps the page under the top bar with the
-     Saved line on it. Without JavaScript the post redirects to this page with
-     Saved in the query string. */}}
+     The page opens with the values as text and an Edit link. Edit opens the
+     form. Cancel and a successful save close it. With JavaScript each of the
+     three swaps the account element alone. Without JavaScript Edit and Cancel
+     are plain links and a successful save redirects to this page with Saved in
+     the query string. */}}
 {{define "main"}}
 {{template "more-topbar" .Bar}}
+<div class="app__body app__body--sub">
 {{template "account" .}}
+<ul class="list">{{template "link-row" .Codes}}</ul>
+{{/* The link is not styled as a warning, because rose means overdue in this
+     app. Closing is confirmed on the page it opens. */}}
+<a class="foot-link" href="{{.Close}}">Close account{{template "icon-chevron"}}</a>
+</div>
 {{end}}
 
-{{define "account"}}<div class="app__body app__body--sub" id="account">
+{{/* novalidate turns the browser's own validation off, so an empty field is
+     reported by the server as the message under that field. The name field
+     has autofocus only when the form opens without an error. After a refused
+     post, autofocus would take focus from Save changes to the name field even
+     when the error is under Handle. */}}
+{{define "account"}}<div id="account">
+{{if .Editing}}
 <form method="post" action="{{.Action}}" novalidate hx-post="{{.Action}}" hx-target="#account" hx-swap="outerHTML settle:0ms">
 <div class="field">
 <label class="field__label" for="name">Display name <span class="field__hint">shown on what you log</span></label>
-<input class="input" id="name" name="name" type="text" value="{{.Name}}">
+<input class="input" id="name" name="name" type="text" value="{{.Name}}"{{if not (or .NameError .HandleError)}} autofocus{{end}}>
 {{with .NameError}}<p class="field__error">{{.}}</p>{{end}}
 </div>
 <div class="field">
@@ -28,14 +39,23 @@
 </div>
 <p class="note">Your handle identifies your account. It’s shown on People when two members have the same display name.</p>
 {{template "timezone-field" .Zone}}
-{{/* The button has an id so htmx puts focus back on it after the swap. */}}
+{{/* The button has an id so htmx puts focus back on it after a refused post. */}}
 <button class="wide-action" type="submit" id="save">Save changes</button>
-{{if .Saved}}{{template "saved"}}{{end}}
+<div class="form__foot">
+<a class="plant__keep" href="{{.Cancel}}" hx-get="{{.Cancel}}" hx-target="#account" hx-swap="outerHTML settle:0ms">Cancel</a>
+</div>
 </form>
-<ul class="list">{{template "link-row" .Codes}}</ul>
-{{/* The link is not styled as a warning, because rose means overdue in this
-     app. Closing is confirmed on the page it opens. */}}
-<a class="foot-link" href="{{.Close}}">Close account{{template "icon-chevron"}}</a>
+{{else}}
+<div class="panel">
+<dl class="facts">
+<dt>Display name</dt><dd>{{.Name}}</dd>
+<dt>Handle</dt><dd>{{.Handle}}</dd>
+<dt>Timezone</dt><dd>{{.ZoneName}}</dd>
+</dl>
+</div>
+<a class="wide-action" href="{{.Edit}}" hx-get="{{.Edit}}" hx-target="#account" hx-swap="outerHTML settle:0ms">Edit</a>
+{{if .Saved}}{{template "saved"}}{{end}}
+{{end}}
 </div>{{end}}
 
 {{define "nav"}}{{template "tabs" "Under More"}}{{end}}

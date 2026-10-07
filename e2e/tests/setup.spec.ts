@@ -42,7 +42,7 @@ test('setting up a garden signs its owner in, offers reminders, and Today says N
     await garden.open();
     await expect(garden.name()).toHaveValue('Greenhouse');
     await account.open();
-    await expect(account.handle()).toHaveValue('robin_g');
+    await expect(account.shown('Handle')).toHaveText('robin_g');
   } finally {
     await detach();
   }

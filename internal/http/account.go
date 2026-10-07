@@ -36,9 +36,17 @@ type accountForm struct {
 
 type accountPage struct {
 	Bar topbar
+	// Editing is true when the form is open. When it is false the values are
+	// shown as text with an Edit link.
+	Editing bool
 	// Action is the URL the form posts to, in its action attribute and in
 	// hx-post.
 	Action string
+	// Edit is the URL the Edit link points at. It opens the form.
+	Edit string
+	// Cancel is the URL the Cancel link points at. It closes the form without
+	// saving.
+	Cancel string
 	Name   string
 	// NameError is shown under Display name, empty when the form is valid.
 	NameError string
@@ -46,14 +54,16 @@ type accountPage struct {
 	// HandleError is shown under Handle, empty when the form is valid.
 	HandleError string
 	Zone        timezoneField
+	// ZoneName is the timezone shown while the form is closed, with
+	// underscores as spaces.
+	ZoneName string
 	// Codes is the row at the bottom of the page. It links to Recovery codes.
 	// That page is reached from Account rather than from More, because every
 	// other page under More is about the garden.
 	Codes linkRow
 	// Close is the URL of the Close account page, linked at the bottom.
 	Close string
-	// Saved is true on the page a save redirects to. "Saved" is shown beside
-	// the button.
+	// Saved is true after a save. "Saved" is shown under the Edit link.
 	Saved bool
 }
 
@@ -64,24 +74,42 @@ type account struct {
 	wake      wakeJobs
 }
 
+// show handles GET /more/account. It renders the account's values as text.
+// Cancel swaps the account element with this response.
 func (h *account) show(w http.ResponseWriter, r *http.Request) {
-	principal := PrincipalFrom(r)
-	user := principal.User
-	held := accountForm{name: user.DisplayName, handle: user.Handle, zone: user.Timezone}
-	page, err := h.newAccountPage(r.Context(), principal, held)
+	page, err := h.storedAccountPage(r)
 	if err != nil {
 		h.templates.serverError(h.logger, w, r, "open the account", err)
 		return
 	}
 	page.Saved = saved(r)
-	h.templates.render(w, r, view{page: "account"}, page)
+	h.renderAccount(w, r, page, 0, "")
 }
 
-// accountID is both the HTML id of the page under the top bar and the name of
-// the template that renders it. Save changes swaps it.
+// edit handles GET /more/account/edit. It renders the page with the account's
+// values in the form.
+func (h *account) edit(w http.ResponseWriter, r *http.Request) {
+	page, err := h.storedAccountPage(r)
+	if err != nil {
+		h.templates.serverError(h.logger, w, r, "open the account", err)
+		return
+	}
+	page.Editing = true
+	h.renderAccount(w, r, page, 0, "")
+}
+
+func (h *account) storedAccountPage(r *http.Request) (accountPage, error) {
+	principal := PrincipalFrom(r)
+	user := principal.User
+	return h.newAccountPage(r.Context(), principal, accountForm{name: user.DisplayName, handle: user.Handle, zone: user.Timezone})
+}
+
+// accountID is both the HTML id of the element holding the account's values
+// and the name of the template that renders it. Edit, Save changes and Cancel
+// swap it. Recovery codes and Close account are outside it.
 const accountID = "account"
 
-// renderAccount writes the page, or the page under the top bar for a swap of
+// renderAccount writes the page, or the account element alone for a swap of
 // it. A status of zero means 200.
 func (h *account) renderAccount(w http.ResponseWriter, r *http.Request, page accountPage, status int, announce string) {
 	v := view{page: "account", status: status, announce: announce}
@@ -111,13 +139,15 @@ func (h *account) saveAccount(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// The page is built before the update, because both refusals below
-	// re-render it: an empty field, and the unique index rejecting the handle.
-	// A plain post that goes through redirects and throws it away.
+	// re-render it with the form open: an empty field, and the unique index
+	// rejecting the handle. A plain post that goes through redirects and throws
+	// it away.
 	page, err := h.newAccountPage(r.Context(), principal, form)
 	if err != nil {
 		h.templates.serverError(h.logger, w, r, "save the account", err)
 		return
 	}
+	page.Editing = true
 	page.NameError = nameErrorFor(form.name)
 	page.HandleError = handleErrorFor(form.handle)
 	if page.NameError != "" || page.HandleError != "" {
@@ -142,10 +172,11 @@ func (h *account) saveAccount(w http.ResponseWriter, r *http.Request) {
 	}
 	// The digest hour is read in the timezone just saved.
 	h.wake.call()
-	// With htmx the response is the page under the top bar with the Saved
-	// line on it. A plain post redirects to the page with Saved in the query
-	// string.
+	// With htmx the response is the account element with the saved values as
+	// text and the Saved line under them. A plain post redirects to the page
+	// with Saved in the query string.
 	if isHTMX(r) {
+		page.Editing = false
 		page.Saved = true
 		h.renderAccount(w, r, page, 0, savedAnnouncement)
 		return
@@ -171,15 +202,18 @@ func handleErrorFor(handle string) string {
 }
 
 // newAccountPage fills the Account page from form: the stored values when the
-// page is opened, and the posted values when a save was refused.
+// page is opened, and the posted values after a save.
 func (h *account) newAccountPage(ctx context.Context, principal auth.Principal, form accountForm) (accountPage, error) {
 	page := accountPage{
-		Bar:    moreBar("Account"),
-		Action: accountPath,
-		Name:   form.name,
-		Handle: form.handle,
-		Codes:  linkRow{Label: "Recovery codes", Href: recoveryPath},
-		Close:  closeAccountPath,
+		Bar:      moreBar("Account"),
+		Action:   accountPath,
+		Edit:     accountEditPath,
+		Cancel:   accountPath,
+		Name:     form.name,
+		Handle:   form.handle,
+		ZoneName: zoneLabel(form.zone),
+		Codes:    linkRow{Label: "Recovery codes", Href: recoveryPath},
+		Close:    closeAccountPath,
 	}
 	page.Zone.Zones = zoneOptions(form.zone)
 
