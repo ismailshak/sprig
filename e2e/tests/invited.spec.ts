@@ -68,7 +68,7 @@ test('a sign-in link adds a passkey to the account it was made for and signs the
 
     await expect(page).toHaveURL('/');
     await account.open();
-    await expect(account.name()).toHaveValue(people.sam.name);
+    await expect(account.shown('Display name')).toHaveText(people.sam.name);
   });
 });
 
@@ -209,7 +209,7 @@ test('a removed sitter signing in from a join link is back in the garden as the 
     await expect(page.getByRole('heading', { name: gardens.home.name })).toBeVisible();
     await expect(today.switchGarden()).toHaveCount(0);
     await account.open();
-    await expect(account.name()).toHaveValue(people.jo.name);
+    await expect(account.shown('Display name')).toHaveText(people.jo.name);
   });
 });
 
@@ -233,7 +233,7 @@ test('an account in no garden opening a join link joins as itself and lands on T
   await expect(page).toHaveURL('/');
   await expect(page.getByRole('heading', { name: gardens.home.name })).toBeVisible();
   await account.open();
-  await expect(account.name()).toHaveValue(people.clare.name);
+  await expect(account.shown('Display name')).toHaveText(people.clare.name);
 });
 
 test('a link made on Invite someone joins a new person from another browser @passkey', async ({

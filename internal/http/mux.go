@@ -150,6 +150,7 @@ func routes(d Dependencies) []route {
 		{pattern: "GET " + morePath, handler: http.HandlerFunc(moreHandler.show)},
 		{pattern: "POST " + signOutPath, withoutGarden: true, handler: http.HandlerFunc(moreHandler.signOut)},
 		{pattern: "GET " + accountPath, handler: http.HandlerFunc(accountHandler.show)},
+		{pattern: "GET " + accountEditPath, handler: http.HandlerFunc(accountHandler.edit)},
 		{pattern: "POST " + accountPath, handler: http.HandlerFunc(accountHandler.saveAccount)},
 		{pattern: "GET " + closeAccountPath, withoutGarden: true, handler: http.HandlerFunc(closeAccountHandler.confirm)},
 		{pattern: "POST " + closeAccountPath, withoutGarden: true, handler: http.HandlerFunc(closeAccountHandler.close)},

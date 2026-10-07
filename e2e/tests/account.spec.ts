@@ -6,20 +6,33 @@ test.beforeEach(async ({ page }) => {
   await signIn(page, people.ellie.handle);
 });
 
-test('a new display name and timezone are saved @swap', async ({ account, more }) => {
+test('Account opens with the values as text and no field', async ({ account }) => {
+  await account.open();
+
+  await expect(account.shown('Display name')).toHaveText(people.ellie.name);
+  await expect(account.shown('Handle')).toHaveText(people.ellie.handle);
+  await expect(account.name()).toHaveCount(0);
+  await expect(account.handle()).toHaveCount(0);
+  await expect(account.timezone()).toHaveCount(0);
+});
+
+test('a new display name and timezone are saved and shown as text @swap', async ({ account, more }) => {
   await more.open();
   await more.row('Account').click();
+  await account.edit().click();
 
   await account.name().fill('Eleanor');
   await account.timezone().selectOption('Asia/Tokyo');
   await account.save().click();
 
-  await expect(account.name()).toHaveValue('Eleanor');
-  await expect(account.timezone()).toHaveValue('Asia/Tokyo');
+  await expect(account.shown('Display name')).toHaveText('Eleanor');
+  await expect(account.shown('Timezone')).toHaveText('Asia/Tokyo');
+  await expect(account.name()).toHaveCount(0);
 });
 
-test('a save keeps the page and says Saved under the button @js', async ({ account, page }) => {
+test('a save stays on /more/account and says Saved @js', async ({ account, page }) => {
   await account.open();
+  await account.edit().click();
 
   await account.name().fill('Eleanor');
   await account.save().click();
@@ -28,8 +41,20 @@ test('a save keeps the page and says Saved under the button @js', async ({ accou
   await expect(page).toHaveURL('/more/account');
 });
 
-test('an empty display name is refused and the page says what is missing', async ({ account, page }) => {
+test('Cancel shows the values as text and saves nothing', async ({ account }) => {
   await account.open();
+  await account.edit().click();
+
+  await account.name().fill('Eleanor');
+  await account.cancel().click();
+
+  await expect(account.shown('Display name')).toHaveText(people.ellie.name);
+  await expect(account.name()).toHaveCount(0);
+});
+
+test('an empty display name is refused and the form stays open with the message @swap', async ({ account, page }) => {
+  await account.open();
+  await account.edit().click();
 
   await account.name().fill('');
   await account.save().click();
@@ -40,15 +65,17 @@ test('an empty display name is refused and the page says what is missing', async
 
 test('a new handle is saved', async ({ account }) => {
   await account.open();
+  await account.edit().click();
 
   await account.handle().fill('eleanor');
   await account.save().click();
 
-  await expect(account.handle()).toHaveValue('eleanor');
+  await expect(account.shown('Handle')).toHaveText('eleanor');
 });
 
 test('a handle another account holds is refused and the page names it', async ({ account, page }) => {
   await account.open();
+  await account.edit().click();
 
   await account.handle().fill(people.sam.handle);
   await account.save().click();
@@ -57,16 +84,17 @@ test('a handle another account holds is refused and the page names it', async ({
   await expect(account.handle()).toHaveValue(people.sam.handle);
 
   await account.open();
-  await expect(account.handle()).toHaveValue(people.ellie.handle);
+  await expect(account.shown('Handle')).toHaveText(people.ellie.handle);
 });
 
 test('a handle typed with a capital and a space is saved in lower case with an underscore', async ({ account }) => {
   await account.open();
+  await account.edit().click();
 
   await account.handle().fill('Emma Fletcher');
   await account.save().click();
 
-  await expect(account.handle()).toHaveValue('emma_fletcher');
+  await expect(account.shown('Handle')).toHaveText('emma_fletcher');
 });
 
 test('the only owner of a garden is told to delete it before closing the account', async ({
@@ -113,5 +141,5 @@ test('closing an account with the wrong handle typed is refused', async ({ accou
   await expect(page.getByText('That isn’t your handle.')).toBeVisible();
   await expect(closeAccount.handle()).toHaveValue(people.ellie.handle);
   await account.open();
-  await expect(account.handle()).toHaveValue(people.sam.handle);
+  await expect(account.shown('Handle')).toHaveText(people.sam.handle);
 });

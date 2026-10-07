@@ -74,10 +74,10 @@ func selectedZone(t *testing.T, page string) zoneChoice {
 	return zoneChoice{}
 }
 
-func TestAccount_TheFormOpensOnTheNameHandleAndZoneTheAccountHolds(t *testing.T) {
+func TestAccount_EditOpensTheFormOnTheNameHandleAndZoneTheAccountHolds(t *testing.T) {
 	f := openAccount(t)
 
-	page := f.page(t, f.handler.show, accountPath)
+	page := f.page(t, f.handler.edit, accountEditPath)
 
 	if got := valueOf(t, page, "name"); got != "Ellie" {
 		t.Errorf("the display name field holds %q, want Ellie", got)
@@ -97,7 +97,7 @@ func TestAccount_AZoneTheSelectDoesNotListIsStillOfferedAndSelected(t *testing.T
 	f := openAccount(t)
 	f.principal.User.Timezone = "Europe/Belfast"
 
-	page := f.page(t, f.handler.show, accountPath)
+	page := f.page(t, f.handler.edit, accountEditPath)
 
 	if got := selectedZone(t, page); got.value != "Europe/Belfast" {
 		t.Errorf("the zone selected is %q, want Europe/Belfast", got.value)
@@ -107,7 +107,7 @@ func TestAccount_AZoneTheSelectDoesNotListIsStillOfferedAndSelected(t *testing.T
 func TestAccount_TheZoneSelectOffersAZoneFromEveryRegion(t *testing.T) {
 	f := openAccount(t)
 
-	page := f.page(t, f.handler.show, accountPath)
+	page := f.page(t, f.handler.edit, accountEditPath)
 
 	offered := map[string]bool{}
 	for _, zone := range zoneOptionsOf(page) {
@@ -123,7 +123,7 @@ func TestAccount_TheZoneSelectOffersAZoneFromEveryRegion(t *testing.T) {
 func TestAccount_TheZoneSelectIsNotMarkedForTheBrowsersZone(t *testing.T) {
 	f := openAccount(t)
 
-	page := f.page(t, f.handler.show, accountPath)
+	page := f.page(t, f.handler.edit, accountEditPath)
 
 	zones := readHTML(page).byID("timezone")
 	if zones == nil {
@@ -137,7 +137,7 @@ func TestAccount_TheZoneSelectIsNotMarkedForTheBrowsersZone(t *testing.T) {
 func TestAccount_AZoneReadsWithoutTheUnderscore(t *testing.T) {
 	f := openAccount(t)
 
-	page := f.page(t, f.handler.show, accountPath)
+	page := f.page(t, f.handler.edit, accountEditPath)
 
 	for _, zone := range zoneOptionsOf(page) {
 		if zone.value == "America/New_York" && zone.label != "America/New York" {
@@ -352,7 +352,7 @@ func TestAccount_TheRecoveryCodesRowSaysNoneLeftWhenEveryCodeHasBeenUsed(t *test
 	}
 }
 
-func TestAccount_ASaveShowsSavedUnderTheButtonWithoutReloadingThePage(t *testing.T) {
+func TestAccount_ASaveSwapsInTheSavedValuesAsTextWithSavedUnderThem(t *testing.T) {
 	f := openAccount(t)
 	form := url.Values{"name": {"Eleanor"}, "handle": {"eleanor"}, "timezone": {"Asia/Tokyo"}}
 
@@ -360,8 +360,13 @@ func TestAccount_ASaveShowsSavedUnderTheButtonWithoutReloadingThePage(t *testing
 
 	body := fragment(t, rec, accountID)
 	account := readHTML(body).byID(accountID)
-	if account.byID("name").attr("value") != "Eleanor" || !strings.Contains(account.text(), "Saved") {
-		t.Errorf("the swap does not show the saved name with Saved under the button:\n%s", account.text())
+	if field := account.first(isTag("input")); field != nil {
+		t.Errorf("the swap after a save holds a field, want the values as text:\n%s", field)
+	}
+	for _, want := range []string{"Eleanor", "eleanor", "Asia/Tokyo", "Saved"} {
+		if !strings.Contains(account.text(), want) {
+			t.Errorf("the swap after a save does not say %q:\n%s", want, account.text())
+		}
 	}
 	if got := announcement(body); got != savedAnnouncement {
 		t.Errorf("the swap announces %q, want %q", got, savedAnnouncement)
@@ -380,10 +385,13 @@ func TestAccount_ASaveWithNoDisplayNameKeepsThePageAndReadsOutTheMessage(t *test
 	body := rec.Body.String()
 	doc := readHTML(body)
 	if doc.first(isTag("html")) != nil || doc.byID(accountID) == nil {
-		t.Fatalf("the refusal is not a swap of the page under the top bar:\n%.200s", body)
+		t.Fatalf("the refusal is not a swap of the account element:\n%.200s", body)
 	}
 	if got := announcement(body); got != nameMissing {
 		t.Errorf("the refusal announces %q, want %q", got, nameMissing)
+	}
+	if !strings.Contains(doc.byID(accountID).text(), nameMissing) || doc.byID("name") == nil {
+		t.Errorf("the refusal does not show the form with %q in it:\n%s", nameMissing, doc.byID(accountID).text())
 	}
 }
 
@@ -403,5 +411,104 @@ func TestAccount_ThePageLinksToCloseAccount(t *testing.T) {
 
 	if link := readHTML(page).first(isTag("a"), attrIs("href", closeAccountPath)); link.text() != "Close account" {
 		t.Errorf("the link to %s reads %q, want Close account:\n%s", closeAccountPath, link.text(), text(page))
+	}
+}
+
+func TestAccount_ThePageOpensWithTheValuesAsTextAndNoField(t *testing.T) {
+	f := openAccount(t)
+
+	account := readHTML(f.page(t, f.handler.show, accountPath)).byID(accountID)
+
+	for _, tag := range []string{"form", "input", "select"} {
+		if field := account.first(isTag(tag)); field != nil {
+			t.Errorf("the page opens with a %s in it:\n%s", tag, field)
+		}
+	}
+	for _, want := range []string{"Ellie", "ellie", "Europe/London"} {
+		if !strings.Contains(account.text(), want) {
+			t.Errorf("the page does not say %q:\n%s", want, account.text())
+		}
+	}
+	edit := account.first(isTag("a"), textIs("Edit"))
+	for name, want := range map[string]string{"href": accountEditPath, "hx-get": accountEditPath, "hx-target": "#" + accountID} {
+		if got := edit.attr(name); got != want {
+			t.Errorf("Edit has %s %q, want %q", name, got, want)
+		}
+	}
+}
+
+func TestAccount_AZoneWithAnUnderscoreIsShownWithASpace(t *testing.T) {
+	f := openAccount(t)
+	f.principal.User.Timezone = "America/New_York"
+
+	account := readHTML(f.page(t, f.handler.show, accountPath)).byID(accountID)
+
+	if !strings.Contains(account.text(), "America/New York") {
+		t.Errorf("the page does not say America/New York:\n%s", account.text())
+	}
+}
+
+func TestAccount_EditSwapsInTheFormWithCancel(t *testing.T) {
+	f := openAccount(t)
+
+	rec := f.swap(t, f.handler.edit, accountEditPath, accountID, "", "", nil)
+
+	account := readHTML(fragment(t, rec, accountID)).byID(accountID)
+	if form := account.first(isTag("form")); form.attr("action") != accountPath || form.attr("hx-target") != "#"+accountID {
+		t.Errorf("the form posts to %q and swaps %q, want %s and #%s", form.attr("action"), form.attr("hx-target"), accountPath, accountID)
+	}
+	if got := account.byID("name").attr("value"); got != "Ellie" {
+		t.Errorf("the display name field holds %q, want Ellie", got)
+	}
+	cancel := account.first(isTag("a"), textIs("Cancel"))
+	for name, want := range map[string]string{"href": accountPath, "hx-get": accountPath, "hx-target": "#" + accountID} {
+		if got := cancel.attr(name); got != want {
+			t.Errorf("Cancel has %s %q, want %q", name, got, want)
+		}
+	}
+}
+
+func TestAccount_CancelSwapsInTheValuesAsText(t *testing.T) {
+	f := openAccount(t)
+
+	rec := f.swap(t, f.handler.show, accountPath, accountID, "", "", nil)
+
+	account := readHTML(fragment(t, rec, accountID)).byID(accountID)
+	if field := account.first(isTag("input")); field != nil {
+		t.Errorf("the swap after Cancel holds a field, want the values as text:\n%s", field)
+	}
+	if !strings.Contains(account.text(), "Ellie") {
+		t.Errorf("the swap after Cancel does not say Ellie:\n%s", account.text())
+	}
+}
+
+// A link inside the account element is rendered again by every Edit, Save
+// changes and Cancel swap.
+func TestAccount_RecoveryCodesAndCloseAccountAreOutsideTheSwappedElement(t *testing.T) {
+	f := openAccount(t)
+
+	page := readHTML(f.page(t, f.handler.show, accountPath))
+
+	for _, href := range []string{recoveryPath, closeAccountPath} {
+		if page.first(isTag("a"), attrIs("href", href)) == nil {
+			t.Errorf("the page has no link to %s", href)
+		}
+		if page.byID(accountID).first(isTag("a"), attrIs("href", href)) != nil {
+			t.Errorf("the link to %s is inside the %s element", href, accountID)
+		}
+	}
+}
+
+func TestAccount_TheNameFieldHasAutofocusWhenTheFormOpensAndNotAfterARefusal(t *testing.T) {
+	f := openAccount(t)
+
+	opened := readHTML(f.page(t, f.handler.edit, accountEditPath))
+	refused := readHTML(f.saveAccount(t, "Ellie", "", "Europe/London").Body.String())
+
+	if !opened.byID("name").has("autofocus") {
+		t.Error("the name field has no autofocus when the form opens")
+	}
+	if refused.byID("name").has("autofocus") {
+		t.Error("the name field has autofocus after a refused post, and focus would leave the field with the error")
 	}
 }

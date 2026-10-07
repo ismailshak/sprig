@@ -206,9 +206,10 @@ var routeAccess = map[string]access{
 	"GET /more": {},
 	// Sign out runs for an account in no garden, so somebody with nothing to
 	// open can still sign out.
-	"POST /signout":      {anyMember: true, withoutGarden: true},
-	"GET /more/account":  {},
-	"POST /more/account": {anyMember: true},
+	"POST /signout":          {anyMember: true, withoutGarden: true},
+	"GET /more/account":      {},
+	"GET /more/account/edit": {},
+	"POST /more/account":     {anyMember: true},
 	// The Close account page is served without a garden, because an account
 	// whose access has ended reaches nothing else. The post is refused and
 	// writes nothing, since the seeded owner is the only owner of Rosewood.
