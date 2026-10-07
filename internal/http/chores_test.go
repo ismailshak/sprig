@@ -9,10 +9,13 @@ import (
 	"slices"
 	"testing"
 	"time"
+	"uuid"
 
 	"github.com/ismailshak/sprig/internal/auth"
 	"github.com/ismailshak/sprig/internal/store"
 )
+
+var mistID = uuid.MustParse("00000000-0000-7000-8000-000000000d13")
 
 // choresGarden returns the seeded Rosewood fixture, the handler, and a
 // principal holding an API token. The account that created the token is in
@@ -62,15 +65,15 @@ func TestChores_TheOverdueAndDueTodayCaresAreTheChoresAndTheRestAreUpcoming(t *t
 	// The whole body is compared as text, because a device's template reads
 	// these exact field names.
 	want := `{"garden":"Rosewood","date":"2026-09-03","chores":[` +
-		`{"plant":"Big Fella","location":"Living room","care":"Water","due":"2026-09-01","late":"2 days late"},` +
-		`{"plant":"Doris","location":"Bedroom","care":"Water","due":"2026-09-03","late":""},` +
-		`{"plant":"Nigel","location":"Bathroom","care":"Water","due":"2026-09-03","late":""}],` +
+		`{"plant":"Big Fella","location":"Living room","care":"Water","icon":"water","due":"2026-09-01","late":"2 days late"},` +
+		`{"plant":"Doris","location":"Bedroom","care":"Water","icon":"water","due":"2026-09-03","late":""},` +
+		`{"plant":"Nigel","location":"Bathroom","care":"Water","icon":"water","due":"2026-09-03","late":""}],` +
 		`"upcoming":[` +
-		`{"plant":"Trail Mix","location":"Kitchen","care":"Water","due":"2026-09-04","when":"tomorrow"},` +
-		`{"plant":"Opuntia microdasys","location":"Windowsill","care":"Water","due":"2026-09-07","when":"Monday"},` +
-		`{"plant":"Sprout","location":"","care":"Water","due":"2026-09-08","when":"Tuesday"},` +
-		`{"plant":"Nigel","location":"Bathroom","care":"Feed","due":"2026-09-10","when":"in 7 days"},` +
-		`{"plant":"Spike","location":"Windowsill","care":"Water","due":"2026-09-15","when":"in 12 days"}]}`
+		`{"plant":"Trail Mix","location":"Kitchen","care":"Water","icon":"water","due":"2026-09-04","when":"tomorrow"},` +
+		`{"plant":"Opuntia microdasys","location":"Windowsill","care":"Water","icon":"water","due":"2026-09-07","when":"Monday"},` +
+		`{"plant":"Sprout","location":"","care":"Water","icon":"water","due":"2026-09-08","when":"Tuesday"},` +
+		`{"plant":"Nigel","location":"Bathroom","care":"Feed","icon":"feed","due":"2026-09-10","when":"in 7 days"},` +
+		`{"plant":"Spike","location":"Windowsill","care":"Water","icon":"water","due":"2026-09-15","when":"in 12 days"}]}`
 	if body != want {
 		t.Errorf("the body reads\n%s\nwant\n%s", body, want)
 	}
@@ -124,8 +127,8 @@ func TestChores_APlantWithTwoCaresDueIsListedOncePerCareWithTheOverdueOneFirst(t
 		}
 	}
 	want := []chore{
-		{Plant: "Nigel", Location: "Bathroom", Care: "Feed", Due: "2026-09-02", Late: "1 day late"},
-		{Plant: "Nigel", Location: "Bathroom", Care: "Water", Due: "2026-09-03"},
+		{Plant: "Nigel", Location: "Bathroom", Care: "Feed", Icon: "feed", Due: "2026-09-02", Late: "1 day late"},
+		{Plant: "Nigel", Location: "Bathroom", Care: "Water", Icon: "water", Due: "2026-09-03"},
 	}
 	if !reflect.DeepEqual(nigel, want) {
 		t.Errorf("Nigel's chores read\n%+v\nwant\n%+v", nigel, want)
@@ -144,9 +147,39 @@ func TestChores_ACareAnchoredToAMonthIsDatedTheFirstOfItAndReadsOverdueSinceTheM
 
 	got := decodeChores(t, poll(t, handler, principal).Body.String())
 
-	want := chore{Plant: "Spike", Location: "Windowsill", Care: "Feed", Due: "2026-08-01", Late: "overdue since August"}
+	want := chore{Plant: "Spike", Location: "Windowsill", Care: "Feed", Icon: "feed", Due: "2026-08-01", Late: "overdue since August"}
 	if got.Chores[0] != want {
 		t.Errorf("the list opens with\n%+v\nwant\n%+v", got.Chores[0], want)
+	}
+}
+
+func TestChores_ACareTypeTheGardenAddedSendsTheIconChosenForIt(t *testing.T) {
+	f, handler, principal := choresGarden(t)
+	// Mist has the sun icon. An icon worked out from the care's name or slug
+	// would read "mist". Big Fella's Mist fell due on 29 August and Spike's is
+	// due on 29 September.
+	insertCareTypes(t, f.tx, rosewoodID, store.CareType{ID: mistID, Name: "Mist", Slug: "mist", Icon: "light"})
+	f.exec(t, "INSERT INTO care_schedule (garden_id, plant_id, care_type_id, interval_count, interval_unit, set_at) VALUES ($1, $2, $3, 1, 'day', $4), ($1, $5, $3, 30, 'day', $6)",
+		rosewoodID, bigFellaID, mistID, day(time.August, 28), spikeID, day(time.August, 30))
+
+	got := decodeChores(t, poll(t, handler, principal).Body.String())
+
+	var choreIcons, upcomingIcons []string
+	for _, c := range got.Chores {
+		if c.Care == "Mist" {
+			choreIcons = append(choreIcons, c.Icon)
+		}
+	}
+	for _, u := range got.Upcoming {
+		if u.Care == "Mist" {
+			upcomingIcons = append(upcomingIcons, u.Icon)
+		}
+	}
+	if !slices.Equal(choreIcons, []string{"light"}) {
+		t.Errorf("the Mist chores send the icons %v, want [light]", choreIcons)
+	}
+	if !slices.Equal(upcomingIcons, []string{"light"}) {
+		t.Errorf("the upcoming Mist sends the icons %v, want [light]", upcomingIcons)
 	}
 }
 

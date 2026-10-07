@@ -50,6 +50,9 @@ type chore struct {
 	Location string `json:"location"`
 	// Care is the care type's name, such as "Water".
 	Care string `json:"care"`
+	// Icon is the name of the care type's icon, such as "water" or "mist". The
+	// app shows the water drop for a name it has no icon for.
+	Icon string `json:"icon"`
 	// Due is the day the care fell due, as YYYY-MM-DD. For a schedule precise
 	// only to a month it is the first of that month.
 	Due string `json:"due"`
@@ -63,6 +66,7 @@ type upcomingCare struct {
 	Plant    string `json:"plant"`
 	Location string `json:"location"`
 	Care     string `json:"care"`
+	Icon     string `json:"icon"`
 	// Due is the day the care falls due, as YYYY-MM-DD. For a schedule
 	// precise only to a month it is the first of that month.
 	Due string `json:"due"`
@@ -139,6 +143,7 @@ func newChore(line schedule.Line, now time.Time) chore {
 	c := chore{
 		Plant: line.Plant.DisplayName(),
 		Care:  line.CareType.Name,
+		Icon:  line.CareType.Icon,
 		Due:   line.Due.Format(time.DateOnly),
 	}
 	if line.Plant.Location != nil {
@@ -154,6 +159,7 @@ func newUpcomingCare(line schedule.Line, now time.Time) upcomingCare {
 	c := upcomingCare{
 		Plant: line.Plant.DisplayName(),
 		Care:  line.CareType.Name,
+		Icon:  line.CareType.Icon,
 		Due:   line.Due.Format(time.DateOnly),
 		When:  comingWord(line, now),
 	}
