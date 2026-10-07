@@ -11,7 +11,9 @@
    Failures. htmx does not swap an error response, so a failed swap changes
    nothing on the page. The response's own sentence, or one saying sprig could
    not be reached, is written into the live region. The region is fixed to the
-   top of the window until the next swap.
+   top of the window until the next swap or for five seconds, whichever is
+   sooner, because offline every request fails and nothing is swapped. While
+   shown, it covers the You're offline line.
 
    Announcements. A swap's sentence is taken out of the live region and put
    back 100ms later. Without the empty region in between, a screen reader
@@ -66,6 +68,11 @@
     return null;
   }
 
+  // hide is the timer that hides and empties the region after say shows a
+  // failure. A screen reader reads the same failure out again only if the
+  // region was empty in between.
+  let hide = 0;
+
   document.addEventListener('htmx:responseError', (event) => {
     const text = event.detail.xhr.responseText;
     say(text && !text.startsWith('<') ? text : 'Something went wrong. Try again.');
@@ -74,7 +81,11 @@
     say('Couldn’t reach sprig. Check the connection and try again.');
   });
   document.addEventListener('htmx:afterSwap', () => {
-    for (const shown of document.querySelectorAll('.status--shown')) shown.classList.remove('status--shown');
+    clearTimeout(hide);
+    for (const shown of document.querySelectorAll('.status--shown')) {
+      shown.classList.remove('status--shown');
+      shown.replaceChildren();
+    }
   });
 
   // region returns the open sheet's live region, or #status when no sheet is
@@ -96,9 +107,14 @@
 
   function say(text) {
     clearTimeout(putBack);
+    clearTimeout(hide);
     const target = region();
     target.textContent = text;
     target.classList.add('status--shown');
+    hide = setTimeout(() => {
+      target.classList.remove('status--shown');
+      target.replaceChildren();
+    }, 5000);
   }
 
   // htmx's delay fires once and cannot pause, so when it fires the request
