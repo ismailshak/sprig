@@ -161,6 +161,23 @@ test('a log that cannot reach the server is reported inside the sheet @js', asyn
   await expect(today.announcement()).toBeEmpty();
 });
 
+test('the Couldn’t reach sprig message in the sheet is cleared after five seconds @js', async ({
+  page,
+  context,
+  today,
+  sheet,
+}) => {
+  await page.clock.install();
+  await today.openSheet(plants.doris, 'water');
+  await context.setOffline(true);
+  await sheet.submit('Log watering');
+  await expect(sheet.announcement()).toHaveText('Couldn’t reach sprig. Check the connection and try again.');
+
+  await page.clock.fastForward(5000);
+
+  await expect(sheet.announcement()).toBeEmpty();
+});
+
 test('the sheet takes focus when it opens and Escape puts it back on the row @js', async ({ page, today, sheet }) => {
   await today.rowLink(plants.nigel, 'water').focus();
   await page.keyboard.press('Enter');

@@ -38,6 +38,25 @@ test('a page opened before today is shown offline with the day it was fetched @o
   await expect(offlinePage.line()).toHaveText(/^You’re offline\. This page was last loaded on .+ at \d{1,2}:\d{2}/);
 });
 
+test('the Couldn’t reach sprig message on a page shown offline is cleared after five seconds @offline', async ({
+  page,
+  context,
+  offlinePage,
+  today,
+}) => {
+  await page.clock.install();
+  await context.setOffline(true);
+  await page.goto('/');
+  await today.rowLink(seeded.nigel, 'water').click();
+
+  await expect(today.announcement()).toHaveText('Couldn’t reach sprig. Check the connection and try again.');
+
+  await page.clock.fastForward(5000);
+
+  await expect(today.announcement()).toBeEmpty();
+  await expect(offlinePage.line()).toHaveText(/^You’re offline\./);
+});
+
 test('a page never opened shows the offline page @offline', async ({ page, context, offlinePage }) => {
   await context.setOffline(true);
   await page.goto('/activity');
