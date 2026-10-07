@@ -154,17 +154,19 @@ curl -H "Authorization: Bearer sprg_..." https://sprig.example.com/api/chores
   "garden": "Rosewood",
   "date": "2026-09-03",
   "chores": [
-    { "plant": "Big Fella", "location": "Living room", "care": "Water", "due": "2026-09-01", "late": "2 days late" },
-    { "plant": "Doris", "location": "Bedroom", "care": "Water", "due": "2026-09-03", "late": "" },
-    { "plant": "Nigel", "location": "Bathroom", "care": "Water", "due": "2026-09-03", "late": "" }
+    { "plant": "Big Fella", "location": "Living room", "care": "Water", "icon": "water", "due": "2026-09-01", "late": "2 days late" },
+    { "plant": "Doris", "location": "Bedroom", "care": "Water", "icon": "water", "due": "2026-09-03", "late": "" },
+    { "plant": "Nigel", "location": "Bathroom", "care": "Water", "icon": "water", "due": "2026-09-03", "late": "" }
   ],
   "upcoming": [
-    { "plant": "Trail Mix", "location": "Kitchen", "care": "Water", "due": "2026-09-04", "when": "tomorrow" },
-    { "plant": "Opuntia microdasys", "location": "Windowsill", "care": "Water", "due": "2026-09-07", "when": "Monday" },
-    { "plant": "Spike", "location": "Windowsill", "care": "Water", "due": "2026-09-15", "when": "in 12 days" }
+    { "plant": "Trail Mix", "location": "Kitchen", "care": "Water", "icon": "water", "due": "2026-09-04", "when": "tomorrow" },
+    { "plant": "Opuntia microdasys", "location": "Windowsill", "care": "Water", "icon": "water", "due": "2026-09-07", "when": "Monday" },
+    { "plant": "Spike", "location": "Windowsill", "care": "Water", "icon": "water", "due": "2026-09-15", "when": "in 12 days" }
   ]
 }
 ```
+
+`icon` is the name of the icon assigned to that care. It's one of `water`, `feed`, `repot`, `prune`, `mist`, `rotate`, `pest`, `clean`, `light`, `photo`, `temperature`, `inspect`, `harvest`, `propagate`, `checkmark`, `pencil`, `star` or `leaf`.
 
 Each token can make 6 requests a minute.
 
