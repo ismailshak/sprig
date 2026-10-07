@@ -12,8 +12,9 @@
    nothing on the page. The response's own sentence, or one saying sprig could
    not be reached, is written into the live region. The region is fixed to the
    top of the window until the next swap or for five seconds, whichever is
-   sooner, because offline every request fails and nothing is swapped. While
-   shown, it covers the You're offline line.
+   sooner, because offline every request fails and nothing is swapped. #status
+   spans the main column, and sits below the You're offline line when that
+   line is in view.
 
    Announcements. A swap's sentence is taken out of the live region and put
    back 100ms later. Without the empty region in between, a screen reader
@@ -30,6 +31,8 @@
    agree on how long is left. */
 (function () {
   const status = document.getElementById('status');
+  const main = document.getElementById('main');
+  const offline = document.getElementById('offline');
   // controls matches every control Tab can reach.
   const controls =
     ':is(a[href], button, input, select, textarea, [tabindex]):not([disabled]):not([tabindex="-1"]):not([type="hidden"])';
@@ -82,10 +85,7 @@
   });
   document.addEventListener('htmx:afterSwap', () => {
     clearTimeout(hide);
-    for (const shown of document.querySelectorAll('.status--shown')) {
-      shown.classList.remove('status--shown');
-      shown.replaceChildren();
-    }
+    for (const shown of document.querySelectorAll('.status--shown')) clear(shown);
   });
 
   // region returns the open sheet's live region, or #status when no sheet is
@@ -110,11 +110,27 @@
     clearTimeout(hide);
     const target = region();
     target.textContent = text;
+    if (target === status) place();
     target.classList.add('status--shown');
-    hide = setTimeout(() => {
-      target.classList.remove('status--shown');
-      target.replaceChildren();
-    }, 5000);
+    hide = setTimeout(() => clear(target), 5000);
+  }
+
+  // place sets #status's left, right and top to the main column's edges and
+  // the bottom of the You're offline line. #status is outside the main
+  // column, so the stylesheet cannot place it against the column. It is
+  // measured once, so a scroll in the five seconds the failure shows can leave
+  // a gap above it.
+  function place() {
+    const column = main.getBoundingClientRect();
+    status.style.left = column.left + 'px';
+    status.style.right = document.documentElement.clientWidth - column.right + 'px';
+    status.style.top = offline.hidden ? '' : Math.max(0, offline.getBoundingClientRect().bottom) + 'px';
+  }
+
+  function clear(target) {
+    target.classList.remove('status--shown');
+    target.replaceChildren();
+    target.removeAttribute('style');
   }
 
   // htmx's delay fires once and cannot pause, so when it fires the request
