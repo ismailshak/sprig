@@ -12,9 +12,9 @@
 <ul class="list">
 {{range .Rows}}{{template "link-row" .}}
 {{end}}</ul>
-<div class="more__foot">
+<div class="actions actions--links">
 <a class="foot-link" href="/install">Install sprig{{template "icon-chevron"}}</a>
-<form method="post" action="/signout"><button class="more__signout">Sign out</button></form>
+<form method="post" action="/signout"><button class="foot-link">Sign out</button></form>
 <p class="more__build">sprig {{.Version}}{{with .Revision}} &middot; {{.}}{{end}}</p>
 </div>
 </div>

@@ -6,14 +6,11 @@
      otherwise be below the fold. An archived plant gets Restore alone. It posts without a confirmation, because archiving the
      plant again undoes it.
 
-     Archive is outlined like Edit plant and not styled as a warning, because
-     rose means overdue in this app and using it here would make an ordinary
-     tidy-up look like a mistake. Archiving asks for confirmation because it
-     removes the plant from the Plants list and leaves no row to undo from. The
-     confirmation replaces the buttons instead of opening a dialog, so the
-     plant stays visible above it. The confirmation's Cancel has autofocus,
-     so a keyboard user who pressed Archive lands on the safe answer rather
-     than at the top of the page.
+     Archiving asks for confirmation because it removes the plant from the
+     Plants list and leaves no row to undo from. The confirmation replaces the
+     buttons instead of opening a dialog, so the plant stays visible above it.
+     The confirmation's Cancel has autofocus, so a keyboard user who pressed
+     Archive lands on the safe answer rather than at the top of the page.
 
      Restore changes the hero line, the back link, the care buttons, the
      schedule rows, Add photo and these buttons, so with JavaScript it swaps
@@ -21,15 +18,15 @@
      Archive button that takes its place share the id plant-action, because
      htmx puts focus on the element holding the focused element's id after a
      swap. Only one of the two is ever on the page. */}}
-{{define "plant-foot"}}{{with .Foot}}<div class="plant__foot{{if .Asking}} plant__foot--asking{{end}}" id="plant-foot">
+{{define "plant-foot"}}{{with .Foot}}<div class="actions actions--row{{if .Asking}} actions--confirm{{end}}" id="plant-foot">
 {{if .Restore}}
 <form method="post" action="{{.Restore}}" hx-post="{{.Restore}}" hx-target="#plant" hx-swap="outerHTML settle:0ms"><button class="care care--outline" id="plant-action">Restore</button></form>
 {{else if .Asking}}
-<span class="plant__ask">Archive {{.Name}}?</span>
-<span class="plant__note">It’s removed from Plants but keeps its activity and photos. You can restore it later.</span>
+<span class="actions__question">Archive {{.Name}}?</span>
+<span class="actions__note">It’s removed from Plants but keeps its activity and photos. You can restore it later.</span>
 {{/* Cancel swaps the buttons back. Archive is a full navigation, because the
      plant leaves the Plants list and its page has to be left too. */}}
-<form method="get" action="{{.Keep}}"><button class="plant__keep" hx-get="{{.Keep}}" hx-target="#plant-foot" hx-swap="outerHTML settle:0ms" autofocus>Cancel</button></form>
+<form method="get" action="{{.Keep}}"><button class="text-button" hx-get="{{.Keep}}" hx-target="#plant-foot" hx-swap="outerHTML settle:0ms" autofocus>Cancel</button></form>
 <form method="post" action="{{.Archive}}"><button class="care care--small">Archive</button></form>
 {{else}}
 {{with .Edit}}<a class="care care--outline" href="{{.}}">Edit plant</a>{{end}}

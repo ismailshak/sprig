@@ -9,7 +9,7 @@
 </header>
 <div class="app__body">
 {{if .Rooms}}
-<div class="app__body--grid">
+<div class="rooms">
 {{range .Rooms}}{{template "room-section" .}}{{end}}
 </div>
 {{else}}
@@ -22,12 +22,12 @@
 {{end}}
 {{/* Archived plants is linked from here rather than from More, because an archived
      plant is still a plant. */}}
-{{with .Archived}}<a class="foot-link" href="{{.Href}}">{{.Label}}{{template "icon-chevron"}}</a>{{end}}
+{{with .Archived}}<div class="actions"><a class="foot-link" href="{{.Href}}">{{.Label}}{{template "icon-chevron"}}</a></div>{{end}}
 </div>
 {{end}}
 
 {{define "room-section"}}
-<section class="section" aria-labelledby="{{.ID}}">
+<section class="section section--room" aria-labelledby="{{.ID}}">
 <div class="section__head">
 <h2 class="section__title" id="{{.ID}}">{{.Title}}</h2>
 <span class="section__count">{{len .Plants}}</span>

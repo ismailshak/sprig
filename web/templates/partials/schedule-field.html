@@ -15,7 +15,7 @@
 <div class="sched__buttons">
 {{/* Don't schedule closes the row. There is no Cancel, because nothing has
      been saved to go back to. */}}
-<button class="sched__cancel" type="submit" name="close" value="{{.Slug}}" formmethod="get" formaction="{{.Path}}"
+<button class="text-button" type="submit" name="close" value="{{.Slug}}" formmethod="get" formaction="{{.Path}}"
  hx-get="{{.Path}}?close={{.Slug}}" hx-target="#{{.ID}}" hx-swap="outerHTML settle:0ms">Don’t schedule</button>
 </div>
 </li>{{else}}<li class="sched sched--add" id="{{.ID}}">

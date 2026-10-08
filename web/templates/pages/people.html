@@ -21,7 +21,7 @@
 {{range .Members}}{{template "member-row" .}}{{end}}
 </ul>
 {{/* The button has an id so htmx puts focus back on it after the swap. */}}
-{{if .Save}}<button class="wide-action" type="submit" id="save">Save changes</button>{{end}}
+{{if .Save}}<div class="actions"><button class="wide-action" type="submit" id="save">Save changes</button></div>{{end}}
 </form>
 {{/* The form the Remove button under "Remove Ellie?" submits. Forms cannot
      nest, so the button is in the row above and names this form in its form
@@ -48,7 +48,7 @@
 {{end}}</ul>
 </div>
 {{end}}
-{{with .InviteSomeone}}<a class="wide-action" href="{{.}}">Invite someone</a>{{end}}
+{{with .InviteSomeone}}<div class="actions"><a class="wide-action" href="{{.}}">Invite someone</a></div>{{end}}
 </div>{{end}}
 
 {{/* One person's row. The reader's own row has no select, no date and no
@@ -59,7 +59,7 @@
 <span class="row__ask">{{.Asking.Ask}}</span>
 <p class="row__why">{{.Who}} will lose access to this garden. Their name stays on everything they’ve logged, and you can invite them again later.</p>
 <div class="row__buttons">
-<a class="sched__cancel" href="{{.Asking.Keep}}" hx-get="{{.Asking.Keep}}" hx-target="#people" hx-swap="outerHTML settle:0ms" autofocus>Cancel</a>
+<a class="text-button" href="{{.Asking.Keep}}" hx-get="{{.Asking.Keep}}" hx-target="#people" hx-swap="outerHTML settle:0ms" autofocus>Cancel</a>
 <button class="care care--small" type="submit" form="{{.Asking.Form}}">Remove</button>
 </div>
 {{else}}

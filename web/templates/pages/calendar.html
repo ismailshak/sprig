@@ -128,7 +128,7 @@
 {{with .Error}}<p class="field__error">{{.}}</p>{{end}}
 <div class="sheet__foot">
 <button class="sheet__go">{{.Button}}</button>
-{{with .Delete}}<button class="sheet__delete" formaction="{{.}}" hx-post="{{.}}">Delete</button>{{end}}
+{{with .Delete}}<button class="sheet__delete sheet__delete--destructive" formaction="{{.}}" hx-post="{{.}}">Delete</button>{{end}}
 </div>
 </form>{{end}}{{end}}
 

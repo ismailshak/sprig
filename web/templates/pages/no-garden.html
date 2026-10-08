@@ -8,8 +8,10 @@
 <div class="app__body app__body--bare">
 <h1 class="bare__title">No garden yet</h1>
 <p class="lead">You’re signed in as {{.Name}}, but this account isn’t a member of any garden. Ask a garden’s owner for an invite link, or set up your own.</p>
+<div class="actions">
 {{with .SetUp}}<a class="wide-action" href="{{.}}">Set up a garden</a>{{end}}
-<form method="post" action="{{.SignOut}}"><button class="more__signout" type="submit">Sign out</button></form>
-<a class="foot-link" href="{{.Close}}">Close account{{template "icon-chevron"}}</a>
+<form method="post" action="{{.SignOut}}"><button class="foot-link" type="submit">Sign out</button></form>
+<a class="care care--outline care--destructive" href="{{.Close}}">Close account</a>
+</div>
 </div>
 {{end}}

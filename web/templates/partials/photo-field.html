@@ -30,7 +30,7 @@
 {{if .Focus}}<p class="photo-field__hint">Drag the frame to set the part the plant’s page shows.</p>
 {{end}}<div class="photo-field__actions">
 <button class="care care--outline care--small" id="photo-replace" type="button">Replace</button>
-<button class="sched__cancel" id="photo-remove" type="button">Remove</button>
+<button class="text-button" id="photo-remove" type="button">Remove</button>
 </div>
 </div>
 <p class="field__error" id="photo-error" hidden>This file couldn’t be opened as a photo.</p>
@@ -38,5 +38,5 @@
      buttons are disabled for as long as it shows, because a post sent before
      the resize finishes would have no photo in it. */}}
 <p class="note" id="photo-preparing" hidden>Preparing the photo…</p>
-{{with .Submit}}<button class="wide-action" type="submit">{{.}}</button>{{end}}
+{{with .Submit}}<div class="actions"><button class="wide-action" type="submit">{{.}}</button></div>{{end}}
 </div>{{end}}

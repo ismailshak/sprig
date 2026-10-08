@@ -13,9 +13,8 @@
 <div class="app__body app__body--sub">
 {{template "account" .}}
 <ul class="list">{{template "link-row" .Codes}}</ul>
-{{/* The link is not styled as a warning, because rose means overdue in this
-     app. Closing is confirmed on the page it opens. */}}
-<a class="foot-link" href="{{.Close}}">Close account{{template "icon-chevron"}}</a>
+{{/* Closing is confirmed on the page it opens. */}}
+<div class="actions"><a class="care care--outline care--destructive" href="{{.Close}}">Close account</a></div>
 </div>
 {{end}}
 
@@ -24,7 +23,7 @@
      has autofocus only when the form opens without an error. After a refused
      post, autofocus would take focus from Save changes to the name field even
      when the error is under Handle. */}}
-{{define "account"}}<div id="account">
+{{define "account"}}<div class="account" id="account">
 {{if .Editing}}
 <form method="post" action="{{.Action}}" novalidate hx-post="{{.Action}}" hx-target="#account" hx-swap="outerHTML settle:0ms">
 <div class="field">
@@ -40,9 +39,9 @@
 <p class="note">Your handle identifies your account. It’s shown on People when two members have the same display name.</p>
 {{template "timezone-field" .Zone}}
 {{/* The button has an id so htmx puts focus back on it after a refused post. */}}
+<div class="actions">
 <button class="wide-action" type="submit" id="save">Save changes</button>
-<div class="form__foot">
-<a class="plant__keep" href="{{.Cancel}}" hx-get="{{.Cancel}}" hx-target="#account" hx-swap="outerHTML settle:0ms">Cancel</a>
+<a class="wide-action wide-action--text" href="{{.Cancel}}" hx-get="{{.Cancel}}" hx-target="#account" hx-swap="outerHTML settle:0ms">Cancel</a>
 </div>
 </form>
 {{else}}
@@ -53,8 +52,10 @@
 <dt>Timezone</dt><dd>{{.ZoneName}}</dd>
 </dl>
 </div>
+<div class="actions">
 <a class="wide-action" href="{{.Edit}}" hx-get="{{.Edit}}" hx-target="#account" hx-swap="outerHTML settle:0ms">Edit</a>
 {{if .Saved}}{{template "saved"}}{{end}}
+</div>
 {{end}}
 </div>{{end}}
 

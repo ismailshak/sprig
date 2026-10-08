@@ -61,8 +61,9 @@ button {
   overflow-y: auto;
 }
 
+/* The bottom padding is the space under the last thing on every page. */
 .app__body {
-  padding: 0 20px 24px;
+  padding: 0 20px 40px;
 }
 
 /* --------------------------------------------------------------------- header */
@@ -151,11 +152,22 @@ button {
   line-height: 1;
   letter-spacing: var(--display-tracking);
   color: var(--accent);
+  font-variant-numeric: lining-nums tabular-nums;
+  font-feature-settings: "lnum" 1, "tnum" 1;
 }
+
+/* Today's summary when nothing is left to do. It shows a tick in place of the
+   count. */
+.summary--clear .summary__count { display: inline-flex; color: var(--good); }
+.summary--clear .summary__count svg { width: 22px; height: 22px; }
 
 /* ------------------------------------------------------------------- sections */
 
 .section { margin-bottom: 26px; }
+
+/* At the end of a page, the page's bottom padding is the only space under the
+   last section. */
+.section:last-child { margin-bottom: 0; }
 
 .section__head {
   display: flex;
@@ -221,7 +233,6 @@ button {
   min-height: var(--tap);
 }
 
-.list--flush { padding: 0; }
 .list .row + .row,
 .list li + li .row { border-top: var(--row-divider); }
 
@@ -275,6 +286,9 @@ button {
 
 .row__name--sp, .hero__name--sp { font-style: italic; }
 
+/* A link that fills its row: a plant on Plants, a page on More. */
+.row--link { color: inherit; text-decoration: none; }
+
 .row__meta {
   font-size: 13px;
   color: var(--ink-2);
@@ -311,9 +325,11 @@ button {
 }
 
 .care:active { transform: scale(.96); }
-/* Add, Edit plant and the empty state's action are links styled as buttons,
-   because they navigate to another page. */
+/* A link styled as a button, for an action that opens another page. Unlike a
+   button, a block-level link fills the column, so it is given the width of its
+   label. */
 a.care, a.empty__action { text-decoration: none; color: inherit; }
+a.care { width: fit-content; }
 a.empty__action { display: inline-flex; align-items: center; }
 .care svg { width: 16px; height: 16px; }
 
@@ -332,10 +348,19 @@ a.empty__action { display: inline-flex; align-items: center; }
   border: 1px solid var(--line-strong);
 }
 
+/* An action that cannot be undone. A filled pill is rose, and an outline pill
+   has a rose label. --accent-ink is legible on rose in both themes. Two
+   classes, so the rule beats the color a.care sets on a link. */
+.care.care--destructive { background: var(--alert); color: var(--accent-ink); }
+.care--outline.care--destructive { background: none; color: var(--alert); }
+
 .care--quiet {
   background: var(--surface-2);
   color: var(--ink-2);
 }
+
+.care--small { height: 32px; padding: 0 12px; font-size: 13px; }
+.care--small svg { width: 14px; height: 14px; }
 
 /* ------------------------------------------------------------------- activity */
 
@@ -384,26 +409,15 @@ a.empty__action { display: inline-flex; align-items: center; }
   color: var(--ink-3);
   font-size: 10px;
   letter-spacing: .02em;
+  text-decoration: none;
 }
 
-.nav__item { text-decoration: none; }
 .nav__item svg { width: 22px; height: 22px; }
 /* The page's own tab, and on a page reached from Plants or More that tab. */
 .nav__item[aria-current] { color: var(--accent); }
 /* The tabs sit 2px apart on the rail, so a ring outside one would overlap
    the next. */
 .nav__item:focus-visible { outline-offset: -2px; }
-
-.summary__count {
-  font-variant-numeric: lining-nums tabular-nums;
-  font-feature-settings: "lnum" 1, "tnum" 1;
-}
-
-.row--done .row__name { color: var(--ink-2); }
-.row--done .row__avatar { opacity: .55; }
-.summary--clear .summary__count { display: inline-flex; }
-.summary--clear .summary__count svg { width: 22px; height: 22px; }
-.summary--clear .summary__count { color: var(--good); }
 
 /* --------------------------------------------------------------- empty states */
 
@@ -463,7 +477,6 @@ a.empty__action { display: inline-flex; align-items: center; }
 
    htmx adds htmx-swapping to a row during the delay before a delete swap. The
    collapse animation runs in that delay. */
-.row--leaving,
 .row.htmx-swapping {
   overflow: hidden;
   min-height: 0;
@@ -478,8 +491,10 @@ a.empty__action { display: inline-flex; align-items: center; }
 
 /* The height the collapse starts from. An open editor is excluded: it never
    collapses, and capping it makes its buttons overlap the row below. */
-.row:not(.row--leaving):not(.htmx-swapping):not(.row--editing) { max-height: 200px; }
+.row:not(.htmx-swapping):not(.row--editing) { max-height: 200px; }
 .row__said { color: var(--good); }
+.row--done .row__name { color: var(--ink-2); }
+.row--done .row__avatar { opacity: .55; }
 
 /* The undo window is a bar along the bottom edge of the row that shrinks from
    the right as time runs out. The row is removed when it reaches zero. The bar
@@ -572,14 +587,23 @@ body:has(dialog[open]) { overscroll-behavior: none; }
 .sheet__chevron { color: var(--ink-3); flex: none; display: grid; }
 .sheet__chevron svg { width: 18px; height: 18px; }
 
-.field { margin-top: 18px; }
+/* A label is close to its input and far from the field above, so it reads as
+   part of its own field. */
+.field { margin-top: 20px; }
 
 .field__label {
   font-size: var(--label-size); font-weight: var(--label-weight);
   letter-spacing: var(--label-tracking); text-transform: var(--label-transform);
-  color: var(--ink-2); margin-bottom: 9px;
+  color: var(--ink-2); margin-bottom: 2px;
   display: block;
 }
+
+/* Every field in a sheet is 18px from the one above and 9px under its label,
+   whether it holds chips or an input. Most fields in a sheet hold chips. Chips
+   have no top margin where an input has 8px, so 2px would put them against the
+   label. */
+.sheet__panel .field { margin-top: 18px; }
+.sheet__panel .field__label { margin-bottom: 9px; }
 
 .field__hint {
   text-transform: none; letter-spacing: 0; font-weight: 400; color: var(--ink-3);
@@ -594,7 +618,10 @@ body:has(dialog[open]) { overscroll-behavior: none; }
 
 .chips { display: flex; flex-wrap: wrap; gap: 8px; }
 
+/* A radio inside a chip is stretched over it, so the whole chip is the tap
+   target and gets the focus ring. */
 .chip {
+  position: relative; cursor: pointer;
   padding: 9px 14px; min-height: 40px;
   border-radius: var(--radius-pill);
   border: 1px solid var(--line);
@@ -708,9 +735,6 @@ button.sheet__scrim { cursor: default; }
 dialog.sheet::backdrop { background: none; }
 dialog.sheet:focus { outline: none; }
 
-/* The radio fills its chip, so the whole chip is the tap target and gets the
-   focus ring. */
-.chip { position: relative; cursor: pointer; }
 .chip > input { position: absolute; inset: 0; margin: 0; opacity: 0; cursor: pointer; }
 .chip:has(> input:checked) {
   background: var(--accent); border-color: var(--accent);
@@ -718,13 +742,18 @@ dialog.sheet:focus { outline: none; }
 }
 .chip:has(> input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-fieldset.field { border: 0; padding: 0; margin: 18px 0 0; min-width: 0; }
+/* Removes the browser's border, padding and side margins from a fieldset used
+   as a field or a section. */
+fieldset.field,
+fieldset.section { border: 0; padding: 0; margin-inline: 0; min-width: 0; }
 /* The legend is floated so it escapes the fieldset's special legend rendering
    and lays out as an ordinary block. */
-legend.field__label { float: left; width: 100%; padding: 0; }
-/* Chips clear the floated legend, because a flex container does not flow
-   around a float. */
-legend.field__label + * { clear: both; }
+legend.field__label,
+legend.section__head { float: left; width: 100%; padding: 0; }
+/* The element after the legend clears the float, because a flex container does
+   not flow around one. */
+legend.field__label + *,
+legend.section__head + * { clear: both; }
 
 /* The Outcome chips decide whether When it happened or Ask again in is shown.
    The When chips decide whether the time input, the date and time input, or
@@ -852,7 +881,7 @@ legend.field__label + * { clear: both; }
    turned off. */
 @media (prefers-reduced-motion: reduce) {
   .sheet__panel, .sheet__scrim { animation: none; }
-  .row--leaving, .row.htmx-swapping { transition-duration: 1ms; }
+  .row.htmx-swapping { transition-duration: 1ms; }
   .care { transition: none; }
   /* The undo bar keeps animating. It is the only way to see how much of the
      window is left, and a four-second linear wipe is not the kind of motion
@@ -877,34 +906,17 @@ legend.field__label + * { clear: both; }
   color: var(--alert);
 }
 
-.row--link { color: inherit; text-decoration: none; }
-
-.foot-link {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  min-height: var(--tap);
-  padding: 0 2px;
-  font-size: 14px;
-  color: var(--ink-2);
-}
-
-.foot-link svg { width: 15px; height: 15px; color: var(--ink-3); }
-/* Some of these are links (the archive, the older page of the log, a plant's
-   full history), so the default link styling is removed. */
-a.foot-link { text-decoration: none; color: var(--ink-2); }
-
 /* There are more rooms than Today has sections, so the gap between them is
    smaller. With six headings on a phone the page is scanned by heading, and a
    larger gap only adds scrolling. */
-.app__body--grid .section { margin-bottom: 18px; }
+.section--room { margin-bottom: 18px; }
 
-/* One column on the phone. On wide screens the rooms sit side by side rather
+/* One column on the phone. On wide screens the rooms are side by side rather
    than the rows stretching, because a row is designed for phone width and a
    1100px row puts the plant name at one edge and its species at the other. Each
    room is one grid item, so a room never splits across columns. */
 @media (min-width: 900px) {
-  .app__body--grid {
+  .rooms {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
     gap: 0 28px;
@@ -1108,9 +1120,6 @@ a.foot-link { text-decoration: none; color: var(--ink-2); }
    outside that edge would be cut off. */
 .sched__open:focus-visible { outline-offset: -2px; }
 
-/* The editing row replaces the due date column with buttons, so it has less
-   space between its parts than a row being read. */
-.sched--editing { gap: 8px; }
 
 /* Editing happens in place. Changing an interval is a one-field adjustment made
    a few times a year, and sending people to a separate form page for it means
@@ -1142,9 +1151,10 @@ a.foot-link { text-decoration: none; color: var(--ink-2); }
 .input--tiny { width: 62px; margin-top: 0; padding: 6px 8px; font-size: 15px; }
 .input--unit { width: auto; max-width: 100%; margin-top: 0; padding: 6px 6px; font-size: 14px; }
 
-/* The editing row is taller than one line, so its buttons sit to the right of
-   the fields rather than on the row's centre line. */
-.sched--editing { align-items: flex-start; flex-wrap: wrap; }
+/* A row being edited has buttons in place of the due date, so its parts are
+   closer together than in a closed row. It is taller than one line, so its
+   parts align to the top rather than the centre line. */
+.sched--editing { gap: 8px; align-items: flex-start; flex-wrap: wrap; }
 .sched--editing .sched__text { flex: 1 1 200px; }
 
 .sched__buttons { display: flex; align-items: center; gap: 4px; margin-top: 8px; margin-left: auto; }
@@ -1192,27 +1202,23 @@ a.foot-link { text-decoration: none; color: var(--ink-2); }
   color: var(--ink-2);
 }
 
-.care--small { height: 32px; padding: 0 12px; font-size: 13px; }
+/* ----------------------------------------------------------- buttons and actions */
 
-/* Without Cancel, a mis-tap into the editor could only be left by saving.
-   Cancel is styled as text rather than a second pill so the row still has one
-   obvious button. */
-.sched__cancel { flex: none; padding: 0 8px; font-size: 13px; color: var(--ink-2); }
-.care--small svg { width: 14px; height: 14px; }
-
-/* ------------------------------------------------------------- the wide action */
-
-/* Log care is a full-width button under the schedule rather than a chip inside
-   it, because it is not tied to any one schedule row. */
+/* A filled button the width of the column: the primary action of a page or a
+   form, and Log care on a plant's page. A link and a button render the same
+   box. */
 .wide-action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 100%;
   min-height: var(--tap);
-  margin: 4px 0 26px;
   border-radius: var(--radius-pill);
   background: var(--accent);
   color: var(--accent-ink);
   font-size: 16px;
   font-weight: 600;
+  text-decoration: none;
 }
 
 /* The passkey buttons start disabled until a script enables them. Without this
@@ -1220,32 +1226,102 @@ a.foot-link { text-decoration: none; color: var(--ink-2); }
    broken. */
 .wide-action:disabled { opacity: .5; }
 
-/* The column holding Add this device and Send test notification under
-   Subscribed devices. It has the margins a wide action has on More's pages. */
-.devices__buttons {
+/* The button that deletes a garden or closes an account. */
+.wide-action--destructive { background: var(--alert); }
+
+/* Cancel or Not now under a page's primary action. It is muted text, so the
+   page keeps one obvious button and the tap target stays the column's width. */
+.wide-action--text {
+  background: none;
+  color: var(--ink-2);
+  font-size: 14px;
+  font-weight: 400;
+}
+
+/* A link to more of a list or to another page, with a chevron. Sign out and
+   Add care type use the same style without one. */
+.foot-link {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: var(--tap);
+  padding: 0 2px;
+  font-size: 14px;
+  color: var(--ink-2);
+  text-decoration: none;
+}
+
+.foot-link svg { width: 15px; height: 15px; color: var(--ink-3); }
+
+/* Muted text beside a small button, such as Cancel beside Save in the
+   schedule editor. It is text rather than a second pill, so the row keeps one
+   obvious button. */
+.text-button { flex: none; padding: 0 8px; font-size: 13px; color: var(--ink-2); text-decoration: none; }
+
+/* The actions at the bottom of a page or a form. The group sets the space
+   above its first action and between its actions, and none below. At the end
+   of a page, the page's bottom padding is the space under the last action.
+
+   Each kind of action has one style:
+   - The primary action is a .wide-action.
+   - Cancel or Not now under the primary action is a .wide-action--text.
+   - Any other action on the plant, photo, garden or account is an outline
+     pill, .care--outline: Edit plant, Restore, Archive, Delete photo, Delete
+     garden and Close account. One that cannot be undone also has
+     .care--destructive, and so does the button that confirms it. Archive does
+     not, because Restore undoes it.
+   - A link to more of a list or to another page, such as Older activity,
+     Archived plants or Install sprig, is a .foot-link with a chevron. Sign out
+     is a .foot-link without one.
+   - Cancel beside a small button in a confirmation is a .text-button. */
+.actions {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  margin: 20px 0 26px;
+  margin-top: 26px;
 }
 
-/* Hidden when no form in it is visible, because an empty column still takes
-   its margins. */
-.devices__buttons:not(:has(> form:not([hidden]))) { display: none; }
-
-/* The buttons are blocks, because as inline-blocks they leave space under them
-   inside their forms. The .app__body--sub prefix lets margin: 0 override
-   .app__body--sub .wide-action. */
-.app__body--sub .devices__buttons .wide-action { display: block; margin: 0; }
+/* An empty group would still take its top margin. On Notifications, Add this
+   device is rendered hidden and Send test notification is not rendered when no
+   device is subscribed. */
+.actions:not(:has(> :not([hidden]))) { display: none; }
 
 /* The error line under Add this device takes no space until the script writes
    a reason into it. */
-.devices__buttons .field__error:empty { margin: 0; }
+.actions .field__error:empty { margin: 0; }
 
-/* "Saved", under a Save button on the page a save redirected to. The wide
-   action's bottom margin is pulled back so the word lands under the button. */
+/* Links stacked with no gap, as on More. Each link's 44px box already
+   puts space above and below its text. */
+.actions--links { gap: 0; }
+
+/* Actions on one line, at opposite ends when there are two, such as Edit plant
+   and Archive on a plant's page. */
+.actions--row {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* The Archive or Delete question that replaces the buttons. Its two buttons
+   wrap onto their own line at the right. scroll-margin-bottom keeps its bottom
+   edge off the bottom of the screen when the swap scrolls it into view. */
+.actions--confirm {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px;
+  scroll-margin-bottom: 24px;
+}
+
+/* Cancel in the question is the full tap height, like the buttons the question
+   replaced. */
+.actions--confirm .text-button { display: flex; align-items: center; min-height: var(--tap); }
+
+.actions__question { flex: 1 1 100%; font-size: 14px; font-weight: 600; }
+.actions__note { flex: 1 1 100%; margin-bottom: 6px; font-size: 13px; color: var(--ink-3); }
+
+/* "Saved", under a Save button on the page a save redirected to. */
 .saved {
-  margin: -18px 0 26px;
+  margin: 0;
   text-align: center;
   font-size: 13px;
   font-weight: 600;
@@ -1385,50 +1461,6 @@ a.foot-link { text-decoration: none; color: var(--ink-2); }
 
 .logline b { color: var(--ink); font-weight: 600; }
 .logline--none { color: var(--ink-3); }
-.logline--fresh { justify-content: space-between; }
-.logline__said { color: var(--good); font-weight: 600; }
-
-/* ------------------------------------------------------------------ page foot */
-
-.plant__foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-top: 6px;
-}
-
-/* Archive is not delete and is not styled as a warning. Rose in this app means
-   overdue, and using it for an ordinary tidy-up would blur the two. */
-
-/* On the plant form Cancel is a link rather than a button, so the underline
-   is removed. */
-a.plant__keep { text-decoration: none; }
-
-.plant__keep {
-  min-height: var(--tap);
-  padding: 0 6px;
-  font-size: 14px;
-  color: var(--ink-2);
-}
-
-/* The confirmation is scrolled into view by the swap that brings it in. The
-   margin keeps its bottom edge off the very bottom of the screen. */
-.plant__foot--asking { scroll-margin-bottom: 24px; }
-
-/* The confirmation replaces the buttons rather than opening a dialog, as the
-   schedule editor's Remove does, so the plant stays visible above it. The
-   question and its note each take the full width, so the two buttons end up on
-   their own row at the right. Cancel is a button's width from Archive, so a
-   mis-tap on one is less likely to hit the other. */
-.plant__foot--asking {
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 4px;
-}
-
-.plant__ask { flex: 1 1 100%; font-size: 14px; font-weight: 600; }
-.plant__note { flex: 1 1 100%; margin-bottom: 6px; font-size: 13px; color: var(--ink-3); }
 
 /* Named grid areas rather than source order, so the phone keeps its reading
    order and the desktop can move the picture and the details into their own
@@ -1439,13 +1471,20 @@ a.plant__keep { text-decoration: none; }
   grid-template-areas: "hero" "sched" "log" "details" "photos" "activity" "foot";
 }
 
-.hero { grid-area: hero; }
-.section--schedule { grid-area: sched; }
-.wide-action { grid-area: log; }
-.section--details { grid-area: details; }
-.section--photos { grid-area: photos; }
-.section--activity { grid-area: activity; }
-.plant__foot { grid-area: foot; }
+.app__body--plant > .hero { grid-area: hero; }
+.app__body--plant > .section--schedule { grid-area: sched; }
+.app__body--plant > .section--details { grid-area: details; }
+.app__body--plant > .section--photos { grid-area: photos; }
+.app__body--plant > .section--activity { grid-area: activity; }
+
+/* Log care is a full-width button under the schedule rather than a chip inside
+   it, because it is not tied to any one schedule row. It is a grid item
+   between two sections, so it sets its own margins. */
+.app__body--plant > .wide-action { grid-area: log; margin: 4px 0 26px; }
+
+/* The section above sets the gap with its bottom margin. Margins do not
+   collapse in a grid, so a top margin here would add to it. */
+.app__body--plant > .actions { grid-area: foot; margin-top: 0; }
 
 /* On wide screens the page splits in two. What the plant is on the left, what
    you do to it on the right. The picture stops growing at about 340px, because
@@ -1498,15 +1537,6 @@ a.plant__keep { text-decoration: none; }
   .app__body--form { max-width: 680px; }
 }
 
-.app__body--form { padding-bottom: 40px; }
-
-/* The gap between label and input is smaller here than in the sheet. The sheet
-   often has chips under a label, so it needs more space. Here every field is an
-   input, and label and input read as one thing. */
-.app__body--form .field { margin-top: 20px; }
-.app__body--form .field__label { margin-bottom: 2px; }
-.app__body--form .section { margin-top: 30px; }
-
 /* The three name fields are one question, what the plant is called, so they
    are grouped with one error message under them rather than three required
    fields. */
@@ -1523,12 +1553,6 @@ a.plant__keep { text-decoration: none; }
 .field__pair > .input { margin-top: 0; }
 
 .input--tall { resize: vertical; line-height: 1.5; }
-
-/* The picture is the first field because the plant is in front of the person
-   and the phone is already in their hand. It is also the one field that can be
-   missing entirely. Where the browser cannot resize an image before upload, the
-   field is not offered. */
-.photo-field { margin-bottom: 4px; }
 
 /* Empty, the picture field is the height of an ordinary field. Filled, it takes
    the 5:3 ratio the plant page uses. The first version used a dashed 5:3 box
@@ -1709,10 +1733,6 @@ a.plant__keep { text-decoration: none; }
 @media (hover: hover) {
   .combo__option:hover { background: var(--accent-soft); }
 }
-
-/* Archive sits under Save, not beside it. They are not equal choices, and a
-   destructive action next to the primary one invites mis-taps. */
-.form__foot { display: flex; justify-content: center; margin-top: 4px; }
 
 @media (prefers-reduced-motion: reduce) {
   .disclosure__head::after { transition: none; }
@@ -2021,15 +2041,6 @@ a.month__day::after { content: ""; position: absolute; inset: 0; }
 /* The Logged and Due headings in a day's sheet. */
 .sheet__group { margin: 14px 0 8px; }
 
-/* Usually one control, two on any page after the first. They sit at opposite
-   ends rather than stacking. */
-.pager {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-}
-
 /* On the filtered view the bar has a back link to the plant above the title,
    so it is two rows where every other bar is one. Both rows are links or
    headings rather than controls, so the bar stays as tall as a row of chrome
@@ -2045,8 +2056,7 @@ a.month__day::after { content: ""; position: absolute; inset: 0; }
 .topbar--stack .backlink { margin-left: -4px; }
 
 /* Save and Delete side by side, on the sheet that corrects an event and on a
-   note's sheet. Delete is outlined, not rose, because rose in this app means
-   overdue. A deleted event can be undone for four seconds afterwards, like a
+   note's sheet. A deleted event can be undone for four seconds afterwards, like a
    logged row on Today, so it has no confirmation step. A deleted note has no
    undo and no confirmation either, because a note is one line and its days. */
 .sheet__foot {
@@ -2072,6 +2082,9 @@ a.month__day::after { content: ""; position: absolute; inset: 0; }
   font-size: 15px;
   font-weight: 600;
 }
+
+/* Delete on a note's sheet. A deleted note cannot be restored. */
+.sheet__delete--destructive { color: var(--alert); }
 
 /* Who logged the event and when, as distinct from who did the care and when.
    It is a statement rather than a field, so it uses the most muted colour and
@@ -2239,28 +2252,10 @@ a.month__day::after { content: ""; position: absolute; inset: 0; }
   }
 }
 
-/* ------------------------------------------------------------------- more foot */
+/* ------------------------------------------------------------- build version */
 
-/* Install, Sign out and the build version, in that order and each more muted
-   than the last. They are stacked at the left rather than spread across the
-   column, because nothing else on this page uses the right-hand end of a row,
-   and Sign out there would be the only thing in the app at that edge. */
-.more__foot {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  margin-top: 4px;
-}
-
-/* Muted for the same reason Archive is. Rose means overdue here, and using it
-   on the action every session ends with would blur the two. */
-.more__signout {
-  min-height: var(--tap);
-  padding: 0 2px;
-  font-size: 14px;
-  color: var(--ink-2);
-}
-
+/* The build version under Sign out on More, the most muted line on the page.
+   The left margin lines it up with the text of the links above it. */
 .more__build {
   margin: 6px 0 0 2px;
   font-size: 12px;
@@ -2319,33 +2314,17 @@ a.month__day::after { content: ""; position: absolute; inset: 0; }
   .app__body--sub { max-width: 760px; }
 }
 
-.app__body--sub { padding-bottom: 40px; }
+/* On More's pages and the plant form, a section can follow a form, a field or
+   a list, and none of those sets space below itself. A section here sets the
+   space above its heading instead. Elsewhere a section can be a grid item,
+   where margins do not collapse and a top margin would add to the bottom
+   margin of the section above. */
+.app__body--sub .section,
+.app__body--form .section { margin-top: 28px; }
 
-/* The plant form's spacing, for the same reason. A label and its input are one
-   thing, and the gap between fields separates them. */
-.app__body--sub .field { margin-top: 20px; }
-.app__body--sub .field__label { margin-bottom: 2px; }
-.app__body--sub .panel { margin-top: 20px; }
-.app__body--sub .section { margin-top: 28px; }
-.app__body--sub .section .care--outline { margin-top: 12px; }
-
-/* Add a care type navigates to a page, so it is a link styled as a button.
-   A button is the width of its label without being told; a link is not. */
-.app__body--sub .section a.care { width: fit-content; }
-
-/* The wide action follows a field, a list or a paragraph rather than sitting
-   under its own heading, so it has a top margin to separate it from the thing
-   above. The plant page's 4px, where the schedule list is already a bounded
-   block, left Save looking attached to the input. */
-.app__body--sub .wide-action { margin-top: 20px; }
-
-/* Invite someone navigates to a page, so it is a link styled as a button. */
-a.wide-action {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  text-decoration: none;
-}
+/* Account's details, as text or as the form that edits them. Both start the
+   same distance under the top bar, so Edit and Cancel do not move the page. */
+.account { margin: 20px 0 26px; }
 
 /* An explanatory sentence under the title, on pages about something the person
    may not have met before, such as a passkey, a bearer token or a single-use
@@ -2431,9 +2410,8 @@ a.wide-action {
 }
 
 /* Remove, Revoke, Turn off. Text at the right-hand end rather than a rose
-   button, because each is reversed by creating the thing again, and rose in this
-   app means overdue. It is the size of the row's own text so the one control on
-   the row is easy to hit. */
+   button, because each is reversed by creating the thing again. It is the size
+   of the row's own text so the one control on the row is easy to hit. */
 .row__drop {
   flex: none;
   display: inline-flex;
@@ -2492,9 +2470,6 @@ a.wide-action {
 .row__icons { flex: 1 1 100%; border: 0; padding: 0; margin: 0; min-width: 0; }
 .chip--icon { display: inline-flex; align-items: center; padding: 9px 12px; }
 .chip--icon svg { width: 20px; height: 20px; }
-
-.row__edits { flex: 1 1 100%; }
-.row__edits .row__drop { padding-left: 0; }
 
 /* Explains why this row offers Turn off rather than Delete, at the moment
    the choice is in front of somebody, rather than through a refused post
@@ -2714,21 +2689,6 @@ a.wide-action {
 
 .bare__line a { color: var(--ink); }
 
-.app__body--bare .wide-action { margin-top: 22px; }
-
-/* Not now under Turn on notifications. A link in the muted colour, so the page
-   keeps one obvious button. */
-.bare__skip {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: var(--tap);
-  margin-top: -14px;
-  font-size: 14px;
-  color: var(--ink-2);
-  text-decoration: none;
-}
-
 /* ------------------------------------------------------ the reminders banner */
 
 /* The offer to turn on reminders in this browser, between Today's top bar and
@@ -2931,10 +2891,6 @@ img[data-photo].photo--fade { transition: opacity .15s; }
 .photo__img { display: block; width: 100%; height: 100%; }
 
 .photo__meta { margin: 12px 0 0; font-size: 14px; color: var(--ink-2); }
-
-/* Delete and the question that replaces it keep the same gap under the
-   caption, so the buttons do not move when the confirmation comes in. */
-.app__body--photo .plant__foot { margin-top: 16px; }
 
 @media (min-width: 900px) {
   .tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }

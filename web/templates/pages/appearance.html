@@ -11,8 +11,8 @@
 {{template "more-topbar" .Bar}}
 <div class="app__body app__body--sub">
 <form id="appearance-form">
-<fieldset class="field">
-<legend class="field__label">Theme</legend>
+<fieldset class="section">
+<legend class="section__head"><span class="section__title">Theme</span></legend>
 <ul class="list">
 {{range .Modes}}<li class="row row--check">
 <label class="check" for="mode-{{.Value}}">

@@ -25,7 +25,7 @@
 <p class="field__error" id="passkey-error" role="alert">{{.Refusal}}</p>
 <form method="post" action="{{.Action}}" novalidate data-passkey="create" data-challenge="{{.Challenge}}" data-field="{{.Field}}" data-message="passkey-error" data-note="passkey-noscript">
 <input type="hidden" name="{{.Field}}">
-<button class="wide-action" type="submit" disabled>Add this device</button>
+<div class="actions"><button class="wide-action" type="submit" disabled>Add this device</button></div>
 <p class="note" id="passkey-noscript">Requires JavaScript and a browser with passkey support.</p>
 </form>
 <p class="note">The new passkey will be listed on your Passkeys page.</p>
@@ -42,7 +42,7 @@
 {{template "handle-field" .}}
 {{template "timezone-field" .Zone}}
 <input type="hidden" name="{{.Field}}">
-<button class="wide-action" type="submit" disabled>Join {{.Garden}}</button>
+<div class="actions"><button class="wide-action" type="submit" disabled>Join {{.Garden}}</button></div>
 <p class="note" id="passkey-noscript">Requires JavaScript and a browser with passkey support.</p>
 </form>
 <p class="note">{{.Joining}}</p>

@@ -19,7 +19,7 @@
 <form method="post" action="{{.Action}}" data-passkey="get" data-challenge="{{.Challenge}}" data-field="{{.Field}}" data-message="passkey-error" data-note="passkey-noscript">
 <input type="hidden" name="{{.Field}}">
 {{with .Next}}<input type="hidden" name="{{$.NextField}}" value="{{.}}">{{end}}
-<button class="wide-action" type="submit" disabled>Sign in with a passkey</button>
+<div class="actions"><button class="wide-action" type="submit" disabled>Sign in with a passkey</button></div>
 <p class="note" id="passkey-noscript">Requires JavaScript and a browser with passkey support.</p>
 </form>
 <p class="note">No passkey on this device? <a href="{{.Recover}}">Use a recovery code</a>, or ask the person who runs this server for a sign-in link.</p>

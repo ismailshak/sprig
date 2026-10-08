@@ -32,7 +32,7 @@
 {{template "handle-field" .}}
 {{template "timezone-field" .Zone}}
 <input type="hidden" name="{{.Field}}">
-<button class="wide-action" type="submit" disabled>Create garden</button>
+<div class="actions"><button class="wide-action" type="submit" disabled>Create garden</button></div>
 <p class="note" id="passkey-noscript">Requires JavaScript and a browser with passkey support.</p>
 </form>
 {{with .SignIn}}<p class="note">Already have an account? <a href="{{.}}">Sign in</a>.</p>{{end}}

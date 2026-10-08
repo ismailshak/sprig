@@ -9,19 +9,19 @@
 {{if .Unusable}}
 <h1 class="bare__title">This invite link can’t be used</h1>
 <p class="bare__line">Invite links work once and expire after 7 days. Ask the person who sent it for a new one.</p>
-<a class="wide-action" href="/">{{if .Current}}Back to {{.Current}}{{else}}Back{{end}}</a>
+<div class="actions"><a class="wide-action" href="/">{{if .Current}}Back to {{.Current}}{{else}}Back{{end}}</a></div>
 {{else if .AlreadyIn}}
 <h1 class="bare__title">You’re already in {{.Garden}}</h1>
 <p class="bare__line">This account is already a member. The link hasn’t been used.</p>
 <form method="post" action="{{.Switch}}">
 <input type="hidden" name="{{.Field}}" value="{{.GardenID}}">
-<button class="wide-action" type="submit">Open {{.Garden}}</button>
+<div class="actions"><button class="wide-action" type="submit">Open {{.Garden}}</button></div>
 </form>
 {{else}}
 <h1 class="bare__title">Join {{.Garden}} as {{.Name}}?</h1>
 <p class="lead">{{.By}} invited you to {{.Garden}}. {{.Joining}}</p>
 <form method="post" action="{{.Action}}">
-<button class="wide-action" type="submit">Join {{.Garden}}</button>
+<div class="actions"><button class="wide-action" type="submit">Join {{.Garden}}</button></div>
 </form>
 <p class="note">Not {{.Name}}? <a href="{{.SignIn}}">Sign in as someone else</a>.</p>
 {{end}}

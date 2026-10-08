@@ -15,7 +15,7 @@
 <input class="input" id="name" name="name" type="text" value="{{.Typed}}" autocomplete="off">
 {{with .Error}}<p class="field__error">{{.}}</p>{{end}}
 </div>
-<button class="wide-action" type="submit">Delete garden</button>
+<div class="actions"><button class="wide-action wide-action--destructive" type="submit">Delete garden</button></div>
 </form>
 </div>
 {{end}}
