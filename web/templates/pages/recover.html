@@ -12,7 +12,7 @@
 <h1 class="bare__title">{{.Title}}</h1>
 {{if .Line}}
 <p class="bare__line">{{.Line}}</p>
-<a class="wide-action" href="{{.TryAnother}}">Try another code</a>
+<div class="actions"><a class="wide-action" href="{{.TryAnother}}">Try another code</a></div>
 {{else if .AddDevice}}
 <p class="lead">Code accepted. Add a passkey on this device, then sign in with it.</p>
 {{/* The paragraph below is rendered even when Refusal is empty, because the
@@ -23,7 +23,7 @@
 <form method="post" action="{{.Action}}" novalidate data-passkey="create" data-challenge="{{.Challenge}}" data-field="{{.Field}}" data-message="passkey-error" data-note="passkey-noscript">
 <input type="hidden" name="{{.CodeField}}" value="{{.Code}}">
 <input type="hidden" name="{{.Field}}">
-<button class="wide-action" type="submit" disabled>Add passkey</button>
+<div class="actions"><button class="wide-action" type="submit" disabled>Add passkey</button></div>
 <p class="note" id="passkey-noscript">Requires JavaScript and a browser with passkey support.</p>
 </form>
 <p class="note">The code is used up once the passkey is added. The new passkey will be listed on your Passkeys page.</p>
@@ -34,7 +34,7 @@
 <label class="field__label" for="code">Recovery code <span class="field__hint">one of the ten you saved</span></label>
 <input class="input" id="code" name="{{.CodeField}}" type="text" autocomplete="off" autocapitalize="off" spellcheck="false">
 </div>
-<button class="wide-action" type="submit">Continue</button>
+<div class="actions"><button class="wide-action" type="submit">Continue</button></div>
 </form>
 <p class="note">No recovery codes? Ask the person who runs this server for a sign-in link.</p>
 {{end}}

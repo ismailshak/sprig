@@ -15,7 +15,7 @@
 {{if .Secret}}
 {{template "secret" .Secret}}
 <p class="note">{{.Made}}</p>
-<a class="wide-action" href="{{.Done}}">Done</a>
+<div class="actions"><a class="wide-action" href="{{.Done}}">Done</a></div>
 {{else}}
 <p class="lead">Create a link to send them. They’ll choose a name and set up a passkey.</p>
 <form method="post" action="{{.Action}}" novalidate>
@@ -38,7 +38,7 @@
 {{/* Create link posts the chosen role as its own value. A button posts its
      name and value only when it is the one pressed, so exactly one role reaches
      the server whether a chip or this button was used. */}}
-<button class="wide-action" type="submit" name="role" value="{{.Chosen}}">Create link</button>
+<div class="actions"><button class="wide-action" type="submit" name="role" value="{{.Chosen}}">Create link</button></div>
 </form>
 {{end}}
 </div>

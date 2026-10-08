@@ -14,7 +14,7 @@
      Screen. */}}
 <div id="push-unavailable" hidden>
 <p class="lead">On iPhone, notifications only work once sprig is added to your Home Screen.</p>
-<a class="wide-action" href="{{.Install}}">Install sprig</a>
+<div class="actions"><a class="wide-action" href="{{.Install}}">Install sprig</a></div>
 </div>
 {{template "push-form" .}}
 {{template "devices" .}}
@@ -69,8 +69,10 @@
 <p class="note">{{$.Zone}} time. Change it in <a href="{{$.Account}}">Account</a>.</p>
 </div>
 {{end}}
-<button class="wide-action without-js" type="submit">Save changes</button>
+<div class="actions without-js">
+<button class="wide-action" type="submit">Save changes</button>
 {{if .Saved}}{{template "saved"}}{{end}}
+</div>
 </form>{{end}}
 
 {{/* The Saved shown beside a control for two seconds after the control saves.
@@ -104,7 +106,7 @@
      not one of the rows above. On the press it subscribes the browser and
      fills in the three fields before the post is sent. data-key is the VAPID
      public key it subscribes with. */}}
-<div class="devices__buttons">
+<div class="actions">
 <form method="post" action="{{.Subscribe}}" id="push-add" data-key="{{.Key}}" hx-post="{{.Subscribe}}" hx-target="#devices" hx-swap="outerHTML settle:0ms" hidden>
 <input type="hidden" name="endpoint" value="">
 <input type="hidden" name="p256dh" value="">

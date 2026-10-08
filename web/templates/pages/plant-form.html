@@ -17,7 +17,8 @@
      would close the row instead of saving the plant. */}}
 <button type="submit" hidden></button>
 {{/* The photo posted here becomes the plant's profile picture. The field is
-     rendered only for a member who may set one. */}}
+     rendered only for a member who may set one. It is the first field, because
+     the photo is usually taken while the plant is being added. */}}
 {{with .PhotoField}}{{template "photo-field" .}}
 {{end}}
 {{/* The error goes under the group, because none of the three names is
@@ -97,12 +98,12 @@
 </div>
 </div>
 </details>
-<button class="wide-action" type="submit">{{.Submit}}</button>
 {{/* Cancel is below the submit button rather than beside it, because the two
      are not equal choices. Archiving is on the plant's own page, where it asks
      for confirmation. */}}
-<div class="form__foot">
-<a class="plant__keep" href="{{.Back}}">Cancel</a>
+<div class="actions">
+<button class="wide-action" type="submit">{{.Submit}}</button>
+<a class="wide-action wide-action--text" href="{{.Back}}">Cancel</a>
 </div>
 </form>
 {{end}}

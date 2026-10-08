@@ -18,7 +18,7 @@
 <input class="input" id="garden" name="garden" type="text" value="{{.Garden}}" autocomplete="off" spellcheck="false">
 {{with .GardenError}}<p class="field__error">{{.}}</p>{{end}}
 </div>
-<button class="wide-action" type="submit">Create garden</button>
+<div class="actions"><button class="wide-action" type="submit">Create garden</button></div>
 </form>
 <p class="note">Not {{.Name}}? <a href="{{.SignIn}}">Sign in as someone else</a>.</p>
 </div>

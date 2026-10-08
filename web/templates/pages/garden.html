@@ -22,8 +22,10 @@
 {{with .NameError}}<p class="field__error">{{.}}</p>{{end}}
 </div>
 {{/* The button has an id so htmx puts focus back on it after the swap. */}}
+<div class="actions">
 <button class="wide-action" type="submit" id="save">Save</button>
 {{if .Saved}}{{template "saved"}}{{end}}
+</div>
 </form>
 {{end}}
 {{if .ManageTypes}}{{template "care-types" .}}{{end}}
@@ -36,9 +38,8 @@
 <p class="note">{{.Storage}}</p>
 <div class="storage" aria-hidden="true">{{if .StorageUsed}}<div class="storage__used" id="photo-storage-used" style="width:{{.StorageUsed}}%"></div>{{end}}</div>
 </div>
-{{/* The link is not styled as a warning, because rose means overdue in this
-     app. Deleting is confirmed on the page it opens. */}}
-{{with .Delete}}<a class="foot-link" href="{{.}}">Delete garden{{template "icon-chevron"}}</a>{{end}}
+{{/* Deleting is confirmed on the page it opens. */}}
+{{with .Delete}}<div class="actions"><a class="care care--outline care--destructive" href="{{.}}">Delete garden</a></div>{{end}}
 </div>{{end}}
 
 {{/* The Care types section. Every link and button in it swaps the whole
@@ -56,7 +57,7 @@
 </a>
 {{end}}</li>
 {{end}}</ul>
-<a class="care care--outline" href="{{.AddType}}" hx-get="{{.AddType}}" hx-target="#care-types" hx-swap="outerHTML settle:0ms">Add care type</a>
+<a class="foot-link" href="{{.AddType}}" hx-get="{{.AddType}}" hx-target="#care-types" hx-swap="outerHTML settle:0ms">Add care type</a>
 </div>{{end}}
 
 {{/* A care type's row while it is being edited. The form is the row, so one
@@ -78,7 +79,7 @@
 {{with .Why}}<p class="row__why">{{.}}</p>{{end}}
 <div class="row__buttons">
 <span>
-<a class="sched__cancel" href="{{.Cancel}}" hx-get="{{.Cancel}}" hx-target="#care-types" hx-swap="outerHTML settle:0ms">Cancel</a>
+<a class="text-button" href="{{.Cancel}}" hx-get="{{.Cancel}}" hx-target="#care-types" hx-swap="outerHTML settle:0ms">Cancel</a>
 <button class="care care--small" type="submit">Save</button>
 </span>
 {{with .Drop}}<button class="row__drop" type="submit" formaction="{{.Action}}" hx-post="{{.Action}}" hx-target="#care-types" hx-swap="outerHTML settle:0ms">{{.Label}}</button>{{end}}

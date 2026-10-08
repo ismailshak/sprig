@@ -153,14 +153,14 @@
 <span class="sched__ask">Remove this schedule?</span>
 {{/* autofocus puts a keyboard user on the safe answer once the confirmation
      has replaced the buttons. */}}
-<button class="sched__cancel" type="submit" formmethod="get" formaction="{{.Path}}"
+<button class="text-button" type="submit" formmethod="get" formaction="{{.Path}}"
  hx-get="{{.Path}}" hx-include="#{{.ID}}" hx-target="#{{.ID}}" hx-swap="outerHTML settle:0ms" autofocus>Cancel</button>
 <button class="care care--small" type="submit" formaction="{{.Remove}}"
  hx-post="{{.Remove}}" hx-target="#{{.ID}}" hx-swap="outerHTML settle:0ms">Remove</button>
 </div>{{else}}<div class="sched__buttons">
-{{with .Remove}}<a class="sched__cancel" href="{{.}}"
+{{with .Remove}}<a class="text-button" href="{{.}}"
  hx-get="{{.}}" hx-include="#{{$.ID}}" hx-target="#{{$.ID}}" hx-swap="outerHTML settle:0ms">Remove</a>{{end}}
-<a class="sched__cancel" href="{{.Cancel}}" hx-get="{{.Cancel}}" hx-target="#{{.ID}}" hx-swap="outerHTML settle:0ms">Cancel</a>
+<a class="text-button" href="{{.Cancel}}" hx-get="{{.Cancel}}" hx-target="#{{.ID}}" hx-swap="outerHTML settle:0ms">Cancel</a>
 <button class="care care--small" type="submit">Save</button>
 </div>{{end}}
 </form>

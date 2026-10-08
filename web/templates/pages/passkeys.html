@@ -18,7 +18,7 @@
      with no credential API it does neither. */}}
 <form method="post" action="{{.Add}}" data-passkey="create" data-challenge="{{.Challenge}}" data-field="{{.Field}}" data-message="passkey-error" data-note="passkey-noscript" data-swap="passkeys-list">
 <input type="hidden" name="{{.Field}}">
-<button class="wide-action" type="submit" disabled>Add passkey</button>
+<div class="actions"><button class="wide-action" type="submit" disabled>Add passkey</button></div>
 <p class="note" id="passkey-noscript">Requires JavaScript and a browser with passkey support.</p>
 </form>
 </div>

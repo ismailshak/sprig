@@ -25,14 +25,16 @@
 <p class="field__error" id="reminders-error" role="alert"></p>
 {{/* A link rather than a button, so without JavaScript the press opens the
      Notifications page. */}}
+<div class="actions">
 <a class="wide-action" href="{{.Notifications}}" id="reminders-on">Turn on notifications</a>
-<a class="bare__skip" href="{{.Today}}" id="reminders-skip">Not now</a>
+<a class="wide-action wide-action--text" href="{{.Today}}" id="reminders-skip">Not now</a>
+</div>
 </div>
 <div id="reminders-install" hidden>
 <h1 class="bare__title">Notifications need the app</h1>
 <p class="lead">On iPhone, notifications only work once sprig is added to your Home Screen.</p>
 <ol class="steps">{{range .Steps}}<li>{{.}}</li>{{end}}</ol>
-<a class="wide-action" href="{{.Today}}">Continue</a>
+<div class="actions"><a class="wide-action" href="{{.Today}}">Continue</a></div>
 </div>
 </div>
 {{end}}
