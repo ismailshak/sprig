@@ -1936,21 +1936,21 @@ legend.section__head + * { clear: both; }
   gap: 3px;
   min-height: 64px;
   padding: 5px 1px;
-  color: inherit;
-  text-decoration: none;
 }
+
+.month__link { color: inherit; text-decoration: none; }
 
 /* The hover colour, the focus ring and the .month__sitting tint are set on the
-   td because the link is only as tall as the cares it lists. The td is as tall
-   as the row. */
+   td because the link is only as big as the day's number. The td is as tall as
+   the row. */
 @media (hover: hover) {
-  .month__grid td:has(> a.month__day):hover { background: var(--surface-2); }
+  .month__grid td:has(a.month__link):hover { background: var(--surface-2); }
 }
-.month__grid td:has(> a.month__day:focus-visible) { outline: 2px solid var(--accent); outline-offset: -2px; }
-a.month__day:focus-visible { outline: none; }
+.month__grid td:has(a.month__link:focus-visible) { outline: 2px solid var(--accent); outline-offset: -2px; }
+.month__link:focus-visible { outline: none; }
 
 /* Stretches the link's click area over the whole td. */
-a.month__day::after { content: ""; position: absolute; inset: 0; }
+.month__link::after { content: ""; position: absolute; inset: 0; }
 
 .month__number {
   display: grid;
@@ -2016,7 +2016,7 @@ a.month__day::after { content: ""; position: absolute; inset: 0; }
 /* From this width a day has room for the plants' names in place of the icons. */
 @media (min-width: 600px) {
   .month__day { align-items: stretch; min-height: 96px; padding: 5px 4px; }
-  .month__number { align-self: center; }
+  .month__link, .month__number { align-self: center; }
   .month__cares { flex-direction: column; flex-wrap: nowrap; justify-content: flex-start; gap: 1px; }
   .month__care { color: var(--ink); }
   .month__care--logged, .month__care--skipped { color: var(--ink-3); }

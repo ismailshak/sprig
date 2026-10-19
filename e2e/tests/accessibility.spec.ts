@@ -8,7 +8,7 @@ import { expect, test } from '../harness/test';
 // announced.
 
 for (const checked of pages) {
-  test(`${checked.name} has no axe violations`, async ({ page }) => {
+  test(`${checked.name} has no axe violations${checked.wide ? ' @wide' : ''}`, async ({ page }) => {
     // A scan takes up to 14s on CI. A worker's first test also launches the
     // browser. The two together have run past the 30s timeout.
     test.slow();

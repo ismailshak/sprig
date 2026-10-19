@@ -33,12 +33,15 @@ import { TokensScreen } from '../screens/tokens';
 import { archivedPlants, invites, people, plants } from './garden';
 import { photos as files } from './photos';
 
-// CheckedPage is one page in the accessibility run. name is the page's name in
-// the app. as is the seeded handle to sign in as, or undefined for a page
+// CheckedPage is one page in the accessibility run. name starts the test's name.
+// It is the page's name in the app, with the width added for a page scanned at
+// both widths. as is the seeded handle to sign in as, or undefined for a page
 // served before sign-in. open navigates to the page through its screen object.
 // Where the last step has no screen object, open waits for the page's heading,
-// because axe passes when it scans the wrong page.
-export type CheckedPage = { name: string; as?: string; open: (page: Page) => Promise<void> };
+// because axe passes when it scans the wrong page. wide is true for a page
+// scanned at desktop width instead of phone width, because its desktop layout
+// shows text the phone layout hides.
+export type CheckedPage = { name: string; as?: string; wide?: boolean; open: (page: Page) => Promise<void> };
 
 // withOnePhoto adds a photo to Big Fella, because the seed writes none. It
 // needs JavaScript, because the photo field resizes the file in the browser.
@@ -136,6 +139,12 @@ export const pages: CheckedPage[] = [
   },
   { name: 'Activity', as: people.ellie.handle, open: (page) => new ActivityScreen(page).open() },
   { name: 'Calendar', as: people.ellie.handle, open: (page) => new CalendarScreen(page).open() },
+  {
+    name: 'Calendar at desktop width',
+    as: people.ellie.handle,
+    wide: true,
+    open: (page) => new CalendarScreen(page).open(),
+  },
   {
     name: 'Day sheet',
     as: people.ellie.handle,
