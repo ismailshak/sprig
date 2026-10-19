@@ -38,8 +38,8 @@ export default defineConfig({
   // reads what the service worker serves. @push marks a test that needs the
   // push API: the Notifications form, the Reminders page's offer and the
   // banner on Today. The emulated iPhone runs as a Safari tab that has none.
-  // @wide marks behaviour that differs above 900px, where the sheet is a
-  // centred dialog rather than a panel at the bottom.
+  // @wide marks behaviour that only exists at desktop width, such as the sheet
+  // opening as a centred dialog above 900px.
   projects: [
     {
       name: 'phone',

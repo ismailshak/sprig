@@ -47,17 +47,21 @@
 {{end}}</tbody>
 </table>{{end}}
 
-{{/* The link's aria-label names each note, counts the care and names the
-     members whose access covers the day, so the lists and the bands inside
-     the link are hidden from screen readers. The stylesheet shows each care's
-     icon below 600px, and each note's text and plant's name from 600px. */}}
+{{/* The link wraps only the day's number. The stylesheet stretches its click
+     area over the td. Its aria-label names each note, counts the logged and
+     due cares and names the members whose access covers the day. The bands and
+     lists are aria-hidden because the label says the same in words. The lists
+     are outside the link because a link's visible text has to appear in its
+     accessible name in the same order. The label does not hold the plants'
+     names or the +N count. The stylesheet shows each care's icon below 600px,
+     and each note's text and plant's name from 600px. */}}
 {{define "calendar-day"}}<td{{with .ID}} id="{{.}}"{{end}}{{if .Sitting}} class="month__sitting"{{end}}{{if .Today}} aria-current="date"{{end}}>{{if .Number}}
-{{if .Href}}<a class="month__day" href="{{.Href}}" hx-get="{{.Href}}" hx-target="#sheet" hx-swap="outerHTML" aria-label="{{.Label}}">{{else}}<span class="month__day">{{end}}
-<span class="month__number{{if .Notes}} month__number--noted{{end}}">{{.Number}}</span>
+<div class="month__day">
+{{if .Href}}<a class="month__link" href="{{.Href}}" hx-get="{{.Href}}" hx-target="#sheet" hx-swap="outerHTML" aria-label="{{.Label}}">{{end}}<span class="month__number{{if .Notes}} month__number--noted{{end}}">{{.Number}}</span>{{if .Href}}</a>{{end}}
 {{if .Bands}}<span class="month__bands" aria-hidden="true">{{range .Bands}}<span class="month__band{{if .Covered}} month__band--{{.Colour}}{{if .Starts}} month__band--start{{end}}{{if .Ends}} month__band--end{{end}}{{end}}"></span>{{end}}</span>{{end}}
 {{if .Notes}}<ul class="month__notes" aria-hidden="true">{{range .Notes}}<li class="month__note">{{.Text}}</li>{{end}}</ul>{{end}}
 {{if .Shown}}<ul class="month__cares" aria-hidden="true">{{range .Shown}}<li class="month__care{{if .Skipped}} month__care--skipped{{else if .Logged}} month__care--logged{{end}}"><span class="month__icon">{{template "care-icon" .Icon}}</span><span class="month__name">{{.Name}}</span></li>{{end}}{{with .More}}<li class="month__more">+{{.}}</li>{{end}}</ul>{{end}}
-{{if .Href}}</a>{{else}}</span>{{end}}
+</div>
 {{end}}</td>{{end}}
 
 {{define "calendar-row"}}<li><a class="row row--link" href="{{.Href}}">

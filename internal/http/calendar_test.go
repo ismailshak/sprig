@@ -371,10 +371,8 @@ func TestCalendar_ADayShowsThreePlantsAndCountsTheRest(t *testing.T) {
 
 	page := f.get(t, calendarPath, nil)
 
-	label := "Thursday 3 September, 4 due"
-	today := readHTML(page).first(isTag("a"), attrIs("aria-label", label))
-	if got, want := today.text(), "3 Big Fella Doris Nigel +1"; got != want {
-		t.Errorf("the link named %q reads %q, want %q", label, got, want)
+	if got, want := readHTML(page).byID(dayID(thursday)).text(), "3 Big Fella Doris Nigel +1"; got != want {
+		t.Errorf("today's cell reads %q, want %q", got, want)
 	}
 }
 

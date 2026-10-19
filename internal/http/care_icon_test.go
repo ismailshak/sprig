@@ -109,9 +109,7 @@ func TestCalendar_ADayShowsTheIconChosenForACareTypeDueOnIt(t *testing.T) {
 
 	page := f.get(t, calendarPath, nil)
 
-	today := time.Date(2026, time.September, 3, 0, 0, 0, 0, london())
-	link := readHTML(page).first(isTag("a"), attrIs("href", calendarHref(startOfMonth(today), &today)))
-	if got := iconsIn(link); !slices.Contains(got, "prune") {
+	if got := iconsIn(readHTML(page).byID(dayID(thursday))); !slices.Contains(got, "prune") {
 		t.Errorf("3 September shows the icons %v, want prune among them", got)
 	}
 }
