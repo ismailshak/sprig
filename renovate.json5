@@ -6,6 +6,7 @@
   osvVulnerabilityAlerts: true,
   semanticCommitType: 'chore',
   semanticCommitScope: 'deps',
+  reviewers: ['ismailshak'],
   postUpdateOptions: ['gomodTidy', 'gomodUpdateImportPaths'],
   // A workflow commits the vendored htmx file to Renovate's branch as this
   // author. Ignoring the author so Renovate doesn't stop rebasing the branch.
