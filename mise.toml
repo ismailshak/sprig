@@ -8,11 +8,11 @@ SPRIG_DATABASE_URL = "{{ env.SPRIG_DATABASE_URL | default(value='postgres://spri
 htmx = "2.0.11"
 
 [tools]
-go = "1.27.2"
+go = "1.27.3"
 golangci-lint = "2.15.0"
 sqlc = "1.31.1"
-node = "26.12.0"
-pnpm = "12.14.0"
+node = "26.12.1"
+pnpm = "12.15.0"
 
 "go:github.com/pressly/goose/v3/cmd/goose" = "v3.29.0" # Only the migrate tasks need the binary because the app runs goose as a library at startup
 "go:github.com/bokwoon95/wgo" = "v0.7.2" # Only the dev task uses wgo, which restarts the server when a file changes
