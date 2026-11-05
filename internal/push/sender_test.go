@@ -107,7 +107,7 @@ func testKeys(t *testing.T) Keys {
 func TestSend_PostsASignedEncryptedMessageToTheSubscriptionsEndpoint(t *testing.T) {
 	service := newPushService(t, http.StatusCreated)
 	keys := testKeys(t)
-	sender := NewSender(keys, service.Client())
+	sender := NewSender(keys, service.Client(), nil)
 	notification := Notification{Title: "Rosewood", Body: "3 plants need water", URL: "https://sprig.example.com/"}
 
 	err := sender.Send(t.Context(), browserSubscription(t, service.URL+"/send/abc"), notification)
@@ -136,7 +136,7 @@ func TestSend_PostsASignedEncryptedMessageToTheSubscriptionsEndpoint(t *testing.
 func TestSend_ReturnsErrGoneWhenThePushServiceHasDroppedTheSubscription(t *testing.T) {
 	for _, status := range []int{http.StatusNotFound, http.StatusGone} {
 		service := newPushService(t, status)
-		sender := NewSender(testKeys(t), service.Client())
+		sender := NewSender(testKeys(t), service.Client(), nil)
 
 		err := sender.Send(t.Context(), browserSubscription(t, service.URL), Notification{Title: "Rosewood"})
 
@@ -150,7 +150,7 @@ func TestSend_AnUnreachablePushServiceIsNamedWithoutTheEndpointsPath(t *testing.
 	service := newPushService(t, http.StatusCreated)
 	endpoint := service.URL + "/send/only-this-browser-has-this"
 	service.Close()
-	sender := NewSender(testKeys(t), service.Client())
+	sender := NewSender(testKeys(t), service.Client(), nil)
 
 	err := sender.Send(t.Context(), browserSubscription(t, endpoint), Notification{Title: "Rosewood"})
 
@@ -167,7 +167,7 @@ func TestSend_AnUnreachablePushServiceIsNamedWithoutTheEndpointsPath(t *testing.
 
 func TestSend_ReturnsTheStatusWhenThePushServiceRefuses(t *testing.T) {
 	service := newPushService(t, http.StatusBadGateway)
-	sender := NewSender(testKeys(t), service.Client())
+	sender := NewSender(testKeys(t), service.Client(), nil)
 
 	err := sender.Send(t.Context(), browserSubscription(t, service.URL), Notification{Title: "Rosewood"})
 

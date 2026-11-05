@@ -15,7 +15,7 @@ func TestMain(m *testing.M) {
 }
 
 func migrateSchema(ctx context.Context, databaseURL string) error {
-	pool, err := store.Open(ctx, databaseURL)
+	pool, err := store.Open(ctx, databaseURL, nil)
 	if err != nil {
 		return err
 	}

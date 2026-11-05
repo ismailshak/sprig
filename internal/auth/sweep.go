@@ -6,6 +6,10 @@ import (
 	"log/slog"
 	"time"
 
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
+	"go.opentelemetry.io/otel/trace/noop"
+
 	"github.com/ismailshak/sprig/internal/store"
 )
 
@@ -68,18 +72,24 @@ type Sweeper struct {
 	sessionTTL time.Duration
 	interval   time.Duration
 	now        func() time.Time
+	tracer     trace.Tracer
 }
 
 // NewSweeper returns a Sweeper that sweeps every SweepInterval. sessionTTL is
 // the server's session lifetime, so the sweep and Sessions.Lookup treat the
-// same sessions as expired.
-func NewSweeper(logger *slog.Logger, queries *store.Queries, sessionTTL time.Duration) *Sweeper {
+// same sessions as expired. Each sweep is the root span of a new trace from
+// provider. A nil provider records no spans.
+func NewSweeper(logger *slog.Logger, queries *store.Queries, sessionTTL time.Duration, provider trace.TracerProvider) *Sweeper {
+	if provider == nil {
+		provider = noop.NewTracerProvider()
+	}
 	return &Sweeper{
 		logger:     logger,
 		queries:    queries,
 		sessionTTL: sessionTTL,
 		interval:   SweepInterval,
 		now:        time.Now,
+		tracer:     provider.Tracer("github.com/ismailshak/sprig/internal/auth"),
 	}
 }
 
@@ -101,7 +111,12 @@ func (s *Sweeper) Run(ctx context.Context) {
 // sweep runs one Sweep and logs what it deleted. A sweep that deleted nothing
 // logs nothing.
 func (s *Sweeper) sweep(ctx context.Context) {
+	ctx, span := s.tracer.Start(ctx, "sweep", trace.WithNewRoot())
+	defer span.End()
 	report, err := Sweep(ctx, s.queries, s.now(), s.sessionTTL)
+	if err != nil {
+		span.SetStatus(codes.Error, err.Error())
+	}
 	if ctx.Err() != nil {
 		return
 	}

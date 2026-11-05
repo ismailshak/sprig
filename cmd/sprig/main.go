@@ -23,6 +23,7 @@ import (
 
 	"github.com/ismailshak/sprig/db"
 	"github.com/ismailshak/sprig/internal/auth"
+	"github.com/ismailshak/sprig/internal/build"
 	sprighttp "github.com/ismailshak/sprig/internal/http"
 	"github.com/ismailshak/sprig/internal/photo"
 	"github.com/ismailshak/sprig/internal/push"
@@ -77,7 +78,8 @@ func vapid(stdout io.Writer) error {
 // anything, then passes over the photo directory and the photo rows, printing
 // what it removed. It does not run the migrations, because the server that
 // wrote the rows has already applied them. A photo row with no file makes it
-// return an error, so the exit status is non-zero.
+// return an error, so the exit status is non-zero. The run is one trace, with
+// a root span named "sweep".
 func sweep(ctx context.Context, getenv func(string) string, stdout io.Writer) error {
 	cfg, err := loadConfig(getenv)
 	if err != nil {
@@ -89,13 +91,28 @@ func sweep(ctx context.Context, getenv func(string) string, stdout io.Writer) er
 	if _, err := os.Stat(cfg.photoDir); err != nil {
 		return err
 	}
-	pool, err := store.Open(ctx, cfg.databaseURL)
+
+	logger := newLogger(cfg, stdout)
+	logTraceErrors(logger)
+	provider, shutdownTracing, err := newTracerProvider(ctx, cfg.tracing, build.Read().Version)
+	if err != nil {
+		return err
+	}
+	defer stopTracing(logger, shutdownTracing)
+
+	pool, err := store.Open(ctx, cfg.databaseURL, provider)
 	if err != nil {
 		return err
 	}
 	defer pool.Close()
 
-	queries := store.New(pool)
+	return inSpan(ctx, provider, "sweep", func(ctx context.Context) error {
+		return sweepOnce(ctx, cfg, store.New(pool), stdout)
+	})
+}
+
+// sweepOnce runs one sweep of the rows and the photos for the sweep command.
+func sweepOnce(ctx context.Context, cfg config, queries *store.Queries, stdout io.Writer) error {
 	rows, err := auth.Sweep(ctx, queries, time.Now(), cfg.sessionTTL)
 	if err != nil {
 		return err
@@ -131,16 +148,28 @@ func run(ctx context.Context, getenv func(string) string, stdout io.Writer) erro
 	}
 
 	logger := newLogger(cfg, stdout)
+	logTraceErrors(logger)
+	// stopTracing is deferred first so it runs last, after the jobs and the
+	// notifications below have ended their spans.
+	provider, shutdownTracing, err := newTracerProvider(ctx, cfg.tracing, build.Read().Version)
+	if err != nil {
+		return err
+	}
+	defer stopTracing(logger, shutdownTracing)
 
-	pool, err := store.Open(ctx, cfg.databaseURL)
+	pool, err := store.Open(ctx, cfg.databaseURL, provider)
 	if err != nil {
 		return err
 	}
 	defer pool.Close()
 
 	// Migrate before listening, so no request is served against a schema older
-	// than the binary.
-	if err := store.Migrate(ctx, pool, db.Migrations, logger); err != nil {
+	// than the binary. A query is traced only inside a span, so the migration
+	// runs inside one.
+	err = inSpan(ctx, provider, "migrate", func(ctx context.Context) error {
+		return store.Migrate(ctx, pool, db.Migrations, logger)
+	})
+	if err != nil {
 		return err
 	}
 
@@ -186,7 +215,7 @@ func run(ctx context.Context, getenv func(string) string, stdout io.Writer) erro
 	var sendTest func(context.Context, store.PushSubscription, push.Notification) error
 	if cfg.pushEnabled {
 		pushKey = cfg.push.Public
-		sender := push.NewSender(cfg.push, nil)
+		sender := push.NewSender(cfg.push, nil, provider)
 		digest = push.NewDigest(logger, queries, sender, cfg.baseURL.String(), sprighttp.DigestPath)
 		deadlines = push.NewDeadlines(logger, queries, sender, cfg.baseURL.String(), sprighttp.TokensPath, sprighttp.PeoplePath)
 		notifier = push.NewNotifier(logger, queries, sender, cfg.baseURL.String())
@@ -217,6 +246,7 @@ func run(ctx context.Context, getenv func(string) string, stdout io.Writer) erro
 		NotifyActivity:  notifyActivity,
 		NotifyUser:      notifyUser,
 		SendTest:        sendTest,
+		TracerProvider:  provider,
 	})
 
 	// run does not return until the sweep and the two push jobs have stopped
@@ -225,7 +255,7 @@ func run(ctx context.Context, getenv func(string) string, stdout io.Writer) erro
 	jobCtx, stopJobs := context.WithCancel(ctx)
 	defer stopJobs()
 	var jobs sync.WaitGroup
-	jobs.Go(func() { auth.NewSweeper(logger, queries, cfg.sessionTTL).Run(jobCtx) })
+	jobs.Go(func() { auth.NewSweeper(logger, queries, cfg.sessionTTL, provider).Run(jobCtx) })
 	if cfg.pushEnabled {
 		jobs.Go(func() { digest.Run(jobCtx) })
 		jobs.Go(func() { deadlines.Run(jobCtx) })

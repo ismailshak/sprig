@@ -47,7 +47,20 @@ type config struct {
 	pushEnabled bool
 	// push is the VAPID key pair and contact subject. It is empty when
 	// pushEnabled is false.
-	push push.Keys
+	push    push.Keys
+	tracing tracingConfig
+}
+
+// tracingConfig is where traces are exported to and how many are kept.
+type tracingConfig struct {
+	// endpoint is the URL of an OTLP/HTTP traces endpoint. Empty means
+	// tracing is off.
+	endpoint string
+	// headers are sent with every export. The values are credentials and are
+	// never logged.
+	headers map[string]string
+	// sampleRatio is the fraction of traces kept, from 0 to 1.
+	sampleRatio float64
 }
 
 // defaultAddr is the address the server listens on when SPRIG_ADDR is unset.
@@ -176,6 +189,8 @@ func loadConfig(getenv func(string) string) (config, error) {
 		}
 	}
 
+	cfg.tracing, problems = loadTracing(getenv, problems)
+
 	level, err := parseLogLevel(withDefault(getenv("SPRIG_LOG_LEVEL"), "info"))
 	if err != nil {
 		problems = append(problems, err.Error())
@@ -187,6 +202,70 @@ func loadConfig(getenv func(string) string) (config, error) {
 	}
 
 	return cfg, nil
+}
+
+// loadTracing reads the three tracing variables and appends a problem for each
+// one that is wrong. No message quotes SPRIG_OTLP_HEADERS or
+// SPRIG_OTLP_ENDPOINT, because either can hold a credential.
+func loadTracing(getenv func(string) string, problems []string) (tracingConfig, []string) {
+	tracing := tracingConfig{endpoint: strings.TrimSpace(getenv("SPRIG_OTLP_ENDPOINT"))}
+	if tracing.endpoint != "" {
+		if problem := checkOTLPEndpoint(tracing.endpoint); problem != "" {
+			problems = append(problems, problem)
+		}
+	}
+
+	headers, err := parseHeaders(getenv("SPRIG_OTLP_HEADERS"))
+	if err != nil {
+		problems = append(problems, "SPRIG_OTLP_HEADERS must be comma-separated key=value pairs: "+err.Error())
+	}
+	tracing.headers = headers
+
+	raw := withDefault(strings.TrimSpace(getenv("SPRIG_TRACE_SAMPLE_RATIO")), "1")
+	ratio, err := strconv.ParseFloat(raw, 64)
+	if err != nil || !(ratio >= 0 && ratio <= 1) {
+		problems = append(problems, fmt.Sprintf("SPRIG_TRACE_SAMPLE_RATIO must be a number from 0 to 1, got %q", raw))
+	}
+	tracing.sampleRatio = ratio
+
+	return tracing, problems
+}
+
+// checkOTLPEndpoint returns the problem with a SPRIG_OTLP_ENDPOINT value, or
+// "" when it is an absolute http or https URL. A user, a password, a query and
+// a fragment are refused, because the exporter sends only the host and path
+// and would drop them without saying so.
+func checkOTLPEndpoint(v string) string {
+	parsed, err := url.Parse(v)
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
+		return "SPRIG_OTLP_ENDPOINT must be an http or https URL such as https://otel.example.com/v1/traces"
+	}
+	if parsed.User != nil {
+		return "SPRIG_OTLP_ENDPOINT must not hold a user or password. Send credentials in SPRIG_OTLP_HEADERS"
+	}
+	if parsed.RawQuery != "" || parsed.ForceQuery || parsed.Fragment != "" {
+		return "SPRIG_OTLP_ENDPOINT must not have a query or fragment. Send credentials in SPRIG_OTLP_HEADERS"
+	}
+	return ""
+}
+
+// parseHeaders reads comma-separated key=value pairs, such as
+// "Authorization=Bearer abc,X-Scope-OrgID=sprig". A value can contain "=" but
+// not a comma. The error names a pair by its position and never quotes it.
+func parseHeaders(v string) (map[string]string, error) {
+	headers := map[string]string{}
+	if strings.TrimSpace(v) == "" {
+		return headers, nil
+	}
+	for i, pair := range strings.Split(v, ",") {
+		key, value, ok := strings.Cut(pair, "=")
+		key = strings.TrimSpace(key)
+		if !ok || key == "" {
+			return map[string]string{}, fmt.Errorf("pair %d is not key=value", i+1)
+		}
+		headers[key] = strings.TrimSpace(value)
+	}
+	return headers, nil
 }
 
 // parseBaseURL returns the scheme and host of a SPRIG_BASE_URL value. Anything

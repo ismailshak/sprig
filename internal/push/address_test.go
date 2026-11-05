@@ -46,7 +46,7 @@ func TestRefusedAddress_RefusesEveryAddressOnAPrivateNetworkAndNoPublicOne(t *te
 
 func TestSend_WithoutAClientMakesNoRequestToAnEndpointThatNamesALoopbackAddress(t *testing.T) {
 	service := newPushService(t, http.StatusCreated)
-	sender := NewSender(testKeys(t), nil)
+	sender := NewSender(testKeys(t), nil, nil)
 
 	err := sender.Send(t.Context(), browserSubscription(t, service.URL+"/send/abc"), Notification{Title: "Rosewood"})
 
@@ -60,7 +60,7 @@ func TestSend_WithoutAClientMakesNoRequestToAnEndpointThatNamesALoopbackAddress(
 
 func TestSend_WithoutAClientMakesNoRequestToAnEndpointWhoseNameResolvesToLoopback(t *testing.T) {
 	service := newPushService(t, http.StatusCreated)
-	sender := NewSender(testKeys(t), nil)
+	sender := NewSender(testKeys(t), nil, nil)
 	endpoint := strings.Replace(service.URL, "127.0.0.1", "localhost", 1) + "/send/abc"
 
 	err := sender.Send(t.Context(), browserSubscription(t, endpoint), Notification{Title: "Rosewood"})
@@ -82,7 +82,7 @@ func TestSend_ARedirectToARefusedAddressIsNotFollowed(t *testing.T) {
 	t.Cleanup(service.Close)
 	serviceAddr := netip.MustParseAddrPort(service.Listener.Addr().String()).Addr()
 	client := guardedClient(func(addr netip.Addr) bool { return addr != serviceAddr && RefusedAddress(addr) })
-	sender := NewSender(testKeys(t), client)
+	sender := NewSender(testKeys(t), client, nil)
 
 	err := sender.Send(t.Context(), browserSubscription(t, service.URL+"/send/abc"), Notification{Title: "Rosewood"})
 

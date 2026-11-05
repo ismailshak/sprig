@@ -70,7 +70,7 @@ func seedUpstairs(t *testing.T, db store.DBTX) {
 func newDeadlines(t *testing.T, db store.DBTX, service *pushService, now func() time.Time) *Deadlines {
 	t.Helper()
 
-	deadlines := NewDeadlines(slog.New(slog.DiscardHandler), store.New(db), NewSender(testKeys(t), service.Client()), "https://sprig.example.com/", "/more/tokens", "/more/people")
+	deadlines := NewDeadlines(slog.New(slog.DiscardHandler), store.New(db), NewSender(testKeys(t), service.Client(), nil), "https://sprig.example.com/", "/more/tokens", "/more/people")
 	deadlines.now = now
 	return deadlines
 }

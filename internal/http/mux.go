@@ -8,6 +8,8 @@ import (
 	"time"
 	"uuid"
 
+	"go.opentelemetry.io/otel/trace"
+	"go.opentelemetry.io/otel/trace/noop"
 	"golang.org/x/time/rate"
 
 	"github.com/ismailshak/sprig/internal/auth"
@@ -73,6 +75,9 @@ type Dependencies struct {
 	NotifyUser func(ctx context.Context, user store.AppUser, n push.Notification)
 	// SendTest sends the Notifications page's test message to one browser.
 	SendTest func(ctx context.Context, subscription store.PushSubscription, n push.Notification) error
+	// TracerProvider is the provider each request's span is started from. Nil
+	// records no spans.
+	TracerProvider trace.TracerProvider
 }
 
 // routes is every route the server has. New registers from this slice and the
@@ -323,13 +328,14 @@ var publicRoutes = map[string]bool{
 
 // New builds sprig's handler. The middleware order matters. RequestID runs
 // outermost so the id is set before anything logs. MatchPattern is next,
-// because Logging and Authenticate read the route pattern it puts on the
-// context. SecurityHeaders is outside Recover so the 500 a panic produces has
-// the security headers too. Logging wraps Recover so a recovered panic's 500
-// still gets a request line. The cross-origin check is inside Logging and
-// Recover so a refused request is logged like any other. Authentication is
-// inside that so a cross-site post is refused before it costs a session
-// lookup.
+// because Tracing, Logging and Authenticate read the route pattern it puts on
+// the context. Tracing is outside Logging so the request's log line has the
+// span's trace id. SecurityHeaders is outside Recover so the 500 a panic
+// produces has the security headers too. Logging wraps Recover so a recovered
+// panic's 500 still gets a request line. The cross-origin check is inside
+// Logging and Recover so a refused request is logged like any other.
+// Authentication is inside that so a cross-site post is refused before it
+// costs a session lookup.
 func New(d Dependencies) http.Handler {
 	mux := http.NewServeMux()
 	table := routes(d)
@@ -364,6 +370,11 @@ func New(d Dependencies) http.Handler {
 	handler = Recover(d.Logger, d.Templates)(handler)
 	handler = Logging(d.Logger)(handler)
 	handler = SecurityHeaders(handler)
+	provider := d.TracerProvider
+	if provider == nil {
+		provider = noop.NewTracerProvider()
+	}
+	handler = Tracing(provider)(handler)
 	handler = MatchPattern(mux)(handler)
 	handler = RequestID(handler)
 	return handler

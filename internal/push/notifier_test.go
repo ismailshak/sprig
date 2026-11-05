@@ -19,7 +19,7 @@ import (
 func newNotifier(t *testing.T, db store.DBTX, service *pushService) *Notifier {
 	t.Helper()
 
-	notifier := NewNotifier(slog.New(slog.DiscardHandler), store.New(db), NewSender(testKeys(t), service.Client()), "https://sprig.example.com/")
+	notifier := NewNotifier(slog.New(slog.DiscardHandler), store.New(db), NewSender(testKeys(t), service.Client(), nil), "https://sprig.example.com/")
 	notifier.now = fixed(utc(2026, time.September, 3, 12, 0, 0))
 	return notifier
 }

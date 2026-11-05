@@ -23,14 +23,14 @@ description = "Build the server binary at ./sprig"
 run = "go build -o sprig ./cmd/sprig"
 
 [tasks."dev:stop"]
-description = "Stop the Postgres container the dev task leaves running"
-run = "docker compose stop db"
+description = "Stop the Postgres and Jaeger containers the dev task leaves running"
+run = "docker compose --profile traces stop db jaeger"
 
 [tasks."dev:reset"]
 description = "Delete the dev database and load the seed into a fresh one"
 run = [
   # --volumes deletes the db-data volume the database lives in
-  "docker compose down --volumes",
+  "docker compose --profile traces down --volumes",
   "docker compose up -d --wait db",
   "mise run seed",
 ]

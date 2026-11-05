@@ -76,7 +76,7 @@ func (d *Deadlines) Wake() {
 // Run sends until ctx is done. It returns no error: a failed look is logged
 // and tried again after retryAfter.
 func (d *Deadlines) Run(ctx context.Context) {
-	runJob(ctx, d.logger, "deadlines", d.now, d.wake, d.sendDue)
+	runJob(ctx, d.logger, d.sender.tracer, "deadlines", d.now, d.wake, d.sendDue)
 }
 
 // sendDue sends every notification whose instant has come and returns the

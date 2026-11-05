@@ -46,10 +46,7 @@ func Logging(logger *slog.Logger) func(http.Handler) http.Handler {
 			start := time.Now()
 			next.ServeHTTP(rec, r)
 
-			status := rec.status
-			if !rec.wroteHeader && errors.Is(r.Context().Err(), context.Canceled) {
-				status = statusClientClosed
-			}
+			status := responseStatus(rec, r)
 			pattern := patternFrom(r)
 			level := slog.LevelInfo
 			if pattern == healthzPattern {
@@ -69,6 +66,15 @@ func Logging(logger *slog.Logger) func(http.Handler) http.Handler {
 // and the handler wrote nothing. It is never sent. nginx logs 499 for the same
 // case.
 const statusClientClosed = 499
+
+// responseStatus returns the status rec recorded for r, or statusClientClosed
+// when the client closed the connection before the handler wrote anything.
+func responseStatus(rec *statusRecorder, r *http.Request) int {
+	if !rec.wroteHeader && errors.Is(r.Context().Err(), context.Canceled) {
+		return statusClientClosed
+	}
+	return rec.status
+}
 
 // statusRecorder captures the status code a handler wrote, defaulting to
 // 200 for a handler that never calls WriteHeader.

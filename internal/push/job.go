@@ -4,6 +4,9 @@ import (
 	"context"
 	"log/slog"
 	"time"
+
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // retryAfter is how long a job waits before looking again after a database
@@ -15,11 +18,14 @@ const retryAfter = time.Minute
 // instant nothing is coming and the job sleeps until a wake. An error from
 // look is logged under name and look is called again after retryAfter.
 //
+// Each call to look is the root span of a new trace, named name. The sleep
+// between calls is outside any span.
+//
 // The timer runs to the next send rather than on a fixed interval, so a send
 // is never up to an interval late.
-func runJob(ctx context.Context, logger *slog.Logger, name string, now func() time.Time, wake <-chan struct{}, look func(context.Context) (time.Time, error)) {
+func runJob(ctx context.Context, logger *slog.Logger, tracer trace.Tracer, name string, now func() time.Time, wake <-chan struct{}, look func(context.Context) (time.Time, error)) {
 	for {
-		next, err := look(ctx)
+		next, err := traceLook(ctx, tracer, name, look)
 		if ctx.Err() != nil {
 			return
 		}
@@ -54,6 +60,16 @@ func runJob(ctx context.Context, logger *slog.Logger, name string, now func() ti
 			return
 		}
 	}
+}
+
+func traceLook(ctx context.Context, tracer trace.Tracer, name string, look func(context.Context) (time.Time, error)) (time.Time, error) {
+	ctx, span := tracer.Start(ctx, name, trace.WithNewRoot())
+	defer span.End()
+	next, err := look(ctx)
+	if err != nil {
+		span.SetStatus(codes.Error, err.Error())
+	}
+	return next, err
 }
 
 // wakeJob sends on wake without blocking. The channel is buffered to one,

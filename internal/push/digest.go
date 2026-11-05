@@ -81,7 +81,7 @@ func (d *Digest) Wake() {
 // Run sends digests until ctx is done. It returns no error: a failed look is
 // logged and tried again after retryAfter.
 func (d *Digest) Run(ctx context.Context) {
-	runJob(ctx, d.logger, "digest", d.now, d.wake, d.sendDue)
+	runJob(ctx, d.logger, d.sender.tracer, "digest", d.now, d.wake, d.sendDue)
 }
 
 // sendDue sends every reminder whose time has come and every digest whose hour
