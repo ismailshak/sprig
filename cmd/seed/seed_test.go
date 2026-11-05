@@ -33,7 +33,7 @@ func TestMain(m *testing.M) {
 // migrateSchema migrates the template database that every test database in
 // this package is copied from.
 func migrateSchema(ctx context.Context, databaseURL string) error {
-	pool, err := store.Open(ctx, databaseURL)
+	pool, err := store.Open(ctx, databaseURL, nil)
 	if err != nil {
 		return err
 	}
@@ -48,7 +48,7 @@ func migrateSchema(ctx context.Context, databaseURL string) error {
 func seeded(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 
-	pool, err := store.Open(t.Context(), pgtest.Fresh(t, migrateSchema))
+	pool, err := store.Open(t.Context(), pgtest.Fresh(t, migrateSchema), nil)
 	if err != nil {
 		t.Fatalf("opening the test database: %v", err)
 	}

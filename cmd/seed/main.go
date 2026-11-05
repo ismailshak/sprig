@@ -58,7 +58,7 @@ func run(ctx context.Context, getenv func(string) string, stdout io.Writer) erro
 		return err
 	}
 
-	pool, err := store.Open(ctx, databaseURL)
+	pool, err := store.Open(ctx, databaseURL, nil)
 	if err != nil {
 		return err
 	}

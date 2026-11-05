@@ -16,7 +16,7 @@ var testAtNoon = utc(2026, time.September, 3, 12, 0, 0)
 func newTestMessage(t *testing.T, db store.DBTX, service *pushService) *TestMessage {
 	t.Helper()
 
-	message := NewTestMessage(store.New(db), NewSender(testKeys(t), service.Client()), "https://sprig.example.com/")
+	message := NewTestMessage(store.New(db), NewSender(testKeys(t), service.Client(), nil), "https://sprig.example.com/")
 	message.now = fixed(testAtNoon)
 	return message
 }
@@ -91,7 +91,7 @@ func TestTestMessage_ASendRefusedForItsAddressKeepsTheBrowserRow(t *testing.T) {
 	tx := pgtest.Tx(t, migrateSchema)
 	seedRosewood(t, tx, service)
 	message := newTestMessage(t, tx, service)
-	message.sender = NewSender(testKeys(t), nil)
+	message.sender = NewSender(testKeys(t), nil, nil)
 
 	err := message.Send(t.Context(), subscriptionAt(t, tx, service, "/ellie-phone"), TestNotification("/more/notifications"))
 

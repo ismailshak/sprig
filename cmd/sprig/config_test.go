@@ -417,3 +417,98 @@ func TestLoadConfig_APublicKeyFromAnotherPairIsRefusedAtStartup(t *testing.T) {
 		t.Errorf("a mismatched pair started with %v, want a startup error naming the mismatch", err)
 	}
 }
+
+// tracingEnv returns a valid environment with vars added.
+func tracingEnv(vars map[string]string) func(string) string {
+	env := map[string]string{"SPRIG_DATABASE_URL": "postgres://example/db", "SPRIG_BASE_URL": "https://sprig.example.com"}
+	maps.Copy(env, vars)
+	return func(k string) string { return env[k] }
+}
+
+func TestLoadConfig_TracingIsOffAndTheSampleRatioIsOneWhenUnset(t *testing.T) {
+	cfg, err := loadConfig(tracingEnv(nil))
+	if err != nil {
+		t.Fatalf("loadConfig returned an error: %v", err)
+	}
+	if cfg.tracing.endpoint != "" {
+		t.Errorf("endpoint = %q, want empty", cfg.tracing.endpoint)
+	}
+	if cfg.tracing.sampleRatio != 1 {
+		t.Errorf("sampleRatio = %v, want 1", cfg.tracing.sampleRatio)
+	}
+}
+
+func TestLoadConfig_ASampleRatioThatIsNotANumberFromZeroToOneIsAProblemNamingTheVariable(t *testing.T) {
+	for _, ratio := range []string{"half", "1.5", "-0.1", "NaN", "Inf"} {
+		t.Run(ratio, func(t *testing.T) {
+			_, err := loadConfig(tracingEnv(map[string]string{"SPRIG_TRACE_SAMPLE_RATIO": ratio}))
+			if err == nil || !strings.Contains(err.Error(), "SPRIG_TRACE_SAMPLE_RATIO") {
+				t.Errorf("a ratio of %q started with %v, want a problem naming SPRIG_TRACE_SAMPLE_RATIO", ratio, err)
+			}
+		})
+	}
+}
+
+func TestLoadConfig_ASampleRatioFromZeroToOneIsAccepted(t *testing.T) {
+	for _, ratio := range []string{"0", "1", "0.25"} {
+		if _, err := loadConfig(tracingEnv(map[string]string{"SPRIG_TRACE_SAMPLE_RATIO": ratio})); err != nil {
+			t.Errorf("a ratio of %q was refused: %v", ratio, err)
+		}
+	}
+}
+
+func TestLoadConfig_OTLPHeadersAreReadAsKeyValuePairs(t *testing.T) {
+	cfg, err := loadConfig(tracingEnv(map[string]string{"SPRIG_OTLP_HEADERS": "Authorization=Basic c3ByaWc6aHVudGVyMg==, X-Scope-OrgID = sprig"}))
+	if err != nil {
+		t.Fatalf("loadConfig returned an error: %v", err)
+	}
+	want := map[string]string{"Authorization": "Basic c3ByaWc6aHVudGVyMg==", "X-Scope-OrgID": "sprig"}
+	if !maps.Equal(cfg.tracing.headers, want) {
+		t.Errorf("headers = %q, want %q", cfg.tracing.headers, want)
+	}
+}
+
+func TestLoadConfig_AnOTLPHeaderWithoutAnEqualsSignIsAProblemThatDoesNotQuoteIt(t *testing.T) {
+	_, err := loadConfig(tracingEnv(map[string]string{"SPRIG_OTLP_HEADERS": "Authorization=Bearer abc,hunter2"}))
+	if err == nil || !strings.Contains(err.Error(), "SPRIG_OTLP_HEADERS") {
+		t.Fatalf("a header with no = started with %v, want a problem naming SPRIG_OTLP_HEADERS", err)
+	}
+	if strings.Contains(err.Error(), "hunter2") || strings.Contains(err.Error(), "abc") {
+		t.Errorf("the error %q quotes a header", err)
+	}
+}
+
+func TestLoadConfig_AnOTLPEndpointThatIsNotAnHTTPURLIsAProblemNamingTheVariable(t *testing.T) {
+	for _, endpoint := range []string{"otel.example.com:4318", "grpc://otel.example.com:4317", "https:///v1/traces"} {
+		t.Run(endpoint, func(t *testing.T) {
+			_, err := loadConfig(tracingEnv(map[string]string{"SPRIG_OTLP_ENDPOINT": endpoint}))
+			if err == nil || !strings.Contains(err.Error(), "SPRIG_OTLP_ENDPOINT") {
+				t.Errorf("an endpoint of %q started with %v, want a problem naming SPRIG_OTLP_ENDPOINT", endpoint, err)
+			}
+		})
+	}
+}
+
+func TestLoadConfig_AnOTLPEndpointWithAPasswordIsAProblemThatDoesNotQuoteIt(t *testing.T) {
+	_, err := loadConfig(tracingEnv(map[string]string{"SPRIG_OTLP_ENDPOINT": "https://sprig:hunter2@otel.example.com/v1/traces"})) //nolint:gosec // G101 sees a password in a URL, and the test needs one
+	if err == nil || !strings.Contains(err.Error(), "SPRIG_OTLP_ENDPOINT") {
+		t.Fatalf("an endpoint with a password started with %v, want a problem naming SPRIG_OTLP_ENDPOINT", err)
+	}
+	if strings.Contains(err.Error(), "hunter2") {
+		t.Errorf("the error %q quotes the password", err)
+	}
+}
+
+func TestLoadConfig_AnOTLPEndpointWithAQueryOrFragmentIsAProblemThatDoesNotQuoteIt(t *testing.T) {
+	for _, endpoint := range []string{"https://otel.example.com/v1/traces?api_key=hunter2", "https://otel.example.com/v1/traces#hunter2"} {
+		t.Run(endpoint, func(t *testing.T) {
+			_, err := loadConfig(tracingEnv(map[string]string{"SPRIG_OTLP_ENDPOINT": endpoint}))
+			if err == nil || !strings.Contains(err.Error(), "SPRIG_OTLP_ENDPOINT") {
+				t.Fatalf("an endpoint of %q started with %v, want a problem naming SPRIG_OTLP_ENDPOINT", endpoint, err)
+			}
+			if strings.Contains(err.Error(), "hunter2") {
+				t.Errorf("the error %q quotes the endpoint", err)
+			}
+		})
+	}
+}

@@ -22,7 +22,7 @@ import (
 // migrateSchema migrates the template database that every test database in
 // this package is copied from.
 func migrateSchema(ctx context.Context, databaseURL string) error {
-	pool, err := Open(ctx, databaseURL)
+	pool, err := Open(ctx, databaseURL, nil)
 	if err != nil {
 		return err
 	}
@@ -190,7 +190,7 @@ func recordingLogger() (*slog.Logger, func() int) {
 func openPool(t *testing.T, databaseURL string) *pgxpool.Pool {
 	t.Helper()
 
-	pool, err := Open(t.Context(), databaseURL)
+	pool, err := Open(t.Context(), databaseURL, nil)
 	if err != nil {
 		t.Fatalf("opening the test database: %v", err)
 	}

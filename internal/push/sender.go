@@ -11,6 +11,10 @@ import (
 	"strings"
 
 	webpush "github.com/SherClockHolmes/webpush-go"
+	"go.opentelemetry.io/otel/codes"
+	semconv "go.opentelemetry.io/otel/semconv/v1.40.0"
+	"go.opentelemetry.io/otel/trace"
+	"go.opentelemetry.io/otel/trace/noop"
 
 	"github.com/ismailshak/sprig/internal/store"
 )
@@ -45,16 +49,22 @@ const ttl = 24 * 60 * 60
 type Sender struct {
 	keys   Keys
 	client *http.Client
+	// tracer starts the span for each send. The jobs and the Notifier that
+	// send through this Sender start their spans from it too.
+	tracer trace.Tracer
 }
 
 // NewSender returns a Sender that signs with keys. A nil client means a new
 // http.Client with a 10-second timeout that refuses to connect to an address
-// RefusedAddress refuses.
-func NewSender(keys Keys, client *http.Client) *Sender {
+// RefusedAddress refuses. A nil provider records no spans.
+func NewSender(keys Keys, client *http.Client, provider trace.TracerProvider) *Sender {
 	if client == nil {
 		client = guardedClient(RefusedAddress)
 	}
-	return &Sender{keys: keys, client: client}
+	if provider == nil {
+		provider = noop.NewTracerProvider()
+	}
+	return &Sender{keys: keys, client: client, tracer: provider.Tracer("github.com/ismailshak/sprig/internal/push")}
 }
 
 // serviceOf returns the scheme and host of a push endpoint, or "the push
@@ -83,7 +93,23 @@ func sendError(endpoint string, err error) error {
 // connect to the endpoint's address, the error wraps ErrRefusedAddress. It is
 // not ErrGone, because a resolver on the server's side giving a wrong answer
 // would then delete every browser's row.
+//
+// The send's span records the push service's scheme and host and the response
+// status. It never records the endpoint's path.
 func (s *Sender) Send(ctx context.Context, subscription store.PushSubscription, n Notification) error {
+	ctx, span := s.tracer.Start(ctx, "push send",
+		trace.WithSpanKind(trace.SpanKindClient),
+		trace.WithAttributes(semconv.ServerAddress(serviceOf(subscription.Endpoint))),
+	)
+	defer span.End()
+	err := s.send(ctx, span, subscription, n)
+	if err != nil {
+		span.SetStatus(codes.Error, err.Error())
+	}
+	return err
+}
+
+func (s *Sender) send(ctx context.Context, span trace.Span, subscription store.PushSubscription, n Notification) error {
 	body, err := json.Marshal(n)
 	if err != nil {
 		return fmt.Errorf("encoding the notification: %w", err)
@@ -107,6 +133,7 @@ func (s *Sender) Send(ctx context.Context, subscription store.PushSubscription, 
 	// status alone says whether the send failed.
 	_, _ = io.Copy(io.Discard, response.Body)
 	_ = response.Body.Close()
+	span.SetAttributes(semconv.HTTPResponseStatusCode(response.StatusCode))
 
 	switch {
 	case response.StatusCode == http.StatusNotFound || response.StatusCode == http.StatusGone:

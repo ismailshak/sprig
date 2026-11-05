@@ -49,7 +49,7 @@ func NewNotifier(logger *slog.Logger, queries *store.Queries, sender *Sender, ba
 // goroutine ignores a cancelled ctx, so the request that logged the care
 // neither waits for the push service nor stops the send when it returns.
 func (p *Notifier) SendActivity(ctx context.Context, gardenID, actor uuid.UUID, n Notification) {
-	p.start(ctx, n, func(ctx context.Context, n Notification) {
+	p.start(ctx, "notify activity", n, func(ctx context.Context, n Notification) {
 		p.sendActivity(ctx, gardenID, actor, n)
 	})
 }
@@ -59,7 +59,7 @@ func (p *Notifier) SendActivity(ctx context.Context, gardenID, actor uuid.UUID, 
 // empty for a notification that opens nothing. The send runs in a goroutine
 // the way SendActivity's does.
 func (p *Notifier) SendToUser(ctx context.Context, user store.AppUser, n Notification) {
-	p.start(ctx, n, func(ctx context.Context, n Notification) {
+	p.start(ctx, "notify user", n, func(ctx context.Context, n Notification) {
 		p.sendToUser(ctx, user, n)
 	})
 }
@@ -71,14 +71,17 @@ func (p *Notifier) Wait() {
 }
 
 // start makes n's paths absolute and runs send in a goroutine counted by
-// Wait.
-func (p *Notifier) start(ctx context.Context, n Notification, send func(context.Context, Notification)) {
+// Wait. send runs inside a span named name, started as a child of the span on
+// ctx so the send is in the request's trace.
+func (p *Notifier) start(ctx context.Context, name string, n Notification, send func(context.Context, Notification)) {
 	n.URL = p.absolute(n.URL)
 	n.Icon = p.absolute(n.Icon)
 	p.sends.Add(1)
 	go func() {
 		defer p.sends.Done()
-		send(context.WithoutCancel(ctx), n)
+		ctx, span := p.sender.tracer.Start(context.WithoutCancel(ctx), name)
+		defer span.End()
+		send(ctx, n)
 	}()
 }
 

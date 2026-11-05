@@ -176,7 +176,7 @@ func seedFairview(t *testing.T, db store.DBTX) {
 func newDigest(t *testing.T, db store.DBTX, service *pushService, now func() time.Time) *Digest {
 	t.Helper()
 
-	digest := NewDigest(slog.New(slog.DiscardHandler), store.New(db), NewSender(testKeys(t), service.Client()), "https://sprig.example.com", "/")
+	digest := NewDigest(slog.New(slog.DiscardHandler), store.New(db), NewSender(testKeys(t), service.Client(), nil), "https://sprig.example.com", "/")
 	digest.now = now
 	return digest
 }
@@ -543,7 +543,7 @@ func shifted(at, started time.Time) func() time.Time {
 func freshRosewood(t *testing.T, service *pushService) store.DBTX {
 	t.Helper()
 
-	pool, err := store.Open(t.Context(), pgtest.Fresh(t, migrateSchema))
+	pool, err := store.Open(t.Context(), pgtest.Fresh(t, migrateSchema), nil)
 	if err != nil {
 		t.Fatalf("opening the database: %v", err)
 	}

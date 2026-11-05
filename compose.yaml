@@ -19,7 +19,7 @@ services:
       retries: 15
       start_period: 10s
 
-  # Behind a profile because the development loop only starts Postgres.
+  # Behind a profile because the development loop runs the server on the host.
   # This service is mainly for the e2e suite.
   app:
     profiles: [app]
@@ -61,6 +61,16 @@ services:
     depends_on:
       db:
         condition: service_healthy
+
+  # Behind a profile because only mise run dev --traces starts it. Jaeger
+  # receives traces over OTLP/HTTP on 4318 and shows them at
+  # http://localhost:16686. It keeps traces in memory. A restart deletes them.
+  jaeger:
+    profiles: [traces]
+    image: jaegertracing/jaeger:2.23.0
+    ports:
+      - "4318:4318"
+      - "16686:16686"
 
 volumes:
   db-data:

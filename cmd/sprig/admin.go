@@ -51,7 +51,7 @@ func adminInvite(ctx context.Context, getenv func(string) string, stdout io.Writ
 	if err != nil {
 		return err
 	}
-	pool, err := store.Open(ctx, cfg.databaseURL)
+	pool, err := store.Open(ctx, cfg.databaseURL, nil)
 	if err != nil {
 		return err
 	}
@@ -80,7 +80,7 @@ func adminSetup(ctx context.Context, getenv func(string) string, stdout io.Write
 	if err != nil {
 		return err
 	}
-	pool, err := store.Open(ctx, cfg.databaseURL)
+	pool, err := store.Open(ctx, cfg.databaseURL, nil)
 	if err != nil {
 		return err
 	}

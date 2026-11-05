@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 #MISE description="Start Postgres and run the server on the host, rebuilding when a file changes"
 #USAGE flag "--once" help="Run the server once instead of rebuilding on a change"
+#USAGE flag "--traces" help="Start Jaeger and send the server's traces to it. They are shown at http://localhost:16686"
 set -euo pipefail
 
 # /setup returns 404 once an install has an account, unless sign-up is on. The
@@ -29,6 +30,11 @@ trap 'exit 0' INT
 
 # The container is left running so the next run only waits on the healthcheck.
 docker compose up -d --wait db
+
+if [ "${usage_traces:-false}" = "true" ]; then
+  docker compose --profile traces up -d --wait jaeger
+  export SPRIG_OTLP_ENDPOINT=http://localhost:4318/v1/traces
+fi
 
 # The dev tag adds the sign-in that stands in for passkeys. The image is built
 # without it.

@@ -5,6 +5,8 @@ import (
 	"crypto/rand"
 	"log/slog"
 	"net/http"
+
+	"go.opentelemetry.io/otel/trace"
 )
 
 // RequestIDHeader is the response header a request's id is echoed under.
@@ -38,8 +40,9 @@ func RequestIDFromContext(ctx context.Context) string {
 }
 
 // NewContextHandler wraps h so every record it handles includes the request
-// id of whichever request produced it. Callers log through a *slog.Logger's
-// *Context methods and never pass the id by hand.
+// id of whichever request produced it. A record logged inside a span also
+// includes the span's trace and span ids. Callers log through a *slog.Logger's
+// *Context methods and never pass the ids by hand.
 func NewContextHandler(h slog.Handler) slog.Handler {
 	return contextHandler{h}
 }
@@ -51,6 +54,12 @@ type contextHandler struct {
 func (h contextHandler) Handle(ctx context.Context, r slog.Record) error {
 	if id := RequestIDFromContext(ctx); id != "" {
 		r.AddAttrs(slog.String("request_id", id))
+	}
+	if span := trace.SpanContextFromContext(ctx); span.IsValid() {
+		r.AddAttrs(
+			slog.String("trace_id", span.TraceID().String()),
+			slog.String("span_id", span.SpanID().String()),
+		)
 	}
 	return h.Handler.Handle(ctx, r)
 }

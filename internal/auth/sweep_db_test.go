@@ -9,6 +9,9 @@ import (
 	"uuid"
 
 	"github.com/jackc/pgx/v5"
+	"go.opentelemetry.io/otel/codes"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
 	"github.com/ismailshak/sprig/internal/pgtest"
 	"github.com/ismailshak/sprig/internal/store"
@@ -203,7 +206,7 @@ func TestSweeper_RunSweepsAtStartupAndAgainAfterTheInterval(t *testing.T) {
 	// transaction the other tests run on.
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
-	pool, err := store.Open(ctx, pgtest.Fresh(t, migrateSchema))
+	pool, err := store.Open(ctx, pgtest.Fresh(t, migrateSchema), nil)
 	if err != nil {
 		t.Fatalf("opening the database: %v", err)
 	}
@@ -223,7 +226,7 @@ func TestSweeper_RunSweepsAtStartupAndAgainAfterTheInterval(t *testing.T) {
 		}
 		return n
 	}
-	sweeper := NewSweeper(slog.New(slog.DiscardHandler), store.New(pool), testTTL)
+	sweeper := NewSweeper(slog.New(slog.DiscardHandler), store.New(pool), testTTL, nil)
 	sweeper.interval = 20 * time.Millisecond
 	sweeper.now = func() time.Time { return sweptAt }
 
@@ -256,5 +259,33 @@ func waitFor(t *testing.T, cond func() bool) {
 			t.Fatal("the sweep did not run within 2s")
 		}
 		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+func TestSweeper_ASweepIsOneRootSpanNamedSweep(t *testing.T) {
+	_, tx := sessionsOnTx(t)
+	recorder := tracetest.NewSpanRecorder()
+	provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
+	sweeper := NewSweeper(slog.New(slog.DiscardHandler), store.New(tx), testTTL, provider)
+	sweeper.now = func() time.Time { return sweptAt }
+
+	ctx, outer := provider.Tracer("test").Start(t.Context(), "outer")
+	sweeper.sweep(ctx)
+	outer.End()
+
+	var swept []sdktrace.ReadOnlySpan
+	for _, span := range recorder.Ended() {
+		if span.Name() == "sweep" {
+			swept = append(swept, span)
+		}
+	}
+	if len(swept) != 1 {
+		t.Fatalf("got %d spans named sweep, want 1", len(swept))
+	}
+	if swept[0].Parent().IsValid() {
+		t.Error("the sweep's span has a parent, want a root span")
+	}
+	if swept[0].Status().Code == codes.Error {
+		t.Error("a sweep that succeeded set the span's status to Error")
 	}
 }
