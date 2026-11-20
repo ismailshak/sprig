@@ -210,6 +210,7 @@ func run(ctx context.Context, getenv func(string) string, stdout io.Writer) erro
 	var deadlines *push.Deadlines
 	var notifier *push.Notifier
 	var wake func()
+	var sendDigest func(context.Context, store.Membership, store.AppUser, store.Garden) error
 	var notifyActivity func(context.Context, uuid.UUID, uuid.UUID, push.Notification)
 	var notifyUser func(context.Context, store.AppUser, push.Notification)
 	var sendTest func(context.Context, store.PushSubscription, push.Notification) error
@@ -225,6 +226,7 @@ func run(ctx context.Context, getenv func(string) string, stdout io.Writer) erro
 			digest.Wake()
 			deadlines.Wake()
 		}
+		sendDigest = digest.SendToday
 		notifyActivity = notifier.SendActivity
 		notifyUser = notifier.SendToUser
 		sendTest = push.NewTestMessage(queries, sender, cfg.baseURL.String()).Send
@@ -243,6 +245,7 @@ func run(ctx context.Context, getenv func(string) string, stdout io.Writer) erro
 		SignupEnabled:   cfg.signupEnabled,
 		PushKey:         pushKey,
 		Wake:            wake,
+		SendDigest:      sendDigest,
 		NotifyActivity:  notifyActivity,
 		NotifyUser:      notifyUser,
 		SendTest:        sendTest,

@@ -2,6 +2,7 @@ package http
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -44,6 +45,28 @@ func (f *todayFixture) dailyDigest(t *testing.T, on bool) {
 func (f *todayFixture) digestSent(t *testing.T, date string) {
 	t.Helper()
 	f.exec(t, "INSERT INTO notification_send (membership_id, kind, send_key) VALUES ($1, 'digest', $2)", rosewoodMembershipID, date)
+}
+
+// digestPending sets up push on, a subscribed browser, and the daily digest on
+// at 8:00am with nothing sent today.
+func (f *todayFixture) digestPending(t *testing.T) {
+	t.Helper()
+	f.handler.pushKey = testPushKey
+	f.subscribe(t)
+	f.dailyDigest(t, true)
+}
+
+// beforeDigest is 06:00 UTC on the fixture's Thursday, 7:00am in London. The
+// reader's digest hour is 8:00am.
+var beforeDigest = time.Date(2026, time.September, 3, 6, 0, 0, 0, time.UTC)
+
+// recordDigests returns a sendDigest that appends the membership of each call
+// to sent and returns err.
+func recordDigests(sent *[]uuid.UUID, err error) sendDigest {
+	return func(_ context.Context, membership store.Membership, _ store.AppUser, _ store.Garden) error {
+		*sent = append(*sent, membership.ID)
+		return err
+	}
 }
 
 // remindAt sets the reader's reminder in the database and on the principal
@@ -120,20 +143,17 @@ func wantStatus(t *testing.T, rec *httptest.ResponseRecorder, want int) {
 	}
 }
 
-func TestToday_RemindMeLaterIsOfferedOnceTodaysDigestIsSentOrWithTheDigestOff(t *testing.T) {
+func TestToday_RemindMeLaterIsOfferedOnlyWithPushOnAndASubscribedBrowser(t *testing.T) {
 	cases := []struct {
 		name    string
 		pushKey string
 		browser bool
-		digest  bool
 		sent    string
 		shown   bool
 	}{
-		{"digest on and today's sent", testPushKey, true, true, "2026-09-03", true},
-		{"digest on and only yesterday's sent", testPushKey, true, true, "2026-09-02", false},
-		{"digest off", testPushKey, true, false, "", true},
-		{"no subscribed browser", testPushKey, false, false, "", false},
-		{"push off", "", true, false, "", false},
+		{"digest on and only yesterday's sent", testPushKey, true, "2026-09-02", true},
+		{"no subscribed browser", testPushKey, false, "", false},
+		{"push off", "", true, "", false},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -142,7 +162,7 @@ func TestToday_RemindMeLaterIsOfferedOnceTodaysDigestIsSentOrWithTheDigestOff(t 
 			if c.browser {
 				f.subscribe(t)
 			}
-			f.dailyDigest(t, c.digest)
+			f.dailyDigest(t, true)
 			if c.sent != "" {
 				f.digestSent(t, c.sent)
 			}
@@ -252,35 +272,68 @@ func TestToday_RemindMeLaterIsNotOfferedInTheLastFiveMinutesOfTheDayUnlessARemin
 	}
 }
 
-func TestToday_AWaitingReminderIsShownBeforeTodaysDigestIsSent(t *testing.T) {
-	f := rosewood(t)
-	f.handler.pushKey = testPushKey
-	f.subscribe(t)
-	// The reader set the reminder with the digest off, then switched the
-	// digest on before its hour.
-	f.dailyDigest(t, true)
-	f.remindAt(t, thursday.Add(2*time.Hour))
-
-	link := remindLaterIn(f.show(t))
-
-	if link == nil {
-		t.Fatal("the link is not shown")
+func TestToday_UntilTodaysDigestIsSentTheLinkReadsDigestAtTheSendTime(t *testing.T) {
+	cases := []struct {
+		name    string
+		sent    string
+		waiting bool
+		want    string
+	}{
+		{"only yesterday's digest sent", "2026-09-02", false, "Digest at 8:00am"},
+		{"only yesterday's digest sent and a reminder at 11:00am", "2026-09-02", true, "Digest at 11:00am"},
+		{"today's digest sent", "2026-09-03", false, "Remind me later"},
+		{"today's digest sent and a reminder at 11:00am", "2026-09-03", true, "Reminder at 11:00am"},
 	}
-	if got, want := link.text(), "Reminder at 11:00am"; got != want {
-		t.Errorf("the link reads %q, want %q", got, want)
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			f := rosewood(t)
+			f.digestPending(t)
+			f.handler.now = func() time.Time { return beforeDigest }
+			f.digestSent(t, c.sent)
+			if c.waiting {
+				f.remindAt(t, thursday.Add(2*time.Hour))
+			}
+
+			if got := remindLaterIn(f.show(t)).text(); got != c.want {
+				t.Errorf("the link reads %q, want %q", got, c.want)
+			}
+		})
 	}
 }
 
-func TestToday_RemindMeLaterIsNotOfferedForADigestSentOnlyInTheReadersOtherGarden(t *testing.T) {
+func TestToday_PastTheDigestHourWithTodaysDigestUnsentTheLinkReadsRemindMeLaterUnlessAReminderIsWaiting(t *testing.T) {
+	cases := []struct {
+		name    string
+		waiting bool
+		want    string
+	}{
+		{"no reminder", false, "Remind me later"},
+		{"a reminder at 11:00am", true, "Digest at 11:00am"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			f := rosewood(t)
+			f.digestPending(t)
+			if c.waiting {
+				f.remindAt(t, thursday.Add(2*time.Hour))
+			}
+
+			if got := remindLaterIn(f.show(t)).text(); got != c.want {
+				t.Errorf("at 9:00am the link reads %q, want %q", got, c.want)
+			}
+		})
+	}
+}
+
+func TestToday_TheLinkReadsDigestAtWhenOnlyTheReadersOtherGardenHasSentTodaysDigest(t *testing.T) {
 	f := rosewood(t)
-	f.handler.pushKey = testPushKey
-	f.subscribe(t)
-	f.dailyDigest(t, true)
+	f.digestPending(t)
+	f.handler.now = func() time.Time { return beforeDigest }
 	f.fairview(t)
 	f.exec(t, "INSERT INTO notification_send (membership_id, kind, send_key) VALUES ($1, 'digest', '2026-09-03')", otherMembershipID)
 
-	if link := remindLaterIn(f.show(t)); link != nil {
-		t.Errorf("the link is shown on Rosewood for Fairview's digest:\n%s", link)
+	if got, want := remindLaterIn(f.show(t)).text(), "Digest at 8:00am"; got != want {
+		t.Errorf("the link on Rosewood reads %q, want %q", got, want)
 	}
 }
 
@@ -344,6 +397,193 @@ func TestRemindLater_TheSheetWithAReminderWaitingOffersRescheduleAndRemove(t *te
 	}
 }
 
+func TestRemindLater_BeforeTodaysDigestIsSentTheSheetOffersToRescheduleIt(t *testing.T) {
+	f := rosewood(t)
+	f.digestPending(t)
+	f.handler.now = func() time.Time { return beforeDigest }
+
+	sheet := remindLaterDialog(f.openRemindLater(t, true).Body.String())
+
+	if sheet == nil {
+		t.Fatal("the response has no Remind me later sheet")
+	}
+	if got, want := sheet.first(isTag("h2")).text(), "Digest at 8:00am"; got != want {
+		t.Errorf("the sheet is titled %q, want %q", got, want)
+	}
+	if got, want := sheet.first(isTag("p")).text(), "Your digest will be sent at 8:00am. Choose a later time today to reschedule it."; got != want {
+		t.Errorf("the sheet says %q, want %q", got, want)
+	}
+	if got, want := chipLabels(sheet.first(isTag("fieldset"))), []string{"In 1 hour", "In 2 hours", "At a time"}; !slices.Equal(got, want) {
+		t.Errorf("the When chips are %q, want %q", got, want)
+	}
+	if sheet.first(isTag("button"), textIs("Reschedule")) == nil {
+		t.Errorf("the sheet has no Reschedule button:\n%s", sheet)
+	}
+	// Reschedule here sets a new reminder, because none is waiting to move.
+	if sheet.first(attrIs("name", rescheduleField)) != nil {
+		t.Error("the form has the reschedule field with no reminder waiting")
+	}
+	if sheet.first(attrIs("formaction", removeReminderPath)) != nil {
+		t.Errorf("the sheet offers to clear a reminder with none waiting:\n%s", sheet)
+	}
+}
+
+func TestRemindLater_WithTheDigestSnoozedTheSheetOffersSendAtTheHourBeforeTheHourAndSendDigestNowAfter(t *testing.T) {
+	cases := []struct {
+		name string
+		now  time.Time
+		want string
+	}{
+		{"at 7:00am", beforeDigest, "Send at 8:00am"},
+		{"at 9:00am", thursday, "Send digest now"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			f := rosewood(t)
+			f.digestPending(t)
+			f.handler.now = func() time.Time { return c.now }
+			// 12:00 UTC is 1:00pm in London.
+			f.remindAt(t, thursday.Add(4*time.Hour))
+
+			sheet := remindLaterDialog(f.openRemindLater(t, true).Body.String())
+
+			if got, want := sheet.first(isTag("h2")).text(), "Digest at 1:00pm"; got != want {
+				t.Errorf("the sheet is titled %q, want %q", got, want)
+			}
+			if got, want := sheet.first(isTag("p")).text(), "Your digest will be sent at 1:00pm."; got != want {
+				t.Errorf("the sheet says %q, want %q", got, want)
+			}
+			if sheet.first(isTag("button"), textIs("Reschedule")) == nil {
+				t.Errorf("the sheet has no Reschedule button:\n%s", sheet)
+			}
+			if clear := sheet.first(isTag("button"), textIs(c.want)); clear == nil || clear.attr("formaction") != removeReminderPath {
+				t.Errorf("%s does not post to %q:\n%s", c.want, removeReminderPath, sheet)
+			}
+		})
+	}
+}
+
+func TestRemindLater_SnoozingTheDigestSetsTheReminderAndAnnouncesTheDigestsNewTime(t *testing.T) {
+	f := rosewood(t)
+	f.digestPending(t)
+	f.handler.now = func() time.Time { return beforeDigest }
+	calls := 0
+	f.handler.wake = countingWake(&calls)
+
+	rec := f.postReminder(t, remindLaterPath, url.Values{whenField: {"2h"}}, true)
+
+	wantStatus(t, rec, http.StatusOK)
+	if got, want := f.storedReminder(t, rosewoodMembershipID), beforeDigest.Add(2*time.Hour); !got.Equal(want) {
+		t.Errorf("the reminder is at %s, want %s", got.UTC(), want)
+	}
+	if calls != 1 {
+		t.Errorf("the job was woken %d times, want once", calls)
+	}
+	body := rec.Body.String()
+	if got, want := remindLaterIn(body).text(), "Digest at 9:00am"; got != want {
+		t.Errorf("the swapped link reads %q, want %q", got, want)
+	}
+	if got, want := announcement(body), "Your digest will be sent at 9:00am."; got != want {
+		t.Errorf("the swap announces %q, want %q", got, want)
+	}
+}
+
+func TestRemindLater_AReminderSetPastTheDigestHourWithTodaysDigestUnsentIsAnnouncedAsTheDigest(t *testing.T) {
+	f := rosewood(t)
+	f.digestPending(t)
+
+	rec := f.postReminder(t, remindLaterPath, url.Values{whenField: {"2h"}}, true)
+
+	wantStatus(t, rec, http.StatusOK)
+	body := rec.Body.String()
+	if got, want := remindLaterIn(body).text(), "Digest at 11:00am"; got != want {
+		t.Errorf("the swapped link reads %q, want %q", got, want)
+	}
+	if got, want := announcement(body), "Your digest will be sent at 11:00am."; got != want {
+		t.Errorf("the swap announces %q, want %q", got, want)
+	}
+}
+
+func TestRemindLater_SendAtTheHourClearsTheSnoozeAndSendsNothing(t *testing.T) {
+	f := rosewood(t)
+	f.digestPending(t)
+	f.handler.now = func() time.Time { return beforeDigest }
+	f.remindAt(t, thursday.Add(4*time.Hour))
+	calls := 0
+	f.handler.wake = countingWake(&calls)
+	var sent []uuid.UUID
+	f.handler.sendDigest = recordDigests(&sent, nil)
+
+	rec := f.postReminder(t, removeReminderPath, nil, true)
+
+	wantStatus(t, rec, http.StatusOK)
+	if got := f.storedReminder(t, rosewoodMembershipID); !got.IsZero() {
+		t.Errorf("the reminder is still at %s, want none", got.UTC())
+	}
+	if len(sent) != 0 {
+		t.Errorf("the digest was sent for %v, want it left to the job", sent)
+	}
+	if calls != 1 {
+		t.Errorf("the job was woken %d times, want once", calls)
+	}
+	body := rec.Body.String()
+	if got, want := remindLaterIn(body).text(), "Digest at 8:00am"; got != want {
+		t.Errorf("the swapped link reads %q, want %q", got, want)
+	}
+	if got, want := announcement(body), "Your digest will be sent at 8:00am."; got != want {
+		t.Errorf("the swap announces %q, want %q", got, want)
+	}
+}
+
+func TestRemindLater_SendDigestNowClearsTheReminderAndSendsTodaysDigest(t *testing.T) {
+	f := rosewood(t)
+	f.digestPending(t)
+	f.remindAt(t, thursday.Add(4*time.Hour))
+	calls := 0
+	f.handler.wake = countingWake(&calls)
+	var sent []uuid.UUID
+	f.handler.sendDigest = recordDigests(&sent, nil)
+
+	rec := f.postReminder(t, removeReminderPath, nil, true)
+
+	wantStatus(t, rec, http.StatusOK)
+	if got := f.storedReminder(t, rosewoodMembershipID); !got.IsZero() {
+		t.Errorf("the reminder is still at %s, want none", got.UTC())
+	}
+	if !slices.Equal(sent, []uuid.UUID{rosewoodMembershipID}) {
+		t.Errorf("the digest was sent for %v, want Rosewood's membership once", sent)
+	}
+	if calls != 1 {
+		t.Errorf("the job was woken %d times, want once", calls)
+	}
+	body := rec.Body.String()
+	if got, want := remindLaterIn(body).text(), "Remind me later"; got != want {
+		t.Errorf("the swapped link reads %q, want %q", got, want)
+	}
+	if got, want := announcement(body), "Digest sent."; got != want {
+		t.Errorf("the swap announces %q, want %q", got, want)
+	}
+}
+
+func TestRemindLater_AFailedSendDigestNowIsAServerErrorAndStillWakesTheJob(t *testing.T) {
+	f := rosewood(t)
+	f.digestPending(t)
+	f.remindAt(t, thursday.Add(4*time.Hour))
+	calls := 0
+	f.handler.wake = countingWake(&calls)
+	var sent []uuid.UUID
+	f.handler.sendDigest = recordDigests(&sent, errors.New("the database went away"))
+
+	rec := f.postReminder(t, removeReminderPath, nil, true)
+
+	wantStatus(t, rec, http.StatusInternalServerError)
+	// The job sends a digest up to an hour past its hour, so it may still
+	// send this one.
+	if calls != 1 {
+		t.Errorf("the job was woken %d times, want once", calls)
+	}
+}
+
 func TestRemindLater_ADelayEndingAfterMidnightIsNotOffered(t *testing.T) {
 	f := rosewood(t)
 	f.offerRemindLater(t)
@@ -379,9 +619,8 @@ func TestRemindLater_EveryRouteIsNotFoundWhenTodayHasNoRemindMeLaterLink(t *test
 		setup func(t *testing.T, f *todayFixture)
 	}{
 		{"push off", func(*testing.T, *todayFixture) {}},
-		{"today's digest not sent yet", func(t *testing.T, f *todayFixture) {
+		{"no subscribed browser", func(t *testing.T, f *todayFixture) {
 			f.handler.pushKey = testPushKey
-			f.subscribe(t)
 			f.dailyDigest(t, true)
 		}},
 	}

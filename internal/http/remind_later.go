@@ -58,9 +58,14 @@ const (
 	timeTomorrow    remindRefused = "Choose a time before midnight."
 )
 
-// remindLaterWords is the name of the template for the sheet's line while a
-// reminder is waiting. The announcement after a reminder is set uses it too.
-const remindLaterWords = "remind-later-words"
+// The names of the templates for the sentence saying when the next
+// notification is sent: digestAtWords while today's digest is unsent, and
+// remindLaterWords for a waiting reminder otherwise. The announcement after a
+// reminder is set or removed renders them too.
+const (
+	remindLaterWords = "remind-later-words"
+	digestAtWords    = "digest-at-words"
+)
 
 // remindLaterFacts holds what Today checks before offering Remind me later,
 // other than the reminder itself. It is read only with push on.
@@ -70,6 +75,8 @@ type remindLaterFacts struct {
 	// digestSent is true when notification_send has today's digest for the
 	// reader.
 	digestSent bool
+	// digestAt is the instant of the reader's digest hour today.
+	digestAt time.Time
 }
 
 // remindLater holds the values the Remind me later link and sheet are built
@@ -79,6 +86,10 @@ type remindLater struct {
 	now time.Time
 	// waiting is the time of the reminder not yet sent, or nil.
 	waiting *time.Time
+	// digest is the instant of today's digest hour while today's digest is
+	// still unsent, or nil. While it is set, a reminder moves today's digest
+	// to the reminder's time.
+	digest *time.Time
 }
 
 // remindLaterState returns the state the Remind me later link and sheet are
@@ -86,28 +97,48 @@ type remindLater struct {
 // not offer Remind me later.
 //
 // It is offered while something is overdue or due today and the reader has a
-// subscribed browser. With a reminder waiting, nothing else is checked.
-// Otherwise, with the daily digest on, it is offered only once today's digest
-// is sent, because before then the member has not had today's list. It stops
-// being offered when the time input would start tomorrow, because a reminder
-// is for today.
+// subscribed browser. With no reminder waiting, it stops being offered when
+// the time input would start tomorrow, because a reminder is for today.
+//
+// The digest field is set while the digest is on, notification_send has no row
+// for today, and either the digest hour is still to come or a reminder is
+// waiting. Past the hour with no reminder waiting it is nil, because the job
+// sends the digest at that hour.
 func (g gardenDay) remindLaterState(at *time.Time) *remindLater {
 	facts := g.remindLater
 	if facts == nil || !facts.hasBrowser || len(g.day.Overdue)+len(g.day.DueToday) == 0 {
 		return nil
 	}
 	state := &remindLater{now: g.now}
-	if at != nil && at.After(g.now) {
+	waiting := at != nil && at.After(g.now)
+	if facts.digestOn && !facts.digestSent && (waiting || g.now.Before(facts.digestAt)) {
+		state.digest = &facts.digestAt
+	}
+	if waiting {
 		state.waiting = at
 		return state
-	}
-	if facts.digestOn && !facts.digestSent {
-		return nil
 	}
 	if !sameDate(g.now.Add(remindLead), g.now) {
 		return nil
 	}
 	return state
+}
+
+// digestPassed reports whether today's digest is not yet sent and its hour
+// has gone by.
+func (s *remindLater) digestPassed() bool {
+	return s.digest != nil && !s.now.Before(*s.digest)
+}
+
+// words returns the sentence saying when the waiting reminder, or the digest it
+// moved, is sent. at is the reminder's time, or the digest's own hour once a
+// reminder that moved it is removed.
+func (s *remindLater) words(templates *Templates, at time.Time) string {
+	name := remindLaterWords
+	if s.digest != nil {
+		name = digestAtWords
+	}
+	return templates.sentence("today", name, clockWord(at, s.now))
 }
 
 // sameDate reports whether a and b fall on the same date in b's timezone.
@@ -122,18 +153,25 @@ func sameDate(a, b time.Time) bool {
 type remindLaterLink struct {
 	ID   string
 	Href string
-	// At is the time of the waiting reminder, "2:30pm". The link reads
-	// Remind me later when it is empty.
+	// At is the time the link shows, "2:30pm": the waiting reminder's, or the
+	// digest hour when Digest is true and no reminder is waiting. The link
+	// reads Remind me later when At is empty.
 	At string
+	// Digest is true while today's digest is still unsent. The link then
+	// reads Digest at At.
+	Digest bool
 }
 
 func (s *remindLater) link() *remindLaterLink {
 	if s == nil {
 		return nil
 	}
-	link := &remindLaterLink{ID: remindLaterID, Href: remindLaterPath}
-	if s.waiting != nil {
+	link := &remindLaterLink{ID: remindLaterID, Href: remindLaterPath, Digest: s.digest != nil}
+	switch {
+	case s.waiting != nil:
 		link.At = clockWord(*s.waiting, s.now)
+	case s.digest != nil:
+		link.At = clockWord(*s.digest, s.now)
 	}
 	return link
 }
@@ -144,10 +182,15 @@ type remindLaterSheet struct {
 	Path   string
 	Target string
 	// Set is the time of the waiting reminder, "2:30pm". Remove is the URL
-	// the Remove reminder button posts to. Both are empty when no reminder is
-	// waiting.
+	// the button that clears the reminder posts to. Both are empty when no
+	// reminder is waiting.
 	Set    string
 	Remove string
+	// Digest is the time of today's digest hour, "8:00am", while today's
+	// digest is still unsent. It is empty otherwise. Passed is true once that
+	// hour has gone by. A post to Remove then also sends the digest.
+	Digest string
+	Passed bool
 	// Whens is the When chips: each delay that ends before midnight, then At
 	// a time. Time is the time input's value, "15:04".
 	Whens []chip
@@ -172,6 +215,10 @@ func (s *remindLater) sheet() *remindLaterSheet {
 		}
 	}
 	sheet.Whens = append(sheet.Whens, chip{Value: whenTime, Label: "At a time"})
+	if s.digest != nil {
+		sheet.Digest = clockWord(*s.digest, s.now)
+		sheet.Passed = s.digestPassed()
+	}
 	chosen := 0
 	if s.waiting != nil {
 		sheet.Set = clockWord(*s.waiting, s.now)
@@ -342,14 +389,20 @@ func (h *today) setReminder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.wake.call()
-	set := &remindLater{now: state.now, waiting: &at}
-	announce := h.templates.sentence("today", remindLaterWords, clockWord(at, state.now))
-	h.reminderChanged(w, r, set.link(), announce)
+	// The state is built again with the new reminder, because past the digest
+	// hour the digest field is set only while a reminder is waiting.
+	set := g.remindLaterState(&at)
+	h.reminderChanged(w, r, set.link(), set.words(h.templates, at))
 }
 
 // removeReminder handles POST /remind-later/remove. It clears the waiting
 // reminder. Removing one the job has already sent is refused, with the sheet
 // rendered again as having no reminder waiting.
+//
+// A reminder that moved today's digest is removed the same way. The job then
+// sends the digest at its hour. Once that hour has passed, the digest is
+// sent here instead, because the job skips a digest more than an hour past its
+// hour.
 func (h *today) removeReminder(w http.ResponseWriter, r *http.Request) {
 	g, state, ok := h.loadRemindLater(w, r)
 	if !ok {
@@ -376,8 +429,25 @@ func (h *today) removeReminder(w http.ResponseWriter, r *http.Request) {
 		h.refuseRemindLater(w, r, g, sheet)
 		return
 	}
+	if state.digestPassed() {
+		err := h.sendDigest.call(r.Context(), principal.Membership, principal.User, principal.Garden)
+		h.wake.call()
+		if err != nil {
+			h.templates.serverError(h.logger, w, r, "send the digest", err)
+			return
+		}
+		facts := *g.remindLater
+		facts.digestSent = true
+		g.remindLater = &facts
+		h.reminderChanged(w, r, g.remindLaterState(nil).link(), "Digest sent.")
+		return
+	}
 	h.wake.call()
-	h.reminderChanged(w, r, g.remindLaterState(nil).link(), "Reminder removed.")
+	announce := "Reminder removed."
+	if state.digest != nil {
+		announce = state.words(h.templates, *state.digest)
+	}
+	h.reminderChanged(w, r, g.remindLaterState(nil).link(), announce)
 }
 
 // reminderChanged responds to a reminder set, rescheduled or removed. Without

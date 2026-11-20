@@ -43,6 +43,17 @@ func (w wakeJobs) call() {
 	}
 }
 
+// sendDigest sends one member today's digest at once. It is nil when push is
+// off. call then does nothing.
+type sendDigest func(ctx context.Context, membership store.Membership, user store.AppUser, garden store.Garden) error
+
+func (f sendDigest) call(ctx context.Context, membership store.Membership, user store.AppUser, garden store.Garden) error {
+	if f == nil {
+		return nil
+	}
+	return f(ctx, membership, user, garden)
+}
+
 // notifyUser sends one person a push notification on every browser they have
 // subscribed. It is nil when push is off. The notifications sent through it
 // have no switch on the Notifications page, so a person stops them by removing

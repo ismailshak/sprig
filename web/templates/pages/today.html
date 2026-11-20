@@ -42,12 +42,14 @@
 </div>{{end}}{{end}}
 
 {{/* The Remind me later sheet. With a reminder waiting, the form has the
-     hidden reschedule field. Remove reminder posts to its own URL. */}}
+     hidden reschedule field, and the button that clears the reminder posts to
+     its own URL. While today's digest is unsent, the sheet is titled Digest
+     at and the time, because a reminder set then moves the digest. */}}
 {{define "remind-later-sheet"}}{{with .RemindLaterSheet}}<dialog open class="sheet" id="sheet" aria-labelledby="remind-later-title" tabindex="-1">
 <form method="dialog"><button class="sheet__scrim" tabindex="-1" aria-hidden="true"></button></form>
 <div class="sheet__panel">
 <div class="sheet__grip"></div>
-<h2 class="sheet__title" id="remind-later-title">Remind me later</h2>
+<h2 class="sheet__title" id="remind-later-title">{{if .Digest}}Digest at {{or .Set .Digest}}{{else}}Remind me later{{end}}</h2>
 {{template "remind-later-form" $}}
 <form method="dialog"><button class="sheet__cancel">Cancel</button></form>
 </div>
@@ -55,10 +57,10 @@
 </dialog>{{else}}<div id="sheet"></div>{{end}}{{end}}
 
 {{/* The form inside the Remind me later sheet, and the fragment a refusal
-     returns. The line saying whether a reminder is waiting is inside the form,
-     because a reminder can be set or sent after the sheet opened. */}}
+     returns. The line saying when the next notification is sent is inside the
+     form, because a reminder can be set or sent after the sheet opened. */}}
 {{define "remind-later-form"}}{{with .RemindLaterSheet}}<form class="sheet__form" id="sheet-form" method="post" action="{{.Path}}" hx-post="{{.Path}}" hx-target="#{{.Target}}" hx-swap="outerHTML settle:0ms">
-<p class="lead">{{if .Set}}{{template "remind-later-words" .Set}}{{else}}Get a notification of what’s still due.{{end}}</p>
+<p class="lead">{{if .Digest}}{{template "digest-at-words" (or .Set .Digest)}}{{if not .Set}} Choose a later time today to reschedule it.{{end}}{{else if .Set}}{{template "remind-later-words" .Set}}{{else}}Get a notification of what’s still due.{{end}}</p>
 {{if .Set}}<input type="hidden" name="reschedule" value="1">
 {{end}}<fieldset class="field">
 <legend class="field__label">When</legend>
@@ -67,14 +69,19 @@
 {{with .Error}}<p class="field__error">{{.}}</p>{{end}}
 </fieldset>
 <div class="sheet__foot">
-<button class="sheet__go">{{if .Set}}Reschedule{{else}}Remind me{{end}}</button>
-{{with .Remove}}<button class="sheet__delete" formaction="{{.}}" hx-post="{{.}}">Remove reminder</button>{{end}}
+<button class="sheet__go">{{if or .Set .Digest}}Reschedule{{else}}Remind me{{end}}</button>
+{{if .Remove}}<button class="sheet__delete" formaction="{{.Remove}}" hx-post="{{.Remove}}">{{if not .Digest}}Remove reminder{{else if .Passed}}Send digest now{{else}}Send at {{.Digest}}{{end}}</button>{{end}}
 </div>
 </form>{{end}}{{end}}
 
-{{/* The sheet's line while a reminder is waiting. The announcement after a
-     reminder is set renders it too. */}}
+{{/* The sheet's line while a reminder is waiting and today's digest is off
+     or sent. The announcement after such a reminder is set renders it too. */}}
 {{define "remind-later-words"}}You’ll get a reminder at {{.}}.{{end}}
+
+{{/* The sheet's line while today's digest is unsent, with the time it is
+     sent. The announcement after a reminder that moves the digest is set or
+     removed renders it too. */}}
+{{define "digest-at-words"}}Your digest will be sent at {{.}}.{{end}}
 
 {{/* The response to a reminder set, rescheduled or removed: the link, and
      an empty #sheet that closes the dialog. With no link the swap removes the

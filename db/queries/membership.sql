@@ -52,7 +52,7 @@ WHERE garden_id = @garden_id AND user_id = @user_id
 
 -- Returns whether the member has a subscribed browser, and whether
 -- notification_send has their digest for @send_key, today's date in their
--- timezone. Today offers Remind me later only when these allow it.
+-- timezone. Today offers Remind me later only to a member with a browser.
 -- name: GetRemindLaterState :one
 SELECT
     EXISTS (SELECT 1 FROM push_subscription WHERE push_subscription.user_id = @user_id) AS has_browser,

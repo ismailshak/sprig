@@ -35,8 +35,9 @@
 {{- end}}
 
 {{/* The link opens the Remind me later sheet. htmx swaps the sheet into
-     #sheet. */}}
-{{define "remind-later-link"}}{{with .}}<a class="section__action" id="{{.ID}}" href="{{.Href}}" hx-get="{{.Href}}" hx-target="#sheet" hx-swap="outerHTML">{{if .At}}Reminder at {{.At}}{{else}}Remind me later{{end}}{{template "icon-chevron"}}</a>{{end}}{{end}}
+     #sheet. While today's digest is unsent, it reads Digest at and the time
+     the digest is sent. */}}
+{{define "remind-later-link"}}{{with .}}<a class="section__action" id="{{.ID}}" href="{{.Href}}" hx-get="{{.Href}}" hx-target="#sheet" hx-swap="outerHTML">{{if .Digest}}Digest at {{.At}}{{else if .At}}Reminder at {{.At}}{{else}}Remind me later{{end}}{{template "icon-chevron"}}</a>{{end}}{{end}}
 
 {{define "today-section"}}
 <section class="section" aria-labelledby="{{.ID}}">

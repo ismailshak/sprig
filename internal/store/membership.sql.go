@@ -211,7 +211,7 @@ type GetRemindLaterStateRow struct {
 
 // Returns whether the member has a subscribed browser, and whether
 // notification_send has their digest for @send_key, today's date in their
-// timezone. Today offers Remind me later only when these allow it.
+// timezone. Today offers Remind me later only to a member with a browser.
 func (q *Queries) GetRemindLaterState(ctx context.Context, arg GetRemindLaterStateParams) (GetRemindLaterStateRow, error) {
 	row := q.db.QueryRow(ctx, getRemindLaterState,
 		arg.UserID,

@@ -73,8 +73,8 @@ type membership struct {
 	digestOff bool
 	activity  bool
 	// digestSent writes the notification_send row the digest job writes after
-	// sending today's digest. With the digest on, Today offers Remind me later
-	// only once that row exists.
+	// sending today's digest. Today's Remind me later link then reads Remind me
+	// later instead of Digest at.
 	digestSent bool
 }
 
