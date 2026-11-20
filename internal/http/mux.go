@@ -40,8 +40,9 @@ type route struct {
 
 type middleware func(http.Handler) http.Handler
 
-// Dependencies is what New builds the handler from. Wake, NotifyActivity,
-// NotifyUser and SendTest are nil and PushKey is empty when push is off.
+// Dependencies is what New builds the handler from. Wake, SendDigest,
+// NotifyActivity, NotifyUser and SendTest are nil and PushKey is empty when
+// push is off.
 type Dependencies struct {
 	Logger   *slog.Logger
 	Sessions *auth.Sessions
@@ -67,6 +68,9 @@ type Dependencies struct {
 	PushKey string
 	// Wake has the digest and deadlines jobs work out their next send again.
 	Wake func()
+	// SendDigest sends one member today's digest at once, unless it has been
+	// sent.
+	SendDigest func(ctx context.Context, membership store.Membership, user store.AppUser, garden store.Garden) error
 	// NotifyActivity sends the garden's other members a push notification
 	// about care someone has just logged.
 	NotifyActivity func(ctx context.Context, gardenID, actorID uuid.UUID, n push.Notification)
@@ -85,7 +89,7 @@ type Dependencies struct {
 // and a route registered directly on the mux would be one the test cannot see.
 // devRoutes is what a development build adds, and empty otherwise.
 func routes(d Dependencies) []route {
-	todayHandler := &today{logger: d.Logger, queries: d.Queries, templates: d.Templates, now: time.Now, notify: d.NotifyActivity, wake: d.Wake, pushKey: d.PushKey}
+	todayHandler := &today{logger: d.Logger, queries: d.Queries, templates: d.Templates, now: time.Now, notify: d.NotifyActivity, wake: d.Wake, sendDigest: d.SendDigest, pushKey: d.PushKey}
 	plantsHandler := &plants{logger: d.Logger, queries: d.Queries, photos: d.Photos, templates: d.Templates, now: time.Now, notify: d.NotifyUser}
 	activityHandler := &activity{logger: d.Logger, queries: d.Queries, templates: d.Templates, now: time.Now}
 	choresHandler := &chores{logger: d.Logger, queries: d.Queries, templates: d.Templates, now: time.Now}

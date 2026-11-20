@@ -659,7 +659,7 @@ func reminderLedger(t *testing.T, db store.DBTX) []string {
 		JOIN membership ON membership.id = notification_send.membership_id
 		JOIN app_user ON app_user.id = membership.user_id
 		JOIN garden ON garden.id = membership.garden_id
-		WHERE notification_send.kind = 'digest_again'`)
+		WHERE notification_send.kind = 'remind_later'`)
 	if err != nil {
 		t.Fatalf("reading the ledger: %v", err)
 	}
@@ -676,20 +676,24 @@ func reminderLedger(t *testing.T, db store.DBTX) []string {
 	return out
 }
 
-func TestSendDue_TheNextSendIsTheEarlierOfTheHourAndTheReminder(t *testing.T) {
+func TestSendDue_TheNextSendIsTheReminderWhetherItIsBeforeOrAfterTheHour(t *testing.T) {
 	cases := []struct {
 		name  string
 		again time.Time
-		want  time.Time
 	}{
-		{"a time before the hour", noon.Add(-time.Hour), noon.Add(-time.Hour)},
-		{"a time after the hour", noon.Add(time.Hour), noon},
+		{"a time before the hour", noon.Add(-time.Hour)},
+		{"a time after the hour", noon.Add(time.Hour)},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			tx := pgtest.Tx(t, migrateSchema)
 			service := newPushService(t, http.StatusCreated)
 			seedRosewood(t, tx, service)
+			// Sam's digest is also at noon. It is switched off so that Ellie's
+			// reminder is the only time left.
+			if _, err := tx.Exec(t.Context(), "UPDATE notification_preference SET enabled = false WHERE membership_id = $1 AND kind = 'digest'", samMembershipID); err != nil {
+				t.Fatalf("switching Sam's digest off: %v", err)
+			}
 			remindAt(t, tx, c.again)
 			digest := newDigest(t, tx, service, fixed(noon.Add(-3*time.Hour)))
 
@@ -698,8 +702,8 @@ func TestSendDue_TheNextSendIsTheEarlierOfTheHourAndTheReminder(t *testing.T) {
 			if err != nil {
 				t.Fatalf("sendDue: %v", err)
 			}
-			if !next.Equal(c.want) {
-				t.Errorf("the next send is %s, want %s", next.UTC(), c.want)
+			if !next.Equal(c.again) {
+				t.Errorf("the next send is %s, want the reminder's %s", next.UTC(), c.again)
 			}
 			if got := service.received(); len(got) != 0 {
 				t.Errorf("the push service received %q, want nothing before either time", got)
@@ -786,6 +790,9 @@ func TestSendDue_AReminderIsNotSentWhenNothingIsLeftDue(t *testing.T) {
 	tx := pgtest.Tx(t, migrateSchema)
 	service := newPushService(t, http.StatusCreated)
 	seedRosewood(t, tx, service)
+	if _, err := tx.Exec(t.Context(), "INSERT INTO notification_send (membership_id, kind, send_key) VALUES ($1, 'digest', '2026-09-03'), ($2, 'digest', '2026-09-03')", ellieMembershipID, samMembershipID); err != nil {
+		t.Fatalf("writing the morning's ledger rows: %v", err)
+	}
 	again := noon.Add(2 * time.Hour)
 	remindAt(t, tx, again)
 	// Everything was watered after the morning digest.
@@ -834,9 +841,13 @@ func TestSendDue_AReminderSentLateAfterMidnightListsTheNewDaysCares(t *testing.T
 	service := newPushService(t, http.StatusCreated)
 	seedRosewood(t, tx, service)
 	// Every seeded plant was watered at Ellie's hour, so nothing is due on 3
-	// September. Sprout is due on the 4th.
+	// September. Sprout is due on the 4th. The 3rd's digest rows are written
+	// so that the reminder claims a reminder row and not the 3rd's digest.
 	if _, err := tx.Exec(t.Context(), "UPDATE care_event SET performed_at = $1, recorded_at = $1", noon); err != nil {
 		t.Fatalf("watering everything: %v", err)
+	}
+	if _, err := tx.Exec(t.Context(), "INSERT INTO notification_send (membership_id, kind, send_key) VALUES ($1, 'digest', '2026-09-03'), ($2, 'digest', '2026-09-03')", ellieMembershipID, samMembershipID); err != nil {
+		t.Fatalf("writing the 3rd's ledger rows: %v", err)
 	}
 	watered := utc(2026, time.August, 25, 12, 0, 0)
 	if _, err := tx.Exec(t.Context(), "INSERT INTO plant (id, garden_id, nickname) VALUES ($1, $2, 'Sprout')", sproutID, rosewoodID); err != nil {
@@ -874,6 +885,126 @@ func TestSendDue_AReminderSentLateAfterMidnightListsTheNewDaysCares(t *testing.T
 	}
 	if want := noon.AddDate(0, 0, 1); !next.Equal(want) {
 		t.Errorf("the next send is %s, want the 4th's own digest at %s", next.UTC(), want)
+	}
+}
+
+func TestSendDue_ADigestSnoozedPastItsHourIsSentOnceAtTheReminderAsThatDaysDigest(t *testing.T) {
+	tx := pgtest.Tx(t, migrateSchema)
+	service := newPushService(t, http.StatusCreated)
+	seedRosewood(t, tx, service)
+	// Ellie's digest is at 13:00 in London and her reminder at 15:00.
+	snoozed := noon.Add(2 * time.Hour)
+	remindAt(t, tx, snoozed)
+
+	next, err := newDigest(t, tx, service, fixed(noon.Add(30*time.Second))).sendDue(t.Context())
+	if err != nil {
+		t.Fatalf("the look at the hour: %v", err)
+	}
+	if got, want := service.received(), []string{"/sam-phone"}; !slices.Equal(got, want) {
+		t.Errorf("at the hour the push service received %q, want %q", got, want)
+	}
+	if !next.Equal(snoozed) {
+		t.Errorf("the next send is %s, want the reminder's %s", next.UTC(), snoozed)
+	}
+	// Half an hour past the hour is within maxLate, so without the reminder
+	// the job would send Ellie's digest here.
+	if _, err := newDigest(t, tx, service, fixed(noon.Add(30*time.Minute))).sendDue(t.Context()); err != nil {
+		t.Fatalf("the look half an hour after the hour: %v", err)
+	}
+	if got, want := service.received(), []string{"/sam-phone"}; !slices.Equal(got, want) {
+		t.Errorf("half an hour after the hour the push service received %q, want %q", got, want)
+	}
+
+	next, err = newDigest(t, tx, service, fixed(snoozed.Add(time.Second))).sendDue(t.Context())
+	if err != nil {
+		t.Fatalf("the look at the reminder: %v", err)
+	}
+	if got, want := service.received(), []string{"/ellie-mac", "/ellie-phone", "/sam-phone"}; !slices.Equal(got, want) {
+		t.Errorf("the push service received %q, want %q", got, want)
+	}
+	if got, want := ledger(t, tx), []string{"ellie Rosewood 2026-09-03", "sam Rosewood 2026-09-03"}; !slices.Equal(got, want) {
+		t.Errorf("the digest ledger holds %q, want %q", got, want)
+	}
+	if got := reminderLedger(t, tx); len(got) != 0 {
+		t.Errorf("the reminder ledger holds %q, want nothing", got)
+	}
+	if got := reminderAt(t, tx); !got.IsZero() {
+		t.Errorf("Ellie's reminder is still at %s, want it cleared", got.UTC())
+	}
+	if want := noon.AddDate(0, 0, 1); !next.Equal(want) {
+		t.Errorf("the next send is %s, want tomorrow's %s", next.UTC(), want)
+	}
+}
+
+func TestSendDue_ADigestSnoozedToBeforeItsHourIsSentOnceAtTheReminder(t *testing.T) {
+	tx := pgtest.Tx(t, migrateSchema)
+	service := newPushService(t, http.StatusCreated)
+	seedRosewood(t, tx, service)
+	early := noon.Add(-time.Hour)
+	remindAt(t, tx, early)
+
+	if _, err := newDigest(t, tx, service, fixed(early)).sendDue(t.Context()); err != nil {
+		t.Fatalf("the look at the reminder: %v", err)
+	}
+	if _, err := newDigest(t, tx, service, fixed(noon.Add(30*time.Second))).sendDue(t.Context()); err != nil {
+		t.Fatalf("the look at the hour: %v", err)
+	}
+
+	if got, want := service.received(), []string{"/ellie-mac", "/ellie-phone", "/sam-phone"}; !slices.Equal(got, want) {
+		t.Errorf("the push service received %q, want %q", got, want)
+	}
+	if got, want := ledger(t, tx), []string{"ellie Rosewood 2026-09-03", "sam Rosewood 2026-09-03"}; !slices.Equal(got, want) {
+		t.Errorf("the digest ledger holds %q, want %q", got, want)
+	}
+	if got := reminderLedger(t, tx); len(got) != 0 {
+		t.Errorf("the reminder ledger holds %q, want nothing", got)
+	}
+}
+
+func TestSendDue_AnHourLateReminderSetBeforeTheHourIsSkippedAndTheDigestIsSent(t *testing.T) {
+	tx := pgtest.Tx(t, migrateSchema)
+	service := newPushService(t, http.StatusCreated)
+	seedRosewood(t, tx, service)
+	// Ellie's digest is at 13:00 in London and her reminder at 12:00. The job
+	// next runs at 13:01, an hour and a minute after the reminder.
+	remindAt(t, tx, noon.Add(-time.Hour))
+
+	if _, err := newDigest(t, tx, service, fixed(noon.Add(time.Minute))).sendDue(t.Context()); err != nil {
+		t.Fatalf("sendDue: %v", err)
+	}
+
+	if got, want := service.received(), []string{"/ellie-mac", "/ellie-phone", "/sam-phone"}; !slices.Equal(got, want) {
+		t.Errorf("the push service received %q, want %q", got, want)
+	}
+	if got, want := ledger(t, tx), []string{"ellie Rosewood 2026-09-03", "sam Rosewood 2026-09-03"}; !slices.Equal(got, want) {
+		t.Errorf("the digest ledger holds %q, want %q", got, want)
+	}
+	if got := reminderAt(t, tx); !got.IsZero() {
+		t.Errorf("Ellie's reminder is still at %s, want it cleared", got.UTC())
+	}
+}
+
+func TestSendToday_SendsTheDigestForTodayInTheMembersTimezoneOnce(t *testing.T) {
+	tx := pgtest.Tx(t, migrateSchema)
+	service := newPushService(t, http.StatusCreated)
+	seedRosewood(t, tx, service)
+	// 23:30 UTC on the 3rd is 00:30 on the 4th in London.
+	digest := newDigest(t, tx, service, fixed(utc(2026, time.September, 3, 23, 30, 0)))
+	membership := store.Membership{ID: ellieMembershipID, GardenID: rosewoodID, UserID: ellieID}
+	user := store.AppUser{ID: ellieID, Handle: "ellie", Timezone: "Europe/London"}
+	garden := store.Garden{ID: rosewoodID, Name: "Rosewood"}
+
+	for range 2 {
+		if err := digest.SendToday(t.Context(), membership, user, garden); err != nil {
+			t.Fatalf("SendToday: %v", err)
+		}
+	}
+
+	if got, want := service.received(), []string{"/ellie-mac", "/ellie-phone"}; !slices.Equal(got, want) {
+		t.Errorf("the push service received %q, want %q", got, want)
+	}
+	if got, want := ledger(t, tx), []string{"ellie Rosewood 2026-09-04"}; !slices.Equal(got, want) {
+		t.Errorf("the ledger holds %q, want %q", got, want)
 	}
 }
 

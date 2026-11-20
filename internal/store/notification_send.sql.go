@@ -62,6 +62,7 @@ func (q *Queries) DeleteNotificationSends(ctx context.Context, arg DeleteNotific
 
 const listDigestMembers = `-- name: ListDigestMembers :many
 SELECT membership.id AS membership_id, membership.garden_id, membership.user_id, membership.digest_hour,
+    membership.remind_again_at,
     app_user.handle, app_user.timezone, garden.name AS garden_name,
     coalesce((SELECT max(send_key) FROM notification_send
         WHERE notification_send.membership_id = membership.id AND notification_send.kind = 'digest'), '')::text AS sent_through
@@ -76,14 +77,15 @@ ORDER BY membership.created_at, membership.id
 `
 
 type ListDigestMembersRow struct {
-	MembershipID uuid.UUID
-	GardenID     uuid.UUID
-	UserID       uuid.UUID
-	DigestHour   int16
-	Handle       string
-	Timezone     string
-	GardenName   string
-	SentThrough  string
+	MembershipID  uuid.UUID
+	GardenID      uuid.UUID
+	UserID        uuid.UUID
+	DigestHour    int16
+	RemindAgainAt *time.Time
+	Handle        string
+	Timezone      string
+	GardenName    string
+	SentThrough   string
 }
 
 // Every membership the digest job may have to send to: the digest switched on,
@@ -91,8 +93,9 @@ type ListDigestMembersRow struct {
 // member with no browser is left out rather than having their day claimed with
 // nothing sent, so a browser subscribed within the hour after their hour still
 // gets that day's digest. sent_through is the latest send key in the ledger for
-// the membership, or empty. There is no @garden_id because the job runs across
-// every garden.
+// the membership, or empty. remind_again_at is the time of the member's
+// reminder from Remind me later on Today, or null. There is no @garden_id
+// because the job runs across every garden.
 func (q *Queries) ListDigestMembers(ctx context.Context, now time.Time) ([]ListDigestMembersRow, error) {
 	rows, err := q.db.Query(ctx, listDigestMembers, now)
 	if err != nil {
@@ -107,6 +110,7 @@ func (q *Queries) ListDigestMembers(ctx context.Context, now time.Time) ([]ListD
 			&i.GardenID,
 			&i.UserID,
 			&i.DigestHour,
+			&i.RemindAgainAt,
 			&i.Handle,
 			&i.Timezone,
 			&i.GardenName,
@@ -125,7 +129,10 @@ func (q *Queries) ListDigestMembers(ctx context.Context, now time.Time) ([]ListD
 const listWaitingReminders = `-- name: ListWaitingReminders :many
 SELECT membership.id AS membership_id, membership.garden_id, membership.user_id,
     membership.remind_again_at::timestamptz AS remind_again_at,
-    app_user.handle, app_user.timezone, garden.name AS garden_name
+    app_user.handle, app_user.timezone, garden.name AS garden_name,
+    EXISTS (SELECT 1 FROM notification_preference
+        WHERE notification_preference.membership_id = membership.id
+          AND notification_preference.kind = 'digest' AND notification_preference.enabled) AS digest_on
 FROM membership
 JOIN app_user ON app_user.id = membership.user_id
 JOIN garden ON garden.id = membership.garden_id
@@ -143,12 +150,14 @@ type ListWaitingRemindersRow struct {
 	Handle        string
 	Timezone      string
 	GardenName    string
+	DigestOn      bool
 }
 
 // Every membership with a reminder waiting from Remind me later on Today,
 // whether or not it has the digest switched on. A membership that has ended or
-// has no subscribed browser is left out, the same as for the digest. There is
-// no @garden_id because the job runs across every garden.
+// has no subscribed browser is left out, the same as for the digest. With
+// digest_on, a reminder sent before the day's digest is written as that
+// digest. There is no @garden_id because the job runs across every garden.
 func (q *Queries) ListWaitingReminders(ctx context.Context, now time.Time) ([]ListWaitingRemindersRow, error) {
 	rows, err := q.db.Query(ctx, listWaitingReminders, now)
 	if err != nil {
@@ -166,6 +175,7 @@ func (q *Queries) ListWaitingReminders(ctx context.Context, now time.Time) ([]Li
 			&i.Handle,
 			&i.Timezone,
 			&i.GardenName,
+			&i.DigestOn,
 		); err != nil {
 			return nil, err
 		}

@@ -32,6 +32,9 @@ type today struct {
 	// wake has the digest job work out its next send again. The reminder
 	// handlers call it after changing the reader's reminder.
 	wake wakeJobs
+	// sendDigest sends the reader today's digest when they press Send digest
+	// now on the Remind me later sheet.
+	sendDigest sendDigest
 	// pushKey is the VAPID public key the reminders banner gives the browser
 	// to subscribe with. It is empty when push is off. Neither the reminders
 	// banner nor the Remind me later link is rendered then.
@@ -172,6 +175,7 @@ func (h *today) load(ctx context.Context, principal auth.Principal) (gardenDay, 
 			hasBrowser: state.HasBrowser,
 			digestOn:   notificationOn(preferences, digestKind),
 			digestSent: state.DigestSent,
+			digestAt:   push.DigestAt(int(principal.Membership.DigestHour), g.now),
 		}
 	}
 

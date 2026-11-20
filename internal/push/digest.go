@@ -15,11 +15,10 @@ import (
 )
 
 // The kind column of the digest job's ledger rows: the daily digest, and a
-// reminder set with Remind me later on Today. digest_again is the value from
-// before the feature was named Remind me later. Existing ledger rows hold it.
+// reminder set with Remind me later on Today.
 const (
 	digestKind   = "digest"
-	reminderKind = "digest_again"
+	reminderKind = "remind_later"
 )
 
 // reminderKey is the layout of a reminder's send key: the instant the member
@@ -33,9 +32,17 @@ func DigestKey(t time.Time) string {
 	return t.Format(dateKey)
 }
 
+// DigestAt returns the instant of the daily digest at hour on the day now falls
+// on in now's location.
+func DigestAt(hour int, now time.Time) time.Time {
+	y, m, d := now.Date()
+	return instantOf(y, m, d, hour, now.Location())
+}
+
 // Digest is the job that sends each member what is due in their garden, once a
-// day at the hour they chose in their timezone, and again at the time of any
-// reminder they set.
+// day at the hour they chose in their timezone, and at the time of any reminder
+// they set. A reminder set before the day's digest is sent moves the digest to
+// the reminder's time. One set after it sends the list again.
 //
 // It sleeps on one timer until the earliest of those hours, sends everything
 // due, then works out the next one. Waking on a fixed interval instead would
@@ -109,7 +116,7 @@ func (d *Digest) sendDue(ctx context.Context) (time.Time, error) {
 			continue
 		}
 		loc := locationOf(d.logger, member.Handle, member.Timezone)
-		if err := d.sendReminder(ctx, to, loc, at, now); err != nil {
+		if err := d.sendReminder(ctx, to, loc, at, member.DigestOn, now); err != nil {
 			if ctx.Err() != nil {
 				return time.Time{}, err
 			}
@@ -126,10 +133,17 @@ func (d *Digest) sendDue(ctx context.Context) (time.Time, error) {
 		to := recipient{membershipID: member.MembershipID, gardenID: member.GardenID, userID: member.UserID, handle: member.Handle, garden: member.GardenName}
 		loc := locationOf(d.logger, member.Handle, member.Timezone)
 		at, key, skipped := nextDigest(int(member.DigestHour), loc, member.SentThrough, now)
-		if !skipped.IsZero() && !d.skipped[member.MembershipID].Equal(skipped) {
+		snoozed := snoozedDate(member.RemindAgainAt, loc, now)
+		if !skipped.IsZero() && DigestKey(skipped.In(loc)) != snoozed && !d.skipped[member.MembershipID].Equal(skipped) {
 			d.skipped[member.MembershipID] = skipped
 			d.logger.Warn("digest skipped", "user", to.handle, "garden", to.garden,
 				"date", skipped.In(loc).Format(dateKey), "late", now.Sub(skipped).Truncate(time.Second))
+		}
+		// A reminder waiting on the same date sends this digest. The loop over
+		// reminders has already passed its time to soonest.
+		if key == snoozed {
+			d.logger.Debug("digest snoozed", "user", to.handle, "garden", to.garden, "date", key, "until", *member.RemindAgainAt)
+			continue
 		}
 		if at.After(now) {
 			d.logger.Debug("digest not due", "user", to.handle, "garden", to.garden, "at", at)
@@ -149,6 +163,27 @@ func (d *Digest) sendDue(ctx context.Context) (time.Time, error) {
 		soonest(at)
 	}
 	return next, nil
+}
+
+// snoozedDate returns the send key of the digest a waiting reminder replaces:
+// the date in loc of a reminder still after now. It returns an empty string
+// when no reminder is waiting.
+func snoozedDate(reminder *time.Time, loc *time.Location, now time.Time) string {
+	if reminder == nil || !reminder.After(now) {
+		return ""
+	}
+	return DigestKey(reminder.In(loc))
+}
+
+// SendToday sends the member today's digest at once, unless the ledger already
+// has it. It is for a member who clears a reminder that moved a digest whose
+// hour has passed, because the job skips a digest more than maxLate past its
+// hour.
+func (d *Digest) SendToday(ctx context.Context, membership store.Membership, user store.AppUser, garden store.Garden) error {
+	now := d.now()
+	loc := locationOf(d.logger, user.Handle, user.Timezone)
+	to := recipient{membershipID: membership.ID, gardenID: garden.ID, userID: user.ID, handle: user.Handle, garden: garden.Name}
+	return d.send(ctx, to, loc, DigestKey(now.In(loc)), now)
 }
 
 // send claims the member's ledger row and sends the digest to each of their
@@ -194,13 +229,15 @@ func (d *Digest) send(ctx context.Context, to recipient, loc *time.Location, key
 }
 
 // sendReminder sends the member the digest's list at the instant their
-// reminder was set for. The same transaction clears that instant and claims
-// the ledger row for it, so a restart cannot send it twice. The list is built
-// fresh, so care logged since the reminder was set is left out and nothing is
-// sent when nothing is left due. A reminder more than maxLate late is cleared
-// and not sent.
-func (d *Digest) sendReminder(ctx context.Context, to recipient, loc *time.Location, at, now time.Time) error {
-	key := at.UTC().Format(reminderKey)
+// reminder was set for. The same transaction clears that instant and claims a
+// ledger row, so a restart cannot send it twice. With the digest on and the
+// reminder less than maxLate late, it first claims the digest row for the
+// reminder's date. If that succeeds, the send is that day's digest. Otherwise
+// it claims a reminder row keyed by the instant. The list is built fresh, so
+// care logged since the reminder was set is left out and nothing is sent when
+// nothing is left due. A reminder more than maxLate late is cleared and not
+// sent.
+func (d *Digest) sendReminder(ctx context.Context, to recipient, loc *time.Location, at time.Time, digestOn bool, now time.Time) error {
 	return d.queries.InTx(ctx, func(q *store.Queries) error {
 		err := q.ClearReminder(ctx, store.ClearReminderParams{
 			GardenID:      to.gardenID,
@@ -210,20 +247,39 @@ func (d *Digest) sendReminder(ctx context.Context, to recipient, loc *time.Locat
 		if err != nil {
 			return fmt.Errorf("clearing the time: %w", err)
 		}
-		claimed, err := q.ClaimNotificationSend(ctx, store.ClaimNotificationSendParams{
-			MembershipID: to.membershipID,
-			Kind:         reminderKind,
-			SendKey:      key,
-		})
-		if err != nil {
-			return fmt.Errorf("claiming the send: %w", err)
+		claim := func(kind, key string) (bool, error) {
+			claimed, err := q.ClaimNotificationSend(ctx, store.ClaimNotificationSendParams{
+				MembershipID: to.membershipID,
+				Kind:         kind,
+				SendKey:      key,
+			})
+			if err != nil {
+				return false, fmt.Errorf("claiming the send: %w", err)
+			}
+			return claimed > 0, nil
 		}
-		if claimed == 0 {
-			d.logger.Debug("reminder already sent", "user", to.handle, "garden", to.garden, "at", key)
+		// A late reminder is not sent, so it claims no digest row. The digest
+		// may still be within maxLate of its own hour.
+		late := now.Sub(at) >= maxLate
+		kind, key := digestKind, DigestKey(at.In(loc))
+		claimed := false
+		if digestOn && !late {
+			if claimed, err = claim(kind, key); err != nil {
+				return err
+			}
+		}
+		if !claimed {
+			kind, key = reminderKind, at.UTC().Format(reminderKey)
+			if claimed, err = claim(kind, key); err != nil {
+				return err
+			}
+		}
+		if !claimed {
+			d.logger.Debug("reminder already sent", "user", to.handle, "garden", to.garden, "kind", kind, "key", key)
 			return nil
 		}
-		if now.Sub(at) >= maxLate {
-			d.logger.Warn("reminder skipped", "user", to.handle, "garden", to.garden, "at", key, "late", now.Sub(at).Truncate(time.Second))
+		if late {
+			d.logger.Warn("reminder skipped", "user", to.handle, "garden", to.garden, "kind", kind, "key", key, "late", now.Sub(at).Truncate(time.Second))
 			return nil
 		}
 
@@ -232,7 +288,7 @@ func (d *Digest) sendReminder(ctx context.Context, to recipient, loc *time.Locat
 			return err
 		}
 		if items == 0 {
-			d.logger.Info("reminder empty", "user", to.handle, "garden", to.garden, "at", key)
+			d.logger.Info("reminder empty", "user", to.handle, "garden", to.garden, "kind", kind, "key", key)
 			return nil
 		}
 
@@ -240,7 +296,7 @@ func (d *Digest) sendReminder(ctx context.Context, to recipient, loc *time.Locat
 		if err != nil {
 			return err
 		}
-		d.logger.Info("reminder sent", "user", to.handle, "garden", to.garden, "at", key, "items", items, "browsers", sent)
+		d.logger.Info("reminder sent", "user", to.handle, "garden", to.garden, "kind", kind, "key", key, "items", items, "browsers", sent)
 		return nil
 	})
 }
