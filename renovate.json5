@@ -36,5 +36,14 @@
       depNameTemplate: 'htmx.org',
       datasourceTemplate: 'npm',
     },
+    // Renovate should update the example's Postgres tag in the same branch as the dev
+    // database's image upgrade.
+    {
+      customType: 'regex',
+      managerFilePatterns: ['/^README\\.md$/'],
+      matchStrings: ['\\n\\s+image: (?<depName>postgres):(?<currentValue>[^\\s]+)'],
+      datasourceTemplate: 'docker',
+      versioningTemplate: 'docker',
+    },
   ],
 }
