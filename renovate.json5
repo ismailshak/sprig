@@ -2,7 +2,7 @@
   $schema: 'https://docs.renovatebot.com/renovate-schema.json',
   extends: ['config:recommended'],
   timezone: 'America/New_York',
-  schedule: ['after 6am on sunday'],
+  schedule: ['after 6am on saturday'],
   osvVulnerabilityAlerts: true,
   semanticCommitType: 'chore',
   semanticCommitScope: 'deps',
