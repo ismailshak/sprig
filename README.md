@@ -16,7 +16,7 @@ Example compose file:
 ```yaml
 services:
   db:
-    image: postgres:18-alpine
+    image: postgres:19-alpine
     environment:
       POSTGRES_USER: sprig
       POSTGRES_PASSWORD: change-me
