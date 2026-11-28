@@ -9,9 +9,9 @@
     "browsers": "playwright install --with-deps webkit chromium"
   },
   "devDependencies": {
-    "@axe-core/playwright": "4.14.0",
+    "@axe-core/playwright": "4.14.1",
     "@playwright/test": "1.65.1",
-    "@types/node": "26.6.6",
+    "@types/node": "26.6.11",
     "prettier": "3.10.1",
     "typescript": "7.0.2"
   }
